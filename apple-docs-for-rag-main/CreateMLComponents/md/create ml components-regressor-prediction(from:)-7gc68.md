@@ -1,0 +1,36 @@
+
+
+- Create ML Components
+- Regressor
+-  prediction(from:) 
+
+Instance Method
+
+# prediction(from:)
+
+Performs a prediction from a single input.
+
+iOS 16.0+iPadOS 16.0+Mac Catalyst 16.0+macOS 13.0+tvOS 16.0+visionOS 1.0+watchOS 11.0+
+
+``` source
+func prediction(from input: Self.Input) async throws -> Self.Output
+```
+
+## Parameters 
+
+`input`  
+
+The input feature.
+
+## Return Value
+
+A regression.
+
+## See Also
+
+### Performing the prediction
+
+func prediction&lt;S>(from: S) async throws -> [Self.Output]
+
+Performs a prediction from a sequence of inputs.
+

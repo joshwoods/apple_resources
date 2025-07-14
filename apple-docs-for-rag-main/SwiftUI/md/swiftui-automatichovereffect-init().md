@@ -1,0 +1,18 @@
+
+
+- SwiftUI
+- AutomaticHoverEffect
+-  init() 
+
+Initializer
+
+# init()
+
+Creates an automatic hover effect.
+
+iOS 18.0+iPadOS 18.0+Mac Catalyst 18.0+tvOS 18.0+visionOS 2.0+
+
+``` source
+init()
+```
+

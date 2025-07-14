@@ -1,0 +1,87 @@
+
+
+- UIKit
+-  UIDataDetectorTypes 
+
+Structure
+
+# UIDataDetectorTypes
+
+Constants that define the types of information to detect in text-based content.
+
+iOSiPadOSMac CatalystvisionOS
+
+``` source
+struct UIDataDetectorTypes
+```
+
+## Topics
+
+### Constants
+
+static var phoneNumber: UIDataDetectorTypes
+
+An option to detect strings with the format of a phone number.
+
+static var link: UIDataDetectorTypes
+
+An option to detect strings with the format of a URL.
+
+static var address: UIDataDetectorTypes
+
+An option to detect strings with the format of an address.
+
+static var calendarEvent: UIDataDetectorTypes
+
+An option to detect strings with the format of a calendar event.
+
+static var shipmentTrackingNumber: UIDataDetectorTypes
+
+An option to detect strings with the format of a tracking number from a package delivery company.
+
+static var flightNumber: UIDataDetectorTypes
+
+An option to detect strings with the format of a flight number from an airline.
+
+static var lookupSuggestion: UIDataDetectorTypes
+
+An option to detect strings with the format of information that a person might want to look up.
+
+static var money: UIDataDetectorTypes
+
+An option to detect strings with the format of an amount of money.
+
+static var physicalValue: UIDataDetectorTypes
+
+An option to detect strings with the format of a physical value, such as length or temperature.
+
+static var all: UIDataDetectorTypes
+
+An option to detect all available types of data.
+
+### Initializers
+
+init(rawValue: UInt)
+
+Creates a data detector type with the specified raw value.
+
+## Relationships
+
+### Conforms To
+
+- BitwiseCopyable
+- Equatable
+- ExpressibleByArrayLiteral
+- OptionSet
+- RawRepresentable
+- Sendable
+- SetAlgebra
+
+## See Also
+
+### Formatting special data in text
+
+var dataDetectorTypes: UIDataDetectorTypes
+
+The types of data that convert to tappable URLs in the text view.
+

@@ -1,0 +1,22 @@
+
+
+- WebKit JS
+- SVGFEMorphologyElement
+-  SVG_MORPHOLOGY_OPERATOR_UNKNOWN 
+
+# SVG_MORPHOLOGY_OPERATOR_UNKNOWN
+
+Safari Desktop 9.0+Safari Mobile 9.0+
+
+``` source
+const unsigned short SVG_MORPHOLOGY_OPERATOR_UNKNOWN;
+```
+
+## See Also
+
+### Miscellaneous
+
+SVG_MORPHOLOGY_OPERATOR_DILATE
+
+SVG_MORPHOLOGY_OPERATOR_ERODE
+

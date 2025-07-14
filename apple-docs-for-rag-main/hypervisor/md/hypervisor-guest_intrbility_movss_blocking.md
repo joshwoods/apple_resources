@@ -1,0 +1,25 @@
+
+
+- Hypervisor
+-  GUEST_INTRBILITY_MOVSS_BLOCKING 
+
+Global Variable
+
+# GUEST_INTRBILITY_MOVSS_BLOCKING
+
+macOS
+
+``` source
+var GUEST_INTRBILITY_MOVSS_BLOCKING: UInt64 { get }
+```
+
+## See Also
+
+### Interruptibility options
+
+var GUEST_INTRBILITY_NMI_BLOCKING: UInt64
+
+var GUEST_INTRBILITY_SMI_BLOCKING: UInt64
+
+var GUEST_INTRBILITY_STI_BLOCKING: UInt64
+

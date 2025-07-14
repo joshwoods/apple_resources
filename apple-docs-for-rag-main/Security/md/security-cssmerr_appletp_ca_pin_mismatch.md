@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_CA_PIN_MISMATCH 
+
+Global Variable
+
+# CSSMERR_APPLETP_CA_PIN_MISMATCH
+
+macOS 10.10+
+
+``` source
+var CSSMERR_APPLETP_CA_PIN_MISMATCH: Int { get }
+```
+

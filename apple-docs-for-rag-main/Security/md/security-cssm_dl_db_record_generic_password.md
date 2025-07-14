@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_DL_DB_RECORD_GENERIC_PASSWORD 
+
+Global Variable
+
+# CSSM_DL_DB_RECORD_GENERIC_PASSWORD
+
+macOS 10.0+
+
+``` source
+var CSSM_DL_DB_RECORD_GENERIC_PASSWORD: UInt32 { get }
+```
+

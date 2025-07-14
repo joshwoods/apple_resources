@@ -1,0 +1,15 @@
+
+
+- OpenGL ES
+-  GL_TEXTURE_MATRIX_FLOAT_AS_INT_BITS_OES 
+
+Global Variable
+
+# GL_TEXTURE_MATRIX_FLOAT_AS_INT_BITS_OES
+
+iOS 2.0+iPadOS 2.0+Mac Catalyst 2.0+tvOS 9.0+visionOS 1.0+
+
+``` source
+var GL_TEXTURE_MATRIX_FLOAT_AS_INT_BITS_OES: Int32 { get }
+```
+

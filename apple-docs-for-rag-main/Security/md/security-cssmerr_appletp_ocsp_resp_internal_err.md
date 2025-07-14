@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_OCSP_RESP_INTERNAL_ERR 
+
+Global Variable
+
+# CSSMERR_APPLETP_OCSP_RESP_INTERNAL_ERR
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLETP_OCSP_RESP_INTERNAL_ERR: Int { get }
+```
+

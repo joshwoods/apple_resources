@@ -1,0 +1,86 @@
+
+
+- Foundation
+- Morphology
+-  Morphology.GrammaticalNumber 
+
+Enumeration
+
+# Morphology.GrammaticalNumber
+
+A representation of grammatical number, used for inflecting strings.
+
+iOS 15.0+iPadOS 15.0+Mac Catalyst 15.0+macOS 12.0+tvOS 15.0+visionOS 1.0+watchOS 8.0+
+
+``` source
+enum GrammaticalNumber
+```
+
+## Topics
+
+### Determining Grammatical Number
+
+case zero
+
+Zero persons or things, as used for a gramnatical number.
+
+case singular
+
+A single person or thing, as used for a grammatical number.
+
+case plural
+
+Multiple persons or things, as used for a grammatical number.
+
+case pluralTwo
+
+Two persons or things, as used for a grammatical number.
+
+case pluralFew
+
+A small number of persons or things, as used for a grammatical number.
+
+case pluralMany
+
+A large number of persons or things, as used for a grammatical number.
+
+## Relationships
+
+### Conforms To
+
+- Copyable
+- Decodable
+- Encodable
+- Equatable
+- Hashable
+- RawRepresentable
+- Sendable
+
+## See Also
+
+### Accessing Grammatical Properties
+
+var isUnspecified: Bool
+
+A Boolean value that indicates whether this instance specifies no particular grammar.
+
+var grammaticalGender: Morphology.GrammaticalGender?
+
+The grammatical gender used for inflecting strings with this morphology.
+
+enum GrammaticalGender
+
+A representation of grammatical gender, used for inflecting strings.
+
+var number: Morphology.GrammaticalNumber?
+
+The grammatical number used for inflecting strings with this morphology.
+
+var partOfSpeech: Morphology.PartOfSpeech?
+
+The grammatical part of speech used for inflecting strings with this morphology.
+
+enum PartOfSpeech
+
+A representation of grammatical parts of speech, used for inflecting strings.
+

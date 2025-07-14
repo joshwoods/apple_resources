@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_OCSP_RESP_MALFORMED_REQ 
+
+Global Variable
+
+# CSSMERR_APPLETP_OCSP_RESP_MALFORMED_REQ
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLETP_OCSP_RESP_MALFORMED_REQ: Int { get }
+```
+

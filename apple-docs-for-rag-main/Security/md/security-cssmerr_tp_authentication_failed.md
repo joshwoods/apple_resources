@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_TP_AUTHENTICATION_FAILED 
+
+Global Variable
+
+# CSSMERR_TP_AUTHENTICATION_FAILED
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSMERR_TP_AUTHENTICATION_FAILED: Int { get }
+```
+

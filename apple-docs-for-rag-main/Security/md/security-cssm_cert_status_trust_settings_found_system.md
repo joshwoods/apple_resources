@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_CERT_STATUS_TRUST_SETTINGS_FOUND_SYSTEM 
+
+Global Variable
+
+# CSSM_CERT_STATUS_TRUST_SETTINGS_FOUND_SYSTEM
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_CERT_STATUS_TRUST_SETTINGS_FOUND_SYSTEM: Int { get }
+```
+

@@ -1,0 +1,34 @@
+
+
+- RealityKit
+- SpatialTrackingSession
+- SpatialTrackingSession.Configuration
+- SpatialTrackingSession.Configuration.Camera
+-  ==(\_:\_:) 
+
+Operator
+
+# ==(\_:\_:)
+
+Returns a Boolean value indicating whether two values are equal.
+
+iOS 18.0+iPadOS 18.0+
+
+``` source
+static func == (a: SpatialTrackingSession.Configuration.Camera, b: SpatialTrackingSession.Configuration.Camera) -> Bool
+```
+
+## Parameters 
+
+`lhs`  
+
+A value to compare.
+
+`rhs`  
+
+Another value to compare.
+
+## Discussion
+
+Equality is the inverse of inequality. For any values `a` and `b`, `a == b` implies that `a != b` is `false`.
+

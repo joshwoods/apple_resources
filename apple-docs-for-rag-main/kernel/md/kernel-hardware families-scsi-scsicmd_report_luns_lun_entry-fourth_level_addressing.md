@@ -1,0 +1,18 @@
+
+
+- Kernel
+- Hardware Families
+- SCSI
+- SCSICmd_REPORT_LUNS_LUN_ENTRY
+-  FOURTH_LEVEL_ADDRESSING 
+
+Instance Property
+
+# FOURTH_LEVEL_ADDRESSING
+
+macOS 10.3+
+
+``` source
+UInt16 FOURTH_LEVEL_ADDRESSING;
+```
+

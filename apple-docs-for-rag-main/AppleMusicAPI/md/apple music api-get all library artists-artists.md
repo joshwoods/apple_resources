@@ -1,0 +1,162 @@
+
+
+- Apple Music API
+-  Get All Library Artists 
+
+Web Service Endpoint
+
+# Get All Library Artists
+
+Fetch all the library artists in alphabetical order.
+
+Apple Music 1.0+
+
+## URL
+
+``` source
+GET https://api.music.apple.com/v1/me/library/artists
+```
+
+## Query Parameters
+
+`include`
+
+`[string]`
+
+Additional relationships to include in the fetch.
+
+`l`
+
+`string`
+
+The localization to use, specified by a language tag. The possible values are in the `supportedLanguageTags` array belonging to the `Storefront` object specified by `storefront`. Otherwise, the default is `defaultLanguageTag` in `Storefront`.
+
+`limit`
+
+`integer`
+
+The number of objects or number of objects in the specified relationship returned.
+
+`offset`
+
+`string`
+
+The next page or group of objects to fetch.
+
+`extend`
+
+`[string]`
+
+A list of attribute extensions to apply to resources in the response.
+
+## Response Codes
+
+` 200 ``OK`
+
+LibraryArtistsResponse
+
+`OK`
+
+The request was successful.
+
+Content-Type: application/json
+
+` 401 ``Unauthorized`
+
+UnauthorizedResponse
+
+`Unauthorized`
+
+A response indicating an incorrect `Authorization` header.
+
+Content-Type: application/json
+
+` 403 ``Forbidden`
+
+ForbiddenResponse
+
+`Forbidden`
+
+A response indicating invalid or insufficient authentication.
+
+Content-Type: application/json
+
+` 500 ``Internal Server Error`
+
+ErrorsResponse
+
+`Internal Server Error`
+
+A response indicating an error occurred on the server.
+
+Content-Type: application/json
+
+## Discussion
+
+If successful, the HTTP status code is 200 (OK) and the `data` array contains the requested resource object. If unsuccessful, the HTTP status code indicates the error and the details are in the `errors` array.
+
+This endpoint requires a music user token. For more information, see User Authentication for MusicKit.
+
+### Example
+
+- Request
+- Response
+
+```
+https://api.music.apple.com/v1/me/library/artists
+```
+
+```
+{    
+    "next": "/v1/me/library/artists?offset=2",
+    "data": [
+        {
+            "id": "r.y8mMT7t",
+            "type": "library-artists",
+            "href": "/v1/me/library/artists/r.y8mMT7t",
+            "attributes": {
+                "name": "Orville Peck"
+            }
+        },
+        {
+            "id": "r.SvEnrEf",
+            "type": "library-artists",
+            "href": "/v1/me/library/artists/r.SvEnrEf",
+            "attributes": {
+                "name": "Florence + the Machine"
+            }
+        }
+    ],
+    "meta": {
+        "total": 10
+    }
+}
+
+```
+
+## See Also
+
+### Related Documentation
+
+object LibraryArtists
+
+A resource object that represents an artist present in a user’s library.
+
+object LibraryArtistsResponse
+
+The response to a library artists request.
+
+### Requesting a Library Artist
+
+Get a Library Artist
+
+Fetch a library artist by using its identifier.
+
+Get a Library Artist's Relationship Directly by Name
+
+Fetch a library artist’s relationship by using its identifier.
+
+Get Multiple Library Artists
+
+Fetch one or more library artists by using their identifiers.
+

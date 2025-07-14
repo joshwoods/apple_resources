@@ -1,0 +1,49 @@
+
+
+- USBDriverKit
+-  kIOUSBSuperSpeedPlusDeviceCapabilitySublinkSymmetry 
+
+Enumeration Case
+
+# kIOUSBSuperSpeedPlusDeviceCapabilitySublinkSymmetry
+
+DriverKit 19.0+
+
+``` source
+kIOUSBSuperSpeedPlusDeviceCapabilitySublinkSymmetry
+```
+
+## See Also
+
+### Getting the Device Capabilities
+
+kIOUSBSuperSpeedPlusDeviceCapabilityMinRxLaneCount
+
+kIOUSBSuperSpeedPlusDeviceCapabilityMinRxLaneCountPhase
+
+kIOUSBSuperSpeedPlusDeviceCapabilityMinTxLaneCount
+
+kIOUSBSuperSpeedPlusDeviceCapabilityMinTxLaneCountPhase
+
+kIOUSBSuperSpeedPlusDeviceCapabilityReserved
+
+kIOUSBSuperSpeedPlusDeviceCapabilityReservedPhase
+
+kIOUSBSuperSpeedPlusDeviceCapabilitySublinkAsymmetric
+
+kIOUSBSuperSpeedPlusDeviceCapabilitySublinkDirection
+
+kIOUSBSuperSpeedPlusDeviceCapabilitySublinkDirectionPhase
+
+kIOUSBSuperSpeedPlusDeviceCapabilitySublinkDirectionRx
+
+kIOUSBSuperSpeedPlusDeviceCapabilitySublinkDirectionTx
+
+kIOUSBSuperSpeedPlusDeviceCapabilitySublinkLSE
+
+kIOUSBSuperSpeedPlusDeviceCapabilitySublinkLSEBits
+
+kIOUSBSuperSpeedPlusDeviceCapabilitySublinkLSEGbits
+
+kIOUSBSuperSpeedPlusDeviceCapabilitySublinkLSEKbits
+

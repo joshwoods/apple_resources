@@ -1,0 +1,114 @@
+
+
+- IOBluetooth
+-  BluetoothEnhancedSynchronousConnectionInfo 
+
+Structure
+
+# BluetoothEnhancedSynchronousConnectionInfo
+
+macOS
+
+``` source
+struct BluetoothEnhancedSynchronousConnectionInfo
+```
+
+## Topics
+
+### Initializers
+
+init()
+
+init(transmitBandWidth: BluetoothHCITransmitBandwidth, receiveBandWidth: BluetoothHCIReceiveBandwidth, transmitCodingFormat: BluetoothHCITransmitCodingFormat, receiveCodingFormat: BluetoothHCIReceiveCodingFormat, transmitCodecFrameSize: BluetoothHCITransmitCodecFrameSize, receiveCodecFrameSize: BluetoothHCIReceiveCodecFrameSize, inputBandwidth: BluetoothHCIInputBandwidth, outputBandwidth: BluetoothHCIOutputBandwidth, inputCodingFormat: BluetoothHCIInputCodingFormat, outputCodingFormat: BluetoothHCIOutputCodingFormat, inputCodedDataSize: BluetoothHCIInputCodedDataSize, outputCodedDataSize: BluetoothHCIOutputCodedDataSize, inputPCMDataFormat: BluetoothHCIInputPCMDataFormat, outputPCMDataFormat: BluetoothHCIOutputPCMDataFormat, inputPCMSampelPayloadMSBPosition: BluetoothHCIInputPCMSamplePayloadMSBPosition, outputPCMSampelPayloadMSBPosition: BluetoothHCIOutputPCMSamplePayloadMSBPosition, inputDataPath: BluetoothHCIInputDataPath, outputDataPath: BluetoothHCIOutputDataPath, inputTransportUnitSize: BluetoothHCIInputTransportUnitSize, outputTransportUnitSize: BluetoothHCIOutputTransportUnitSize, maxLatency: BluetoothHCIMaxLatency, voiceSetting: BluetoothHCIVoiceSetting, retransmissionEffort: BluetoothHCIRetransmissionEffort, packetType: BluetoothPacketType)
+
+### Instance Properties
+
+var inputBandwidth: BluetoothHCIInputBandwidth
+
+var inputCodedDataSize: BluetoothHCIInputCodedDataSize
+
+var inputCodingFormat: BluetoothHCIInputCodingFormat
+
+var inputDataPath: BluetoothHCIInputDataPath
+
+var inputPCMDataFormat: BluetoothHCIInputPCMDataFormat
+
+var inputPCMSampelPayloadMSBPosition: BluetoothHCIInputPCMSamplePayloadMSBPosition
+
+var inputTransportUnitSize: BluetoothHCIInputTransportUnitSize
+
+var maxLatency: BluetoothHCIMaxLatency
+
+var outputBandwidth: BluetoothHCIOutputBandwidth
+
+var outputCodedDataSize: BluetoothHCIOutputCodedDataSize
+
+var outputCodingFormat: BluetoothHCIOutputCodingFormat
+
+var outputDataPath: BluetoothHCIOutputDataPath
+
+var outputPCMDataFormat: BluetoothHCIOutputPCMDataFormat
+
+var outputPCMSampelPayloadMSBPosition: BluetoothHCIOutputPCMSamplePayloadMSBPosition
+
+var outputTransportUnitSize: BluetoothHCIOutputTransportUnitSize
+
+var packetType: BluetoothPacketType
+
+var receiveBandWidth: BluetoothHCIReceiveBandwidth
+
+var receiveCodecFrameSize: BluetoothHCIReceiveCodecFrameSize
+
+var receiveCodingFormat: BluetoothHCIReceiveCodingFormat
+
+var retransmissionEffort: BluetoothHCIRetransmissionEffort
+
+var transmitBandWidth: BluetoothHCITransmitBandwidth
+
+var transmitCodecFrameSize: BluetoothHCITransmitCodecFrameSize
+
+var transmitCodingFormat: BluetoothHCITransmitCodingFormat
+
+var voiceSetting: BluetoothHCIVoiceSetting
+
+## Relationships
+
+### Conforms To
+
+- BitwiseCopyable
+- Sendable
+
+## See Also
+
+### Structures
+
+struct BluetoothAFHHostChannelClassification
+
+struct BluetoothAFHResults
+
+struct BluetoothAMPCommandRejectReason
+
+struct BluetoothAMPCreatePhysicalLinkResponseStatus
+
+struct BluetoothAMPDisconnectPhysicalLinkResponseStatus
+
+struct BluetoothAMPDiscoverResponseControllerStatus
+
+struct BluetoothAMPGetAssocResponseStatus
+
+struct BluetoothAMPGetInfoResponseStatus
+
+struct BluetoothAMPManagerCode
+
+struct BluetoothAuthenticationRequirementsValues
+
+struct BluetoothCompanyIdentifers
+
+struct BluetoothDeviceAddress
+
+struct BluetoothEventFilterCondition
+
+struct BluetoothFeatureBits
+
+struct BluetoothHCIAFHChannelAssessmentModes
+

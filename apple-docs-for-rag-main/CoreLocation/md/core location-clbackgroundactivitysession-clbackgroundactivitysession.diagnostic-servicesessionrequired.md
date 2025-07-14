@@ -1,0 +1,17 @@
+
+
+- Core Location
+- CLBackgroundActivitySession
+- CLBackgroundActivitySession.Diagnostic
+-  serviceSessionRequired 
+
+Instance Property
+
+# serviceSessionRequired
+
+iOS 18.0+iPadOS 18.0+Mac Catalyst 18.0+visionOS 1.0+watchOS 11.0+
+
+``` source
+var serviceSessionRequired: Bool { get }
+```
+

@@ -1,0 +1,49 @@
+
+
+- USBDriverKit
+-  kIOUSBEndpointDescriptorDirectionOut 
+
+Enumeration Case
+
+# kIOUSBEndpointDescriptorDirectionOut
+
+DriverKit 19.0+
+
+``` source
+kIOUSBEndpointDescriptorDirectionOut
+```
+
+## See Also
+
+### Getting the Options
+
+kIOUSBEndpointDescriptorNumber
+
+kIOUSBEndpointDescriptorNumberPhase
+
+kIOUSBEndpointDescriptorEndpointAddressReserved
+
+kIOUSBEndpointDescriptorDirection
+
+kIOUSBEndpointDescriptorDirectionPhase
+
+kIOUSBEndpointDescriptorDirectionIn
+
+kIOUSBEndpointDescriptorTransferType
+
+kIOUSBEndpointDescriptorTransferTypePhase
+
+kIOUSBEndpointDescriptorTransferTypeControl
+
+kIOUSBEndpointDescriptorTransferTypeIsochronous
+
+kIOUSBEndpointDescriptorTransferTypeBulk
+
+kIOUSBEndpointDescriptorTransferTypeInterrupt
+
+kIOUSBEndpointDescriptorSynchronizationType
+
+kIOUSBEndpointDescriptorSynchronizationTypePhase
+
+kIOUSBEndpointDescriptorSynchronizationTypeNone
+

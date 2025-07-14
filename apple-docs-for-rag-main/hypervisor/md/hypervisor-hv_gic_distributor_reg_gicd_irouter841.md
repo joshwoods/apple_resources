@@ -1,0 +1,49 @@
+
+
+- Hypervisor
+-  HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER841 
+
+Global Variable
+
+# HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER841
+
+macOS
+
+``` source
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER841: hv_gic_distributor_reg_t { get }
+```
+
+## See Also
+
+### Interrupt routing registers
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER32: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER33: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER34: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER35: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER36: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER37: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER38: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER39: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER40: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER41: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER42: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER43: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER44: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER45: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER46: hv_gic_distributor_reg_t
+

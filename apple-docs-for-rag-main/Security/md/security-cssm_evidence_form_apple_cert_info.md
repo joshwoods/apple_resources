@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_EVIDENCE_FORM_APPLE_CERT_INFO 
+
+Global Variable
+
+# CSSM_EVIDENCE_FORM_APPLE_CERT_INFO
+
+macOS 10.0+
+
+``` source
+var CSSM_EVIDENCE_FORM_APPLE_CERT_INFO: UInt32 { get }
+```
+

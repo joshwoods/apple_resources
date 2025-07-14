@@ -1,0 +1,176 @@
+
+
+- IOBluetooth
+- IOBluetooth Enumerations
+-  BluetoothHCIError constants 
+
+API Collection
+
+# BluetoothHCIError constants
+
+## Topics
+
+### Constants
+
+var kBluetoothHCIErrorACLConnectionAlreadyExists: Int
+
+var kBluetoothHCIErrorAuthenticationFailure: Int
+
+var kBluetoothHCIErrorChannelClassificationNotSupported: Int
+
+var kBluetoothHCIErrorCommandDisallowed: Int
+
+var kBluetoothHCIErrorConnectionFailedToBeEstablished: Int
+
+var kBluetoothHCIErrorConnectionRejectedDueToNoSuitableChannelFound: Int
+
+var kBluetoothHCIErrorConnectionTerminatedByLocalHost: Int
+
+var kBluetoothHCIErrorConnectionTerminatedDueToMICFailure: Int
+
+var kBluetoothHCIErrorConnectionTimeout: Int
+
+var kBluetoothHCIErrorControllerBusy: Int
+
+var kBluetoothHCIErrorDifferentTransactionCollision: Int
+
+var kBluetoothHCIErrorDirectedAdvertisingTimeout: Int
+
+var kBluetoothHCIErrorEncryptionModeNotAcceptable: Int
+
+var kBluetoothHCIErrorExtendedInquiryResponseTooLarge: Int
+
+var kBluetoothHCIErrorHardwareFailure: Int
+
+var kBluetoothHCIErrorHostBusyPairing: Int
+
+var kBluetoothHCIErrorHostRejectedLimitedResources: Int
+
+var kBluetoothHCIErrorHostRejectedRemoteDeviceIsPersonal: Int
+
+var kBluetoothHCIErrorHostRejectedSecurityReasons: Int
+
+var kBluetoothHCIErrorHostRejectedUnacceptableDeviceAddress: Int
+
+var kBluetoothHCIErrorHostTimeout: Int
+
+var kBluetoothHCIErrorInstantPassed: Int
+
+var kBluetoothHCIErrorInsufficientSecurity: Int
+
+var kBluetoothHCIErrorInvalidHCICommandParameters: Int
+
+var kBluetoothHCIErrorInvalidLMPParameters: Int
+
+var kBluetoothHCIErrorKeyMissing: Int
+
+var kBluetoothHCIErrorLMPErrorTransactionCollision: Int
+
+var kBluetoothHCIErrorLMPPDUNotAllowed: Int
+
+var kBluetoothHCIErrorLMPResponseTimeout: Int
+
+var kBluetoothHCIErrorMACConnectionFailed: Int
+
+var kBluetoothHCIErrorMax: Int
+
+var kBluetoothHCIErrorMaxNumberOfConnections: Int
+
+var kBluetoothHCIErrorMaxNumberOfSCOConnectionsToADevice: Int
+
+var kBluetoothHCIErrorMemoryFull: Int
+
+var kBluetoothHCIErrorNoConnection: Int
+
+var kBluetoothHCIErrorOtherEndTerminatedConnectionAboutToPowerOff: Int
+
+var kBluetoothHCIErrorOtherEndTerminatedConnectionLowResources: Int
+
+var kBluetoothHCIErrorOtherEndTerminatedConnectionUserEnded: Int
+
+var kBluetoothHCIErrorPageTimeout: Int
+
+var kBluetoothHCIErrorPairingNotAllowed: Int
+
+var kBluetoothHCIErrorPairingWithUnitKeyNotSupported: Int
+
+var kBluetoothHCIErrorParameterOutOfMandatoryRange: Int
+
+var kBluetoothHCIErrorQoSNotSupported: Int
+
+var kBluetoothHCIErrorQoSRejected: Int
+
+var kBluetoothHCIErrorQoSUnacceptableParameter: Int
+
+var kBluetoothHCIErrorRepeatedAttempts: Int
+
+var kBluetoothHCIErrorReservedSlotViolation: Int
+
+var kBluetoothHCIErrorRoleChangeNotAllowed: Int
+
+var kBluetoothHCIErrorRoleSwitchFailed: Int
+
+var kBluetoothHCIErrorRoleSwitchPending: Int
+
+var kBluetoothHCIErrorSCOAirModeRejected: Int
+
+var kBluetoothHCIErrorSCOIntervalRejected: Int
+
+var kBluetoothHCIErrorSCOOffsetRejected: Int
+
+var kBluetoothHCIErrorSecureSimplePairingNotSupportedByHost: Int
+
+var kBluetoothHCIErrorSuccess: Int
+
+var kBluetoothHCIErrorUnacceptableConnectionInterval: Int
+
+var kBluetoothHCIErrorUnitKeyUsed: Int
+
+var kBluetoothHCIErrorUnknownHCICommand: Int
+
+var kBluetoothHCIErrorUnknownLMPPDU: Int
+
+var kBluetoothHCIErrorUnspecifiedError: Int
+
+var kBluetoothHCIErrorUnsupportedFeatureOrParameterValue: Int
+
+var kBluetoothHCIErrorUnsupportedLMPParameterValue: Int
+
+var kBluetoothHCIErrorUnsupportedRemoteFeature: Int
+
+var kBluetoothHCIErrorCoarseClockAdjustmentRejected: Int
+
+## See Also
+
+### Enumerations
+
+struct BluetoothAMPCommandRejectReason
+
+struct BluetoothAMPCreatePhysicalLinkResponseStatus
+
+struct BluetoothAMPDisconnectPhysicalLinkResponseStatus
+
+struct BluetoothAMPDiscoverResponseControllerStatus
+
+struct BluetoothAMPGetAssocResponseStatus
+
+struct BluetoothAMPGetInfoResponseStatus
+
+struct BluetoothAMPManagerCode
+
+struct BluetoothHCIPowerState
+
+struct BluetoothL2CAPCommandCode
+
+struct BluetoothL2CAPCommandRejectReason
+
+struct BluetoothL2CAPConfigurationOption
+
+struct BluetoothL2CAPConfigurationResult
+
+struct BluetoothL2CAPConfigurationRetransmissionAndFlowControlFlags
+
+struct BluetoothL2CAPConnectionResult
+
+struct BluetoothL2CAPConnectionStatus
+

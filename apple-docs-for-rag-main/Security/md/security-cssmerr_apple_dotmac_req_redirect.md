@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLE_DOTMAC_REQ_REDIRECT 
+
+Global Variable
+
+# CSSMERR_APPLE_DOTMAC_REQ_REDIRECT
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLE_DOTMAC_REQ_REDIRECT: Int { get }
+```
+

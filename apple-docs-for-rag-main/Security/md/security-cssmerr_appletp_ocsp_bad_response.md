@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_OCSP_BAD_RESPONSE 
+
+Global Variable
+
+# CSSMERR_APPLETP_OCSP_BAD_RESPONSE
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLETP_OCSP_BAD_RESPONSE: Int { get }
+```
+

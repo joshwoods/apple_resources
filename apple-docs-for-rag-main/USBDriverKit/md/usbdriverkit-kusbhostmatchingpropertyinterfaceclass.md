@@ -1,0 +1,47 @@
+
+
+- USBDriverKit
+-  kUSBHostMatchingPropertyInterfaceClass 
+
+Macro
+
+# kUSBHostMatchingPropertyInterfaceClass
+
+DriverKit 19.0+
+
+``` source
+#define kUSBHostMatchingPropertyInterfaceClass
+```
+
+## See Also
+
+### Host Matching Properties
+
+kUSBHostMatchingPropertySpeed
+
+kUSBHostMatchingPropertyPortType
+
+kUSBHostMatchingPropertyVendorID
+
+kUSBHostMatchingPropertyProductID
+
+kUSBHostMatchingPropertyDeviceClass
+
+kUSBHostMatchingPropertyProductIDMask
+
+kUSBHostMatchingPropertyDeviceProtocol
+
+kUSBHostMatchingPropertyDeviceSubClass
+
+kUSBHostMatchingPropertyProductIDArray
+
+kUSBHostMatchingPropertyInterfaceNumber
+
+kUSBHostMatchingPropertyInterfaceProtocol
+
+kUSBHostMatchingPropertyInterfaceSubClass
+
+kUSBHostMatchingPropertyConfigurationValue
+
+kUSBHostMatchingPropertyDeviceReleaseNumber
+

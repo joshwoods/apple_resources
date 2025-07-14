@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_OCSP_INVALID_ANCHOR_CERT 
+
+Global Variable
+
+# CSSMERR_APPLETP_OCSP_INVALID_ANCHOR_CERT
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLETP_OCSP_INVALID_ANCHOR_CERT: Int { get }
+```
+

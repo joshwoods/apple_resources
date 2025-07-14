@@ -1,0 +1,40 @@
+
+
+- WebKit JS
+- FileError
+-  ABORT_ERR 
+
+# ABORT_ERR
+
+Safari Desktop 10.0+Safari Mobile 10.0+
+
+``` source
+const unsigned short ABORT_ERR;
+```
+
+## See Also
+
+### Miscellaneous
+
+ENCODING_ERR
+
+INVALID_MODIFICATION_ERR
+
+INVALID_STATE_ERR
+
+NOT_FOUND_ERR
+
+NOT_READABLE_ERR
+
+NO_MODIFICATION_ALLOWED_ERR
+
+PATH_EXISTS_ERR
+
+QUOTA_EXCEEDED_ERR
+
+SECURITY_ERR
+
+SYNTAX_ERR
+
+TYPE_MISMATCH_ERR
+

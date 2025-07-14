@@ -1,0 +1,31 @@
+
+
+- IOBluetooth
+-  kBluetoothLESecurityManagerIOCapabilityDisplayYesNo 
+
+Global Variable
+
+# kBluetoothLESecurityManagerIOCapabilityDisplayYesNo
+
+macOS
+
+``` source
+var kBluetoothLESecurityManagerIOCapabilityDisplayYesNo: BluetoothLESecurityManagerIOCapability { get }
+```
+
+## See Also
+
+### Constants
+
+var kBluetoothLESecurityManagerIOCapabilityDisplayOnly: BluetoothLESecurityManagerIOCapability
+
+var kBluetoothLESecurityManagerIOCapabilityKeyboardDisplay: BluetoothLESecurityManagerIOCapability
+
+var kBluetoothLESecurityManagerIOCapabilityKeyboardOnly: BluetoothLESecurityManagerIOCapability
+
+var kBluetoothLESecurityManagerIOCapabilityNoInputNoOutput: BluetoothLESecurityManagerIOCapability
+
+var kBluetoothLESecurityManagerIOCapabilityReservedEnd: BluetoothLESecurityManagerIOCapability
+
+var kBluetoothLESecurityManagerIOCapabilityReservedStart: BluetoothLESecurityManagerIOCapability
+

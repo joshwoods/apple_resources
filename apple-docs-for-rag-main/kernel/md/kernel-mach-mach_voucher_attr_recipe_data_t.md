@@ -1,0 +1,108 @@
+
+
+- Kernel
+- mach
+-  mach_voucher_attr_recipe_data_t 
+
+Structure
+
+# mach_voucher_attr_recipe_data_t
+
+macOS 10.10+
+
+``` source
+typedef struct mach_voucher_attr_recipe_data {
+    ...
+} mach_voucher_attr_recipe_data_t;
+```
+
+## Topics
+
+### Instance Properties
+
+command
+
+content
+
+content_size
+
+key
+
+previous_voucher
+
+## See Also
+
+### Voucher
+
+mach_voucher_attr_command
+
+mach_voucher_attr_control_create_mach_voucher
+
+mach_voucher_attr_control_get_values
+
+mach_voucher_debug_info
+
+mach_voucher_extract_all_attr_recipes
+
+mach_voucher_extract_attr_content
+
+mach_voucher_extract_attr_recipe
+
+host_create_mach_voucher
+
+host_register_mach_voucher_attr_manager
+
+host_register_well_known_mach_voucher_attr_manager
+
+mach_voucher_attr_command_t
+
+mach_voucher_attr_content_size_t
+
+mach_voucher_attr_content_t
+
+mach_voucher_attr_control_flags_t
+
+mach_voucher_attr_control_t
+
+mach_voucher_attr_importance_refs
+
+mach_voucher_attr_key_array_t
+
+mach_voucher_attr_key_t
+
+mach_voucher_attr_manager_t
+
+mach_voucher_attr_raw_recipe_array_size_t
+
+mach_voucher_attr_raw_recipe_array_t
+
+mach_voucher_attr_raw_recipe_size_t
+
+mach_voucher_attr_raw_recipe_t
+
+mach_voucher_attr_recipe_command_array_t
+
+mach_voucher_attr_recipe_command_t
+
+mach_voucher_attr_recipe_size_t
+
+mach_voucher_attr_recipe_t
+
+mach_voucher_attr_value_flags_t
+
+mach_voucher_attr_value_handle_array_size_t
+
+mach_voucher_attr_value_handle_array_t
+
+mach_voucher_attr_value_handle_t
+
+mach_voucher_attr_value_reference_t
+
+mach_voucher_name_array_t
+
+mach_voucher_name_t
+
+mach_voucher_selector_t
+
+mach_voucher_t
+

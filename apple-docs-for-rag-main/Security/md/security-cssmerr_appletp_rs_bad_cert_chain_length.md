@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_RS_BAD_CERT_CHAIN_LENGTH 
+
+Global Variable
+
+# CSSMERR_APPLETP_RS_BAD_CERT_CHAIN_LENGTH
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLETP_RS_BAD_CERT_CHAIN_LENGTH: Int { get }
+```
+

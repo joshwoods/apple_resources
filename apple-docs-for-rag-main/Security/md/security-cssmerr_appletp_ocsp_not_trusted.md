@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_OCSP_NOT_TRUSTED 
+
+Global Variable
+
+# CSSMERR_APPLETP_OCSP_NOT_TRUSTED
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLETP_OCSP_NOT_TRUSTED: Int { get }
+```
+

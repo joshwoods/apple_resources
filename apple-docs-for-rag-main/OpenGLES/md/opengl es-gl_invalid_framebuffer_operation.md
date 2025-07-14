@@ -1,0 +1,15 @@
+
+
+- OpenGL ES
+-  GL_INVALID_FRAMEBUFFER_OPERATION 
+
+Global Variable
+
+# GL_INVALID_FRAMEBUFFER_OPERATION
+
+iOS 2.0+iPadOS 2.0+Mac Catalyst 2.0+tvOS 9.0+visionOS 1.0+
+
+``` source
+var GL_INVALID_FRAMEBUFFER_OPERATION: Int32 { get }
+```
+

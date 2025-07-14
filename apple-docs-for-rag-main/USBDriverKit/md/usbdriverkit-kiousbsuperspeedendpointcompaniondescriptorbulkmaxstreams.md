@@ -1,0 +1,39 @@
+
+
+- USBDriverKit
+-  kIOUSBSuperSpeedEndpointCompanionDescriptorBulkMaxStreams 
+
+Enumeration Case
+
+# kIOUSBSuperSpeedEndpointCompanionDescriptorBulkMaxStreams
+
+DriverKit 19.0+
+
+``` source
+kIOUSBSuperSpeedEndpointCompanionDescriptorBulkMaxStreams
+```
+
+## See Also
+
+### Getting the Descriptor Options
+
+kIOUSBSuperSpeedEndpointCompanionDescriptorMaxBurst
+
+kIOUSBSuperSpeedEndpointCompanionDescriptorMaxBurstPhase
+
+kIOUSBSuperSpeedEndpointCompanionDescriptorBulkMaxStreamsPhase
+
+kIOUSBSuperSpeedEndpointCompanionDescriptorBulkReserved
+
+kIOUSBSuperSpeedEndpointCompanionDescriptorBulkReservedPhase
+
+kIOUSBSuperSpeedEndpointCompanionDescriptorIsocMult
+
+kIOUSBSuperSpeedEndpointCompanionDescriptorIsocMultPhase
+
+kIOUSBSuperSpeedEndpointCompanionDescriptorIsocReserved
+
+kIOUSBSuperSpeedEndpointCompanionDescriptorIsocReservedPhase
+
+kIOUSBSuperSpeedEndpointCompanionDescriptorSSPIsocCompanion
+

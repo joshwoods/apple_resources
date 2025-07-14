@@ -1,0 +1,55 @@
+
+
+- Core Foundation
+-  kCFURLUbiquitousItemIsExcludedFromSyncKey 
+
+Global Variable
+
+# kCFURLUbiquitousItemIsExcludedFromSyncKey
+
+iOS 14.5+iPadOS 14.5+Mac Catalyst 14.5+macOS 11.3+tvOS 14.5+visionOS 1.0+watchOS 7.4+
+
+``` source
+let kCFURLUbiquitousItemIsExcludedFromSyncKey: CFString!
+```
+
+## See Also
+
+### Constants
+
+var CFByteOrderBigEndian: __CFByteOrder
+
+Multi-byte values are stored with the most-significant bytes stored first. PowerPC CPUs are big endian.
+
+var CFByteOrderLittleEndian: __CFByteOrder
+
+Multi-byte values are stored with the least-significant bytes stored first. Pentium CPUs are little endian.
+
+var CFByteOrderUnknown: __CFByteOrder
+
+The byte order is unknown.
+
+var kCFCoreFoundationVersionNumber10_10: Double
+
+var kCFCoreFoundationVersionNumber10_10_1: Double
+
+var kCFCoreFoundationVersionNumber10_10_2: Int32
+
+var kCFCoreFoundationVersionNumber10_10_3: Double
+
+var kCFCoreFoundationVersionNumber10_10_4: Double
+
+var kCFCoreFoundationVersionNumber10_10_5: Double
+
+var kCFCoreFoundationVersionNumber10_10_Max: Int32
+
+var kCFCoreFoundationVersionNumber10_11: Int32
+
+var kCFCoreFoundationVersionNumber10_11_1: Double
+
+var kCFCoreFoundationVersionNumber10_11_2: Double
+
+var kCFCoreFoundationVersionNumber10_11_3: Double
+
+var kCFCoreFoundationVersionNumber10_11_4: Double
+

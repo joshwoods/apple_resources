@@ -1,0 +1,39 @@
+
+
+- USBDriverKit
+-  kIOUSBSuperSpeedDeviceCapabilityFullSpeed 
+
+Enumeration Case
+
+# kIOUSBSuperSpeedDeviceCapabilityFullSpeed
+
+DriverKit 19.0+
+
+``` source
+kIOUSBSuperSpeedDeviceCapabilityFullSpeed
+```
+
+## See Also
+
+### Getting the Device Capabilities
+
+kIOUSBSuperSpeedDeviceCapability5Gb
+
+kIOUSBSuperSpeedDeviceCapabilityHighSpeed
+
+kIOUSBSuperSpeedDeviceCapabilityLTM
+
+kIOUSBSuperSpeedDeviceCapabilityLowSpeed
+
+kIOUSBSuperSpeedDeviceCapabilitySupport5Gb
+
+kIOUSBSuperSpeedDeviceCapabilitySupportFullSpeed
+
+kIOUSBSuperSpeedDeviceCapabilitySupportHighSpeed
+
+kIOUSBSuperSpeedDeviceCapabilitySupportLowSpeed
+
+kIOUSBSuperSpeedDeviceCapabilityU1DevExitLatMax
+
+kIOUSBSuperSpeedDeviceCapabilityU2DevExitLatMax
+

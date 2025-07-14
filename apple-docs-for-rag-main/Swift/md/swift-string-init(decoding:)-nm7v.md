@@ -1,0 +1,68 @@
+
+
+- Swift
+- String
+-  init(decoding:) 
+
+Initializer
+
+# init(decoding:)
+
+Creates a string by interpreting the file path’s content as UTF-8 on Unix and UTF-16 on Windows.
+
+iOS 14.0+iPadOS 14.0+Mac Catalyst 14.0+macOS 11.0+tvOS 14.0+visionOS 1.0+watchOS 7.0+
+
+``` source
+init(decoding path: FilePath)
+```
+
+## Parameters 
+
+`path`  
+
+The file path to be interpreted as `CInterop.PlatformUnicodeEncoding`.
+
+## Discussion
+
+If the content of the file path isn’t a well-formed Unicode string, this initializer replaces invalid bytes with U+FFFD. This means that, depending on the semantics of the specific file system, conversion to a string and back to a path might result in a value that’s different from the original path.
+
+## See Also
+
+### Creating a String
+
+init()
+
+Creates an empty string.
+
+init(Character)
+
+Creates a string containing the given character.
+
+init&lt;S>(S)
+
+Creates a new string containing the characters in the given sequence.
+
+init&lt;S>(S)
+
+Creates a new instance of a collection containing the elements of a sequence.
+
+init&lt;S>(S)
+
+Creates a new string containing the characters in the given sequence.
+
+init(Substring)
+
+Creates a new string from the given substring.
+
+init(repeating: String, count: Int)
+
+Creates a new string representing the given string repeated the specified number of times.
+
+init(repeating: Character, count: Int)
+
+Creates a string representing the given character repeated the specified number of times.
+
+init(unsafeUninitializedCapacity: Int, initializingUTF8With: (UnsafeMutableBufferPointer&lt;UInt8>) throws -> Int) rethrows
+
+Creates a new string with the specified capacity in UTF-8 code units, and then calls the given closure with a buffer covering the string’s uninitialized memory.
+

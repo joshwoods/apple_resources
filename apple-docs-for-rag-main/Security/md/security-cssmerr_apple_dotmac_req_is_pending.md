@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLE_DOTMAC_REQ_IS_PENDING 
+
+Global Variable
+
+# CSSMERR_APPLE_DOTMAC_REQ_IS_PENDING
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLE_DOTMAC_REQ_IS_PENDING: Int { get }
+```
+

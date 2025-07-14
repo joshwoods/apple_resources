@@ -1,0 +1,22 @@
+
+
+- Create ML Components
+- ClassificationDistribution
+-  ClassificationDistribution.Index 
+
+Type Alias
+
+# ClassificationDistribution.Index
+
+A type that represents a position in the collection.
+
+iOS 16.0+iPadOS 16.0+Mac Catalyst 16.0+macOS 13.0+tvOS 16.0+visionOS 1.0+watchOS 11.0+
+
+``` source
+typealias Index = Int
+```
+
+## Discussion
+
+Valid indices consist of the position of every element and a “past the end” position that’s not valid for use as a subscript argument.
+

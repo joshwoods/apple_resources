@@ -1,0 +1,51 @@
+
+
+- Kernel
+- Hardware Families
+- Bluetooth
+-  BluetoothAMPDiscoverResponseControllerStatus 
+
+Type Alias
+
+# BluetoothAMPDiscoverResponseControllerStatus
+
+macOS 10.6+
+
+``` source
+typedef enum BluetoothAMPDiscoverResponseControllerStatus BluetoothAMPDiscoverResponseControllerStatus;
+```
+
+## Topics
+
+### Constants
+
+kBluetoothAMPManagerDiscoverResponseControllerStatusBluetoothOnly
+
+kBluetoothAMPManagerDiscoverResponseControllerStatusFullCapacity
+
+kBluetoothAMPManagerDiscoverResponseControllerStatusHighCapacity
+
+kBluetoothAMPManagerDiscoverResponseControllerStatusLowCapacity
+
+kBluetoothAMPManagerDiscoverResponseControllerStatusMediumCapacity
+
+kBluetoothAMPManagerDiscoverResponseControllerStatusNoCapacity
+
+kBluetoothAMPManagerDiscoverResponseControllerStatusPoweredDown
+
+## See Also
+
+### AMP
+
+BluetoothAMPCommandRejectReason
+
+BluetoothAMPCreatePhysicalLinkResponseStatus
+
+BluetoothAMPDisconnectPhysicalLinkResponseStatus
+
+BluetoothAMPGetAssocResponseStatus
+
+BluetoothAMPGetInfoResponseStatus
+
+BluetoothAMPManagerCode
+

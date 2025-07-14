@@ -1,0 +1,54 @@
+
+
+- Core Data
+- NSManagedObjectContext
+-  tryLock() Deprecated
+
+Instance Method
+
+# tryLock()
+
+Attempts to acquire a lock.
+
+iOS 3.0–8.0DeprecatediPadOS 3.0–8.0DeprecatedMac Catalyst 13.1–13.1DeprecatedmacOS 10.4–10.10DeprecatedvisionOS 1.0–1.0Deprecated
+
+``` source
+func tryLock() -> Bool
+```
+
+Deprecated
+
+Use a queue style context and -performBlock: instead
+
+## Return Value
+
+true if a lock was acquired, false otherwise.
+
+## Discussion
+
+This method returns immediately after the attempt to acquire a lock.
+
+## See Also
+
+### Deprecated instance methods
+
+init(concurrencyType: NSManagedObjectContextConcurrencyType)
+
+Creates a context that uses the specified concurrency type.
+
+Deprecated
+
+convenience init()Deprecated
+
+func lock()
+
+Attempts to acquire a lock on the context.
+
+Deprecated
+
+func unlock()
+
+Relinquishes a previously acquired lock.
+
+Deprecated
+

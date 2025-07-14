@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Enumerations
+- Anonymous
+-  INPUT_PROCESSING_MICROPHONE_ARRAY 
+
+Enumeration Case
+
+# INPUT_PROCESSING_MICROPHONE_ARRAY
+
+macOS 10.12+
+
+``` source
+INPUT_PROCESSING_MICROPHONE_ARRAY = 0x0206
+```
+

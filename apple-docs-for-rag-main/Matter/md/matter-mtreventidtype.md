@@ -1,0 +1,385 @@
+
+
+- Matter
+-  MTREventIDType 
+
+Enumeration
+
+# MTREventIDType
+
+iOS 16.0+iPadOS 16.0+Mac Catalyst 16.1+macOS 13.0+tvOS 16.0+visionOS 1.0+watchOS 9.0+
+
+``` source
+enum MTREventIDType
+```
+
+## Topics
+
+### Enumeration Cases
+
+static var MTRClusterPumpConfigurationAndControlEventElectronicTemperatureHighID: MTREventIDTypeDeprecated
+
+static var MTRClusterPumpConfigurationAndControlEventPumpBlockedID: MTREventIDTypeDeprecated
+
+static var MTRClusterPumpConfigurationAndControlEventPumpMotorFatalFailureID: MTREventIDTypeDeprecated
+
+static var MTRClusterPumpConfigurationAndControlEventSensorFailureID: MTREventIDTypeDeprecated
+
+static var MTRClusterSwitchEventLongReleaseID: MTREventIDTypeDeprecated
+
+case MTRClusterAccessControlEventAccessControlEntryChangedIDDeprecated
+
+case MTRClusterAccessControlEventAccessControlExtensionChangedIDDeprecated
+
+static var MTRClusterBasicEventLeaveID: MTREventIDTypeDeprecated
+
+case MTRClusterBasicEventReachableChangedIDDeprecated
+
+case MTRClusterPumpConfigurationAndControlEventAirDetectionIDDeprecated
+
+case MTRClusterPumpConfigurationAndControlEventElectronicFatalFailureIDDeprecated
+
+case MTRClusterPumpConfigurationAndControlEventElectronicNonFatalFailureIDDeprecated
+
+case MTRClusterPumpConfigurationAndControlEventGeneralFaultIDDeprecated
+
+case MTRClusterPumpConfigurationAndControlEventLeakageIDDeprecated
+
+case MTRClusterPumpConfigurationAndControlEventTurbineOperationIDDeprecated
+
+case MTRClusterSwitchEventMultiPressCompleteIDDeprecated
+
+case MTRClusterSwitchEventMultiPressOngoingIDDeprecated
+
+case clusterSmokeCOAlarmEventAllClearID
+
+case clusterSmokeCOAlarmEventInterconnectCOAlarmID
+
+case clusterSmokeCOAlarmEventInterconnectSmokeAlarmID
+
+case clusterSmokeCOAlarmEventMuteEndedID
+
+case clusterAccessControlEventFabricRestrictionReviewUpdateID
+
+case clusterBridgedDeviceBasicInformationEventActiveChangedID
+
+case clusterTimeSynchronizationEventMissingTrustedTimeSourceID
+
+### Type Properties
+
+static var MTRClusterActionsEventActionFailedID: MTREventIDTypeDeprecated
+
+static var MTRClusterActionsEventStateChangedID: MTREventIDTypeDeprecated
+
+static var MTRClusterBasicEventShutDownID: MTREventIDTypeDeprecated
+
+static var MTRClusterBasicEventStartUpID: MTREventIDTypeDeprecated
+
+static var MTRClusterBooleanStateEventStateChangeID: MTREventIDTypeDeprecated
+
+static var MTRClusterBridgedDeviceBasicEventLeaveID: MTREventIDTypeDeprecated
+
+static var MTRClusterBridgedDeviceBasicEventReachableChangedID: MTREventIDTypeDeprecated
+
+static var MTRClusterBridgedDeviceBasicEventShutDownID: MTREventIDTypeDeprecated
+
+static var MTRClusterBridgedDeviceBasicEventStartUpID: MTREventIDTypeDeprecated
+
+static var MTRClusterDoorLockEventDoorLockAlarmID: MTREventIDTypeDeprecated
+
+static var MTRClusterDoorLockEventDoorStateChangeID: MTREventIDTypeDeprecated
+
+static var MTRClusterDoorLockEventLockOperationErrorID: MTREventIDTypeDeprecated
+
+static var MTRClusterDoorLockEventLockOperationID: MTREventIDTypeDeprecated
+
+static var MTRClusterDoorLockEventLockUserChangeID: MTREventIDTypeDeprecated
+
+static var MTRClusterGeneralDiagnosticsEventBootReasonID: MTREventIDTypeDeprecated
+
+static var MTRClusterGeneralDiagnosticsEventHardwareFaultChangeID: MTREventIDTypeDeprecated
+
+static var MTRClusterGeneralDiagnosticsEventNetworkFaultChangeID: MTREventIDTypeDeprecated
+
+static var MTRClusterGeneralDiagnosticsEventRadioFaultChangeID: MTREventIDTypeDeprecated
+
+static var MTRClusterOtaSoftwareUpdateRequestorEventDownloadErrorID: MTREventIDTypeDeprecated
+
+static var MTRClusterOtaSoftwareUpdateRequestorEventStateTransitionID: MTREventIDTypeDeprecated
+
+static var MTRClusterOtaSoftwareUpdateRequestorEventVersionAppliedID: MTREventIDTypeDeprecated
+
+static var MTRClusterPumpConfigurationAndControlEventDryRunningID: MTREventIDTypeDeprecated
+
+static var MTRClusterPumpConfigurationAndControlEventElectronicTemperatureHighID: MTREventIDTypeDeprecated
+
+static var MTRClusterPumpConfigurationAndControlEventMotorTemperatureHighID: MTREventIDTypeDeprecated
+
+static var MTRClusterPumpConfigurationAndControlEventPowerMissingPhaseID: MTREventIDTypeDeprecated
+
+static var MTRClusterPumpConfigurationAndControlEventPumpBlockedID: MTREventIDTypeDeprecated
+
+static var MTRClusterPumpConfigurationAndControlEventPumpMotorFatalFailureID: MTREventIDTypeDeprecated
+
+static var MTRClusterPumpConfigurationAndControlEventSensorFailureID: MTREventIDTypeDeprecated
+
+static var MTRClusterPumpConfigurationAndControlEventSupplyVoltageHighID: MTREventIDTypeDeprecated
+
+static var MTRClusterPumpConfigurationAndControlEventSupplyVoltageLowID: MTREventIDTypeDeprecated
+
+static var MTRClusterPumpConfigurationAndControlEventSystemPressureHighID: MTREventIDTypeDeprecated
+
+static var MTRClusterPumpConfigurationAndControlEventSystemPressureLowID: MTREventIDTypeDeprecated
+
+static var MTRClusterSoftwareDiagnosticsEventSoftwareFaultID: MTREventIDTypeDeprecated
+
+static var MTRClusterSwitchEventInitialPressID: MTREventIDTypeDeprecated
+
+static var MTRClusterSwitchEventLongPressID: MTREventIDTypeDeprecated
+
+static var MTRClusterSwitchEventLongReleaseID: MTREventIDTypeDeprecated
+
+static var MTRClusterSwitchEventShortReleaseID: MTREventIDTypeDeprecated
+
+static var MTRClusterSwitchEventSwitchLatchedID: MTREventIDTypeDeprecated
+
+static var MTRClusterTestClusterEventTestEventID: MTREventIDTypeDeprecated
+
+static var MTRClusterTestClusterEventTestFabricScopedEventID: MTREventIDTypeDeprecated
+
+static var MTRClusterThreadNetworkDiagnosticsEventConnectionStatusID: MTREventIDTypeDeprecated
+
+static var MTRClusterThreadNetworkDiagnosticsEventNetworkFaultChangeID: MTREventIDTypeDeprecated
+
+static var MTRClusterWiFiNetworkDiagnosticsEventAssociationFailureID: MTREventIDTypeDeprecated
+
+static var MTRClusterWiFiNetworkDiagnosticsEventConnectionStatusID: MTREventIDTypeDeprecated
+
+static var MTRClusterWiFiNetworkDiagnosticsEventDisconnectionID: MTREventIDTypeDeprecated
+
+static var clusterAccessControlEventAccessControlEntryChangedID: MTREventIDType
+
+static var clusterAccessControlEventAccessControlExtensionChangedID: MTREventIDType
+
+static var clusterActionsEventActionFailedID: MTREventIDType
+
+static var clusterActionsEventStateChangedID: MTREventIDType
+
+static var clusterBasicInformationEventLeaveID: MTREventIDType
+
+static var clusterBasicInformationEventReachableChangedID: MTREventIDType
+
+static var clusterBasicInformationEventShutDownID: MTREventIDType
+
+static var clusterBasicInformationEventStartUpID: MTREventIDType
+
+static var clusterBooleanStateConfigurationEventAlarmsStateChangedID: MTREventIDType
+
+static var clusterBooleanStateConfigurationEventSensorFaultID: MTREventIDType
+
+static var clusterBooleanStateEventStateChangeID: MTREventIDType
+
+static var clusterBridgedDeviceBasicInformationEventLeaveID: MTREventIDType
+
+static var clusterBridgedDeviceBasicInformationEventReachableChangedID: MTREventIDType
+
+static var clusterBridgedDeviceBasicInformationEventShutDownID: MTREventIDType
+
+static var clusterBridgedDeviceBasicInformationEventStartUpID: MTREventIDType
+
+static var clusterDoorLockEventDoorLockAlarmID: MTREventIDType
+
+static var clusterDoorLockEventDoorStateChangeID: MTREventIDType
+
+static var clusterDoorLockEventLockOperationErrorID: MTREventIDType
+
+static var clusterDoorLockEventLockOperationID: MTREventIDType
+
+static var clusterDoorLockEventLockUserChangeID: MTREventIDType
+
+static var clusterElectricalEnergyMeasurementEventCumulativeEnergyMeasuredID: MTREventIDType
+
+static var clusterElectricalEnergyMeasurementEventPeriodicEnergyMeasuredID: MTREventIDType
+
+static var clusterElectricalPowerMeasurementEventMeasurementPeriodRangesID: MTREventIDType
+
+static var clusterGeneralDiagnosticsEventBootReasonID: MTREventIDType
+
+static var clusterGeneralDiagnosticsEventHardwareFaultChangeID: MTREventIDType
+
+static var clusterGeneralDiagnosticsEventNetworkFaultChangeID: MTREventIDType
+
+static var clusterGeneralDiagnosticsEventRadioFaultChangeID: MTREventIDType
+
+static var clusterOTASoftwareUpdateRequestorEventDownloadErrorID: MTREventIDType
+
+static var clusterOTASoftwareUpdateRequestorEventStateTransitionID: MTREventIDType
+
+static var clusterOTASoftwareUpdateRequestorEventVersionAppliedID: MTREventIDType
+
+static var clusterOperationalStateEventOperationCompletionID: MTREventIDType
+
+static var clusterOperationalStateEventOperationalErrorID: MTREventIDType
+
+static var clusterPowerSourceEventBatChargeFaultChangeID: MTREventIDType
+
+static var clusterPowerSourceEventBatFaultChangeID: MTREventIDType
+
+static var clusterPowerSourceEventWiredFaultChangeID: MTREventIDType
+
+static var clusterPumpConfigurationAndControlEventAirDetectionID: MTREventIDType
+
+static var clusterPumpConfigurationAndControlEventDryRunningID: MTREventIDType
+
+static var clusterPumpConfigurationAndControlEventElectronicFatalFailureID: MTREventIDType
+
+static var clusterPumpConfigurationAndControlEventElectronicNonFatalFailureID: MTREventIDType
+
+static var clusterPumpConfigurationAndControlEventElectronicTemperatureHighID: MTREventIDType
+
+static var clusterPumpConfigurationAndControlEventGeneralFaultID: MTREventIDType
+
+static var clusterPumpConfigurationAndControlEventLeakageID: MTREventIDType
+
+static var clusterPumpConfigurationAndControlEventMotorTemperatureHighID: MTREventIDType
+
+static var clusterPumpConfigurationAndControlEventPowerMissingPhaseID: MTREventIDType
+
+static var clusterPumpConfigurationAndControlEventPumpBlockedID: MTREventIDType
+
+static var clusterPumpConfigurationAndControlEventPumpMotorFatalFailureID: MTREventIDType
+
+static var clusterPumpConfigurationAndControlEventSensorFailureID: MTREventIDType
+
+static var clusterPumpConfigurationAndControlEventSupplyVoltageHighID: MTREventIDType
+
+static var clusterPumpConfigurationAndControlEventSupplyVoltageLowID: MTREventIDType
+
+static var clusterPumpConfigurationAndControlEventSystemPressureHighID: MTREventIDType
+
+static var clusterPumpConfigurationAndControlEventSystemPressureLowID: MTREventIDType
+
+static var clusterPumpConfigurationAndControlEventTurbineOperationID: MTREventIDType
+
+static var clusterRVCOperationalStateEventOperationCompletionID: MTREventIDType
+
+static var clusterRVCOperationalStateEventOperationalErrorID: MTREventIDType
+
+static var clusterSmokeCOAlarmEventAlarmMutedID: MTREventIDType
+
+static var clusterSmokeCOAlarmEventCOAlarmID: MTREventIDType
+
+static var clusterSmokeCOAlarmEventEndOfServiceID: MTREventIDType
+
+static var clusterSmokeCOAlarmEventHardwareFaultID: MTREventIDType
+
+static var clusterSmokeCOAlarmEventLowBatteryID: MTREventIDType
+
+static var clusterSmokeCOAlarmEventSelfTestCompleteID: MTREventIDType
+
+static var clusterSmokeCOAlarmEventSmokeAlarmID: MTREventIDType
+
+static var clusterSoftwareDiagnosticsEventSoftwareFaultID: MTREventIDType
+
+static var clusterSwitchEventInitialPressID: MTREventIDType
+
+static var clusterSwitchEventLongPressID: MTREventIDType
+
+static var clusterSwitchEventLongReleaseID: MTREventIDType
+
+static var clusterSwitchEventMultiPressCompleteID: MTREventIDType
+
+static var clusterSwitchEventMultiPressOngoingID: MTREventIDType
+
+static var clusterSwitchEventShortReleaseID: MTREventIDType
+
+static var clusterSwitchEventSwitchLatchedID: MTREventIDType
+
+static var clusterThreadNetworkDiagnosticsEventConnectionStatusID: MTREventIDType
+
+static var clusterThreadNetworkDiagnosticsEventNetworkFaultChangeID: MTREventIDType
+
+static var clusterUnitTestingEventTestEventID: MTREventIDType
+
+static var clusterUnitTestingEventTestFabricScopedEventID: MTREventIDType
+
+static var clusterValveConfigurationAndControlEventValveFaultID: MTREventIDType
+
+static var clusterValveConfigurationAndControlEventValveStateChangedID: MTREventIDType
+
+static var clusterWiFiNetworkDiagnosticsEventAssociationFailureID: MTREventIDType
+
+static var clusterWiFiNetworkDiagnosticsEventConnectionStatusID: MTREventIDType
+
+static var clusterWiFiNetworkDiagnosticsEventDisconnectionID: MTREventIDType
+
+static var clusterAccountLoginEventLoggedOutID: MTREventIDType
+
+static var clusterCommissionerControlEventCommissioningRequestResultID: MTREventIDType
+
+static var clusterDeviceEnergyManagementEventPausedID: MTREventIDType
+
+static var clusterDeviceEnergyManagementEventPowerAdjustEndID: MTREventIDType
+
+static var clusterDeviceEnergyManagementEventPowerAdjustStartID: MTREventIDType
+
+static var clusterDeviceEnergyManagementEventResumedID: MTREventIDType
+
+static var clusterDishwasherAlarmEventNotifyID: MTREventIDType
+
+static var clusterEnergyEVSEEventEVConnectedID: MTREventIDType
+
+static var clusterEnergyEVSEEventEVNotDetectedID: MTREventIDType
+
+static var clusterEnergyEVSEEventEnergyTransferStartedID: MTREventIDType
+
+static var clusterEnergyEVSEEventEnergyTransferStoppedID: MTREventIDType
+
+static var clusterEnergyEVSEEventFaultID: MTREventIDType
+
+static var clusterEnergyEVSEEventRFIDID: MTREventIDType
+
+static var clusterMediaPlaybackEventStateChangedID: MTREventIDType
+
+static var clusterMessagesEventMessageCompleteID: MTREventIDType
+
+static var clusterMessagesEventMessagePresentedID: MTREventIDType
+
+static var clusterMessagesEventMessageQueuedID: MTREventIDType
+
+static var clusterOccupancySensingEventOccupancyChangedID: MTREventIDType
+
+static var clusterOvenCavityOperationalStateEventOperationCompletionID: MTREventIDType
+
+static var clusterOvenCavityOperationalStateEventOperationalErrorID: MTREventIDType
+
+static var clusterRefrigeratorAlarmEventNotifyID: MTREventIDType
+
+static var clusterTargetNavigatorEventTargetUpdatedID: MTREventIDType
+
+static var clusterTimeSynchronizationEventDSTStatusID: MTREventIDType
+
+static var clusterTimeSynchronizationEventDSTTableEmptyID: MTREventIDType
+
+static var clusterTimeSynchronizationEventTimeFailureID: MTREventIDType
+
+static var clusterTimeSynchronizationEventTimeZoneStatusID: MTREventIDType
+
+static var clusterWaterHeaterManagementEventBoostEndedID: MTREventIDType
+
+static var clusterWaterHeaterManagementEventBoostStartedID: MTREventIDType
+
+### Initializers
+
+init?(rawValue: UInt32)
+
+## Relationships
+
+### Conforms To
+
+- BitwiseCopyable
+- Equatable
+- Hashable
+- RawRepresentable
+- Sendable
+

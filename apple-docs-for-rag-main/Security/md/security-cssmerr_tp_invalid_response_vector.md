@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_TP_INVALID_RESPONSE_VECTOR 
+
+Global Variable
+
+# CSSMERR_TP_INVALID_RESPONSE_VECTOR
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSMERR_TP_INVALID_RESPONSE_VECTOR: Int { get }
+```
+

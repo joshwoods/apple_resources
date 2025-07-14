@@ -1,0 +1,31 @@
+
+
+- Shared With You
+- SWAttributionView
+- SWAttributionView.BackgroundStyle
+-  SWAttributionView.BackgroundStyle.material 
+
+Case
+
+# SWAttributionView.BackgroundStyle.material
+
+A material background blur for the view’s contents, best when placed over multicolored backgrounds.
+
+iOS 16.0+iPadOS 16.0+Mac Catalyst 16.0+macOS 13.0+tvOS 16.0+visionOS 1.0+
+
+``` source
+case material
+```
+
+## See Also
+
+### Background styles
+
+case `default`
+
+The default background style the system chooses.
+
+case color
+
+A non-material background color for the view’s contents, best when placed over monochrome backgrounds.
+

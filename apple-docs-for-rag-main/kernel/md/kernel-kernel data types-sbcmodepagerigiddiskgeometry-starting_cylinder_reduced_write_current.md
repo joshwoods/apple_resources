@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Data Types
+- SBCModePageRigidDiskGeometry
+-  STARTING_CYLINDER_REDUCED_WRITE_CURRENT 
+
+Instance Property
+
+# STARTING_CYLINDER_REDUCED_WRITE_CURRENT
+
+macOS 10.3+
+
+``` source
+UInt8 STARTING_CYLINDER_REDUCED_WRITE_CURRENT[3];
+```
+

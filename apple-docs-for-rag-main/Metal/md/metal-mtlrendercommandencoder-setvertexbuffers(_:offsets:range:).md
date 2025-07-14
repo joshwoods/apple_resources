@@ -1,0 +1,68 @@
+
+
+- Metal
+- MTLRenderCommandEncoder
+-  setVertexBuffers(\_:offsets:range:) 
+
+Instance Method
+
+# setVertexBuffers(\_:offsets:range:)
+
+Assigns multiple buffers to a range of entries in the vertex shader argument table.
+
+iOS 8.0+iPadOS 8.0+Mac CatalystmacOS 10.11+tvOS 8.0+visionOS
+
+``` source
+func setVertexBuffers(
+    _ buffers: [(any MTLBuffer)?],
+    offsets: [Int],
+    range: Range
+)
+```
+
+## Parameters 
+
+`buffers`  
+
+An array of MTLBuffer instances the command assigns to entries in the vertex shader argument table for buffers.
+
+`offsets`  
+
+An array of integers. Each element represents the location, in bytes, from the start of the corresponding MTLBuffer element in `buffers` where the vertex shader argument data begins.
+
+See the Metal feature set tables (PDF) to check for offset alignment requirements for buffers in `device` and `constant` address space.
+
+`range`  
+
+A span of integers that represent the entries in the vertex shader argument table for buffers. Each entry stores a record of the corresponding element in `buffers` and `offsets`.
+
+## Discussion
+
+By default, the buffer at each index is `nil`.
+
+Note
+
+The Objective-C version of this method is setVertexBuffers:offsets:withRange:.
+
+## See Also
+
+### Assigning Buffers
+
+func setVertexBuffer((any MTLBuffer)?, offset: Int, index: Int)
+
+Assigns a buffer to an entry in the vertex shader argument table.
+
+**Required**
+
+func setVertexBytes(UnsafeRawPointer, length: Int, index: Int)
+
+Creates a buffer from bytes and assigns it to an entry in the vertex shader argument table.
+
+**Required**
+
+func setVertexBufferOffset(Int, index: Int)
+
+Updates an entry in the vertex shader argument table with a new location within the entry’s current buffer.
+
+**Required**
+

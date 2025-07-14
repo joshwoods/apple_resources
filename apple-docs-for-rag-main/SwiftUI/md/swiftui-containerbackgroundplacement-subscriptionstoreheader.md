@@ -1,0 +1,30 @@
+
+
+- SwiftUI
+- ContainerBackgroundPlacement
+-  subscriptionStoreHeader 
+
+Type Property
+
+# subscriptionStoreHeader
+
+A background placement behind the marketing content of a subscription store view.
+
+StoreKitSwiftUIiOS 17.0+iPadOS 17.0+macOS 14.0+tvOS 18.0+
+
+``` source
+static var subscriptionStoreHeader: ContainerBackgroundPlacement { get }
+```
+
+## See Also
+
+### Getting StoreKit placements
+
+static var subscriptionStore: ContainerBackgroundPlacement
+
+An automatic placement within a subscription store view, based on the view’s context.
+
+static var subscriptionStoreFullHeight: ContainerBackgroundPlacement
+
+A background placement that spans the full height of a subscription store view.
+

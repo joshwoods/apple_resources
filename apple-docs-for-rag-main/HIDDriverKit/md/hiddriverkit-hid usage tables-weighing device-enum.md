@@ -1,0 +1,130 @@
+
+
+- HIDDriverKit
+- HID Usage Tables
+-  Weighing Device 
+
+API Collection
+
+# Weighing Device
+
+Usages for scales and other devices that measure weights.
+
+## Topics
+
+### Getting the Usages
+
+kHIDUsage_WD_CalibrationCount
+
+kHIDUsage_WD_DataScaling
+
+kHIDUsage_WD_DataWeight
+
+kHIDUsage_WD_EnforcedZeroReturn
+
+kHIDUsage_WD_RezeroCount
+
+kHIDUsage_WD_ScaleAtrributeReport
+
+kHIDUsage_WD_ScaleControlReport
+
+kHIDUsage_WD_ScaleDataReport
+
+kHIDUsage_WD_ScaleScaleClassGeneric
+
+kHIDUsage_WD_ScaleScaleClassIIIEnglish
+
+kHIDUsage_WD_ScaleScaleClassIIILEnglish
+
+kHIDUsage_WD_ScaleScaleClassIIILMetric
+
+kHIDUsage_WD_ScaleScaleClassIIIMetric
+
+kHIDUsage_WD_ScaleScaleClassIIMetric
+
+kHIDUsage_WD_ScaleScaleClassIMetric
+
+kHIDUsage_WD_ScaleScaleClassIMetricCL
+
+kHIDUsage_WD_ScaleScaleClassIVEnglish
+
+kHIDUsage_WD_ScaleScaleClassIVMetric
+
+kHIDUsage_WD_ScaleScaleDevice
+
+kHIDUsage_WD_ScaleStatisticsReport
+
+kHIDUsage_WD_ScaleStatus
+
+kHIDUsage_WD_ScaleStatusFault
+
+kHIDUsage_WD_ScaleStatusInMotion
+
+kHIDUsage_WD_ScaleStatusOverWeightLimit
+
+kHIDUsage_WD_ScaleStatusReport
+
+kHIDUsage_WD_ScaleStatusRequiresCalibration
+
+kHIDUsage_WD_ScaleStatusRequiresRezeroing
+
+kHIDUsage_WD_ScaleStatusStableAtZero
+
+kHIDUsage_WD_ScaleStatusUnderZero
+
+kHIDUsage_WD_ScaleStatusWeightStable
+
+kHIDUsage_WD_ScaleWeightLimitReport
+
+kHIDUsage_WD_Undefined
+
+kHIDUsage_WD_WeighingDevice
+
+kHIDUsage_WD_WeightUnit
+
+kHIDUsage_WD_WeightUnitAvoirTon
+
+kHIDUsage_WD_WeightUnitCarats
+
+kHIDUsage_WD_WeightUnitGrains
+
+kHIDUsage_WD_WeightUnitGram
+
+kHIDUsage_WD_WeightUnitKilogram
+
+kHIDUsage_WD_WeightUnitMetricTon
+
+kHIDUsage_WD_WeightUnitMilligram
+
+kHIDUsage_WD_WeightUnitOunce
+
+kHIDUsage_WD_WeightUnitPennyweights
+
+kHIDUsage_WD_WeightUnitPound
+
+kHIDUsage_WD_WeightUnitTaels
+
+kHIDUsage_WD_WeightUnitTroyOunce
+
+kHIDUsage_WD_ZeroScale
+
+## See Also
+
+### Input and Text
+
+Sensors
+
+Usages for device sensors, including biometric and electrical sensors.
+
+Bar Code Scanner
+
+Usages for devices that scan bar codes.
+
+Magnetic Stripe Reader
+
+Usages for magnetic striper readers.
+
+Camera Control
+
+Usages for digital cameras.
+

@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Enumerations
+- Anonymous
+-  kHIDUsage_Snsr_Data_Location_VerticalDilutionOfPrecision 
+
+Enumeration Case
+
+# kHIDUsage_Snsr_Data_Location_VerticalDilutionOfPrecision
+
+macOS 10.13.4+
+
+``` source
+kHIDUsage_Snsr_Data_Location_VerticalDilutionOfPrecision = 0x0412
+```
+

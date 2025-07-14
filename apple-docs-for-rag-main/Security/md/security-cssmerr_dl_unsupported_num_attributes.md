@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_DL_UNSUPPORTED_NUM_ATTRIBUTES 
+
+Global Variable
+
+# CSSMERR_DL_UNSUPPORTED_NUM_ATTRIBUTES
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSMERR_DL_UNSUPPORTED_NUM_ATTRIBUTES: Int { get }
+```
+

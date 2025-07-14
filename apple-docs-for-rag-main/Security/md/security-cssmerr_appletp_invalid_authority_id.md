@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_INVALID_AUTHORITY_ID 
+
+Global Variable
+
+# CSSMERR_APPLETP_INVALID_AUTHORITY_ID
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLETP_INVALID_AUTHORITY_ID: Int { get }
+```
+

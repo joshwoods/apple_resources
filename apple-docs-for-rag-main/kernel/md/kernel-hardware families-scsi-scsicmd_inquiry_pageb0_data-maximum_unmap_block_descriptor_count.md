@@ -1,0 +1,18 @@
+
+
+- Kernel
+- Hardware Families
+- SCSI
+- SCSICmd_INQUIRY_PageB0_Data
+-  MAXIMUM_UNMAP_BLOCK_DESCRIPTOR_COUNT 
+
+Instance Property
+
+# MAXIMUM_UNMAP_BLOCK_DESCRIPTOR_COUNT
+
+DriverKitKernelDriverKit 22.0+macOS 10.12+
+
+``` source
+UInt32 MAXIMUM_UNMAP_BLOCK_DESCRIPTOR_COUNT;
+```
+

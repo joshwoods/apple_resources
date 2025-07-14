@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_TP_AUTHORITY_REQUEST_CERTNOTARIZE 
+
+Global Variable
+
+# CSSM_TP_AUTHORITY_REQUEST_CERTNOTARIZE
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_TP_AUTHORITY_REQUEST_CERTNOTARIZE: Int { get }
+```
+

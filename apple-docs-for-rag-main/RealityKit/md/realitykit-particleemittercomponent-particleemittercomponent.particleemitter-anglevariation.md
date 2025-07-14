@@ -1,0 +1,19 @@
+
+
+- RealityKit
+- ParticleEmitterComponent
+- ParticleEmitterComponent.ParticleEmitter
+-  angleVariation 
+
+Instance Property
+
+# angleVariation
+
+Defines a plus/minus range (in radians) from which a value is randomly selected to offset `angle`.
+
+iOS 18.0+iPadOS 18.0+Mac Catalyst 18.0+macOS 15.0+visionOS 1.0+
+
+``` source
+var angleVariation: Float
+```
+

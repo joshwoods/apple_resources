@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_ERRCODE_OBJECT_MANIP_AUTH_DENIED 
+
+Global Variable
+
+# CSSM_ERRCODE_OBJECT_MANIP_AUTH_DENIED
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_ERRCODE_OBJECT_MANIP_AUTH_DENIED: Int { get }
+```
+

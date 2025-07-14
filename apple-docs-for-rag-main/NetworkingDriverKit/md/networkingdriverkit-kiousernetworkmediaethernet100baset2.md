@@ -1,0 +1,49 @@
+
+
+- NetworkingDriverKit
+-  kIOUserNetworkMediaEthernet100BaseT2 
+
+Enumeration Case
+
+# kIOUserNetworkMediaEthernet100BaseT2
+
+DriverKit
+
+``` source
+kIOUserNetworkMediaEthernet100BaseT2
+```
+
+## See Also
+
+### Getting the Media Types
+
+kIOUserNetworkMediaEthernetAuto
+
+kIOUserNetworkMediaEthernetManual
+
+kIOUserNetworkMediaEthernetNone
+
+kIOUserNetworkMediaEthernet10BaseT
+
+kIOUserNetworkMediaEthernet10Base2
+
+kIOUserNetworkMediaEthernet10Base5
+
+kIOUserNetworkMediaEthernet100BaseTX
+
+kIOUserNetworkMediaEthernet100BaseFX
+
+kIOUserNetworkMediaEthernet100BaseT4
+
+kIOUserNetworkMediaEthernet100BaseVG
+
+kIOUserNetworkMediaEthernet1000BaseSX
+
+kIOUserNetworkMediaEthernet10BaseSTP
+
+kIOUserNetworkMediaEthernet10BaseFL
+
+kIOUserNetworkMediaEthernet1000BaseLX
+
+kIOUserNetworkMediaEthernet1000BaseCX
+

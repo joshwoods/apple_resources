@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_TP_CERTVERIFY_INVALID_SIGNATURE 
+
+Global Variable
+
+# CSSM_TP_CERTVERIFY_INVALID_SIGNATURE
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_TP_CERTVERIFY_INVALID_SIGNATURE: Int { get }
+```
+

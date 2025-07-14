@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Enumerations
+- Anonymous
+-  EMBEDDED_LEVEL_CALIBRATION_NOISE_SOURCE 
+
+Enumeration Case
+
+# EMBEDDED_LEVEL_CALIBRATION_NOISE_SOURCE
+
+macOS 10.12+
+
+``` source
+EMBEDDED_LEVEL_CALIBRATION_NOISE_SOURCE = 0x0701
+```
+

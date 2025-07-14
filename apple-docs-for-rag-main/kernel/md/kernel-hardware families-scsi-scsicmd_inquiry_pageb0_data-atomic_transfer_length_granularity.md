@@ -1,0 +1,18 @@
+
+
+- Kernel
+- Hardware Families
+- SCSI
+- SCSICmd_INQUIRY_PageB0_Data
+-  ATOMIC_TRANSFER_LENGTH_GRANULARITY 
+
+Instance Property
+
+# ATOMIC_TRANSFER_LENGTH_GRANULARITY
+
+DriverKitKernelDriverKit 22.0+macOS 10.12+
+
+``` source
+UInt32 ATOMIC_TRANSFER_LENGTH_GRANULARITY;
+```
+

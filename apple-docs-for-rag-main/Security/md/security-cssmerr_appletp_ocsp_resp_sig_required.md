@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_OCSP_RESP_SIG_REQUIRED 
+
+Global Variable
+
+# CSSMERR_APPLETP_OCSP_RESP_SIG_REQUIRED
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLETP_OCSP_RESP_SIG_REQUIRED: Int { get }
+```
+

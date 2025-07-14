@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_TP_AUTHORITY_REQUEST_CERTVERIFY 
+
+Global Variable
+
+# CSSM_TP_AUTHORITY_REQUEST_CERTVERIFY
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_TP_AUTHORITY_REQUEST_CERTVERIFY: Int { get }
+```
+

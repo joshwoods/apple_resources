@@ -1,0 +1,53 @@
+
+
+- SceneKit
+- SCNShadable
+-  handleBinding(ofSymbol:handler:) 
+
+Instance Method
+
+# handleBinding(ofSymbol:handler:)
+
+Specifies a block to be called before rendering with programs with the specified GLSL uniform variable or attribute name.
+
+iOSiPadOSMac Catalyst 13.1+macOS 10.9+tvOSvisionOS
+
+``` source
+optional func handleBinding(
+    ofSymbol symbol: String,
+    handler block: SCNBindingBlock? = nil
+)
+```
+
+## Parameters 
+
+`symbol`  
+
+A GLSL uniform variable or attribute name.
+
+`block`  
+
+A block to be called by SceneKit.
+
+## Discussion
+
+Use this method to associate a block with a SceneKit object (geometry or material) to handle setup of an attribute or uniform variable in a custom SCNProgram shader associated with that object. SceneKit calls your block before rendering the object. In the block, you can execute any OpenGL commands or other code necessary for preparing your custom shader. For example, the following block updates the `time` uniform variable in a custom fragment shader for producing animated effects:
+
+```
+CFTimeInterval startTime = CFAbsoluteTimeGetCurrent();
+[myNode.geometry.firstMaterial handleBindingOfSymbol:@"time" usingBlock:
+    ^(unsigned int programID, unsigned int location, SCNNode *renderedNode, SCNRenderer *renderer) {
+        glUniform1f(location, CFAbsoluteTimeGetCurrent() - startTime);
+    }];
+```
+
+This method is for OpenGL shader programs only. To bind custom variable data for Metal shader programs, use the handleBinding(ofBufferNamed:frequency:handler:) method.
+
+## See Also
+
+### Handling Parameters in Custom OpenGL Shader Programs
+
+func handleUnbinding(ofSymbol: String, handler: SCNBindingBlock?)
+
+Specifies a block to be called after rendering with programs with the specified GLSL uniform variable or attribute name.
+

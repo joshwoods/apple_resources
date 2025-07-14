@@ -1,0 +1,23 @@
+
+
+- Core Foundation
+-  COREFOUNDATION_CFPLUGINCOM_SEPARATE 
+
+Global Variable
+
+# COREFOUNDATION_CFPLUGINCOM_SEPARATE
+
+iOSiPadOSMac CatalystmacOStvOSvisionOSwatchOS
+
+``` source
+var COREFOUNDATION_CFPLUGINCOM_SEPARATE: Int32 { get }
+```
+
+## See Also
+
+### Macros
+
+var CF_HAS_TYPED_ALLOCATOR: Int32
+
+var CGFLOAT_DEFINED: Int32
+

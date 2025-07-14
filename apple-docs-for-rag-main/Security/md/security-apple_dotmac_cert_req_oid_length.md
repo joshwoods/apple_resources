@@ -1,0 +1,15 @@
+
+
+- Security
+-  APPLE_DOTMAC_CERT_REQ_OID_LENGTH 
+
+Global Variable
+
+# APPLE_DOTMAC_CERT_REQ_OID_LENGTH
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var APPLE_DOTMAC_CERT_REQ_OID_LENGTH: Int32 { get }
+```
+

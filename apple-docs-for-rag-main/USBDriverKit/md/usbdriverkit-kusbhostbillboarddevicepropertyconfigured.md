@@ -1,0 +1,45 @@
+
+
+- USBDriverKit
+-  kUSBHostBillboardDevicePropertyConfigured 
+
+Macro
+
+# kUSBHostBillboardDevicePropertyConfigured
+
+DriverKit 19.0+
+
+``` source
+#define kUSBHostBillboardDevicePropertyConfigured
+```
+
+## See Also
+
+### Billboard Device Properties
+
+kUSBHostBillboardDevicePropertySVID
+
+kUSBHostBillboardDevicePropertyBcdVersion
+
+kUSBHostBillboardDevicePropertyVCONNPower
+
+kUSBHostBillboardDevicePropertyAlternateMode
+
+kUSBHostBillboardDevicePropertyAddtionalInfoURL
+
+kUSBHostBillboardDevicePropertydwAlternateModeVdo
+
+kUSBHostBillboardDevicePropertyAlternateModeString
+
+kUSBHostBillboardDevicePropertyAdditionalFailureInfo
+
+kUSBHostBillboardDevicePropertyAddtionalInfoURLIndex
+
+kUSBHostBillboardDevicePropertyNumberOfAlternateModes
+
+kUSBHostBillboardDevicePropertyPreferredAlternateMode
+
+kUSBHostBillboardDevicePropertyAlternateModeStringIndex
+
+kUSBHostInterfacePropertyAlternateSetting
+

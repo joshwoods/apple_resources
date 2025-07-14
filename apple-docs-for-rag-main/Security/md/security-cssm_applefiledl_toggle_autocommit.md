@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_APPLEFILEDL_TOGGLE_AUTOCOMMIT 
+
+Global Variable
+
+# CSSM_APPLEFILEDL_TOGGLE_AUTOCOMMIT
+
+macOS 10.0+
+
+``` source
+var CSSM_APPLEFILEDL_TOGGLE_AUTOCOMMIT: Int { get }
+```
+

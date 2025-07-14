@@ -1,0 +1,82 @@
+
+
+- Foundation
+- URLResourceValues
+-  typeIdentifier Deprecated
+
+Instance Property
+
+# typeIdentifier
+
+A string that represents the identifier for the type of the resource.
+
+iOS 8.0–18.4DeprecatediPadOS 8.0–18.4DeprecatedMac Catalyst 8.0–18.4DeprecatedmacOS 10.10–15.4DeprecatedtvOS 9.0–18.4DeprecatedvisionOS 1.0–2.4DeprecatedwatchOS 2.0–9.0Deprecated
+
+``` source
+var typeIdentifier: String? { get }
+```
+
+Deprecated
+
+Use .contentType instead
+
+## See Also
+
+### Universal resource values
+
+var addedToDirectoryDate: Date?
+
+The date the resource was created, or renamed into or within its parent directory.
+
+var allValues: [URLResourceKey : Any]
+
+A loosely-typed dictionary containing all keys and values.
+
+var attributeModificationDate: Date?
+
+The time the resource’s attributes were last modified.
+
+var canonicalPath: String?
+
+The URL’s path as a canonical absolute file system path.
+
+var contentAccessDate: Date?
+
+The date the resource was last accessed.
+
+var contentModificationDate: Date?
+
+The time the resource content was last modified.
+
+var creationDate: Date?
+
+The date the resource was created.
+
+var customIcon: NSImage?
+
+var effectiveIcon: AnyObject?
+
+var generationIdentifier: (any NSCopying &amp; NSSecureCoding &amp; NSObjectProtocol)?
+
+An opaque generation identifier which can be compared using `==` to determine if the data in a document has been modified.
+
+var hasHiddenExtension: Bool?
+
+True for resources whose filename extension is removed from the localized name property.
+
+var isAliasFile: Bool?
+
+true if the resource is a Finder alias file or a symlink, false otherwise
+
+var isExcludedFromBackup: Bool?
+
+True if resource should be excluded from backups, false otherwise.
+
+var isHidden: Bool?
+
+True for resources normally not displayed to users.
+
+var isPackage: Bool?
+
+True for packaged directories.
+

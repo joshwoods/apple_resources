@@ -1,0 +1,94 @@
+
+
+- Kernel
+- Kernel Data Types
+-  IOUSBHostCIMessageType 
+
+Type Alias
+
+# IOUSBHostCIMessageType
+
+macOS 11.0+
+
+``` source
+typedef enum IOUSBHostCIMessageType IOUSBHostCIMessageType;
+```
+
+## Topics
+
+### Constants
+
+IOUSBHostCIMessageTypeCommandMax
+
+IOUSBHostCIMessageTypeCommandMin
+
+IOUSBHostCIMessageTypeControllerCapabilities
+
+IOUSBHostCIMessageTypeControllerFrameNumber
+
+IOUSBHostCIMessageTypeControllerPause
+
+IOUSBHostCIMessageTypeControllerPowerOff
+
+IOUSBHostCIMessageTypeControllerPowerOn
+
+IOUSBHostCIMessageTypeControllerStart
+
+IOUSBHostCIMessageTypeDeviceCreate
+
+IOUSBHostCIMessageTypeDeviceDestroy
+
+IOUSBHostCIMessageTypeDevicePause
+
+IOUSBHostCIMessageTypeDeviceStart
+
+IOUSBHostCIMessageTypeDeviceUpdate
+
+IOUSBHostCIMessageTypeEndpointCreate
+
+IOUSBHostCIMessageTypeEndpointDestroy
+
+IOUSBHostCIMessageTypeEndpointPause
+
+IOUSBHostCIMessageTypeEndpointReset
+
+IOUSBHostCIMessageTypeEndpointSetNextTransfer
+
+IOUSBHostCIMessageTypeEndpointUpdate
+
+IOUSBHostCIMessageTypeEndpoint_reserved_
+
+IOUSBHostCIMessageTypeFrameNumberUpdate
+
+IOUSBHostCIMessageTypeFrameTimestampUpdate
+
+IOUSBHostCIMessageTypeIsochronousTransfer
+
+IOUSBHostCIMessageTypeLink
+
+IOUSBHostCIMessageTypeNormalTransfer
+
+IOUSBHostCIMessageTypePortCapabilities
+
+IOUSBHostCIMessageTypePortDisable
+
+IOUSBHostCIMessageTypePortEvent
+
+IOUSBHostCIMessageTypePortPowerOff
+
+IOUSBHostCIMessageTypePortPowerOn
+
+IOUSBHostCIMessageTypePortReset
+
+IOUSBHostCIMessageTypePortResume
+
+IOUSBHostCIMessageTypePortStatus
+
+IOUSBHostCIMessageTypePortSuspend
+
+IOUSBHostCIMessageTypeSetupTransfer
+
+IOUSBHostCIMessageTypeStatusTransfer
+
+IOUSBHostCIMessageTypeTransferComplete
+

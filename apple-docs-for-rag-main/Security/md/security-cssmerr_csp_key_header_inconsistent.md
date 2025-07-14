@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_CSP_KEY_HEADER_INCONSISTENT 
+
+Global Variable
+
+# CSSMERR_CSP_KEY_HEADER_INCONSISTENT
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSMERR_CSP_KEY_HEADER_INCONSISTENT: Int { get }
+```
+

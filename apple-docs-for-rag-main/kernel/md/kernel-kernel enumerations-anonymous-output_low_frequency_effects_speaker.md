@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Enumerations
+- Anonymous
+-  OUTPUT_LOW_FREQUENCY_EFFECTS_SPEAKER 
+
+Enumeration Case
+
+# OUTPUT_LOW_FREQUENCY_EFFECTS_SPEAKER
+
+macOS 10.12+
+
+``` source
+OUTPUT_LOW_FREQUENCY_EFFECTS_SPEAKER = 0x0307
+```
+

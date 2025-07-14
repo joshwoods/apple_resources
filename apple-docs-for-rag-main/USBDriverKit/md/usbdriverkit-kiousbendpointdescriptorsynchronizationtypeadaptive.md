@@ -1,0 +1,49 @@
+
+
+- USBDriverKit
+-  kIOUSBEndpointDescriptorSynchronizationTypeAdaptive 
+
+Enumeration Case
+
+# kIOUSBEndpointDescriptorSynchronizationTypeAdaptive
+
+DriverKit 19.0+
+
+``` source
+kIOUSBEndpointDescriptorSynchronizationTypeAdaptive
+```
+
+## See Also
+
+### Getting the Options
+
+kIOUSBEndpointDescriptorNumber
+
+kIOUSBEndpointDescriptorNumberPhase
+
+kIOUSBEndpointDescriptorEndpointAddressReserved
+
+kIOUSBEndpointDescriptorDirection
+
+kIOUSBEndpointDescriptorDirectionPhase
+
+kIOUSBEndpointDescriptorDirectionOut
+
+kIOUSBEndpointDescriptorDirectionIn
+
+kIOUSBEndpointDescriptorTransferType
+
+kIOUSBEndpointDescriptorTransferTypePhase
+
+kIOUSBEndpointDescriptorTransferTypeControl
+
+kIOUSBEndpointDescriptorTransferTypeIsochronous
+
+kIOUSBEndpointDescriptorTransferTypeBulk
+
+kIOUSBEndpointDescriptorTransferTypeInterrupt
+
+kIOUSBEndpointDescriptorSynchronizationType
+
+kIOUSBEndpointDescriptorSynchronizationTypePhase
+

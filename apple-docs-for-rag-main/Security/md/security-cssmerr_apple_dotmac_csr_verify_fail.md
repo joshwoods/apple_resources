@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLE_DOTMAC_CSR_VERIFY_FAIL 
+
+Global Variable
+
+# CSSMERR_APPLE_DOTMAC_CSR_VERIFY_FAIL
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLE_DOTMAC_CSR_VERIFY_FAIL: Int { get }
+```
+

@@ -1,0 +1,49 @@
+
+
+- HIDDriverKit
+-  kHIDUsage_Snsr_Environmental_AtmosphericPressure 
+
+Enumeration Case
+
+# kHIDUsage_Snsr_Environmental_AtmosphericPressure
+
+DriverKitmacOS
+
+``` source
+kHIDUsage_Snsr_Environmental_AtmosphericPressure
+```
+
+## See Also
+
+### Getting the Usages
+
+kHIDUsage_Snsr_Biometric
+
+kHIDUsage_Snsr_Biometric_HumanPresence
+
+kHIDUsage_Snsr_Biometric_HumanProximity
+
+kHIDUsage_Snsr_Biometric_HumanTouch
+
+kHIDUsage_Snsr_Data_Biometric
+
+kHIDUsage_Snsr_Data_Biometric_HumanPresence
+
+kHIDUsage_Snsr_Data_Biometric_HumanProximityOutOfRange
+
+kHIDUsage_Snsr_Data_Biometric_HumanProximityRange
+
+kHIDUsage_Snsr_Data_Biometric_HumanTouchState
+
+kHIDUsage_Snsr_Data_Custom
+
+kHIDUsage_Snsr_Data_Custom_BooleanArray
+
+kHIDUsage_Snsr_Data_Custom_Usage
+
+kHIDUsage_Snsr_Data_Custom_Value
+
+kHIDUsage_Snsr_Data_Custom_Value1
+
+kHIDUsage_Snsr_Data_Custom_Value2
+

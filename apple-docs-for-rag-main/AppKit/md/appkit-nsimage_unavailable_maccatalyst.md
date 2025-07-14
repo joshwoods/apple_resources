@@ -1,0 +1,21 @@
+
+
+- AppKit
+-  NSIMAGE_UNAVAILABLE_MACCATALYST 
+
+Global Variable
+
+# NSIMAGE_UNAVAILABLE_MACCATALYST
+
+Mac CatalystmacOS
+
+``` source
+var NSIMAGE_UNAVAILABLE_MACCATALYST: Int32 { get }
+```
+
+## See Also
+
+### Constants
+
+var NS_USER_ACTIVITY_SUPPORTED: Int32
+

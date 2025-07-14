@@ -1,0 +1,27 @@
+
+
+- SwiftUI
+- View
+-  accessibilityHidden(\_:) 
+
+Instance Method
+
+# accessibilityHidden(\_:)
+
+Specifies whether to hide this view from system accessibility features.
+
+iOS 14.0+iPadOS 14.0+Mac Catalyst 14.0+macOS 11.0+tvOS 14.0+visionOS 1.0+watchOS 7.0+
+
+``` source
+nonisolated
+func accessibilityHidden(_ hidden: Bool) -> ModifiedContent
+```
+
+## See Also
+
+### Hiding elements
+
+func accessibilityHidden(Bool, isEnabled: Bool) -> ModifiedContent&lt;Self, AccessibilityAttachmentModifier>
+
+Specifies whether to hide this view from system accessibility features.
+

@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_ACL_AUTHORIZATION_INTEGRITY 
+
+Global Variable
+
+# CSSM_ACL_AUTHORIZATION_INTEGRITY
+
+macOS 10.11.4+
+
+``` source
+var CSSM_ACL_AUTHORIZATION_INTEGRITY: Int { get }
+```
+

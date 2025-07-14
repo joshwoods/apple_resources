@@ -1,0 +1,18 @@
+
+
+- Kernel
+- Hardware Families
+- SCSI
+- IOSCSIBlockCommandsDevice
+-  REPORT_PROVISIONING_INITIALIZATION_PATTERN 
+
+Instance Method
+
+# REPORT_PROVISIONING_INITIALIZATION_PATTERN
+
+macOS 10.12+
+
+``` source
+bool REPORT_PROVISIONING_INITIALIZATION_PATTERN(SCSITaskIdentifier request, IOMemoryDescriptor *dataBuffer, SCSICmdField4Byte ALLOCATION_LENGTH, SCSICmdField1Byte CONTROL);
+```
+

@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_LEAF_PIN_MISMATCH 
+
+Global Variable
+
+# CSSMERR_APPLETP_LEAF_PIN_MISMATCH
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLETP_LEAF_PIN_MISMATCH: Int { get }
+```
+

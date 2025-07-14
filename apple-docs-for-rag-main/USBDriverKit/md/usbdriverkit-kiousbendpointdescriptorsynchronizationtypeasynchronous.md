@@ -1,0 +1,49 @@
+
+
+- USBDriverKit
+-  kIOUSBEndpointDescriptorSynchronizationTypeAsynchronous 
+
+Enumeration Case
+
+# kIOUSBEndpointDescriptorSynchronizationTypeAsynchronous
+
+DriverKit 19.0+
+
+``` source
+kIOUSBEndpointDescriptorSynchronizationTypeAsynchronous
+```
+
+## See Also
+
+### Getting the Options
+
+kIOUSBEndpointDescriptorNumber
+
+kIOUSBEndpointDescriptorNumberPhase
+
+kIOUSBEndpointDescriptorEndpointAddressReserved
+
+kIOUSBEndpointDescriptorDirection
+
+kIOUSBEndpointDescriptorDirectionPhase
+
+kIOUSBEndpointDescriptorDirectionOut
+
+kIOUSBEndpointDescriptorDirectionIn
+
+kIOUSBEndpointDescriptorTransferType
+
+kIOUSBEndpointDescriptorTransferTypePhase
+
+kIOUSBEndpointDescriptorTransferTypeControl
+
+kIOUSBEndpointDescriptorTransferTypeIsochronous
+
+kIOUSBEndpointDescriptorTransferTypeBulk
+
+kIOUSBEndpointDescriptorTransferTypeInterrupt
+
+kIOUSBEndpointDescriptorSynchronizationType
+
+kIOUSBEndpointDescriptorSynchronizationTypePhase
+

@@ -1,0 +1,75 @@
+
+
+- AppKit
+- NSLayoutConstraint
+- NSLayoutConstraint.Attribute
+-  NSLayoutConstraint.Attribute.notAnAttribute 
+
+Case
+
+# NSLayoutConstraint.Attribute.notAnAttribute
+
+A placeholder value for indicating that the constraint’s second item and second attribute aren’t used in any calculations.
+
+macOS
+
+``` source
+case notAnAttribute
+```
+
+## Discussion
+
+Use this value when creating a constraint that assigns a constant to an attribute. For example, `item1.height >= 40`. If a constraint only has one item, set the second item to `nil`, and set the second attribute to NSLayoutConstraint.Attribute.notAnAttribute.
+
+## See Also
+
+### Constants
+
+case left
+
+The left side of the object’s alignment rectangle.
+
+case right
+
+The right side of the object’s alignment rectangle.
+
+case top
+
+The top of the object’s alignment rectangle.
+
+case bottom
+
+The bottom of the object’s alignment rectangle.
+
+case leading
+
+The leading edge of the object’s alignment rectangle.
+
+case trailing
+
+The trailing edge of the object’s alignment rectangle.
+
+case width
+
+The width of the object’s alignment rectangle.
+
+case height
+
+The height of the object’s alignment rectangle.
+
+case centerX
+
+The center along the x-axis of the object’s alignment rectangle.
+
+case centerY
+
+The center along the y-axis of the object’s alignment rectangle.
+
+case lastBaseline
+
+The object’s baseline.
+
+case firstBaseline
+
+The object’s baseline.
+

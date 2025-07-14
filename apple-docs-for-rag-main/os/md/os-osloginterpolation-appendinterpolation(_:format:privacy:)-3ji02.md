@@ -1,0 +1,68 @@
+
+
+- os
+- OSLogInterpolation
+-  appendInterpolation(\_:format:privacy:) 
+
+Instance Method
+
+# appendInterpolation(\_:format:privacy:)
+
+Appends an interpolated 32-bit integer.
+
+iOS 14.0+iPadOS 14.0+Mac CatalystmacOS 11.0+tvOS 14.0+visionOSwatchOS 7.0+
+
+``` source
+mutating func appendInterpolation(
+    _ number: @autoclosure @escaping () -> Int32,
+    format: OSLogInt32ExtendedFormat,
+    privacy: OSLogPrivacy = .auto
+)
+```
+
+## Parameters 
+
+`number`  
+
+The 32-bit integer value to add to the message.
+
+`format`  
+
+The format to apply to the integer value. You format integers as decimal, hexadecimal, or octal values. If you don’t specify this parameter, the default format uses a decimal value. For more information, see OSLogIntegerFormatting.
+
+`privacy`  
+
+The privacy level of the information. If you don’t specify this parameter, the system uses the default rules to determine whether to show the information.
+
+## Discussion
+
+Don’t call this function directly. The system calls it automatically when interpolating values of this type. When specifying the value in your string, you may include any of the indicated parameters to change the default presentation of that value.
+
+## See Also
+
+### Appending Signed Integers
+
+func appendInterpolation(@autoclosure () -> Int, format: OSLogIntegerFormatting, align: OSLogStringAlignment, privacy: OSLogPrivacy)
+
+Appends an interpolated integer.
+
+func appendInterpolation(@autoclosure () -> Int8, format: OSLogIntegerFormatting, align: OSLogStringAlignment, privacy: OSLogPrivacy)
+
+Appends an interpolated 8-bit integer.
+
+func appendInterpolation(@autoclosure () -> Int16, format: OSLogIntegerFormatting, align: OSLogStringAlignment, privacy: OSLogPrivacy)
+
+Appends an interpolated 16-bit integer.
+
+func appendInterpolation(@autoclosure () -> Int32, format: OSLogInt32ExtendedFormat, privacy: OSLogPrivacy, attributes: String)
+
+Appends an interpolated 32-bit integer with the specified attributes.
+
+func appendInterpolation(@autoclosure () -> Int32, format: OSLogIntegerFormatting, align: OSLogStringAlignment, privacy: OSLogPrivacy)
+
+Appends an interpolated 32-bit integer with the specified alignment.
+
+func appendInterpolation(@autoclosure () -> Int64, format: OSLogIntegerFormatting, align: OSLogStringAlignment, privacy: OSLogPrivacy)
+
+Appends an interpolated 64-bit integer.
+

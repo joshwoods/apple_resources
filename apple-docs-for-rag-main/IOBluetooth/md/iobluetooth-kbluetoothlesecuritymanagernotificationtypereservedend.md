@@ -1,0 +1,31 @@
+
+
+- IOBluetooth
+-  kBluetoothLESecurityManagerNotificationTypeReservedEnd 
+
+Global Variable
+
+# kBluetoothLESecurityManagerNotificationTypeReservedEnd
+
+macOS
+
+``` source
+var kBluetoothLESecurityManagerNotificationTypeReservedEnd: BluetoothLESecurityManagerKeypressNotificationType { get }
+```
+
+## See Also
+
+### Constants
+
+var kBluetoothLESecurityManagerNotificationTypePasskeyCleared: BluetoothLESecurityManagerKeypressNotificationType
+
+var kBluetoothLESecurityManagerNotificationTypePasskeyDigitEntered: BluetoothLESecurityManagerKeypressNotificationType
+
+var kBluetoothLESecurityManagerNotificationTypePasskeyDigitErased: BluetoothLESecurityManagerKeypressNotificationType
+
+var kBluetoothLESecurityManagerNotificationTypePasskeyEntryCompleted: BluetoothLESecurityManagerKeypressNotificationType
+
+var kBluetoothLESecurityManagerNotificationTypePasskeyEntryStarted: BluetoothLESecurityManagerKeypressNotificationType
+
+var kBluetoothLESecurityManagerNotificationTypeReservedStart: BluetoothLESecurityManagerKeypressNotificationType
+

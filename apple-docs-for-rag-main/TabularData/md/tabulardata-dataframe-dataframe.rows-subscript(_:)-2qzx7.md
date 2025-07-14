@@ -1,0 +1,27 @@
+
+
+- TabularData
+- DataFrame
+- DataFrame.Rows
+-  subscript(\_:) 
+
+Instance Subscript
+
+# subscript(\_:)
+
+Returns a row collection from an index range.
+
+iOS 15.0+iPadOS 15.0+Mac Catalyst 15.0+macOS 12.0+tvOS 15.0+visionOS 1.0+watchOS 8.0+
+
+``` source
+subscript(bounds: Range) -> DataFrame.Rows { get set }
+```
+
+## See Also
+
+### Accessing Elements
+
+subscript(Int) -> DataFrame.Row
+
+Accesses a row at an index.
+

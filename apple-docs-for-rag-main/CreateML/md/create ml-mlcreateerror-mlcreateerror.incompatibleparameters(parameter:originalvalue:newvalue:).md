@@ -1,0 +1,50 @@
+
+
+- Create ML
+- MLCreateError
+-  MLCreateError.incompatibleParameters(parameter:originalValue:newValue:) 
+
+Case
+
+# MLCreateError.incompatibleParameters(parameter:originalValue:newValue:)
+
+An error that indicates the training session parameters are incompatible.
+
+iOS 15.0+iPadOS 15.0+Mac Catalyst 15.0+macOS 11.0+tvOS 16.0+visionOS 1.0+
+
+``` source
+case incompatibleParameters(
+    parameter: String,
+    originalValue: String,
+    newValue: String
+)
+```
+
+## See Also
+
+### Identifying errors
+
+case cancelled
+
+An error that indicates you canceled the training session.
+
+case modifiedTrainingData
+
+An error that indicates the training data is different from the data when you created the session.
+
+case io(reason: String)
+
+An error that indicates an I/O failure.
+
+case type(reason: String)
+
+An error that indicates a missing or incorrect type.
+
+case generic(reason: String)
+
+An error that indicates a failure not covered by one of the other errors.
+
+let MLCreateErrorDomain: String
+
+A global constant that defines the domain for Create ML errors.
+

@@ -1,0 +1,382 @@
+
+
+- Security
+- Secure Transport
+-  SSL Cipher Suite Values 
+
+API Collection
+
+# SSL Cipher Suite Values
+
+Recognize the set of valid SSL cipher suite values.
+
+## Overview
+
+These cipher suite constants are part of the TLS specification. For more information, see RFC 5246.
+
+## Topics
+
+### Constants
+
+var SSL_DHE_DSS_EXPORT_WITH_DES40_CBC_SHA: SSLCipherSuite
+
+Session key size conforms to pre-1998 US export restrictions.
+
+var SSL_DHE_DSS_WITH_3DES_EDE_CBC_SHA: SSLCipherSuite
+
+var SSL_DHE_DSS_WITH_DES_CBC_SHA: SSLCipherSuite
+
+var SSL_DHE_RSA_EXPORT_WITH_DES40_CBC_SHA: SSLCipherSuite
+
+Session key size conforms to pre-1998 US export restrictions.
+
+var SSL_DHE_RSA_WITH_3DES_EDE_CBC_SHA: SSLCipherSuite
+
+var SSL_DHE_RSA_WITH_DES_CBC_SHA: SSLCipherSuite
+
+var SSL_DH_DSS_EXPORT_WITH_DES40_CBC_SHA: SSLCipherSuite
+
+var SSL_DH_DSS_WITH_3DES_EDE_CBC_SHA: SSLCipherSuite
+
+var SSL_DH_DSS_WITH_DES_CBC_SHA: SSLCipherSuite
+
+var SSL_DH_RSA_EXPORT_WITH_DES40_CBC_SHA: SSLCipherSuite
+
+Session key size conforms to pre-1998 US export restrictions.
+
+var SSL_DH_RSA_WITH_3DES_EDE_CBC_SHA: SSLCipherSuite
+
+var SSL_DH_RSA_WITH_DES_CBC_SHA: SSLCipherSuite
+
+var SSL_DH_anon_EXPORT_WITH_DES40_CBC_SHA: SSLCipherSuite
+
+Session key size conforms to pre-1998 US export restrictions.
+
+var SSL_DH_anon_EXPORT_WITH_RC4_40_MD5: SSLCipherSuite
+
+Session key size conforms to pre-1998 US export restrictions.
+
+var SSL_DH_anon_WITH_3DES_EDE_CBC_SHA: SSLCipherSuite
+
+var SSL_DH_anon_WITH_DES_CBC_SHA: SSLCipherSuite
+
+var SSL_DH_anon_WITH_RC4_128_MD5: SSLCipherSuite
+
+var SSL_FORTEZZA_DMS_WITH_FORTEZZA_CBC_SHA: SSLCipherSuite
+
+var SSL_FORTEZZA_DMS_WITH_NULL_SHA: SSLCipherSuite
+
+var SSL_NO_SUCH_CIPHERSUITE: SSLCipherSuite
+
+var SSL_NULL_WITH_NULL_NULL: SSLCipherSuite
+
+var SSL_RSA_EXPORT_WITH_DES40_CBC_SHA: SSLCipherSuite
+
+Session key size conforms to pre-1998 US export restrictions.
+
+var SSL_RSA_EXPORT_WITH_RC2_CBC_40_MD5: SSLCipherSuite
+
+Session key size conforms to pre-1998 US export restrictions.
+
+var SSL_RSA_EXPORT_WITH_RC4_40_MD5: SSLCipherSuite
+
+Session key size conforms to pre-1998 US export restrictions.
+
+var SSL_RSA_WITH_3DES_EDE_CBC_MD5: SSLCipherSuite
+
+This value can be specified for SSL 2 but not SSL 3.
+
+var SSL_RSA_WITH_3DES_EDE_CBC_SHA: SSLCipherSuite
+
+var SSL_RSA_WITH_DES_CBC_MD5: SSLCipherSuite
+
+This value can be specified for SSL 2 but not SSL 3.
+
+var SSL_RSA_WITH_DES_CBC_SHA: SSLCipherSuite
+
+var SSL_RSA_WITH_IDEA_CBC_MD5: SSLCipherSuite
+
+This value can be specified for SSL 2 but not SSL 3.
+
+var SSL_RSA_WITH_IDEA_CBC_SHA: SSLCipherSuite
+
+var SSL_RSA_WITH_NULL_MD5: SSLCipherSuite
+
+var SSL_RSA_WITH_NULL_SHA: SSLCipherSuite
+
+var SSL_RSA_WITH_RC2_CBC_MD5: SSLCipherSuite
+
+This value can be specified for SSL 2 but not SSL 3.
+
+var SSL_RSA_WITH_RC4_128_MD5: SSLCipherSuite
+
+var SSL_RSA_WITH_RC4_128_SHA: SSLCipherSuite
+
+var TLS_AES_128_CCM_8_SHA256: SSLCipherSuite
+
+var TLS_AES_128_CCM_SHA256: SSLCipherSuite
+
+var TLS_AES_128_GCM_SHA256: SSLCipherSuite
+
+var TLS_AES_256_GCM_SHA384: SSLCipherSuite
+
+var TLS_CHACHA20_POLY1305_SHA256: SSLCipherSuite
+
+var TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA: SSLCipherSuite
+
+var TLS_DHE_DSS_WITH_AES_128_CBC_SHA: SSLCipherSuite
+
+var TLS_DHE_DSS_WITH_AES_128_CBC_SHA256: SSLCipherSuite
+
+var TLS_DHE_DSS_WITH_AES_128_GCM_SHA256: SSLCipherSuite
+
+var TLS_DHE_DSS_WITH_AES_256_CBC_SHA: SSLCipherSuite
+
+var TLS_DHE_DSS_WITH_AES_256_CBC_SHA256: SSLCipherSuite
+
+var TLS_DHE_DSS_WITH_AES_256_GCM_SHA384: SSLCipherSuite
+
+var TLS_DHE_PSK_WITH_3DES_EDE_CBC_SHA: SSLCipherSuite
+
+var TLS_DHE_PSK_WITH_AES_128_CBC_SHA: SSLCipherSuite
+
+var TLS_DHE_PSK_WITH_AES_128_CBC_SHA256: SSLCipherSuite
+
+var TLS_DHE_PSK_WITH_AES_128_GCM_SHA256: SSLCipherSuite
+
+var TLS_DHE_PSK_WITH_AES_256_CBC_SHA: SSLCipherSuite
+
+var TLS_DHE_PSK_WITH_AES_256_CBC_SHA384: SSLCipherSuite
+
+var TLS_DHE_PSK_WITH_AES_256_GCM_SHA384: SSLCipherSuite
+
+var TLS_DHE_PSK_WITH_NULL_SHA: SSLCipherSuite
+
+var TLS_DHE_PSK_WITH_NULL_SHA256: SSLCipherSuite
+
+var TLS_DHE_PSK_WITH_NULL_SHA384: SSLCipherSuite
+
+var TLS_DHE_PSK_WITH_RC4_128_SHA: SSLCipherSuite
+
+var TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA: SSLCipherSuite
+
+var TLS_DHE_RSA_WITH_AES_128_CBC_SHA: SSLCipherSuite
+
+var TLS_DHE_RSA_WITH_AES_128_CBC_SHA256: SSLCipherSuite
+
+var TLS_DHE_RSA_WITH_AES_128_GCM_SHA256: SSLCipherSuite
+
+var TLS_DHE_RSA_WITH_AES_256_CBC_SHA: SSLCipherSuite
+
+var TLS_DHE_RSA_WITH_AES_256_CBC_SHA256: SSLCipherSuite
+
+var TLS_DHE_RSA_WITH_AES_256_GCM_SHA384: SSLCipherSuite
+
+var TLS_DH_DSS_WITH_3DES_EDE_CBC_SHA: SSLCipherSuite
+
+var TLS_DH_DSS_WITH_AES_128_CBC_SHA: SSLCipherSuite
+
+var TLS_DH_DSS_WITH_AES_128_CBC_SHA256: SSLCipherSuite
+
+var TLS_DH_DSS_WITH_AES_128_GCM_SHA256: SSLCipherSuite
+
+var TLS_DH_DSS_WITH_AES_256_CBC_SHA: SSLCipherSuite
+
+var TLS_DH_DSS_WITH_AES_256_CBC_SHA256: SSLCipherSuite
+
+var TLS_DH_DSS_WITH_AES_256_GCM_SHA384: SSLCipherSuite
+
+var TLS_DH_RSA_WITH_3DES_EDE_CBC_SHA: SSLCipherSuite
+
+var TLS_DH_RSA_WITH_AES_128_CBC_SHA: SSLCipherSuite
+
+var TLS_DH_RSA_WITH_AES_128_CBC_SHA256: SSLCipherSuite
+
+var TLS_DH_RSA_WITH_AES_128_GCM_SHA256: SSLCipherSuite
+
+var TLS_DH_RSA_WITH_AES_256_CBC_SHA: SSLCipherSuite
+
+var TLS_DH_RSA_WITH_AES_256_CBC_SHA256: SSLCipherSuite
+
+var TLS_DH_RSA_WITH_AES_256_GCM_SHA384: SSLCipherSuite
+
+var TLS_DH_anon_WITH_3DES_EDE_CBC_SHA: SSLCipherSuite
+
+var TLS_DH_anon_WITH_AES_128_CBC_SHA: SSLCipherSuite
+
+var TLS_DH_anon_WITH_AES_128_CBC_SHA256: SSLCipherSuite
+
+var TLS_DH_anon_WITH_AES_128_GCM_SHA256: SSLCipherSuite
+
+var TLS_DH_anon_WITH_AES_256_CBC_SHA: SSLCipherSuite
+
+var TLS_DH_anon_WITH_AES_256_CBC_SHA256: SSLCipherSuite
+
+var TLS_DH_anon_WITH_AES_256_GCM_SHA384: SSLCipherSuite
+
+var TLS_DH_anon_WITH_RC4_128_MD5: SSLCipherSuite
+
+var TLS_ECDHE_ECDSA_WITH_3DES_EDE_CBC_SHA: SSLCipherSuite
+
+var TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA: SSLCipherSuite
+
+var TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256: SSLCipherSuite
+
+var TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SSLCipherSuite
+
+var TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA: SSLCipherSuite
+
+var TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384: SSLCipherSuite
+
+var TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SSLCipherSuite
+
+var TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SSLCipherSuite
+
+var TLS_ECDHE_ECDSA_WITH_NULL_SHA: SSLCipherSuite
+
+var TLS_ECDHE_ECDSA_WITH_RC4_128_SHA: SSLCipherSuite
+
+var TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA: SSLCipherSuite
+
+var TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA: SSLCipherSuite
+
+var TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA: SSLCipherSuite
+
+var TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA: SSLCipherSuite
+
+var TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256: SSLCipherSuite
+
+var TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SSLCipherSuite
+
+var TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA: SSLCipherSuite
+
+var TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384: SSLCipherSuite
+
+var TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SSLCipherSuite
+
+var TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SSLCipherSuite
+
+var TLS_ECDHE_RSA_WITH_NULL_SHA: SSLCipherSuite
+
+var TLS_ECDHE_RSA_WITH_RC4_128_SHA: SSLCipherSuite
+
+var TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA: SSLCipherSuite
+
+var TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA: SSLCipherSuite
+
+var TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA256: SSLCipherSuite
+
+var TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256: SSLCipherSuite
+
+var TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA: SSLCipherSuite
+
+var TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA384: SSLCipherSuite
+
+var TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384: SSLCipherSuite
+
+var TLS_ECDH_ECDSA_WITH_NULL_SHA: SSLCipherSuite
+
+var TLS_ECDH_ECDSA_WITH_RC4_128_SHA: SSLCipherSuite
+
+var TLS_ECDH_RSA_WITH_3DES_EDE_CBC_SHA: SSLCipherSuite
+
+var TLS_ECDH_RSA_WITH_AES_128_CBC_SHA: SSLCipherSuite
+
+var TLS_ECDH_RSA_WITH_AES_128_CBC_SHA256: SSLCipherSuite
+
+var TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256: SSLCipherSuite
+
+var TLS_ECDH_RSA_WITH_AES_256_CBC_SHA: SSLCipherSuite
+
+var TLS_ECDH_RSA_WITH_AES_256_CBC_SHA384: SSLCipherSuite
+
+var TLS_ECDH_RSA_WITH_AES_256_GCM_SHA384: SSLCipherSuite
+
+var TLS_ECDH_RSA_WITH_NULL_SHA: SSLCipherSuite
+
+var TLS_ECDH_RSA_WITH_RC4_128_SHA: SSLCipherSuite
+
+var TLS_ECDH_anon_WITH_3DES_EDE_CBC_SHA: SSLCipherSuite
+
+var TLS_ECDH_anon_WITH_AES_128_CBC_SHA: SSLCipherSuite
+
+var TLS_ECDH_anon_WITH_AES_256_CBC_SHA: SSLCipherSuite
+
+var TLS_ECDH_anon_WITH_NULL_SHA: SSLCipherSuite
+
+var TLS_ECDH_anon_WITH_RC4_128_SHA: SSLCipherSuite
+
+var TLS_EMPTY_RENEGOTIATION_INFO_SCSV: SSLCipherSuite
+
+var TLS_NULL_WITH_NULL_NULL: SSLCipherSuite
+
+var TLS_PSK_WITH_3DES_EDE_CBC_SHA: SSLCipherSuite
+
+var TLS_PSK_WITH_AES_128_CBC_SHA: SSLCipherSuite
+
+var TLS_PSK_WITH_AES_128_CBC_SHA256: SSLCipherSuite
+
+var TLS_PSK_WITH_AES_128_GCM_SHA256: SSLCipherSuite
+
+var TLS_PSK_WITH_AES_256_CBC_SHA: SSLCipherSuite
+
+var TLS_PSK_WITH_AES_256_CBC_SHA384: SSLCipherSuite
+
+var TLS_PSK_WITH_AES_256_GCM_SHA384: SSLCipherSuite
+
+var TLS_PSK_WITH_CHACHA20_POLY1305_SHA256: SSLCipherSuite
+
+var TLS_PSK_WITH_NULL_SHA: SSLCipherSuite
+
+var TLS_PSK_WITH_NULL_SHA256: SSLCipherSuite
+
+var TLS_PSK_WITH_NULL_SHA384: SSLCipherSuite
+
+var TLS_PSK_WITH_RC4_128_SHA: SSLCipherSuite
+
+var TLS_RSA_PSK_WITH_3DES_EDE_CBC_SHA: SSLCipherSuite
+
+var TLS_RSA_PSK_WITH_AES_128_CBC_SHA: SSLCipherSuite
+
+var TLS_RSA_PSK_WITH_AES_128_CBC_SHA256: SSLCipherSuite
+
+var TLS_RSA_PSK_WITH_AES_128_GCM_SHA256: SSLCipherSuite
+
+var TLS_RSA_PSK_WITH_AES_256_CBC_SHA: SSLCipherSuite
+
+var TLS_RSA_PSK_WITH_AES_256_CBC_SHA384: SSLCipherSuite
+
+var TLS_RSA_PSK_WITH_AES_256_GCM_SHA384: SSLCipherSuite
+
+var TLS_RSA_PSK_WITH_NULL_SHA: SSLCipherSuite
+
+var TLS_RSA_PSK_WITH_NULL_SHA256: SSLCipherSuite
+
+var TLS_RSA_PSK_WITH_NULL_SHA384: SSLCipherSuite
+
+var TLS_RSA_PSK_WITH_RC4_128_SHA: SSLCipherSuite
+
+var TLS_RSA_WITH_3DES_EDE_CBC_SHA: SSLCipherSuite
+
+var TLS_RSA_WITH_AES_128_CBC_SHA: SSLCipherSuite
+
+var TLS_RSA_WITH_AES_128_CBC_SHA256: SSLCipherSuite
+
+var TLS_RSA_WITH_AES_128_GCM_SHA256: SSLCipherSuite
+
+var TLS_RSA_WITH_AES_256_CBC_SHA: SSLCipherSuite
+
+var TLS_RSA_WITH_AES_256_CBC_SHA256: SSLCipherSuite
+
+var TLS_RSA_WITH_AES_256_GCM_SHA384: SSLCipherSuite
+
+var TLS_RSA_WITH_NULL_MD5: SSLCipherSuite
+
+var TLS_RSA_WITH_NULL_SHA: SSLCipherSuite
+
+var TLS_RSA_WITH_NULL_SHA256: SSLCipherSuite
+
+var TLS_RSA_WITH_RC4_128_MD5: SSLCipherSuite
+
+var TLS_RSA_WITH_RC4_128_SHA: SSLCipherSuite
+

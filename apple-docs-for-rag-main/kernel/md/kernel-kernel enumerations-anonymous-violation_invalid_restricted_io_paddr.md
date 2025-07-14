@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Enumerations
+- Anonymous
+-  VIOLATION_INVALID_RESTRICTED_IO_PADDR 
+
+Enumeration Case
+
+# VIOLATION_INVALID_RESTRICTED_IO_PADDR
+
+macOS 15.4+
+
+``` source
+VIOLATION_INVALID_RESTRICTED_IO_PADDR
+```
+

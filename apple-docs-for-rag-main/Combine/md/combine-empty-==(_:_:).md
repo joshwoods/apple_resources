@@ -1,0 +1,40 @@
+
+
+- Combine
+- Empty
+-  ==(\_:\_:) 
+
+Operator
+
+# ==(\_:\_:)
+
+Returns a Boolean value that indicates whether two publishers are equivalent.
+
+iOS 13.0+iPadOS 13.0+Mac Catalyst 13.0+macOS 10.15+tvOS 13.0+visionOS 1.0+watchOS 6.0+
+
+``` source
+static func == (lhs: Empty, rhs: Empty) -> Bool
+```
+
+## Parameters 
+
+`lhs`  
+
+An `Empty` instance to compare.
+
+`rhs`  
+
+Another `Empty` instance to compare.
+
+## Return Value
+
+`true` if the two publishers have equal `completeImmediately` properties; otherwise `false`.
+
+## See Also
+
+### Comparing Publishers
+
+static func != (Self, Self) -> Bool
+
+Returns a Boolean value indicating whether two values are not equal.
+

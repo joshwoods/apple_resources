@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_ERRCODE_INVALID_PASSTHROUGH_ID 
+
+Global Variable
+
+# CSSM_ERRCODE_INVALID_PASSTHROUGH_ID
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_ERRCODE_INVALID_PASSTHROUGH_ID: Int { get }
+```
+

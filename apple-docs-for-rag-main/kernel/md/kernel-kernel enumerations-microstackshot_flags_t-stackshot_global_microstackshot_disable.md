@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Enumerations
+- microstackshot_flags_t
+-  STACKSHOT_GLOBAL_MICROSTACKSHOT_DISABLE 
+
+Enumeration Case
+
+# STACKSHOT_GLOBAL_MICROSTACKSHOT_DISABLE
+
+macOS 10.12+
+
+``` source
+STACKSHOT_GLOBAL_MICROSTACKSHOT_DISABLE
+```
+

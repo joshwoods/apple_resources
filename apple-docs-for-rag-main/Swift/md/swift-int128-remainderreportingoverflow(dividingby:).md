@@ -1,0 +1,26 @@
+
+
+- Swift
+- Int128
+-  remainderReportingOverflow(dividingBy:) 
+
+Instance Method
+
+# remainderReportingOverflow(dividingBy:)
+
+Returns the remainder after dividing this value by the given value, along with a Boolean value indicating whether overflow occurred during division.
+
+iOS 18.0+iPadOS 18.0+Mac Catalyst 18.0+macOS 15.0+tvOS 18.0+visionOS 2.0+watchOS 11.0+
+
+``` source
+func remainderReportingOverflow(dividingBy other: Int128) -> (partialValue: Int128, overflow: Bool)
+```
+
+## Return Value
+
+A tuple containing the result of the operation along with a Boolean value indicating whether overflow occurred. If the `overflow` component is `false`, the `partialValue` component contains the entire remainder. If the `overflow` component is `true`, an overflow occurred during division and the `partialValue` component contains either the entire remainder or, if the remainder is undefined, the dividend.
+
+## Discussion
+
+Dividing by zero is not an error when using this method. For a value `x`, the result of `x.remainderReportingOverflow(dividingBy: 0)` is `(x, true)`.
+

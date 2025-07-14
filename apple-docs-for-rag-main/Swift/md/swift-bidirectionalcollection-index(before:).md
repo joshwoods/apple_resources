@@ -1,0 +1,38 @@
+
+
+- Swift
+- BidirectionalCollection
+-  index(before:) 
+
+Instance Method
+
+# index(before:)
+
+Returns the position immediately before the given index.
+
+iOS 8.0+iPadOS 8.0+Mac Catalyst 13.0+macOS 10.10+tvOS 9.0+visionOS 1.0+watchOS 2.0+
+
+``` source
+func index(before i: Self.Index) -> Self.Index
+```
+
+**Required** Default implementation provided.
+
+## Parameters 
+
+`i`  
+
+A valid index of the collection. `i` must be greater than `startIndex`.
+
+## Return Value
+
+The index value immediately before `i`.
+
+## Default Implementations
+
+### BidirectionalCollection Implementations
+
+func index(before: Self.Index) -> Self.Index
+
+Returns the position immediately after the given index.
+

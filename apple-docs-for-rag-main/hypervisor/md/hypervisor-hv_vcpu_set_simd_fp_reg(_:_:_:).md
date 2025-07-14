@@ -1,0 +1,59 @@
+
+
+- Hypervisor
+-  hv_vcpu_set_simd_fp_reg(\_:\_:\_:) 
+
+Function
+
+# hv_vcpu_set_simd_fp_reg(\_:\_:\_:)
+
+Sets the value of a vCPU SIMD&FP register.
+
+macOS 11.0+
+
+``` source
+func hv_vcpu_set_simd_fp_reg(
+    _ vcpu: hv_vcpu_t,
+    _ reg: hv_simd_fp_reg_t,
+    _ value: hv_simd_fp_uchar16_t
+) -> hv_return_t
+```
+
+## Parameters 
+
+`vcpu`  
+
+The instance of the vCPU.
+
+`reg`  
+
+The ID of the SIMD&FP register.
+
+`value`  
+
+The new value of the register.
+
+## Return Value
+
+HV_SUCCESS if the operation was successful, otherwise an error code specified in hv_return_t.
+
+## Discussion
+
+This function must be called by the owning thread.
+
+## See Also
+
+### SIMD &amp; Floating-point registers
+
+func hv_vcpu_get_simd_fp_reg(hv_vcpu_t, hv_simd_fp_reg_t, UnsafeMutablePointer&lt;hv_simd_fp_uchar16_t>) -> hv_return_t
+
+Gets the current value of a vCPU SIMD and FP register.
+
+typealias hv_simd_fp_uchar16_t
+
+The value that represents an ARM SIMD and FP register.
+
+struct hv_simd_fp_reg_t
+
+The type that defines SIMD and floating-point registers.
+

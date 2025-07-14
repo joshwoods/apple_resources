@@ -1,0 +1,42 @@
+
+
+- Metal
+- MTLTextureSwizzle
+-  MTLTextureSwizzle.alpha 
+
+Case
+
+# MTLTextureSwizzle.alpha
+
+The alpha channel of the source pixel is copied to the destination channel.
+
+iOS 13.0+iPadOS 13.0+Mac Catalyst 13.1+macOS 10.15+tvOS 13.0+visionOS 1.0+
+
+``` source
+case alpha
+```
+
+## See Also
+
+### Specifying Swizzle Channels
+
+case blue
+
+The blue channel of the source pixel is copied to the destination channel.
+
+case green
+
+The green channel of the source pixel is copied to the destination channel.
+
+case red
+
+The red channel of the source pixel is copied to the destination channel.
+
+case one
+
+A value of `1.0` is copied to the destination channel.
+
+case zero
+
+A value of `0.0` is copied to the destination channel.
+

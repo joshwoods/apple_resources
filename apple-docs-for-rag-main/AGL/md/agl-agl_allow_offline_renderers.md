@@ -1,0 +1,31 @@
+
+
+- AGL
+-  AGL_ALLOW_OFFLINE_RENDERERS 
+
+Global Variable
+
+# AGL_ALLOW_OFFLINE_RENDERERS
+
+macOS 10.0+
+
+``` source
+var AGL_ALLOW_OFFLINE_RENDERERS: Int32 { get }
+```
+
+## See Also
+
+### Constants
+
+var AGL_DISPLAY_MASK: Int32
+
+var AGL_INVALID_FUNCTION: Int32
+
+var AGL_VERSION_3_0: Int32
+
+var AGL_DISPLAY_MASK: Int32
+
+var AGL_INVALID_FUNCTION: Int32
+
+var AGL_VERSION_3_0: Int32
+

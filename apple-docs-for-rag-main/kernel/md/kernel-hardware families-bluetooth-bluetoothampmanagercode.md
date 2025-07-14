@@ -1,0 +1,65 @@
+
+
+- Kernel
+- Hardware Families
+- Bluetooth
+-  BluetoothAMPManagerCode 
+
+Type Alias
+
+# BluetoothAMPManagerCode
+
+macOS 10.6+
+
+``` source
+typedef enum BluetoothAMPManagerCode BluetoothAMPManagerCode;
+```
+
+## Topics
+
+### Constants
+
+kBluetoothAMPManagerCodeAMPChangeNotify
+
+kBluetoothAMPManagerCodeAMPChangeResponse
+
+kBluetoothAMPManagerCodeAMPCommandReject
+
+kBluetoothAMPManagerCodeAMPCreatePhysicalLinkRequest
+
+kBluetoothAMPManagerCodeAMPCreatePhysicalLinkResponse
+
+kBluetoothAMPManagerCodeAMPDisconnectPhysicalLinkRequest
+
+kBluetoothAMPManagerCodeAMPDisconnectPhysicalLinkResponse
+
+kBluetoothAMPManagerCodeAMPDiscoverRequest
+
+kBluetoothAMPManagerCodeAMPDiscoverResponse
+
+kBluetoothAMPManagerCodeAMPGetAssocRequest
+
+kBluetoothAMPManagerCodeAMPGetAssocResponse
+
+kBluetoothAMPManagerCodeAMPGetInfoRequest
+
+kBluetoothAMPManagerCodeAMPGetInfoResponse
+
+kBluetoothAMPManagerCodeReserved
+
+## See Also
+
+### AMP
+
+BluetoothAMPCommandRejectReason
+
+BluetoothAMPCreatePhysicalLinkResponseStatus
+
+BluetoothAMPDisconnectPhysicalLinkResponseStatus
+
+BluetoothAMPDiscoverResponseControllerStatus
+
+BluetoothAMPGetAssocResponseStatus
+
+BluetoothAMPGetInfoResponseStatus
+

@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_WORDID_KEYCHAIN_CHANGE_LOCK 
+
+Global Variable
+
+# CSSM_WORDID_KEYCHAIN_CHANGE_LOCK
+
+macOS 10.0+
+
+``` source
+var CSSM_WORDID_KEYCHAIN_CHANGE_LOCK: Int { get }
+```
+

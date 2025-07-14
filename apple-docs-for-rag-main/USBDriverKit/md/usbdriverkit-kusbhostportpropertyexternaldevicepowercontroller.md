@@ -1,0 +1,49 @@
+
+
+- USBDriverKit
+-  kUSBHostPortPropertyExternalDevicePowerController 
+
+Macro
+
+# kUSBHostPortPropertyExternalDevicePowerController
+
+DriverKit 19.0+
+
+``` source
+#define kUSBHostPortPropertyExternalDevicePowerController
+```
+
+## See Also
+
+### Port Properties
+
+kUSBHostPortPropertyUsbCPortNumber
+
+kUSBHostPortPropertyTestMode
+
+kUSBHostPortPropertyStatus
+
+kUSBHostPortPropertySimulateInterrupt
+
+kUSBHostPortPropertyRemovable
+
+kUSBHostPortPropertyPowerSource
+
+kUSBHostPortPropertyPortNumber
+
+kUSBHostPortPropertyOvercurrent
+
+kUSBHostPortPropertyMux
+
+kUSBHostPortPropertyExternalDeviceResetController
+
+kUSBHostPortPropertyDisconnectInterval
+
+kUSBHostPortPropertyConnectorType
+
+kUSBHostPortPropertyConnectable
+
+kUSBHostPortPropertyCompanionPortNumber
+
+kUSBHostPortPropertyCompanionIndex
+

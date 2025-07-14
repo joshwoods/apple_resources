@@ -1,0 +1,16 @@
+
+
+- DriverKit
+- SCSI_Sense_Data
+-  ADDITIONAL_SENSE_CODE_QUALIFIER 
+
+Instance Property
+
+# ADDITIONAL_SENSE_CODE_QUALIFIER
+
+DriverKitiOSiPadOSmacOS
+
+``` source
+UInt8 ADDITIONAL_SENSE_CODE_QUALIFIER;
+```
+

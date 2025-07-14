@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_ATTRIBUTE_ASC_OPTIMIZATION 
+
+Global Variable
+
+# CSSM_ATTRIBUTE_ASC_OPTIMIZATION
+
+macOS 10.0+
+
+``` source
+var CSSM_ATTRIBUTE_ASC_OPTIMIZATION: Int { get }
+```
+

@@ -1,0 +1,18 @@
+
+
+- RealityKit
+- CollisionCastHit
+-  triangleHit 
+
+Instance Property
+
+# triangleHit
+
+Information the system provides when a ray touches or intersects a triangle mesh.
+
+iOS 18.0+iPadOS 18.0+Mac Catalyst 18.0+macOS 15.0+visionOS 1.0+
+
+``` source
+var triangleHit: CollisionCastHit.TriangleHit? { get }
+```
+

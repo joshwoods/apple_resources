@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_ACL_PREAUTH_TRACKING_UNKNOWN 
+
+Global Variable
+
+# CSSM_ACL_PREAUTH_TRACKING_UNKNOWN
+
+macOS 10.0+
+
+``` source
+var CSSM_ACL_PREAUTH_TRACKING_UNKNOWN: UInt32 { get }
+```
+

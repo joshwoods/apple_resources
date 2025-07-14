@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_ERRCODE_INVALID_ACCESS_CREDENTIALS 
+
+Global Variable
+
+# CSSM_ERRCODE_INVALID_ACCESS_CREDENTIALS
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_ERRCODE_INVALID_ACCESS_CREDENTIALS: Int { get }
+```
+

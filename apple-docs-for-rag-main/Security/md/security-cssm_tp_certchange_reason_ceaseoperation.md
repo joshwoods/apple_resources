@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_TP_CERTCHANGE_REASON_CEASEOPERATION 
+
+Global Variable
+
+# CSSM_TP_CERTCHANGE_REASON_CEASEOPERATION
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_TP_CERTCHANGE_REASON_CEASEOPERATION: Int { get }
+```
+

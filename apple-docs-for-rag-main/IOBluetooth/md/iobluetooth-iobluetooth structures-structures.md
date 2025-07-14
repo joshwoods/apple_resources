@@ -1,0 +1,459 @@
+
+
+- IOBluetooth
+-  IOBluetooth Structures 
+
+API Collection
+
+# IOBluetooth Structures
+
+## Topics
+
+### Structures
+
+struct BluetoothAFHHostChannelClassification
+
+struct BluetoothAFHResults
+
+struct BluetoothAMPCommandRejectReason
+
+struct BluetoothAMPCreatePhysicalLinkResponseStatus
+
+struct BluetoothAMPDisconnectPhysicalLinkResponseStatus
+
+struct BluetoothAMPDiscoverResponseControllerStatus
+
+struct BluetoothAMPGetAssocResponseStatus
+
+struct BluetoothAMPGetInfoResponseStatus
+
+struct BluetoothAMPManagerCode
+
+struct BluetoothAuthenticationRequirementsValues
+
+struct BluetoothCompanyIdentifers
+
+struct BluetoothDeviceAddress
+
+struct BluetoothEnhancedSynchronousConnectionInfo
+
+struct BluetoothEventFilterCondition
+
+struct BluetoothFeatureBits
+
+struct BluetoothHCIAFHChannelAssessmentModes
+
+struct BluetoothHCIAcceptSynchronousConnectionRequestParams
+
+struct BluetoothHCIAuthentionEnableModes
+
+struct BluetoothHCIAutomaticFlushTimeoutInfo
+
+struct BluetoothHCIBufferSize
+
+struct BluetoothHCIConnectionModes
+
+struct BluetoothHCICurrentInquiryAccessCodes
+
+struct BluetoothHCICurrentInquiryAccessCodesForWrite
+
+struct BluetoothHCIDeleteStoredLinkKeyFlags
+
+struct BluetoothHCIEncryptionModes
+
+struct BluetoothHCIEnhancedAcceptSynchronousConnectionRequestParams
+
+struct BluetoothHCIEnhancedSetupSynchronousConnectionParams
+
+struct BluetoothHCIEventAuthenticationCompleteResults
+
+struct BluetoothHCIEventChangeConnectionLinkKeyCompleteResults
+
+struct BluetoothHCIEventConnectionCompleteResults
+
+struct BluetoothHCIEventConnectionPacketTypeResults
+
+struct BluetoothHCIEventConnectionRequestResults
+
+struct BluetoothHCIEventDataBufferOverflowResults
+
+struct BluetoothHCIEventDisconnectionCompleteResults
+
+struct BluetoothHCIEventEncryptionChangeResults
+
+struct BluetoothHCIEventEncryptionKeyRefreshCompleteResults
+
+struct BluetoothHCIEventFlowSpecificationData
+
+struct BluetoothHCIEventFlushOccurredResults
+
+struct BluetoothHCIEventHardwareErrorResults
+
+struct BluetoothHCIEventLEConnectionCompleteResults
+
+struct BluetoothHCIEventLEConnectionUpdateCompleteResults
+
+struct BluetoothHCIEventLELongTermKeyRequestResults
+
+struct BluetoothHCIEventLEMetaResults
+
+struct BluetoothHCIEventLEReadRemoteUsedFeaturesCompleteResults
+
+struct BluetoothHCIEventLinkKeyNotificationResults
+
+struct BluetoothHCIEventMasterLinkKeyCompleteResults
+
+struct BluetoothHCIEventMaxSlotsChangeResults
+
+struct BluetoothHCIEventModeChangeResults
+
+struct BluetoothHCIEventPageScanModeChangeResults
+
+struct BluetoothHCIEventPageScanRepetitionModeChangeResults
+
+struct BluetoothHCIEventQoSSetupCompleteResults
+
+struct BluetoothHCIEventQoSViolationResults
+
+struct BluetoothHCIEventReadClockOffsetResults
+
+struct BluetoothHCIEventReadExtendedFeaturesResults
+
+struct BluetoothHCIEventReadRemoteExtendedFeaturesResults
+
+struct BluetoothHCIEventReadRemoteSupportedFeaturesResults
+
+struct BluetoothHCIEventReadRemoteVersionInfoResults
+
+struct BluetoothHCIEventReadSupportedFeaturesResults
+
+struct BluetoothHCIEventRemoteNameRequestResults
+
+struct BluetoothHCIEventReturnLinkKeysResults
+
+struct BluetoothHCIEventRoleChangeResults
+
+struct BluetoothHCIEventSimplePairingCompleteResults
+
+struct BluetoothHCIEventSniffSubratingResults
+
+struct BluetoothHCIEventSynchronousConnectionChangedResults
+
+struct BluetoothHCIEventSynchronousConnectionCompleteResults
+
+struct BluetoothHCIEventVendorSpecificResults
+
+struct BluetoothHCIExtendedFeaturesInfo
+
+struct BluetoothHCIExtendedInquiryResponse
+
+struct BluetoothHCIExtendedInquiryResponseDataTypes
+
+struct BluetoothHCIExtendedInquiryResult
+
+struct BluetoothHCIFECRequiredValues
+
+struct BluetoothHCIFailedContactInfo
+
+struct BluetoothHCIGeneralFlowControlStates
+
+struct BluetoothHCIHoldModeActivityStates
+
+struct BluetoothHCIInquiryAccessCode
+
+struct BluetoothHCIInquiryModes
+
+struct BluetoothHCIInquiryResult
+
+struct BluetoothHCIInquiryResults
+
+struct BluetoothHCIInquiryScanTypes
+
+struct BluetoothHCIInquiryWithRSSIResult
+
+struct BluetoothHCIInquiryWithRSSIResults
+
+struct BluetoothHCILEBufferSize
+
+struct BluetoothHCILinkPolicySettingsInfo
+
+struct BluetoothHCILinkPolicySettingsValues
+
+struct BluetoothHCILinkQualityInfo
+
+struct BluetoothHCILinkSupervisionTimeout
+
+struct BluetoothHCIPageScanEnableStates
+
+struct BluetoothHCIPageScanModes
+
+struct BluetoothHCIPageScanPeriodModes
+
+struct BluetoothHCIPageScanTypes
+
+struct BluetoothHCIPowerState
+
+struct BluetoothHCIQualityOfServiceSetupParams
+
+struct BluetoothHCIRSSIInfo
+
+struct BluetoothHCIReadExtendedInquiryResponseResults
+
+struct BluetoothHCIReadLMPHandleResults
+
+struct BluetoothHCIReadLocalOOBDataResults
+
+struct BluetoothHCIReadStoredLinkKeysFlags
+
+struct BluetoothHCIRequestCallbackInfo
+
+struct BluetoothHCIRetransmissionEffortTypes
+
+struct BluetoothHCIRoleInfo
+
+struct BluetoothHCIRoles
+
+struct BluetoothHCISCOFlowControlStates
+
+struct BluetoothHCIScanActivity
+
+struct BluetoothHCISetupSynchronousConnectionParams
+
+struct BluetoothHCISimplePairingModes
+
+struct BluetoothHCISimplePairingOOBData
+
+struct BluetoothHCIStoredLinkKeysInfo
+
+struct BluetoothHCISupportedCommands
+
+struct BluetoothHCISupportedFeatures
+
+struct BluetoothHCITimeoutValues
+
+struct BluetoothHCITransmitPowerLevelInfo
+
+struct BluetoothHCITransmitReadPowerLevelTypes
+
+struct BluetoothHCIVersionInfo
+
+struct BluetoothHCIVersions
+
+struct BluetoothIOCapabilities
+
+struct BluetoothIOCapabilityResponse
+
+struct BluetoothIRK
+
+struct BluetoothKey
+
+struct BluetoothKeypressNotification
+
+struct BluetoothKeypressNotificationTypes
+
+struct BluetoothL2CAPCommandCode
+
+struct BluetoothL2CAPCommandRejectReason
+
+struct BluetoothL2CAPConfigurationOption
+
+struct BluetoothL2CAPConfigurationResult
+
+struct BluetoothL2CAPConfigurationRetransmissionAndFlowControlFlags
+
+struct BluetoothL2CAPConnectionResult
+
+struct BluetoothL2CAPConnectionStatus
+
+struct BluetoothL2CAPInformationExtendedFeaturesMask
+
+struct BluetoothL2CAPInformationResult
+
+struct BluetoothL2CAPInformationType
+
+struct BluetoothL2CAPQoSType
+
+struct BluetoothL2CAPQualityOfServiceOptions
+
+struct BluetoothL2CAPRetransmissionAndFlowControlOptions
+
+struct BluetoothL2CAPSegmentationAndReassembly
+
+struct BluetoothL2CAPSupervisoryFuctionType
+
+struct BluetoothLEAddressType
+
+struct BluetoothLEAdvertisingType
+
+struct BluetoothLEConnectionInterval
+
+struct BluetoothLEFeatureBits
+
+struct BluetoothLEScan
+
+struct BluetoothLEScanDuplicateFilter
+
+struct BluetoothLEScanFilter
+
+struct BluetoothLEScanType
+
+struct BluetoothLESecurityManagerCommandCode
+
+struct BluetoothLESecurityManagerIOCapability
+
+struct BluetoothLESecurityManagerKeyDistributionFormat
+
+struct BluetoothLESecurityManagerKeypressNotificationType
+
+struct BluetoothLESecurityManagerOOBData
+
+struct BluetoothLESecurityManagerPairingFailedReasonCode
+
+struct BluetoothLESecurityManagerUserInputCapability
+
+struct BluetoothLESecurityManagerUserOutputCapability
+
+struct BluetoothLMPVersions
+
+struct BluetoothLinkTypes
+
+struct BluetoothOOBDataPresenceValues
+
+struct BluetoothPINCode
+
+struct BluetoothRFCOMMLineStatus
+
+struct BluetoothRFCOMMParityType
+
+struct BluetoothReadClockInfo
+
+struct BluetoothRemoteHostSupportedFeaturesNotification
+
+struct BluetoothSetEventMask
+
+struct BluetoothSimplePairingDebugModes
+
+struct BluetoothSynchronousConnectionInfo
+
+struct BluetoothTransportInfo
+
+struct BluetoothTransportTypes
+
+struct BluetoothUserConfirmationRequest
+
+struct BluetoothUserPasskeyNotification
+
+struct FTSFileType
+
+struct IOBluetoothDeviceSearchAttributes
+
+Structure used to search for particular devices.
+
+struct IOBluetoothDeviceSearchOptionsBits
+
+struct IOBluetoothDeviceSearchTypesBits
+
+Bits to determine what Bluetooth devices to search for
+
+struct IOBluetoothL2CAPChannelDataBlock
+
+struct IOBluetoothL2CAPChannelEvent
+
+struct IOBluetoothL2CAPChannelEventType
+
+struct IOBluetoothUserNotificationChannelDirection
+
+struct OBEXConnectFlagValues
+
+Flags for Connect command.
+
+struct OBEXErrorCodes
+
+struct OBEXHeaderIdentifiers
+
+Identifiers for OBEX Headers.
+
+struct OBEXNonceFlagValues
+
+Flags for Nonce command during digest challenge.
+
+struct OBEXOpCodeCommandValues
+
+Operation OpCode values for commands.
+
+struct OBEXOpCodeResponseValues
+
+Response opCode values.
+
+struct OBEXOpCodeSessionValues
+
+Operation OpCode values for sessions. From the OBEX 1.3 specification.
+
+struct OBEXPutFlagValues
+
+struct OBEXRealmValues
+
+Values for Realm during digest response.
+
+struct OBEXSessionEventTypes
+
+Type identifiers for OBEX sessions.
+
+struct OBEXSessionParameterTags
+
+Tags for SessionParameters.
+
+struct OBEXTransportEvent
+
+struct OBEXTransportEventTypes
+
+struct OBEXVersions
+
+The available/supported OBEX versions.
+
+struct ProtocolParameters
+
+struct SDPAttributeDeviceIdentificationRecord
+
+struct SDPAttributeIdentifierCodes
+
+struct SDPServiceClasses
+
+struct BluetoothHCIEncryptionKeySizeInfo
+
+struct BluetoothHCIEventLEEnhancedConnectionCompleteResults
+
+## See Also
+
+### Reference
+
+Bluetooth.h User-Space
+
+Bluetooth wireless technology
+
+IOBluetoothUserLib.h
+
+Public Interfaces for Apple’s implementation of Bluetooth technology.
+
+IOBluetoothUtilities.h
+
+See the Overview section above for header-level documentation.
+
+OBEX.h
+
+Public OBEX technology interfaces.
+
+OBEXBluetooth.h
+
+Object Exchange over Bluetooth.
+
+OBEXFileTransferServices.h
+
+IOBluetooth Enumerations
+
+IOBluetooth Constants
+
+IOBluetooth Functions
+
+IOBluetooth Data Types
+

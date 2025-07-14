@@ -1,0 +1,53 @@
+
+
+- AppKit
+- NSTextCheckingClient
+-  addAnnotations(\_:range:) 
+
+Instance Method
+
+# addAnnotations(\_:range:)
+
+macOS 10.0+
+
+``` source
+func addAnnotations(
+    _ annotations: [NSAttributedString.Key : String],
+    range: NSRange
+)
+```
+
+**Required**
+
+## See Also
+
+### Instance Methods
+
+func annotatedSubstring(forProposedRange: NSRange, actualRange: NSRangePointer?) -> NSAttributedString?
+
+**Required**
+
+func candidateListTouchBarItem() -> NSCandidateListTouchBarItem&lt;AnyObject>?
+
+**Required**
+
+func removeAnnotation(NSAttributedString.Key, range: NSRange)
+
+**Required**
+
+func replaceCharacters(in: NSRange, withAnnotatedString: NSAttributedString)
+
+**Required**
+
+func selectAndShow(NSRange)
+
+**Required**
+
+func setAnnotations([NSAttributedString.Key : String], range: NSRange)
+
+**Required**
+
+func view(for: NSRange, firstRect: NSRectPointer?, actualRange: NSRangePointer?) -> NSView?
+
+**Required**
+

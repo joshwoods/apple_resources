@@ -1,0 +1,45 @@
+
+
+- AppKit
+-  NSFontExpandedTrait 
+
+Global Variable
+
+# NSFontExpandedTrait
+
+The font’s typestyle is expanded. Expanded and condensed traits are mutually exclusive.
+
+macOS
+
+``` source
+var NSFontExpandedTrait: Int { get }
+```
+
+## See Also
+
+### Constants
+
+var NSFontItalicTrait: Int
+
+The font’s typestyle is italic.
+
+var NSFontBoldTrait: Int
+
+The font’s typestyle is boldface.
+
+var NSFontCondensedTrait: Int
+
+The font’s typestyle is condensed. Expanded and condensed traits are mutually exclusive.
+
+var NSFontMonoSpaceTrait: Int
+
+The font uses fixed-pitch glyphs if available. The font may have multiple glyph advances (many CJK glyphs contain two spaces).
+
+var NSFontVerticalTrait: Int
+
+The font uses vertical glyph variants and metrics.
+
+var NSFontUIOptimizedTrait: Int
+
+The font synthesizes appropriate attributes for user interface rendering, such as control titles, if necessary.
+

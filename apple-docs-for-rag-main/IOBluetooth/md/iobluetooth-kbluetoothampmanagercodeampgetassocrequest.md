@@ -1,0 +1,45 @@
+
+
+- IOBluetooth
+-  kBluetoothAMPManagerCodeAMPGetAssocRequest 
+
+Global Variable
+
+# kBluetoothAMPManagerCodeAMPGetAssocRequest
+
+macOS
+
+``` source
+var kBluetoothAMPManagerCodeAMPGetAssocRequest: BluetoothAMPManagerCode { get }
+```
+
+## See Also
+
+### Constants
+
+var kBluetoothAMPManagerCodeAMPChangeNotify: BluetoothAMPManagerCode
+
+var kBluetoothAMPManagerCodeAMPChangeResponse: BluetoothAMPManagerCode
+
+var kBluetoothAMPManagerCodeAMPCommandReject: BluetoothAMPManagerCode
+
+var kBluetoothAMPManagerCodeAMPCreatePhysicalLinkRequest: BluetoothAMPManagerCode
+
+var kBluetoothAMPManagerCodeAMPCreatePhysicalLinkResponse: BluetoothAMPManagerCode
+
+var kBluetoothAMPManagerCodeAMPDisconnectPhysicalLinkRequest: BluetoothAMPManagerCode
+
+var kBluetoothAMPManagerCodeAMPDisconnectPhysicalLinkResponse: BluetoothAMPManagerCode
+
+var kBluetoothAMPManagerCodeAMPDiscoverRequest: BluetoothAMPManagerCode
+
+var kBluetoothAMPManagerCodeAMPDiscoverResponse: BluetoothAMPManagerCode
+
+var kBluetoothAMPManagerCodeAMPGetAssocResponse: BluetoothAMPManagerCode
+
+var kBluetoothAMPManagerCodeAMPGetInfoRequest: BluetoothAMPManagerCode
+
+var kBluetoothAMPManagerCodeAMPGetInfoResponse: BluetoothAMPManagerCode
+
+var kBluetoothAMPManagerCodeReserved: BluetoothAMPManagerCode
+

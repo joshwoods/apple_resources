@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_CSP_STAGED_OPERATION_IN_PROGRESS 
+
+Global Variable
+
+# CSSMERR_CSP_STAGED_OPERATION_IN_PROGRESS
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSMERR_CSP_STAGED_OPERATION_IN_PROGRESS: Int { get }
+```
+

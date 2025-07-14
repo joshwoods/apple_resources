@@ -1,0 +1,17 @@
+
+
+- AppKit
+- NSWindow
+- NSWindow.OrderingMode
+-  init(rawValue:) 
+
+Initializer
+
+# init(rawValue:)
+
+macOS
+
+``` source
+init?(rawValue: Int)
+```
+

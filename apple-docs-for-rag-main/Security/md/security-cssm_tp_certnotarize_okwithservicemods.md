@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_TP_CERTNOTARIZE_OKWITHSERVICEMODS 
+
+Global Variable
+
+# CSSM_TP_CERTNOTARIZE_OKWITHSERVICEMODS
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_TP_CERTNOTARIZE_OKWITHSERVICEMODS: Int { get }
+```
+

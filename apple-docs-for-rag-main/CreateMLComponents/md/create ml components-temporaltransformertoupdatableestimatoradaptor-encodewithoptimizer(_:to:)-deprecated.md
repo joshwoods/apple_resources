@@ -1,0 +1,43 @@
+
+
+- Create ML Components
+- TemporalTransformerToUpdatableEstimatorAdaptor
+-  encodeWithOptimizer(\_:to:) Deprecated
+
+Instance Method
+
+# encodeWithOptimizer(\_:to:)
+
+This method is part of the conformance. It doesn’t encode anything since the transformer is pre-defined, so don’t call it.
+
+iOS 16.0–18.0DeprecatediPadOS 16.0–18.0DeprecatedMac Catalyst 16.0–18.0DeprecatedmacOS 13.0–15.0DeprecatedtvOS 16.0–18.0DeprecatedvisionOS 1.0–2.0Deprecated
+
+``` source
+func encodeWithOptimizer(
+    _ transformer: Transformer,
+    to encoder: inout any EstimatorEncoder
+) throws
+```
+
+## See Also
+
+### Encoding and decoding
+
+func encode(Transformer, to: inout any EstimatorEncoder) throws
+
+Does nothing since this estimator uses a pre-defined transformer.
+
+Deprecated
+
+func decode(from: inout any EstimatorDecoder) throws -> Transformer
+
+Returns the pre-defined transformer.
+
+Deprecated
+
+func decodeWithOptimizer(from: inout any EstimatorDecoder) throws -> Transformer
+
+Returns the pre-defined transformer.
+
+Deprecated
+

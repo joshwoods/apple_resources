@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_CSSM_PVC_ALREADY_CONFIGURED 
+
+Global Variable
+
+# CSSMERR_CSSM_PVC_ALREADY_CONFIGURED
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSMERR_CSSM_PVC_ALREADY_CONFIGURED: Int { get }
+```
+

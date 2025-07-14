@@ -1,0 +1,76 @@
+
+
+- Create ML Components
+- PreprocessingUpdatableTabularEstimator
+-  update(\_:with:eventHandler:) 
+
+Instance Method
+
+# update(\_:with:eventHandler:)
+
+Updates a transformer with a new data frame of examples.
+
+iOS 17.0+iPadOS 17.0+Mac Catalyst 17.0+macOS 14.0+tvOS 17.0+visionOS 1.0+watchOS 11.0+
+
+``` source
+func update(
+    _ transformer: inout PreprocessingUpdatableTabularEstimator.Transformer,
+    with input: DataFrame,
+    eventHandler: EventHandler? = nil
+) async throws
+```
+
+## Parameters 
+
+`transformer`  
+
+A transformer to update.
+
+`input`  
+
+A data frame of examples.
+
+`eventHandler`  
+
+An event handler.
+
+## See Also
+
+### Preprocesing and fitting
+
+func preprocessed(from: DataFrame, eventHandler: EventHandler?) async throws -> DataFrame
+
+Preprocesses a data frame of examples.
+
+func fitted(to: DataFrame, eventHandler: EventHandler?) async throws -> PreprocessingUpdatableTabularEstimator&lt;Preprocessor, Estimator>.Transformer
+
+Fits a composed transformer to a data frame of examples.
+
+func fitted(toPreprocessed: DataFrame, eventHandler: EventHandler?) async throws -> PreprocessingUpdatableTabularEstimator&lt;Preprocessor, Estimator>.Transformer
+
+Fits a transformer to a data frame of preprocessed features.
+
+func update(inout PreprocessingUpdatableTabularEstimator&lt;Preprocessor, Estimator>.Transformer, withPreprocessed: DataFrame, eventHandler: EventHandler?) async throws
+
+Updates a transformer with a new data frame of preprocessed features.
+
+func makeTransformer() -> PreprocessingUpdatableTabularEstimator&lt;Preprocessor, Estimator>.Transformer
+
+Creates a default-initialized transformer suitable for incremental fitting.
+
+typealias Input
+
+The input type.
+
+typealias Intermediate
+
+The intermediate type.
+
+typealias Output
+
+The output type.
+
+typealias Transformer
+
+The transformer type created by this estimator.
+

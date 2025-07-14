@@ -1,0 +1,107 @@
+
+
+- IOBluetooth
+-  BluetoothLESecurityManagerPairingFailedReasonCode 
+
+Structure
+
+# BluetoothLESecurityManagerPairingFailedReasonCode
+
+macOS
+
+``` source
+struct BluetoothLESecurityManagerPairingFailedReasonCode
+```
+
+## Topics
+
+### Constants
+
+var kBluetoothLESecurityManagerReasonCodeAuthenticationRequirements: BluetoothLESecurityManagerPairingFailedReasonCode
+
+var kBluetoothLESecurityManagerReasonCodeBREDRPairingInProgress: BluetoothLESecurityManagerPairingFailedReasonCode
+
+var kBluetoothLESecurityManagerReasonCodeCommandNotSupported: BluetoothLESecurityManagerPairingFailedReasonCode
+
+var kBluetoothLESecurityManagerReasonCodeConfirmValueFailed: BluetoothLESecurityManagerPairingFailedReasonCode
+
+var kBluetoothLESecurityManagerReasonCodeCrossTransportKeyDerivationGenerationNotAllowed: BluetoothLESecurityManagerPairingFailedReasonCode
+
+var kBluetoothLESecurityManagerReasonCodeDHKeyCheckFailed: BluetoothLESecurityManagerPairingFailedReasonCode
+
+var kBluetoothLESecurityManagerReasonCodeEncryptionKeySize: BluetoothLESecurityManagerPairingFailedReasonCode
+
+var kBluetoothLESecurityManagerReasonCodeInvalidParameters: BluetoothLESecurityManagerPairingFailedReasonCode
+
+var kBluetoothLESecurityManagerReasonCodeNumericComparisonFailed: BluetoothLESecurityManagerPairingFailedReasonCode
+
+var kBluetoothLESecurityManagerReasonCodeOOBNotAvailbale: BluetoothLESecurityManagerPairingFailedReasonCode
+
+var kBluetoothLESecurityManagerReasonCodePairingNotSupported: BluetoothLESecurityManagerPairingFailedReasonCode
+
+var kBluetoothLESecurityManagerReasonCodePasskeyEntryFailed: BluetoothLESecurityManagerPairingFailedReasonCode
+
+var kBluetoothLESecurityManagerReasonCodeRepeatedAttempts: BluetoothLESecurityManagerPairingFailedReasonCode
+
+var kBluetoothLESecurityManagerReasonCodeReserved: BluetoothLESecurityManagerPairingFailedReasonCode
+
+var kBluetoothLESecurityManagerReasonCodeReservedEnd: BluetoothLESecurityManagerPairingFailedReasonCode
+
+var kBluetoothLESecurityManagerReasonCodeReservedStart: BluetoothLESecurityManagerPairingFailedReasonCode
+
+var kBluetoothLESecurityManagerReasonCodeUnspecifiedReason: BluetoothLESecurityManagerPairingFailedReasonCode
+
+### Initializers
+
+init(UInt32)
+
+init(rawValue: UInt32)
+
+### Instance Properties
+
+var rawValue: UInt32
+
+## Relationships
+
+### Conforms To
+
+- BitwiseCopyable
+- Equatable
+- Hashable
+- RawRepresentable
+- Sendable
+
+## See Also
+
+### Enumerations
+
+struct BluetoothAMPCommandRejectReason
+
+struct BluetoothAMPCreatePhysicalLinkResponseStatus
+
+struct BluetoothAMPDisconnectPhysicalLinkResponseStatus
+
+struct BluetoothAMPDiscoverResponseControllerStatus
+
+struct BluetoothAMPGetAssocResponseStatus
+
+struct BluetoothAMPGetInfoResponseStatus
+
+struct BluetoothAMPManagerCode
+
+struct BluetoothHCIPowerState
+
+struct BluetoothL2CAPCommandCode
+
+struct BluetoothL2CAPCommandRejectReason
+
+struct BluetoothL2CAPConfigurationOption
+
+struct BluetoothL2CAPConfigurationResult
+
+struct BluetoothL2CAPConfigurationRetransmissionAndFlowControlFlags
+
+struct BluetoothL2CAPConnectionResult
+
+struct BluetoothL2CAPConnectionStatus
+

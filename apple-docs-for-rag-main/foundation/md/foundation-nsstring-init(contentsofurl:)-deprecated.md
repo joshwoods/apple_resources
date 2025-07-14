@@ -1,0 +1,134 @@
+
+
+- Foundation
+- NSString
+-  init(contentsOfURL:) Deprecated
+
+Initializer
+
+# init(contentsOfURL:)
+
+Initializes the receiver, a newly allocated `NSString` object, by reading data from the location named by a given URL.
+
+tvOS 9.0–9.0DeprecatedvisionOS 1.0–1.0DeprecatedwatchOS 2.0–2.0Deprecated
+
+``` source
+convenience init?(contentsOfURL url: URL)
+```
+
+``` source
+convenience init?(contentsOf url: URL)
+```
+
+Deprecated
+
+Use init(contentsOfURL:encoding:) or init(contentsOfURL:usedEncoding:) instead.
+
+## Discussion
+
+Initializes the receiver, a newly allocated `NSString` object, by reading data from the location named by `aURL`. If the contents begin with a byte-order mark (`U+FEFF` or `U+FFFE`), interprets the contents as UTF-16 code units; otherwise interprets the contents as data in the default C string encoding. Returns an initialized object, which might be different from the original receiver, or `nil` if the location can’t be opened.
+
+## See Also
+
+### Related Documentation
+
+convenience init(contentsOfURL: URL, encoding: UInt) throws
+
+Returns an `NSString` object initialized by reading data from a given URL interpreted using a given encoding.
+
+convenience init(contentsOfURL: URL, usedEncoding: UnsafeMutablePointer&lt;UInt>?) throws
+
+Returns an `NSString` object initialized by reading data from a given URL and returns by reference the encoding used to interpret the data.
+
+### Deprecated
+
+class func string(withCString: UnsafePointer&lt;CChar>) -> Any?
+
+Creates a new string using a given C-string.
+
+Deprecated
+
+convenience init?(CString: UnsafePointer&lt;CChar>)
+
+Initializes the receiver, a newly allocated `NSString` object, by converting the data in a given C-string from the default C-string encoding into the Unicode character encoding.
+
+Deprecated
+
+class func string(withCString: UnsafePointer&lt;CChar>, length: Int) -> Any?
+
+Returns a string containing the characters in a given C-string.
+
+Deprecated
+
+convenience init?(CString: UnsafePointer&lt;CChar>, length: Int)
+
+Initializes the receiver, a newly allocated `NSString` object, by converting the data in a given C-string from the default C-string encoding into the Unicode character encoding.
+
+Deprecated
+
+convenience init?(CStringNoCopy: UnsafeMutablePointer&lt;CChar>, length: Int, freeWhenDone: Bool)
+
+Initializes the receiver, a newly allocated `NSString` object, by converting the data in a given C-string from the default C-string encoding into the Unicode character encoding.
+
+Deprecated
+
+class func string(withContentsOfFile: String) -> Any?
+
+Returns a string created by reading data from the file named by a given path.
+
+Deprecated
+
+convenience init?(contentsOfFile: String)
+
+Initializes the receiver, a newly allocated `NSString` object, by reading data from the file named by `path`.
+
+Deprecated
+
+class func string(withContentsOf: URL) -> Any?
+
+Returns a string created by reading data from the file named by a given URL.
+
+Deprecated
+
+func write(toFile: String, atomically: Bool) -> Bool
+
+Writes the contents of the receiver to the file specified by a given path.
+
+Deprecated
+
+func write(to: URL, atomically: Bool) -> Bool
+
+Writes the contents of the receiver to the location specified by a given URL.
+
+Deprecated
+
+func getCharacters(UnsafeMutablePointer&lt;unichar>)
+
+Copies all characters from the receiver into a given buffer.
+
+Deprecated
+
+func cString() -> UnsafePointer&lt;CChar>?
+
+Returns a representation of the receiver as a C string in the default C-string encoding.
+
+Deprecated
+
+func lossyCString() -> UnsafePointer&lt;CChar>?
+
+Returns a representation of the receiver as a C string in the default C-string encoding, possibly losing information in converting to that encoding.
+
+Deprecated
+
+func cStringLength() -> Int
+
+Returns the length in char-sized units of the receiver’s C-string representation in the default C-string encoding.
+
+Deprecated
+
+func getCString(UnsafeMutablePointer&lt;CChar>)
+
+Invokes getCString(_:maxLength:range:remaining:) with `NSMaximumStringLength` as the maximum length, the receiver’s entire extent as the range, and `NULL` for the remaining range.
+
+Deprecated
+

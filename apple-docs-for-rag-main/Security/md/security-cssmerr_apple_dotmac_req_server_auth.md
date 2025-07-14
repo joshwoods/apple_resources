@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLE_DOTMAC_REQ_SERVER_AUTH 
+
+Global Variable
+
+# CSSMERR_APPLE_DOTMAC_REQ_SERVER_AUTH
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLE_DOTMAC_REQ_SERVER_AUTH: Int { get }
+```
+

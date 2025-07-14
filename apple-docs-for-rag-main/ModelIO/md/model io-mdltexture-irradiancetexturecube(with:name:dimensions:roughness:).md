@@ -1,0 +1,65 @@
+
+
+- Model I/O
+- MDLTexture
+-  irradianceTextureCube(with:name:dimensions:roughness:) 
+
+Type Method
+
+# irradianceTextureCube(with:name:dimensions:roughness:)
+
+Generates an irradiance texture from the specified reflectance cube texture, assuming a surface of the specified roughness.
+
+iOS 9.0+iPadOS 9.0+Mac Catalyst 13.1+macOS 10.11+tvOS 9.0+visionOS 1.0+
+
+``` source
+class func irradianceTextureCube(
+    with texture: MDLTexture,
+    name: String?,
+    dimensions: vector_int2,
+    roughness: Float
+) -> Self
+```
+
+## Parameters 
+
+`texture`  
+
+The reflective (environment map) cube texture from which to generate an irradiance texture.
+
+`name`  
+
+The name property for the newly generated texture.
+
+`dimensions`  
+
+The size (width and height in texels) of each cube face for the newly generated texture.
+
+`roughness`  
+
+A floating-point value between zero and one. At zero, the generated texture is similar to the input texture; at one, the generated texture is more diffuse.
+
+## Return Value
+
+A new cube texture object.
+
+## Discussion
+
+Irradiance and reflectance textures are used in realistic lighting:
+
+- A reflectance texture, also known as an environment map, contains a rendering of a scene as seen from a specific position. A renderer can use this texture to create reflections on surfaces with metallic materials.
+
+- An irradiance contains samples of the total light arriving at the a specific position from every direction. A renderer can use this texture to create diffuse lighting effects.
+
+Typically, an irradiance texture is derived from a reflective texture. For example, consider a reflective texture that is red in all directions above its position and blue in all directions below that point. The side of an object rendered with a reflective material would show a hard line between red and blue, but a diffuse material should appear purple, because the side of the object receives a blend of the red light from above and the blue light from below. Therefore, this method generates an irradiance texture that is red directly above, is blue directly below, and contains gradations of purple on all sides.
+
+You can use reflective and irradiance textures with the MDLLightProbe class.
+
+## See Also
+
+### Creating Irradiance Textures
+
+class func irradianceTextureCube(with: MDLTexture, name: String?, dimensions: vector_int2) -> Self
+
+Generates an irradiance texture from the specified reflectance cube texture.
+

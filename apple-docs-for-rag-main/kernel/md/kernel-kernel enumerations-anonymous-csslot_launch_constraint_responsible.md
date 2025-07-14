@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Enumerations
+- Anonymous
+-  CSSLOT_LAUNCH_CONSTRAINT_RESPONSIBLE 
+
+Enumeration Case
+
+# CSSLOT_LAUNCH_CONSTRAINT_RESPONSIBLE
+
+macOS 13.0+
+
+``` source
+CSSLOT_LAUNCH_CONSTRAINT_RESPONSIBLE = 10
+```
+

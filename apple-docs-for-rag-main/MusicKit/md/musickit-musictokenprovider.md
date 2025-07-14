@@ -1,0 +1,45 @@
+
+
+- MusicKit
+-  MusicTokenProvider 
+
+Type Alias
+
+# MusicTokenProvider
+
+An object that music requests use to access Apple Music API.
+
+iOS 15.0+iPadOS 15.0+Mac Catalyst 15.0+macOS 12.0+tvOS 15.0+visionOS 1.0+watchOS 8.0+
+
+``` source
+typealias MusicTokenProvider = MusicUserTokenProvider & MusicDeveloperTokenProvider
+```
+
+## Discussion
+
+A token provider for MusicKit needs to be a subclass of MusicUserTokenProvider which conforms to the MusicDeveloperTokenProvider protocol.
+
+## See Also
+
+### Token management
+
+protocol MusicDeveloperTokenProvider
+
+A set of methods that music requests use to access Apple Music API.
+
+class MusicUserTokenProvider
+
+A class that music requests use to fetch user tokens your app requires to access Apple Music API.
+
+struct MusicTokenRequestOptions
+
+Options that music requests pass into token provider methods to fetch a required token for accessing Apple Music API.
+
+enum MusicTokenRequestError
+
+An error that the token provider or music requests can throw upon requesting any token necessary for accessing Apple Music API.
+
+class DefaultMusicTokenProvider
+
+The default token provider that music requests use to access Apple Music API.
+

@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Enumerations
+- Anonymous
+-  CS_VALIDATION_CATEGORY_DEVELOPMENT 
+
+Enumeration Case
+
+# CS_VALIDATION_CATEGORY_DEVELOPMENT
+
+macOS 13.0+
+
+``` source
+CS_VALIDATION_CATEGORY_DEVELOPMENT = 3
+```
+

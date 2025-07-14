@@ -1,0 +1,15 @@
+
+
+- Security
+-  kSecOIDAPPLE_EKU_RESOURCE_SIGNING 
+
+Global Variable
+
+# kSecOIDAPPLE_EKU_RESOURCE_SIGNING
+
+macOS 10.7+
+
+``` source
+let kSecOIDAPPLE_EKU_RESOURCE_SIGNING: CFString
+```
+

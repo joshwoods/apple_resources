@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Data Types
+- user64_dyld_uuid_info
+-  imageUUID 
+
+Instance Property
+
+# imageUUID
+
+macOS 10.12+
+
+``` source
+uuid_t imageUUID;
+```
+

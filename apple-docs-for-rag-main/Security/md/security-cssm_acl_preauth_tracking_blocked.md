@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_ACL_PREAUTH_TRACKING_BLOCKED 
+
+Global Variable
+
+# CSSM_ACL_PREAUTH_TRACKING_BLOCKED
+
+macOS 10.0+
+
+``` source
+var CSSM_ACL_PREAUTH_TRACKING_BLOCKED: UInt32 { get }
+```
+

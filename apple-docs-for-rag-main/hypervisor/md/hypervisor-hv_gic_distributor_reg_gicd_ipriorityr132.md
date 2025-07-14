@@ -1,0 +1,49 @@
+
+
+- Hypervisor
+-  HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR132 
+
+Global Variable
+
+# HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR132
+
+macOS
+
+``` source
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR132: hv_gic_distributor_reg_t { get }
+```
+
+## See Also
+
+### Interrupt priority registers
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR0: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR1: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR2: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR3: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR4: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR5: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR6: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR7: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR8: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR9: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR10: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR11: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR12: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR16: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR13: hv_gic_distributor_reg_t
+

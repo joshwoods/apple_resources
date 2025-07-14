@@ -1,0 +1,22 @@
+
+
+- WebKit JS
+- SVGFEMorphologyElement
+-  SVG_MORPHOLOGY_OPERATOR_DILATE 
+
+# SVG_MORPHOLOGY_OPERATOR_DILATE
+
+Safari Desktop 10.0+Safari Mobile 10.0+
+
+``` source
+const unsigned short SVG_MORPHOLOGY_OPERATOR_DILATE;
+```
+
+## See Also
+
+### Miscellaneous
+
+SVG_MORPHOLOGY_OPERATOR_ERODE
+
+SVG_MORPHOLOGY_OPERATOR_UNKNOWN
+

@@ -1,0 +1,49 @@
+
+
+- ARKit
+-  ar_barcode_anchor_get_symbology 
+
+Function
+
+# ar_barcode_anchor_get_symbology
+
+visionOS 2.0+
+
+``` source
+extern ar_barcode_detection_symbology_t ar_barcode_anchor_get_symbology(ar_barcode_anchor_t barcode_anchor);
+```
+
+## See Also
+
+### Barcode functions
+
+ar_barcode_anchor_copy_payload_data
+
+ar_barcode_anchor_get_extent
+
+ar_barcode_anchor_get_identifier
+
+ar_barcode_anchor_get_origin_from_anchor_transform
+
+ar_barcode_anchor_get_payload_string_value
+
+ar_barcode_anchor_get_timestamp
+
+ar_barcode_anchors_enumerate_anchors
+
+ar_barcode_anchors_enumerate_anchors_f
+
+ar_barcode_anchors_get_count
+
+ar_barcode_detection_configuration_create
+
+ar_barcode_detection_configuration_set_detection_symbology
+
+ar_barcode_detection_provider_create
+
+ar_barcode_detection_provider_get_required_authorization_type
+
+ar_barcode_detection_provider_is_supported
+
+ar_barcode_detection_provider_set_update_handler
+

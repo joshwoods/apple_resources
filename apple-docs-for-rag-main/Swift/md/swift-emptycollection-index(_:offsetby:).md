@@ -1,0 +1,48 @@
+
+
+- Swift
+- EmptyCollection
+-  index(\_:offsetBy:) 
+
+Instance Method
+
+# index(\_:offsetBy:)
+
+Returns an index that is the specified distance from the given index.
+
+iOS 8.0+iPadOS 8.0+Mac Catalyst 13.0+macOS 10.10+tvOS 9.0+visionOS 1.0+watchOS 2.0+
+
+``` source
+func index(
+    _ i: EmptyCollection.Index,
+    offsetBy n: Int
+) -> EmptyCollection.Index
+```
+
+## Parameters 
+
+`i`  
+
+A valid index of the collection.
+
+## Return Value
+
+An index offset by `distance` from the index `i`. If `distance` is positive, this is the same value as the result of `distance` calls to `index(after:)`. If `distance` is negative, this is the same value as the result of `abs(distance)` calls to `index(before:)`.
+
+## Discussion
+
+The following example obtains an index advanced four positions from a string’s starting index and then prints the character at that position.
+
+```
+let s = "Swift"
+let i = s.index(s.startIndex, offsetBy: 4)
+print(s[i])
+// Prints "t"
+```
+
+The value passed as `distance` must not offset `i` beyond the bounds of the collection.
+
+Complexity
+
+O(1)
+

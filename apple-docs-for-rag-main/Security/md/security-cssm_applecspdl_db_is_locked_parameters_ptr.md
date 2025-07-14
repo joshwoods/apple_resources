@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_APPLECSPDL_DB_IS_LOCKED_PARAMETERS_PTR 
+
+Type Alias
+
+# CSSM_APPLECSPDL_DB_IS_LOCKED_PARAMETERS_PTR
+
+macOS 10.0+
+
+``` source
+typealias CSSM_APPLECSPDL_DB_IS_LOCKED_PARAMETERS_PTR = UnsafeMutablePointer
+```
+

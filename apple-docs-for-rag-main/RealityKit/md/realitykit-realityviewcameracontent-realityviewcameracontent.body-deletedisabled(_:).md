@@ -1,0 +1,20 @@
+
+
+- RealityKit
+- RealityViewCameraContent
+- RealityViewCameraContent.Body
+-  deleteDisabled(\_:) 
+
+Instance Method
+
+# deleteDisabled(\_:)
+
+Adds a condition for whether the view’s view hierarchy is deletable.
+
+RealityKitSwiftUIiOS 13.0+iPadOS 13.0+Mac CatalystmacOS 10.15+tvOS 13.0+watchOS 6.0+
+
+``` source
+nonisolated
+func deleteDisabled(_ isDisabled: Bool) -> some View
+```
+

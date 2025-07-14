@@ -1,0 +1,18 @@
+
+
+- Create ML
+- MLWordTagger
+-  CustomPlaygroundDisplayConvertible Implementations 
+
+API Collection
+
+# CustomPlaygroundDisplayConvertible Implementations
+
+## Topics
+
+### Instance Properties
+
+var playgroundDescription: Any
+
+A description of the word tagger in a playground.
+

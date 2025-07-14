@@ -1,0 +1,23 @@
+
+
+- OpenGL ES
+-  glNormalPointer(\_:\_:\_:) Deprecated
+
+Function
+
+# glNormalPointer(\_:\_:\_:)
+
+iOS 2.0–12.0DeprecatediPadOS 2.0–12.0DeprecatedMac Catalyst 2.0–12.0DeprecatedtvOS 9.0–12.0Deprecated
+
+``` source
+func glNormalPointer(
+    _ type: GLenum,
+    _ stride: GLsizei,
+    _ pointer: UnsafeRawPointer!
+)
+```
+
+Deprecated
+
+OpenGLES API deprecated. (Define GLES_SILENCE_DEPRECATION to silence these warnings)
+

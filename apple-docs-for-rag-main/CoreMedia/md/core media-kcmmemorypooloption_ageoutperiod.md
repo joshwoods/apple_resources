@@ -1,0 +1,21 @@
+
+
+- Core Media
+-  kCMMemoryPoolOption_AgeOutPeriod 
+
+Global Variable
+
+# kCMMemoryPoolOption_AgeOutPeriod
+
+The period of time before the pool recycles its memory.
+
+iOS 6.0+iPadOS 6.0+Mac Catalyst 13.1+macOS 10.8+tvOS 9.0+visionOS 1.0+watchOS 6.0+
+
+``` source
+let kCMMemoryPoolOption_AgeOutPeriod: CFString
+```
+
+## Discussion
+
+Pass a value for this option to the CMMemoryPoolCreate(options:) function.
+

@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_ACL_KEYCHAIN_PROMPT_INVALID_ACT 
+
+Global Variable
+
+# CSSM_ACL_KEYCHAIN_PROMPT_INVALID_ACT
+
+macOS 10.0+
+
+``` source
+var CSSM_ACL_KEYCHAIN_PROMPT_INVALID_ACT: Int { get }
+```
+

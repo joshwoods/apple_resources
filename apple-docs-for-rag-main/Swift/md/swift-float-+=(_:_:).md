@@ -1,0 +1,28 @@
+
+
+- Swift
+- Float
+-  +=(\_:\_:) 
+
+Operator
+
+# +=(\_:\_:)
+
+Adds two values and stores the result in the left-hand-side variable, rounded to a representable value.
+
+iOS 8.0+iPadOS 8.0+Mac Catalyst 13.0+macOS 10.10+tvOS 9.0+visionOS 1.0+watchOS 2.0+
+
+``` source
+static func += (lhs: inout Float, rhs: Float)
+```
+
+## Parameters 
+
+`lhs`  
+
+The first value to add.
+
+`rhs`  
+
+The second value to add.
+

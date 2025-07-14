@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_BAD_CERT_FROM_ISSUER 
+
+Global Variable
+
+# CSSMERR_APPLETP_BAD_CERT_FROM_ISSUER
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLETP_BAD_CERT_FROM_ISSUER: Int { get }
+```
+

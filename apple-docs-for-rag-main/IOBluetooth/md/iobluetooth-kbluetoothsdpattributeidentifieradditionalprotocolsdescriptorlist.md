@@ -1,0 +1,49 @@
+
+
+- IOBluetooth
+-  kBluetoothSDPAttributeIdentifierAdditionalProtocolsDescriptorList 
+
+Global Variable
+
+# kBluetoothSDPAttributeIdentifierAdditionalProtocolsDescriptorList
+
+macOS
+
+``` source
+var kBluetoothSDPAttributeIdentifierAdditionalProtocolsDescriptorList: SDPAttributeIdentifierCodes { get }
+```
+
+## See Also
+
+### Constants
+
+var kBluetoothSDPAttributeIdentifierAudioFeedbackSupport: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierBluetoothProfileDescriptorList: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierBrowseGroupList: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierClientExecutableURL: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierDocumentationURL: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierExternalNetwork: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierFaxClass1Support: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierFaxClass2Support: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierFaxClass2_0Support: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierGroupID: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierHIDBatteryPower: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierHIDBootDevice: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierHIDCountryCode: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierHIDDescriptorList: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierHIDDeviceSubclass: SDPAttributeIdentifierCodes
+

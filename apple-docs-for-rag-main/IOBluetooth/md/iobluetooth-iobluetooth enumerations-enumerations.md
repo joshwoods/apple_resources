@@ -1,0 +1,239 @@
+
+
+- IOBluetooth
+-  IOBluetooth Enumerations 
+
+API Collection
+
+# IOBluetooth Enumerations
+
+## Topics
+
+### Enumerations
+
+struct BluetoothAMPCommandRejectReason
+
+struct BluetoothAMPCreatePhysicalLinkResponseStatus
+
+struct BluetoothAMPDisconnectPhysicalLinkResponseStatus
+
+struct BluetoothAMPDiscoverResponseControllerStatus
+
+struct BluetoothAMPGetAssocResponseStatus
+
+struct BluetoothAMPGetInfoResponseStatus
+
+struct BluetoothAMPManagerCode
+
+struct BluetoothHCIPowerState
+
+struct BluetoothL2CAPCommandCode
+
+struct BluetoothL2CAPCommandRejectReason
+
+struct BluetoothL2CAPConfigurationOption
+
+struct BluetoothL2CAPConfigurationResult
+
+struct BluetoothL2CAPConfigurationRetransmissionAndFlowControlFlags
+
+struct BluetoothL2CAPConnectionResult
+
+struct BluetoothL2CAPConnectionStatus
+
+struct BluetoothL2CAPInformationExtendedFeaturesMask
+
+struct BluetoothL2CAPInformationResult
+
+struct BluetoothL2CAPInformationType
+
+struct BluetoothL2CAPQoSType
+
+struct BluetoothL2CAPSegmentationAndReassembly
+
+struct BluetoothL2CAPSupervisoryFuctionType
+
+struct BluetoothLEAddressType
+
+struct BluetoothLEAdvertisingType
+
+struct BluetoothLEConnectionInterval
+
+struct BluetoothLEScan
+
+struct BluetoothLEScanDuplicateFilter
+
+struct BluetoothLEScanFilter
+
+struct BluetoothLEScanType
+
+struct BluetoothLESecurityManagerCommandCode
+
+struct BluetoothLESecurityManagerIOCapability
+
+struct BluetoothLESecurityManagerKeypressNotificationType
+
+struct BluetoothLESecurityManagerOOBData
+
+struct BluetoothLESecurityManagerPairingFailedReasonCode
+
+struct BluetoothLESecurityManagerUserInputCapability
+
+struct BluetoothLESecurityManagerUserOutputCapability
+
+struct BluetoothRFCOMMLineStatus
+
+struct BluetoothRFCOMMParityType
+
+enum IOBluetoothHandsFreeAudioGatewayFeatures
+
+enum IOBluetoothHandsFreeCallHoldModes
+
+enum IOBluetoothHandsFreeCodecID
+
+enum IOBluetoothHandsFreeDeviceFeatures
+
+enum IOBluetoothHandsFreePDUMessageStatus
+
+enum IOBluetoothHandsFreeSMSSupport
+
+struct IOBluetoothL2CAPChannelEventType
+
+enum IOBluetoothSMSMode
+
+struct IOBluetoothUserNotificationChannelDirection
+
+Bluetooth logical channel constants
+
+BluetoothVoiceSettingInputSampleSize constants
+
+BluetoothEncryptionEnable constants
+
+BluetoothL2CAPConfigurationOption constants
+
+BluetoothL2CAPTCIEventID constants
+
+BluetoothL2CAPPacketHeaderSize constants
+
+BluetoothGAPAppearance constants
+
+BluetoothLETX constants
+
+BluetoothKeyFlag constants
+
+BluetoothHCILoopbackMode constants
+
+BluetoothSDPDataElementType constants
+
+BluetoothLEMaxTX constants
+
+BluetoothVoiceSettingInputCoding constants
+
+BluetoothHCIEventMask constants
+
+BluetoothDeviceNameMaxLength constants
+
+BluetoothVoiceSettingPCMBitPositionMask constants
+
+BluetoothHCIErrorPowerIsOFF constants
+
+BluetoothHCI packet size constants
+
+BluetoothVoiceSettingAirCodingFormat constants
+
+BluetoothKeyType constants
+
+BluetoothL2CAP constants
+
+BluetoothL2CAPFlushTimeout constants
+
+BluetoothHCI event constants
+
+BluetoothSDPPDUID constants
+
+BluetoothLESecurityManager constants
+
+BluetoothSynchronousConnectionPacketType constants
+
+BluetoothHCI command constants
+
+BluetoothHCIErroneousDataReporting constants
+
+BluetoothL2CAPTCICommand constants
+
+BluetoothSDPErrorCode constants
+
+BluetoothConnectionHandleNone constants
+
+BluetoothVoiceSettingInputDataFormat constants
+
+BluetoothPacketType constants
+
+BluetoothAirMode constants
+
+BluetoothL2CAPPSM constants
+
+BluetoothDeviceClassMinor constants
+
+BluetoothServiceClassMajor constants
+
+BluetoothL2CAPChannel constants
+
+BluetoothDeviceClassMajor constants
+
+BluetoothHCIUSBDeviceMatchingConstants
+
+Bluetooth USB device matching constants
+
+MaximumNumberOfInquiryAccessCodes constants
+
+BluetoothL2CAPInfoTypeMaxConnectionlessMTUSize constants
+
+BluetoothHCIError constants
+
+BluetoothPageScanMode constants
+
+BluetoothSDPUUID16 constants
+
+BluetoothPageScanPeriodMode constants
+
+Bluetooth role switch constants
+
+Bluetooth access inquiry constants
+
+BluetoothPageScanRepetitionMode constants
+
+## See Also
+
+### Reference
+
+Bluetooth.h User-Space
+
+Bluetooth wireless technology
+
+IOBluetoothUserLib.h
+
+Public Interfaces for Apple’s implementation of Bluetooth technology.
+
+IOBluetoothUtilities.h
+
+See the Overview section above for header-level documentation.
+
+OBEX.h
+
+Public OBEX technology interfaces.
+
+OBEXBluetooth.h
+
+Object Exchange over Bluetooth.
+
+OBEXFileTransferServices.h
+
+IOBluetooth Structures
+
+IOBluetooth Constants
+
+IOBluetooth Functions
+
+IOBluetooth Data Types
+

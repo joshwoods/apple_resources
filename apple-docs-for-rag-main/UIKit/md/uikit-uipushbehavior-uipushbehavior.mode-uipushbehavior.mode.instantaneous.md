@@ -1,0 +1,27 @@
+
+
+- UIKit
+- UIPushBehavior
+- UIPushBehavior.Mode
+-  UIPushBehavior.Mode.instantaneous 
+
+Case
+
+# UIPushBehavior.Mode.instantaneous
+
+Option for instantaneous force.
+
+iOS 7.0+iPadOS 7.0+Mac Catalyst 13.1+tvOSvisionOS 1.0+
+
+``` source
+case instantaneous
+```
+
+## See Also
+
+### Constants
+
+case continuous
+
+Option for continuous force.
+

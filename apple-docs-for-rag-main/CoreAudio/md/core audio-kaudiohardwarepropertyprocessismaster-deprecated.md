@@ -1,0 +1,49 @@
+
+
+- Core Audio
+-  kAudioHardwarePropertyProcessIsMaster Deprecated
+
+Global Variable
+
+# kAudioHardwarePropertyProcessIsMaster
+
+iOS 2.0–15.0DeprecatediPadOS 2.0–15.0DeprecatedMac Catalyst 13.1–15.0DeprecatedmacOS 10.0–12.0Deprecated
+
+``` source
+var kAudioHardwarePropertyProcessIsMaster: AudioObjectPropertySelector { get }
+```
+
+## See Also
+
+### Constants
+
+var kAudioHardwarePropertyBoxList: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyDefaultInputDevice: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyDefaultOutputDevice: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyDefaultSystemOutputDevice: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyDevices: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyHogModeIsAllowed: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyIsInitingOrExiting: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyMixStereoToMono: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyPlugInList: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyPowerHint: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyProcessIsAudible: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyServiceRestarted: AudioObjectPropertySelector
+
+var kAudioHardwarePropertySleepingIsAllowed: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyTranslateBundleIDToPlugIn: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyTranslateBundleIDToTransportManager: AudioObjectPropertySelector
+

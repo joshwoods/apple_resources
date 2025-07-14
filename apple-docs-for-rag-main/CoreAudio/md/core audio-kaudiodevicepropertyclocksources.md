@@ -1,0 +1,49 @@
+
+
+- Core Audio
+-  kAudioDevicePropertyClockSources 
+
+Global Variable
+
+# kAudioDevicePropertyClockSources
+
+Mac CatalystmacOS
+
+``` source
+var kAudioDevicePropertyClockSources: AudioObjectPropertySelector { get }
+```
+
+## See Also
+
+### Constants
+
+var kAudioDevicePropertyChannelNominalLineLevel: AudioObjectPropertySelector
+
+var kAudioDevicePropertyChannelNominalLineLevelNameForIDCFString: AudioObjectPropertySelector
+
+var kAudioDevicePropertyChannelNominalLineLevels: AudioObjectPropertySelector
+
+var kAudioDevicePropertyClipLight: AudioObjectPropertySelector
+
+var kAudioDevicePropertyClockSource: AudioObjectPropertySelector
+
+var kAudioDevicePropertyClockSourceKindForID: AudioObjectPropertySelector
+
+var kAudioDevicePropertyClockSourceNameForIDCFString: AudioObjectPropertySelector
+
+var kAudioDevicePropertyDataSource: AudioObjectPropertySelector
+
+var kAudioDevicePropertyDataSourceKindForID: AudioObjectPropertySelector
+
+var kAudioDevicePropertyDataSourceNameForIDCFString: AudioObjectPropertySelector
+
+var kAudioDevicePropertyDataSources: AudioObjectPropertySelector
+
+var kAudioDevicePropertyHighPassFilterSetting: AudioObjectPropertySelector
+
+var kAudioDevicePropertyHighPassFilterSettingNameForIDCFString: AudioObjectPropertySelector
+
+var kAudioDevicePropertyHighPassFilterSettings: AudioObjectPropertySelector
+
+var kAudioDevicePropertyJackIsConnected: AudioObjectPropertySelector
+

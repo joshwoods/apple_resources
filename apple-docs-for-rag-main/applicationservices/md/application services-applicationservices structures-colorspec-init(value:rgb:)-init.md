@@ -1,0 +1,20 @@
+
+
+- Application Services
+- ApplicationServices Structures
+- ColorSpec
+-  init(value:rgb:) 
+
+Initializer
+
+# init(value:rgb:)
+
+Mac Catalyst 13.0+macOS 10.9+Xcode 9.0+
+
+``` source
+init(
+    value: Int16,
+    rgb: RGBColor
+)
+```
+

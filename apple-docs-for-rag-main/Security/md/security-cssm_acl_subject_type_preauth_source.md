@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_ACL_SUBJECT_TYPE_PREAUTH_SOURCE 
+
+Global Variable
+
+# CSSM_ACL_SUBJECT_TYPE_PREAUTH_SOURCE
+
+macOS 10.0+
+
+``` source
+var CSSM_ACL_SUBJECT_TYPE_PREAUTH_SOURCE: Int { get }
+```
+

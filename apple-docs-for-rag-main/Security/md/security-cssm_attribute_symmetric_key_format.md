@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_ATTRIBUTE_SYMMETRIC_KEY_FORMAT 
+
+Global Variable
+
+# CSSM_ATTRIBUTE_SYMMETRIC_KEY_FORMAT
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_ATTRIBUTE_SYMMETRIC_KEY_FORMAT: UInt32 { get }
+```
+

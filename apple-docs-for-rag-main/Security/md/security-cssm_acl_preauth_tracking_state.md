@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_ACL_PREAUTH_TRACKING_STATE 
+
+Type Alias
+
+# CSSM_ACL_PREAUTH_TRACKING_STATE
+
+macOS 10.0+
+
+``` source
+typealias CSSM_ACL_PREAUTH_TRACKING_STATE = uint32
+```
+

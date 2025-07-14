@@ -1,0 +1,17 @@
+
+
+- UIKit
+- UINavigationItem
+- UINavigationItem.LargeTitleDisplayMode
+-  UINavigationItem.LargeTitleDisplayMode.inline 
+
+Case
+
+# UINavigationItem.LargeTitleDisplayMode.inline
+
+iOS 17.0+iPadOS 17.0+Mac Catalyst 17.0+visionOS 1.0+
+
+``` source
+case inline
+```
+

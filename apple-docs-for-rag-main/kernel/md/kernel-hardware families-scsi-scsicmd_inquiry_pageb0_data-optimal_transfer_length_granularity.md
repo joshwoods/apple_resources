@@ -1,0 +1,18 @@
+
+
+- Kernel
+- Hardware Families
+- SCSI
+- SCSICmd_INQUIRY_PageB0_Data
+-  OPTIMAL_TRANSFER_LENGTH_GRANULARITY 
+
+Instance Property
+
+# OPTIMAL_TRANSFER_LENGTH_GRANULARITY
+
+macOS 10.12+
+
+``` source
+UInt16 OPTIMAL_TRANSFER_LENGTH_GRANULARITY;
+```
+

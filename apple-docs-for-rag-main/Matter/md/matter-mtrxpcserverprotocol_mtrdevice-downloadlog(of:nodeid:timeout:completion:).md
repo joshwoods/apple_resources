@@ -1,0 +1,31 @@
+
+
+- Matter
+- MTRXPCServerProtocol_MTRDevice
+-  downloadLog(of:nodeID:timeout:completion:) 
+
+Instance Method
+
+# downloadLog(of:nodeID:timeout:completion:)
+
+iOS 18.2+iPadOS 18.2+Mac Catalyst 18.2+macOS 15.2+tvOS 18.2+visionOS 2.2+watchOS 11.2+
+
+``` source
+func downloadLog(
+    of type: MTRDiagnosticLogType,
+    nodeID: NSNumber,
+    timeout: TimeInterval,
+    completion: @escaping (URL?, (any Error)?) -> Void
+)
+```
+
+``` source
+func downloadLog(
+    of type: MTRDiagnosticLogType,
+    nodeID: NSNumber,
+    timeout: TimeInterval
+) async throws -> URL
+```
+
+**Required**
+

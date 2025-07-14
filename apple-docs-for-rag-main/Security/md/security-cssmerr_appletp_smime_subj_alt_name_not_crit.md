@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_SMIME_SUBJ_ALT_NAME_NOT_CRIT 
+
+Global Variable
+
+# CSSMERR_APPLETP_SMIME_SUBJ_ALT_NAME_NOT_CRIT
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLETP_SMIME_SUBJ_ALT_NAME_NOT_CRIT: Int { get }
+```
+

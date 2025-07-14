@@ -1,0 +1,18 @@
+
+
+- MusicKit
+- RecordLabel
+-  shortDescription 
+
+Instance Property
+
+# shortDescription
+
+An abbreviated description to show inline or when the record label appears alongside other content.
+
+iOS 15.0+iPadOS 15.0+Mac Catalyst 15.0+macOS 12.0+tvOS 15.0+visionOS 1.0+watchOS 8.0+
+
+``` source
+var shortDescription: String? { get }
+```
+

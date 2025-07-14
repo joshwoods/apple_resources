@@ -1,0 +1,16 @@
+
+
+- DriverKit
+- SCSICmd_INQUIRY_Page89_Data
+-  SAT_PRODUCT_IDENTIFICATION 
+
+Instance Property
+
+# SAT_PRODUCT_IDENTIFICATION
+
+DriverKitiOSiPadOSmacOS
+
+``` source
+UInt8 SAT_PRODUCT_IDENTIFICATION[16];
+```
+

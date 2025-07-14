@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_DL_MULTIPLE_VALUES_UNSUPPORTED 
+
+Global Variable
+
+# CSSMERR_DL_MULTIPLE_VALUES_UNSUPPORTED
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSMERR_DL_MULTIPLE_VALUES_UNSUPPORTED: Int { get }
+```
+

@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_DL_SAMPLE_VALUE_NOT_SUPPORTED 
+
+Global Variable
+
+# CSSMERR_DL_SAMPLE_VALUE_NOT_SUPPORTED
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSMERR_DL_SAMPLE_VALUE_NOT_SUPPORTED: Int { get }
+```
+

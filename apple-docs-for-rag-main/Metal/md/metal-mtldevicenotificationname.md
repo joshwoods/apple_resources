@@ -1,0 +1,78 @@
+
+
+- Metal
+-  MTLDeviceNotificationName 
+
+Structure
+
+# MTLDeviceNotificationName
+
+A notification that represents a change to a GPU device in the system.
+
+macOS 10.13+
+
+``` source
+struct MTLDeviceNotificationName
+```
+
+## Topics
+
+### Creating a notification name
+
+static let wasAdded: MTLDeviceNotificationName
+
+A notification that Metal sends to observers when the system adds a GPU device.
+
+static let removalRequested: MTLDeviceNotificationName
+
+A notification that Metal sends to observers when a person requests to remove a GPU device from the system.
+
+static let wasRemoved: MTLDeviceNotificationName
+
+A notification that Metal sends to observers when the system removes a GPU device.
+
+init(rawValue: String)
+
+Creates a Metal device notification name from a string.
+
+## Relationships
+
+### Conforms To
+
+- Equatable
+- Hashable
+- RawRepresentable
+- Sendable
+
+## See Also
+
+### Locating GPUs
+
+Finding Multiple GPUs on an Intel-based Mac
+
+Locate, identify, and choose suitable GPUs for your app.
+
+Getting the GPU that Drives a View’s Display
+
+Keep up to date with the optimal device for your display.
+
+func MTLCopyAllDevices() -> [any MTLDevice]
+
+Returns an array of all the Metal device instances in the system.
+
+func MTLCopyAllDevicesWithObserver(handler: MTLDeviceNotificationHandler) -> (devices: [any MTLDevice], observer: NSObject)
+
+Returns an array of all the Metal GPU devices in the system and registers a notification handler that Metal calls when the device list changes.
+
+func MTLRemoveDeviceObserver(any NSObjectProtocol)
+
+Removes a registered observer of device notifications.
+
+func CGDirectDisplayCopyCurrentMetalDevice(_ display: CGDirectDisplayID) -> (any MTLDevice)?
+
+Returns the GPU device instance that’s currently driving a display.
+
+typealias MTLDeviceNotificationHandler
+
+A Swift closure or an Objective-C block that Metal calls when the system adds or removes a GPU device.
+

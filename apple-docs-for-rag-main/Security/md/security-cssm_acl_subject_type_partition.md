@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_ACL_SUBJECT_TYPE_PARTITION 
+
+Global Variable
+
+# CSSM_ACL_SUBJECT_TYPE_PARTITION
+
+macOS 10.11.4+
+
+``` source
+var CSSM_ACL_SUBJECT_TYPE_PARTITION: Int { get }
+```
+

@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_OCSP_RESP_TRY_LATER 
+
+Global Variable
+
+# CSSMERR_APPLETP_OCSP_RESP_TRY_LATER
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLETP_OCSP_RESP_TRY_LATER: Int { get }
+```
+

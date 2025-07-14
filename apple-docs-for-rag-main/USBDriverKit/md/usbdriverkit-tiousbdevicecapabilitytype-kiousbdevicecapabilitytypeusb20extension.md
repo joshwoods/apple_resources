@@ -1,0 +1,46 @@
+
+
+- USBDriverKit
+- tIOUSBDeviceCapabilityType
+-  kIOUSBDeviceCapabilityTypeUSB20Extension 
+
+Enumeration Case
+
+# kIOUSBDeviceCapabilityTypeUSB20Extension
+
+DriverKit 19.0+
+
+``` source
+kIOUSBDeviceCapabilityTypeUSB20Extension
+```
+
+## See Also
+
+### Getting the Capability Types
+
+kIOUSBDeviceCapabilityTypeBatteryInfo
+
+kIOUSBDeviceCapabilityTypeBillboard
+
+kIOUSBDeviceCapabilityTypeBillboardAltMode
+
+kIOUSBDeviceCapabilityTypeContainerID
+
+kIOUSBDeviceCapabilityTypePdConsumerPort
+
+kIOUSBDeviceCapabilityTypePdProviderPort
+
+kIOUSBDeviceCapabilityTypePlatform
+
+kIOUSBDeviceCapabilityTypePowerDelivery
+
+kIOUSBDeviceCapabilityTypePrecisionMeasurement
+
+kIOUSBDeviceCapabilityTypeSuperSpeed
+
+kIOUSBDeviceCapabilityTypeSuperSpeedPlus
+
+kIOUSBDeviceCapabilityTypeWireless
+
+kIOUSBDeviceCapabilityTypeWirelessExt
+

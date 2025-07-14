@@ -1,0 +1,23 @@
+
+
+- Kernel
+- Hardware Families
+- 
+  - Hardware Families
+- USB
+- Additional Specifications
+- USBDeviceInformationBits
+-  kUSBInformationDeviceIsEnabledBit 
+
+Enumeration Case
+
+# kUSBInformationDeviceIsEnabledBit
+
+The system has enabled the hub port that the USB device attaches to.
+
+macOS 10.6+
+
+``` source
+kUSBInformationDeviceIsEnabledBit = 4
+```
+

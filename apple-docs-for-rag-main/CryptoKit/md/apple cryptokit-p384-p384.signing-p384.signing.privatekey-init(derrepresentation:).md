@@ -1,0 +1,46 @@
+
+
+- Apple CryptoKit
+- P384
+- P384.Signing
+- P384.Signing.PrivateKey
+-  init(derRepresentation:) 
+
+Initializer
+
+# init(derRepresentation:)
+
+Creates a P-384 private key for signing from a Distinguished Encoding Rules (DER) encoded representation.
+
+iOS 14.0+iPadOS 14.0+Mac Catalyst 14.0+macOS 11.0+tvOS 14.0+visionOS 1.0+watchOS 7.0+
+
+``` source
+init(derRepresentation: Bytes) throws where Bytes : RandomAccessCollection, Bytes.Element == UInt8
+```
+
+## Parameters 
+
+`derRepresentation`  
+
+A DER-encoded representation of the key.
+
+## See Also
+
+### Creating a private key
+
+init&lt;Bytes>(rawRepresentation: Bytes) throws
+
+Creates a P-384 private key for signing from a collection of bytes.
+
+init(compactRepresentable: Bool)
+
+Creates a random P-384 private key for signing.
+
+init(pemRepresentation: String) throws
+
+Creates a P-384 private key for signing from a Privacy-Enhanced Mail PEM) representation.
+
+init&lt;Bytes>(x963Representation: Bytes) throws
+
+Creates a P-384 private key for signing from an ANSI x9.63 representation.
+

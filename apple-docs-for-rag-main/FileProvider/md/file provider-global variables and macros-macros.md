@@ -1,0 +1,67 @@
+
+
+- File Provider
+-  Global variables and macros 
+
+API Collection
+
+# Global variables and macros
+
+## Topics
+
+### Global variables
+
+NSFileProviderDomainDidChange
+
+A notification that posts when a file provider’s domain changes.
+
+NSFileProviderMaterializedSetDidChange
+
+A notification that the system posts when the set of materialized items changes for your file provider extension.
+
+NSFileProviderPendingSetDidChange
+
+A notification that the system posts when the set of pending items changes for your file provider extension.
+
+### Macros
+
+FILEPROVIDER_API_AVAILABILITY_V1
+
+FILEPROVIDER_API_AVAILABILITY_V1_V2_V3
+
+FILEPROVIDER_API_AVAILABILITY_V2
+
+FILEPROVIDER_API_AVAILABILITY_V2_V3
+
+FILEPROVIDER_API_AVAILABILITY_V2_V5
+
+FILEPROVIDER_API_AVAILABILITY_V3
+
+FILEPROVIDER_API_AVAILABILITY_V3_1
+
+FILEPROVIDER_API_AVAILABILITY_V3_1_IOS
+
+FILEPROVIDER_API_AVAILABILITY_V3_IOS
+
+FILEPROVIDER_API_AVAILABILITY_V4_0
+
+FILEPROVIDER_API_AVAILABILITY_V4_0_IOS
+
+FILEPROVIDER_API_AVAILABILITY_V4_1
+
+FILEPROVIDER_API_AVAILABILITY_V5_0
+
+FILEPROVIDER_API_AVAILABILITY_V5_0_IOS
+
+FILEPROVIDER_API_AVAILABILITY_V5_1
+
+FILEPROVIDER_API_AVAILABILITY_V6_0_IOS
+
+FILEPROVIDER_API_AVAILABILITY_V7_0_IOS
+
+FILEPROVIDER_API_AVAILABILITY_V8_0_IOS
+
+FILEPROVIDER_API_AVAILABILITY_DESKTOP
+
+FILEPROVIDER_API_AVAILABILITY_EXTERNAL_VOLUME
+

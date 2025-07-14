@@ -1,0 +1,29 @@
+
+
+- ARKit
+-  ar_environment_light_estimation_provider_get_required_authorization_type 
+
+Function
+
+# ar_environment_light_estimation_provider_get_required_authorization_type
+
+visionOS 2.0+
+
+``` source
+extern ar_authorization_type_t ar_environment_light_estimation_provider_get_required_authorization_type();
+```
+
+## See Also
+
+### Environment lighting estimation functions
+
+ar_environment_light_estimation_configuration_create
+
+ar_environment_light_estimation_provider_create
+
+ar_environment_light_estimation_provider_is_supported
+
+ar_environment_light_estimation_provider_set_update_handler
+
+ar_environment_light_estimation_provider_set_update_handler_f
+

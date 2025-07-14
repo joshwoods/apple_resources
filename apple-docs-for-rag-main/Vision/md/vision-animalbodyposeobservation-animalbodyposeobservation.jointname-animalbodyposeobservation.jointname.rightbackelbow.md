@@ -1,0 +1,51 @@
+
+
+- Vision
+- AnimalBodyPoseObservation
+- AnimalBodyPoseObservation.JointName
+-  AnimalBodyPoseObservation.JointName.rightBackElbow 
+
+Case
+
+# AnimalBodyPoseObservation.JointName.rightBackElbow
+
+iOS 18.0+iPadOS 18.0+Mac Catalyst 18.0+macOS 15.0+tvOS 18.0+visionOS 2.0+
+
+``` source
+case rightBackElbow
+```
+
+## See Also
+
+### Getting the joint names
+
+case leftBackElbow
+
+case leftBackKnee
+
+case leftBackPaw
+
+case leftEarBottom
+
+case leftEarMiddle
+
+case leftEarTop
+
+case leftEye
+
+case leftFrontElbow
+
+case leftFrontKnee
+
+case leftFrontPaw
+
+case neck
+
+case nose
+
+case rightBackKnee
+
+case rightBackPaw
+
+case rightEarBottom
+

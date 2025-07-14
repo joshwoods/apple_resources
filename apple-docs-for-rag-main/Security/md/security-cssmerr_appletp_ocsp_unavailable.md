@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_OCSP_UNAVAILABLE 
+
+Global Variable
+
+# CSSMERR_APPLETP_OCSP_UNAVAILABLE
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLETP_OCSP_UNAVAILABLE: Int { get }
+```
+

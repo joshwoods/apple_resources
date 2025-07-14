@@ -1,0 +1,27 @@
+
+
+- Dispatch
+-  DISPATCH_ONCE_INLINE_FASTPATH 
+
+Global Variable
+
+# DISPATCH_ONCE_INLINE_FASTPATH
+
+iOSiPadOSMac CatalystmacOStvOSvisionOSwatchOS
+
+``` source
+var DISPATCH_ONCE_INLINE_FASTPATH: Int32 { get }
+```
+
+## See Also
+
+### Constants
+
+var DISPATCH_API_VERSION: Int32
+
+var DISPATCH_APPLY_AUTO_AVAILABLE: Int32
+
+var DISPATCH_SWIFT3_OVERLAY: Int32
+
+var MSEC_PER_SEC: UInt64
+

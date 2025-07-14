@@ -1,0 +1,41 @@
+
+
+- Force Feedback
+-  FFGFFS_PAUSED 
+
+Global Variable
+
+# FFGFFS_PAUSED
+
+Mac Catalyst 13.0+macOS 10.2+
+
+``` source
+var FFGFFS_PAUSED: UInt32 { get }
+```
+
+## See Also
+
+### Constants
+
+var FFGFFS_ACTUATORSOFF: UInt32
+
+var FFGFFS_ACTUATORSON: UInt32
+
+var FFGFFS_DEVICELOST: UInt32
+
+var FFGFFS_EMPTY: UInt32
+
+var FFGFFS_POWEROFF: UInt32
+
+var FFGFFS_POWERON: UInt32
+
+var FFGFFS_SAFETYSWITCHOFF: UInt32
+
+var FFGFFS_SAFETYSWITCHON: UInt32
+
+var FFGFFS_STOPPED: UInt32
+
+var FFGFFS_USERFFSWITCHOFF: UInt32
+
+var FFGFFS_USERFFSWITCHON: UInt32
+

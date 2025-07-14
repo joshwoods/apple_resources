@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_INVALID_SUBJECT_ID 
+
+Global Variable
+
+# CSSMERR_APPLETP_INVALID_SUBJECT_ID
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLETP_INVALID_SUBJECT_ID: Int { get }
+```
+

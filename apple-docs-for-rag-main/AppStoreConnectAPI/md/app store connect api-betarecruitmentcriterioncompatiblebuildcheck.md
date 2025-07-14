@@ -1,0 +1,87 @@
+
+
+- App Store Connect API
+-  BetaRecruitmentCriterionCompatibleBuildCheck 
+
+Object
+
+# BetaRecruitmentCriterionCompatibleBuildCheck
+
+The data structure that represents a beta recruitment criteria-compatible, build-check resource.
+
+App Store Connect API 3.8+
+
+``` source
+object BetaRecruitmentCriterionCompatibleBuildCheck
+```
+
+## Properties
+
+`attributes`
+
+BetaRecruitmentCriterionCompatibleBuildCheck.Attributes
+
+`id`
+
+`string`
+
+ (Required) 
+
+`links`
+
+ResourceLinks
+
+`type`
+
+`string`
+
+ (Required) 
+
+Value: `betaRecruitmentCriterionCompatibleBuildChecks`
+
+## Topics
+
+### Dictionaries
+
+object BetaRecruitmentCriterionCompatibleBuildCheck.Attributes
+
+Attributes that describe a beta recruitment criteria-compatible, build-check resource.
+
+## See Also
+
+### Objects
+
+object BetaRecruitmentCriterionCompatibleBuildCheckResponse
+
+A response that contains a single beta recruitment criteria-compatible, build-check resource.
+
+object BetaRecruitmentCriterion
+
+The data structure that represents a beta recruitment criterion resource.
+
+object BetaRecruitmentCriterionCreateRequest
+
+The request body you use to create a beta recruitment criterion.
+
+object BetaRecruitmentCriterionOption
+
+object BetaRecruitmentCriterionResponse
+
+A response that contains a single beta recruitment criterion resource.
+
+object BetaRecruitmentCriterionUpdateRequest
+
+The request body you use to update a beta recruitment criterion resource.
+
+object BetaPublicLinkUsagesV1MetricResponse
+
+type DeviceFamily
+
+String that represents a device family.
+
+object DeviceFamilyOsVersionFilter
+
+The object that you use to specify a device family and operating system to use for your beta recruitment criteria.
+
+object BetaRecruitmentCriterionOptionsResponse
+

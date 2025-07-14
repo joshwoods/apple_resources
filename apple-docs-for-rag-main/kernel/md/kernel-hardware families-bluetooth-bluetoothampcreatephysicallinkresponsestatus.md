@@ -1,0 +1,51 @@
+
+
+- Kernel
+- Hardware Families
+- Bluetooth
+-  BluetoothAMPCreatePhysicalLinkResponseStatus 
+
+Type Alias
+
+# BluetoothAMPCreatePhysicalLinkResponseStatus
+
+macOS 10.6+
+
+``` source
+typedef enum BluetoothAMPCreatePhysicalLinkResponseStatus BluetoothAMPCreatePhysicalLinkResponseStatus;
+```
+
+## Topics
+
+### Constants
+
+kBluetoothAMPManagerCreatePhysicalLinkResponseAMPDisconnectedPhysicalLinkRequestReceived
+
+kBluetoothAMPManagerCreatePhysicalLinkResponseCollisionOccurred
+
+kBluetoothAMPManagerCreatePhysicalLinkResponseInvalidControllerID
+
+kBluetoothAMPManagerCreatePhysicalLinkResponsePhysicalLinkAlreadyExists
+
+kBluetoothAMPManagerCreatePhysicalLinkResponseSecurityViolation
+
+kBluetoothAMPManagerCreatePhysicalLinkResponseSuccess
+
+kBluetoothAMPManagerCreatePhysicalLinkResponseUnableToStartLinkCreation
+
+## See Also
+
+### AMP
+
+BluetoothAMPCommandRejectReason
+
+BluetoothAMPDisconnectPhysicalLinkResponseStatus
+
+BluetoothAMPDiscoverResponseControllerStatus
+
+BluetoothAMPGetAssocResponseStatus
+
+BluetoothAMPGetInfoResponseStatus
+
+BluetoothAMPManagerCode
+

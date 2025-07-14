@@ -1,0 +1,41 @@
+
+
+- USBDriverKit
+-  kUSBHostControllerPropertyPersistFullSpeedIsochronous 
+
+Macro
+
+# kUSBHostControllerPropertyPersistFullSpeedIsochronous
+
+DriverKit 19.0+
+
+``` source
+#define kUSBHostControllerPropertyPersistFullSpeedIsochronous
+```
+
+## See Also
+
+### Host Controller Properties
+
+kUSBHostControllerPropertyRevision
+
+kUSBHostControllerPropertyCompanion
+
+kUSBHostControllerPropertyMuxEnabled
+
+kUSBHostControllerPropertyRTD3Supported
+
+kUSBHostControllerPropertySleepSupported
+
+kUSBHostControllerPropertyLowSpeedCompanion
+
+kUSBHostControllerPropertyFullSpeedCompanion
+
+kUSBHostControllerPropertyHighSpeedCompanion
+
+kUSBHostControllerPropertySuperSpeedCompanion
+
+kUSBHostControllerPropertyCompanionControllerName
+
+kUSBHostControllerPropertyIsochronousRequiresContiguous
+

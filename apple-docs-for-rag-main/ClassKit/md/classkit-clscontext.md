@@ -1,0 +1,234 @@
+
+
+- ClassKit
+-  CLSContext 
+
+Class
+
+# CLSContext
+
+An area of your app that represents an assignable task, like a quiz or a chapter.
+
+iOS 11.3+iPadOS 11.3+Mac Catalyst 11.3+macOS 11.0+visionOS 1.0+
+
+``` source
+class CLSContext
+```
+
+## Mentioned in 
+
+Creating bookmarks and assignments from your app
+
+Building missing contexts
+
+## Overview
+
+Make it easy for teachers to understand the app content a context represents by configuring it with information like a clear, concise title localized for the regions that your app supports.
+
+A context can contain groups of other contexts, like a book that contains chapters or a chapter that contains sections. You can assemble contexts into a hierarchy of up to eight levels that acts as a table of contents for teachers who want to assign your app content. See Advertising your app’s assignable content for more details.
+
+## Topics
+
+### Creating contexts
+
+init(type: CLSContextType, identifier: String, title: String)
+
+Initializes a new context.
+
+class CLSObject
+
+The abstract base class for objects managed by ClassKit.
+
+### Identifying the context
+
+var identifier: String
+
+A string that uniquely identifies a context among its siblings.
+
+var title: String
+
+The name of the context as it appears to users.
+
+var summary: String?
+
+An optional, user-visible description of the context.
+
+var thumbnail: CGImage?
+
+An optional thumbnail image associated with the context.
+
+### Managing the context type
+
+var type: CLSContextType
+
+The kind of content a context represents.
+
+func setType(CLSContextType)
+
+Updates the kind of content that a context represents.
+
+enum CLSContextType
+
+The kinds of assignable content a context can contain.
+
+var customTypeName: String?
+
+An optional name that the system presents to the user if you choose the custom context type.
+
+### Characterizing the context
+
+var suggestedAge: NSRange
+
+The range of ages, measured in years, for which you deem a context’s content suitable.
+
+var suggestedCompletionTime: NSRange
+
+A suggested time range to complete a task, measured in minutes.
+
+var isAssignable: Bool
+
+A Boolean that indicates whether teachers can assign the context as a task.
+
+### Managing context presentation
+
+var displayOrder: Int
+
+The position of a context relative to its siblings.
+
+var topic: CLSContextTopic?
+
+The area of study to which a context relates.
+
+struct CLSContextTopic
+
+The areas of study to which contexts may relate.
+
+### Indicating progress reporting capabilities
+
+var progressReportingCapabilities: Set&lt;CLSProgressReportingCapability>
+
+The kinds of progress reporting that the context can perform.
+
+func addProgressReportingCapabilities(Set&lt;CLSProgressReportingCapability>)
+
+Adds a progress reporting capability to the set of capabilities for the context.
+
+func resetProgressReportingCapabilities()
+
+Resets the set of capabilities for the context.
+
+class CLSProgressReportingCapability
+
+A progress reporting capability supported by a context.
+
+### Activating and deactivating a context
+
+Informing ClassKit that a task is about to begin
+
+Activate and deactivate contexts according to user interaction.
+
+func becomeActive()
+
+Tells a context to become the active context.
+
+func resignActive()
+
+Tells a context to stop being the active context.
+
+var isActive: Bool
+
+A Boolean indicating whether the context is active.
+
+### Creating activities
+
+var currentActivity: CLSActivity?
+
+The activity available for recording progress.
+
+func createNewActivity() -> CLSActivity
+
+Creates and returns a new activity instance for the context.
+
+### Managing context hierarchy
+
+var identifierPath: [String]
+
+The identifier path that locates the context within the data store’s context hierarchy.
+
+var parent: CLSContext?
+
+The direct ancestor of this context.
+
+func removeFromParent()
+
+Removes the context from its parent.
+
+func addChildContext(CLSContext)
+
+Adds the specifed context as a child of the context receiving the method call.
+
+func descendant(matchingIdentifierPath: [String], completion: (CLSContext?, (any Error)?) -> Void)
+
+Finds the context with the given identifier path relative to this context.
+
+### Creating a context presentation hierarchy
+
+var navigationChildContexts: [CLSContext]
+
+The child contexts that a user can navigate to from this context in the Schoolwork app.
+
+func addNavigationChildContext(CLSContext)
+
+Adds a child context that users can navigate to from this context.
+
+func removeNavigationChildContext(CLSContext)
+
+Removes the specified context as a presentable child of this context.
+
+### Configuring deep links
+
+Linking directly to assignments
+
+Make it easy for teachers to guide students to specific content.
+
+var universalLinkURL: URL?
+
+A URL that leads to the content in your app associated with the current context.
+
+var isClassKitDeepLink: Bool
+
+A Boolean value that indicates whether a user activity represents a ClassKit context.
+
+var contextIdentifierPath: [String]?
+
+The identifier path associated with a user activity generated by an app that adopts ClassKit.
+
+## Relationships
+
+### Inherits From
+
+- CLSObject
+
+### Conforms To
+
+- CVarArg
+- CustomDebugStringConvertible
+- CustomStringConvertible
+- Equatable
+- Hashable
+- NSCoding
+- NSObjectProtocol
+- NSSecureCoding
+
+## See Also
+
+### Contexts
+
+Advertising your app’s assignable content
+
+Assemble a hierarchy of contexts and declare your app’s assignable content.
+
+protocol CLSContextProvider
+
+An interface used to tell your ClassKit context provider app extension to update contexts.
+

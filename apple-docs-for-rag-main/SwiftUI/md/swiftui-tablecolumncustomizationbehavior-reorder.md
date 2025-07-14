@@ -1,0 +1,34 @@
+
+
+- SwiftUI
+- TableColumnCustomizationBehavior
+-  reorder 
+
+Type Property
+
+# reorder
+
+A behavior that allows the column to be reordered by the user.
+
+iOS 17.0+iPadOS 17.0+Mac Catalyst 17.0+macOS 14.0+visionOS 1.0+
+
+``` source
+static let reorder: TableColumnCustomizationBehavior
+```
+
+## See Also
+
+### Getting the customization behavior
+
+static var all: TableColumnCustomizationBehavior
+
+All customization behaviors.
+
+static let resize: TableColumnCustomizationBehavior
+
+A behavior that allows the column to be resized by the user.
+
+static let visibility: TableColumnCustomizationBehavior
+
+A behavior that allows the column to be hidden or revealed by the user.
+

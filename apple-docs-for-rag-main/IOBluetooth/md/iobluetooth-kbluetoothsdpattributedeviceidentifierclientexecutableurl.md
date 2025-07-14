@@ -1,0 +1,39 @@
+
+
+- IOBluetooth
+-  kBluetoothSDPAttributeDeviceIdentifierClientExecutableURL 
+
+Global Variable
+
+# kBluetoothSDPAttributeDeviceIdentifierClientExecutableURL
+
+macOS
+
+``` source
+var kBluetoothSDPAttributeDeviceIdentifierClientExecutableURL: SDPAttributeDeviceIdentificationRecord { get }
+```
+
+## See Also
+
+### Constants
+
+var kBluetoothSDPAttributeDeviceIdentifierDocumentationURL: SDPAttributeDeviceIdentificationRecord
+
+var kBluetoothSDPAttributeDeviceIdentifierPrimaryRecord: SDPAttributeDeviceIdentificationRecord
+
+var kBluetoothSDPAttributeDeviceIdentifierProductID: SDPAttributeDeviceIdentificationRecord
+
+var kBluetoothSDPAttributeDeviceIdentifierReservedRangeEnd: SDPAttributeDeviceIdentificationRecord
+
+var kBluetoothSDPAttributeDeviceIdentifierReservedRangeStart: SDPAttributeDeviceIdentificationRecord
+
+var kBluetoothSDPAttributeDeviceIdentifierServiceDescription: SDPAttributeDeviceIdentificationRecord
+
+var kBluetoothSDPAttributeDeviceIdentifierSpecificationID: SDPAttributeDeviceIdentificationRecord
+
+var kBluetoothSDPAttributeDeviceIdentifierVendorID: SDPAttributeDeviceIdentificationRecord
+
+var kBluetoothSDPAttributeDeviceIdentifierVendorIDSource: SDPAttributeDeviceIdentificationRecord
+
+var kBluetoothSDPAttributeDeviceIdentifierVersion: SDPAttributeDeviceIdentificationRecord
+

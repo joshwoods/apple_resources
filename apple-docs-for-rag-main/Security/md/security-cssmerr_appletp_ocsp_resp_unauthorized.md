@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_OCSP_RESP_UNAUTHORIZED 
+
+Global Variable
+
+# CSSMERR_APPLETP_OCSP_RESP_UNAUTHORIZED
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLETP_OCSP_RESP_UNAUTHORIZED: Int { get }
+```
+

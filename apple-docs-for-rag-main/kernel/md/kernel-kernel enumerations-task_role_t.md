@@ -1,0 +1,42 @@
+
+
+- Kernel
+- Kernel Enumerations
+-  task_role_t 
+
+Enumeration
+
+# task_role_t
+
+macOS 10.1+
+
+``` source
+typedef enum task_role : int {
+    ...
+} task_role_t;
+```
+
+## Topics
+
+### Constants
+
+TASK_BACKGROUND_APPLICATION
+
+TASK_CONTROL_APPLICATION
+
+TASK_DARWINBG_APPLICATION
+
+TASK_DEFAULT_APPLICATION
+
+TASK_FOREGROUND_APPLICATION
+
+TASK_GRAPHICS_SERVER
+
+TASK_NONUI_APPLICATION
+
+TASK_RENICED
+
+TASK_THROTTLE_APPLICATION
+
+TASK_UNSPECIFIED
+

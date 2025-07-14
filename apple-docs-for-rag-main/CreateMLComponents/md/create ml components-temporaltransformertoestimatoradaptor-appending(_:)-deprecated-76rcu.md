@@ -1,0 +1,19 @@
+
+
+- Create ML Components
+- TemporalTransformerToEstimatorAdaptor
+-  appending(\_:) Deprecated
+
+Instance Method
+
+# appending(\_:)
+
+Composes this temporal estimator with a supervised temporal estimator.
+
+iOS 16.0–18.0DeprecatediPadOS 16.0–18.0DeprecatedMac Catalyst 16.0–18.0DeprecatedmacOS 13.0–15.0DeprecatedtvOS 16.0–18.0DeprecatedvisionOS 1.0–2.0Deprecated
+
+``` source
+@preconcurrency
+func appending(_ other: Other) -> some SupervisedTemporalEstimator>, Other.Annotation> where Other : SupervisedEstimator, Other.Annotation : Sendable, Self.Transformer.Output == Other.Transformer.Input
+```
+

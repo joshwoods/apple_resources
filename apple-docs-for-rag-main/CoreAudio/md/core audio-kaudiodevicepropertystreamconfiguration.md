@@ -1,0 +1,45 @@
+
+
+- Core Audio
+-  kAudioDevicePropertyStreamConfiguration 
+
+Global Variable
+
+# kAudioDevicePropertyStreamConfiguration
+
+Mac CatalystmacOS
+
+``` source
+var kAudioDevicePropertyStreamConfiguration: AudioObjectPropertySelector { get }
+```
+
+## See Also
+
+### Constants
+
+var kAudioDeviceProcessorOverload: AudioObjectPropertySelector
+
+var kAudioDevicePropertyActualSampleRate: AudioObjectPropertySelector
+
+var kAudioDevicePropertyBufferFrameSize: AudioObjectPropertySelector
+
+var kAudioDevicePropertyBufferFrameSizeRange: AudioObjectPropertySelector
+
+var kAudioDevicePropertyDeviceHasChanged: AudioObjectPropertySelector
+
+var kAudioDevicePropertyDeviceIsRunningSomewhere: AudioObjectPropertySelector
+
+var kAudioDevicePropertyHogMode: AudioObjectPropertySelector
+
+var kAudioDevicePropertyIOCycleUsage: AudioObjectPropertySelector
+
+var kAudioDevicePropertyIOProcStreamUsage: AudioObjectPropertySelector
+
+var kAudioDevicePropertyIOStoppedAbnormally: AudioObjectPropertySelector
+
+var kAudioDevicePropertyPlugIn: AudioObjectPropertySelector
+
+var kAudioDevicePropertyUsesVariableBufferFrameSizes: AudioObjectPropertySelector
+
+var kAudioDevicePropertyClockDevice: AudioObjectPropertySelector
+

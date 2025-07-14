@@ -1,0 +1,16 @@
+
+
+- DriverKit
+- SCSI_Capacity_Data_Long
+-  RETURNED_LOGICAL_BLOCK_ADDRESS 
+
+Instance Property
+
+# RETURNED_LOGICAL_BLOCK_ADDRESS
+
+DriverKitiOSiPadOSmacOS
+
+``` source
+UInt64 RETURNED_LOGICAL_BLOCK_ADDRESS;
+```
+

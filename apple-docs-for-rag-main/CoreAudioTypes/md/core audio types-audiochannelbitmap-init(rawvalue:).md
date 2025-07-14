@@ -1,0 +1,24 @@
+
+
+- Core Audio Types
+- AudioChannelBitmap
+-  init(rawValue:) 
+
+Initializer
+
+# init(rawValue:)
+
+Creates an audio channel bitmap.
+
+iOS 13.0+iPadOS 13.0+Mac Catalyst 13.0+macOS 10.15+tvOS 13.0+visionOS 1.0+watchOS 6.0+
+
+``` source
+init(rawValue: UInt32)
+```
+
+## Parameters 
+
+`rawValue`  
+
+The value with which to initialize the bitmap.
+

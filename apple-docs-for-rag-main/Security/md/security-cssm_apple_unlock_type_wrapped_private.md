@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_APPLE_UNLOCK_TYPE_WRAPPED_PRIVATE 
+
+Global Variable
+
+# CSSM_APPLE_UNLOCK_TYPE_WRAPPED_PRIVATE
+
+macOS 10.0+
+
+``` source
+var CSSM_APPLE_UNLOCK_TYPE_WRAPPED_PRIVATE: Int { get }
+```
+

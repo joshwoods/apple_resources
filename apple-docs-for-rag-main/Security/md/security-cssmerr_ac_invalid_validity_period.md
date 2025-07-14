@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_AC_INVALID_VALIDITY_PERIOD 
+
+Global Variable
+
+# CSSMERR_AC_INVALID_VALIDITY_PERIOD
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSMERR_AC_INVALID_VALIDITY_PERIOD: Int { get }
+```
+

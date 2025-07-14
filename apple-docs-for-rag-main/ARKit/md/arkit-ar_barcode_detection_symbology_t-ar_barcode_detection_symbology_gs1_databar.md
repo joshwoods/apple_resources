@@ -1,0 +1,48 @@
+
+
+- ARKit
+- ar_barcode_detection_symbology_t
+-  ar_barcode_detection_symbology_gs1_databar 
+
+Enumeration Case
+
+# ar_barcode_detection_symbology_gs1_databar
+
+``` source
+ar_barcode_detection_symbology_gs1_databar
+```
+
+## See Also
+
+### Barcode types
+
+ar_barcode_detection_symbology_aztec
+
+ar_barcode_detection_symbology_codabar
+
+ar_barcode_detection_symbology_code_128
+
+ar_barcode_detection_symbology_code_39
+
+ar_barcode_detection_symbology_code_39_checksum
+
+ar_barcode_detection_symbology_code_39_full_ascii
+
+ar_barcode_detection_symbology_code_39_full_ascii_checksum
+
+ar_barcode_detection_symbology_code_93
+
+ar_barcode_detection_symbology_code_93i
+
+ar_barcode_detection_symbology_data_matrix
+
+ar_barcode_detection_symbology_ean_13
+
+ar_barcode_detection_symbology_ean_8
+
+ar_barcode_detection_symbology_gs1_databar_expanded
+
+ar_barcode_detection_symbology_gs1_databar_limited
+
+ar_barcode_detection_symbology_itf
+

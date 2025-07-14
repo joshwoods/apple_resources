@@ -1,0 +1,49 @@
+
+
+- Hypervisor
+-  HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER2 
+
+Global Variable
+
+# HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER2
+
+macOS
+
+``` source
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER2: hv_gic_distributor_reg_t { get }
+```
+
+## See Also
+
+### Interrupt set-enable registers
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER0: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER1: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER3: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER4: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER5: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER6: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER7: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER8: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER9: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER10: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER11: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER12: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER13: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER14: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER15: hv_gic_distributor_reg_t
+

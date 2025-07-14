@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_ERRCODE_INVALID_ACL_CHALLENGE_CALLBACK 
+
+Global Variable
+
+# CSSM_ERRCODE_INVALID_ACL_CHALLENGE_CALLBACK
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_ERRCODE_INVALID_ACL_CHALLENGE_CALLBACK: Int { get }
+```
+

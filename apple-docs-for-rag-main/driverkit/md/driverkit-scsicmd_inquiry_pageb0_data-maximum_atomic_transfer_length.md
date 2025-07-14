@@ -1,0 +1,16 @@
+
+
+- DriverKit
+- SCSICmd_INQUIRY_PageB0_Data
+-  MAXIMUM_ATOMIC_TRANSFER_LENGTH 
+
+Instance Property
+
+# MAXIMUM_ATOMIC_TRANSFER_LENGTH
+
+DriverKitiOSiPadOSmacOS
+
+``` source
+UInt32 MAXIMUM_ATOMIC_TRANSFER_LENGTH;
+```
+

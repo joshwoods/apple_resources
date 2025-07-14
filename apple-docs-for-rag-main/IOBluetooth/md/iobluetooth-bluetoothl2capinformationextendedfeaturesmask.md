@@ -1,0 +1,95 @@
+
+
+- IOBluetooth
+-  BluetoothL2CAPInformationExtendedFeaturesMask 
+
+Structure
+
+# BluetoothL2CAPInformationExtendedFeaturesMask
+
+macOS
+
+``` source
+struct BluetoothL2CAPInformationExtendedFeaturesMask
+```
+
+## Topics
+
+### Constants
+
+var kBluetoothL2CAPInformationBidirectionalQoS: BluetoothL2CAPInformationExtendedFeaturesMask
+
+var kBluetoothL2CAPInformationEnhancedRetransmissionMode: BluetoothL2CAPInformationExtendedFeaturesMask
+
+var kBluetoothL2CAPInformationExtendedFlowSpecification: BluetoothL2CAPInformationExtendedFeaturesMask
+
+var kBluetoothL2CAPInformationExtendedWindowSize: BluetoothL2CAPInformationExtendedFeaturesMask
+
+var kBluetoothL2CAPInformationFCSOption: BluetoothL2CAPInformationExtendedFeaturesMask
+
+var kBluetoothL2CAPInformationFixedChannels: BluetoothL2CAPInformationExtendedFeaturesMask
+
+var kBluetoothL2CAPInformationFlowControlMode: BluetoothL2CAPInformationExtendedFeaturesMask
+
+var kBluetoothL2CAPInformationNoExtendedFeatures: BluetoothL2CAPInformationExtendedFeaturesMask
+
+var kBluetoothL2CAPInformationRetransmissionMode: BluetoothL2CAPInformationExtendedFeaturesMask
+
+var kBluetoothL2CAPInformationStreamingMode: BluetoothL2CAPInformationExtendedFeaturesMask
+
+var kBluetoothL2CAPUnicastConnectionlessDataReception: BluetoothL2CAPInformationExtendedFeaturesMask
+
+### Initializers
+
+init(UInt32)
+
+init(rawValue: UInt32)
+
+### Instance Properties
+
+var rawValue: UInt32
+
+## Relationships
+
+### Conforms To
+
+- BitwiseCopyable
+- Equatable
+- Hashable
+- RawRepresentable
+- Sendable
+
+## See Also
+
+### Enumerations
+
+struct BluetoothAMPCommandRejectReason
+
+struct BluetoothAMPCreatePhysicalLinkResponseStatus
+
+struct BluetoothAMPDisconnectPhysicalLinkResponseStatus
+
+struct BluetoothAMPDiscoverResponseControllerStatus
+
+struct BluetoothAMPGetAssocResponseStatus
+
+struct BluetoothAMPGetInfoResponseStatus
+
+struct BluetoothAMPManagerCode
+
+struct BluetoothHCIPowerState
+
+struct BluetoothL2CAPCommandCode
+
+struct BluetoothL2CAPCommandRejectReason
+
+struct BluetoothL2CAPConfigurationOption
+
+struct BluetoothL2CAPConfigurationResult
+
+struct BluetoothL2CAPConfigurationRetransmissionAndFlowControlFlags
+
+struct BluetoothL2CAPConnectionResult
+
+struct BluetoothL2CAPConnectionStatus
+

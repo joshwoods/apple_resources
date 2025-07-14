@@ -1,0 +1,45 @@
+
+
+- Metal Performance Shaders Graph
+- MPSGraph
+-  argSort(\_:axis:descending:name:) 
+
+Instance Method
+
+# argSort(\_:axis:descending:name:)
+
+Computes the indices that sort the elements of the input tensor along the specified axis.
+
+iOS 16.1+iPadOS 16.1+Mac Catalyst 16.1+macOS 13.0+tvOS 16.1+visionOS 1.0+
+
+``` source
+func argSort(
+    _ tensor: MPSGraphTensor,
+    axis: Int,
+    descending: Bool,
+    name: String?
+) -> MPSGraphTensor
+```
+
+## Parameters 
+
+`tensor`  
+
+The input tensor
+
+`axis`  
+
+The tensor dimension over which you sort the tensor
+
+`descending`  
+
+If true, reverse the sort direction
+
+`name`  
+
+The name for the operation.
+
+## Return Value
+
+A valid MPSGraphTensor object with 32-bit integer data type
+

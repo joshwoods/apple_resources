@@ -1,0 +1,49 @@
+
+
+- USBDriverKit
+-  kUSBHostDevicePropertyCurrentConfiguration 
+
+Macro
+
+# kUSBHostDevicePropertyCurrentConfiguration
+
+DriverKit 19.0+
+
+``` source
+#define kUSBHostDevicePropertyCurrentConfiguration
+```
+
+## See Also
+
+### Device Properties
+
+kUSBHostDevicePropertyAddress
+
+kUSBHostDevicePropertyEnableLPM
+
+kUSBHostDevicePropertyDeviceECID
+
+kUSBHostDevicePropertyNumConfigs
+
+kUSBHostDevicePropertyContainerID
+
+kUSBHostDevicePropertyVendorString
+
+kUSBHostDevicePropertyMaxPacketSize
+
+kUSBHostDevicePropertyProductString
+
+kUSBHostDevicePropertyDisablePortLPM
+
+kUSBHostDevicePropertyStandardVersion
+
+kUSBHostDevicePropertyDescriptorOverride
+
+kUSBHostDevicePropertyProductStringIndex
+
+kUSBHostDevicePropertyRemoteWakeOverride
+
+kUSBHostDevicePropertyResumeRecoveryTime
+
+kUSBHostDevicePropertySerialNumberString
+

@@ -1,0 +1,18 @@
+
+
+- MusicKit
+- MusicDataResponse
+-  data 
+
+Instance Property
+
+# data
+
+The raw data returned by the Apple Music API endpoint for the originating data request.
+
+iOS 15.0+iPadOS 15.0+Mac Catalyst 15.0+macOS 12.0+tvOS 15.0+visionOS 1.0+watchOS 8.0+
+
+``` source
+let data: Data
+```
+

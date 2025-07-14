@@ -1,0 +1,35 @@
+
+
+- Quartz
+-  QC_GL_DEPRECATED 
+
+Macro
+
+# QC_GL_DEPRECATED
+
+macOS 10.4+
+
+``` source
+#define QC_GL_DEPRECATED(from, to)
+```
+
+## See Also
+
+### Macros
+
+IKSaveOptions_h
+
+IK_API_DEPRECATED
+
+IK_AVAILABLE
+
+IK_CLASS_AVAILABLE
+
+IK_ENUM_AVAILABLE
+
+QC_CLASS_DEPRECATED_MAC
+
+QC_DEPRECATED_MAC
+
+QC_GL_CLASS_DEPRECATED
+

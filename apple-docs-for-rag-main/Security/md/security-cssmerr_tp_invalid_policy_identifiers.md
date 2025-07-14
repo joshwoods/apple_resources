@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_TP_INVALID_POLICY_IDENTIFIERS 
+
+Global Variable
+
+# CSSMERR_TP_INVALID_POLICY_IDENTIFIERS
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSMERR_TP_INVALID_POLICY_IDENTIFIERS: Int { get }
+```
+

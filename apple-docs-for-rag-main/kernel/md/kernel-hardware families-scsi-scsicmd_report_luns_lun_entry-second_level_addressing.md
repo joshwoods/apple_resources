@@ -1,0 +1,18 @@
+
+
+- Kernel
+- Hardware Families
+- SCSI
+- SCSICmd_REPORT_LUNS_LUN_ENTRY
+-  SECOND_LEVEL_ADDRESSING 
+
+Instance Property
+
+# SECOND_LEVEL_ADDRESSING
+
+macOS 10.3+
+
+``` source
+UInt16 SECOND_LEVEL_ADDRESSING;
+```
+

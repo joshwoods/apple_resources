@@ -1,0 +1,102 @@
+
+
+- IOBluetooth
+- IOBluetooth Enumerations
+-  BluetoothGAPAppearance constants 
+
+API Collection
+
+# BluetoothGAPAppearance constants
+
+## Topics
+
+### Constants
+
+var kBluetoothGAPAppearanceGenericBarcodeScanner: Int
+
+var kBluetoothGAPAppearanceGenericBloodPressure: Int
+
+var kBluetoothGAPAppearanceGenericClock: Int
+
+var kBluetoothGAPAppearanceGenericComputer: Int
+
+var kBluetoothGAPAppearanceGenericCycling: Int
+
+var kBluetoothGAPAppearanceGenericDisplay: Int
+
+var kBluetoothGAPAppearanceGenericEyeGlasses: Int
+
+var kBluetoothGAPAppearanceGenericGlucoseMeter: Int
+
+var kBluetoothGAPAppearanceGenericHeartrateSensor: Int
+
+var kBluetoothGAPAppearanceGenericHumanInterfaceDevice: Int
+
+var kBluetoothGAPAppearanceGenericKeyring: Int
+
+var kBluetoothGAPAppearanceGenericMediaPlayer: Int
+
+var kBluetoothGAPAppearanceGenericPhone: Int
+
+var kBluetoothGAPAppearanceGenericRemoteControl: Int
+
+var kBluetoothGAPAppearanceGenericRunningWalkingSensor: Int
+
+var kBluetoothGAPAppearanceGenericTag: Int
+
+var kBluetoothGAPAppearanceGenericThermometer: Int
+
+var kBluetoothGAPAppearanceGenericWatch: Int
+
+var kBluetoothGAPAppearanceHumanInterfaceDeviceBarcodeScanner: Int
+
+var kBluetoothGAPAppearanceHumanInterfaceDeviceCardReader: Int
+
+var kBluetoothGAPAppearanceHumanInterfaceDeviceDigitalPen: Int
+
+var kBluetoothGAPAppearanceHumanInterfaceDeviceDigitizerTablet: Int
+
+var kBluetoothGAPAppearanceHumanInterfaceDeviceGamepad: Int
+
+var kBluetoothGAPAppearanceHumanInterfaceDeviceJoystick: Int
+
+var kBluetoothGAPAppearanceHumanInterfaceDeviceKeyboard: Int
+
+var kBluetoothGAPAppearanceHumanInterfaceDeviceMouse: Int
+
+var kBluetoothGAPAppearanceUnknown: Int
+
+## See Also
+
+### Enumerations
+
+struct BluetoothAMPCommandRejectReason
+
+struct BluetoothAMPCreatePhysicalLinkResponseStatus
+
+struct BluetoothAMPDisconnectPhysicalLinkResponseStatus
+
+struct BluetoothAMPDiscoverResponseControllerStatus
+
+struct BluetoothAMPGetAssocResponseStatus
+
+struct BluetoothAMPGetInfoResponseStatus
+
+struct BluetoothAMPManagerCode
+
+struct BluetoothHCIPowerState
+
+struct BluetoothL2CAPCommandCode
+
+struct BluetoothL2CAPCommandRejectReason
+
+struct BluetoothL2CAPConfigurationOption
+
+struct BluetoothL2CAPConfigurationResult
+
+struct BluetoothL2CAPConfigurationRetransmissionAndFlowControlFlags
+
+struct BluetoothL2CAPConnectionResult
+
+struct BluetoothL2CAPConnectionStatus
+

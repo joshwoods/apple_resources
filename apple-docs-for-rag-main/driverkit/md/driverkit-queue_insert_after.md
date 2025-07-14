@@ -1,0 +1,49 @@
+
+
+- DriverKit
+-  queue_insert_after 
+
+Macro
+
+# queue_insert_after
+
+DriverKitiOSiPadOSmacOS
+
+``` source
+#define queue_insert_after(head, elt, cur, type, field)
+```
+
+## See Also
+
+### Macros
+
+ALWAYS
+
+APPLE_KEXT_OVERRIDE
+
+DEFN
+
+DRIVERKIT_CONSUMED
+
+DRIVERKIT_CONSUMES_THIS
+
+DRIVERKIT_FRAMEWORK_INCLUDE
+
+DRIVERKIT_IOLIB_H
+
+DRIVERKIT_OSCOLLECTIONS_H
+
+DRIVERKIT_RETURNS_NOT_RETAINED
+
+DRIVERKIT_RETURNS_RETAINED
+
+DRIVERKIT_RETURNS_RETAINED_ON_NONZERO
+
+DRIVERKIT_RETURNS_RETAINED_ON_ZERO
+
+ERR_SUCCESS
+
+EXTENDS
+
+HIDDEN
+

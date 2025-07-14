@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_TP_ACTION_REQUIRE_CRL_IF_PRESENT 
+
+Global Variable
+
+# CSSM_TP_ACTION_REQUIRE_CRL_IF_PRESENT
+
+macOS 10.0+
+
+``` source
+var CSSM_TP_ACTION_REQUIRE_CRL_IF_PRESENT: Int { get }
+```
+

@@ -1,0 +1,49 @@
+
+
+- USBDriverKit
+-  kUSBHostDevicePropertyMaxPacketSize 
+
+Macro
+
+# kUSBHostDevicePropertyMaxPacketSize
+
+DriverKit 19.0+
+
+``` source
+#define kUSBHostDevicePropertyMaxPacketSize
+```
+
+## See Also
+
+### Device Properties
+
+kUSBHostDevicePropertyAddress
+
+kUSBHostDevicePropertyEnableLPM
+
+kUSBHostDevicePropertyDeviceECID
+
+kUSBHostDevicePropertyNumConfigs
+
+kUSBHostDevicePropertyContainerID
+
+kUSBHostDevicePropertyVendorString
+
+kUSBHostDevicePropertyProductString
+
+kUSBHostDevicePropertyDisablePortLPM
+
+kUSBHostDevicePropertyStandardVersion
+
+kUSBHostDevicePropertyDescriptorOverride
+
+kUSBHostDevicePropertyProductStringIndex
+
+kUSBHostDevicePropertyRemoteWakeOverride
+
+kUSBHostDevicePropertyResumeRecoveryTime
+
+kUSBHostDevicePropertySerialNumberString
+
+kUSBHostDevicePropertyCurrentConfiguration
+

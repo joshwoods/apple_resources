@@ -1,0 +1,35 @@
+
+
+- Foundation
+- AttributedString
+-  AttributedString.InterpolationOptions 
+
+Structure
+
+# AttributedString.InterpolationOptions
+
+Options that affect the behavior of string interpolation on the attributed string.
+
+iOS 15.0+iPadOS 15.0+Mac Catalyst 15.0+macOS 12.0+tvOS 15.0+visionOS 1.0+watchOS 8.0+
+
+``` source
+struct InterpolationOptions
+```
+
+## Topics
+
+### Type Properties
+
+static let insertAttributesWithoutMerging: AttributedString.InterpolationOptions
+
+## Relationships
+
+### Conforms To
+
+- Equatable
+- ExpressibleByArrayLiteral
+- OptionSet
+- RawRepresentable
+- Sendable
+- SetAlgebra
+

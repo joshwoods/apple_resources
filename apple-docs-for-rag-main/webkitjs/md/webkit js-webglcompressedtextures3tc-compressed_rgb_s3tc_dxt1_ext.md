@@ -1,0 +1,24 @@
+
+
+- WebKit JS
+- WebGLCompressedTextureS3TC
+-  COMPRESSED_RGB_S3TC_DXT1_EXT 
+
+# COMPRESSED_RGB_S3TC_DXT1_EXT
+
+Safari Desktop 10.0+Safari Mobile 10.0+
+
+``` source
+const unsigned long COMPRESSED_RGB_S3TC_DXT1_EXT;
+```
+
+## See Also
+
+### Miscellaneous
+
+COMPRESSED_RGBA_S3TC_DXT1_EXT
+
+COMPRESSED_RGBA_S3TC_DXT3_EXT
+
+COMPRESSED_RGBA_S3TC_DXT5_EXT
+

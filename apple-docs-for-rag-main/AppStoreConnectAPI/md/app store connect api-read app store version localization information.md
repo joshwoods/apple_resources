@@ -1,0 +1,121 @@
+
+
+- App Store Connect API
+-  Read App Store Version Localization Information 
+
+Web Service Endpoint
+
+# Read App Store Version Localization Information
+
+Read localized version-level information.
+
+App Store Connect API 1.2+
+
+## URL
+
+``` source
+GET https://api.appstoreconnect.apple.com/v1/appStoreVersionLocalizations/{id}
+```
+
+## Path Parameters
+
+`id`
+
+`string`
+
+ (Required) 
+
+## Query Parameters
+
+`fields[appPreviewSets]`
+
+`[string]`
+
+Possible Values: `previewType, appStoreVersionLocalization, appCustomProductPageLocalization, appStoreVersionExperimentTreatmentLocalization, appPreviews`
+
+`fields[appScreenshotSets]`
+
+`[string]`
+
+Possible Values: `screenshotDisplayType, appStoreVersionLocalization, appCustomProductPageLocalization, appStoreVersionExperimentTreatmentLocalization, appScreenshots`
+
+`fields[appStoreVersionLocalizations]`
+
+`[string]`
+
+Possible Values: `description, locale, keywords, marketingUrl, promotionalText, supportUrl, whatsNew, appStoreVersion, appScreenshotSets, appPreviewSets`
+
+`include`
+
+`[string]`
+
+Possible Values: `appStoreVersion, appScreenshotSets, appPreviewSets`
+
+`limit[appPreviewSets]`
+
+`integer`
+
+Maximum: `50`
+
+`limit[appScreenshotSets]`
+
+`integer`
+
+Maximum: `50`
+
+## Response Codes
+
+` 200 ``OK`
+
+AppStoreVersionLocalizationResponse
+
+`OK`
+
+Content-Type: application/json
+
+` 400 ``Bad Request`
+
+ErrorResponse
+
+`Bad Request`
+
+An error occurred with your request.
+
+Content-Type: application/json
+
+` 401 ``Unauthorized`
+
+ErrorResponse
+
+`Unauthorized`
+
+Content-Type: application/json
+
+` 403 ``Forbidden`
+
+ErrorResponse
+
+`Forbidden`
+
+Request not authorized.
+
+Content-Type: application/json
+
+` 404 ``Not Found`
+
+ErrorResponse
+
+`Not Found`
+
+Resource not found.
+
+Content-Type: application/json
+
+## See Also
+
+### Getting Version Localizations
+
+List All App Store Version Localizations for an App Store Version
+
+Get a list of localized, version-level information about an app, for all locales.
+

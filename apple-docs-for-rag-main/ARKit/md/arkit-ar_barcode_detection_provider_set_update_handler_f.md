@@ -1,0 +1,51 @@
+
+
+- ARKit
+-  ar_barcode_detection_provider_set_update_handler_f 
+
+Function
+
+# ar_barcode_detection_provider_set_update_handler_f
+
+Set the function for receiving barcode detection updates.
+
+visionOS 2.0+
+
+``` source
+extern void ar_barcode_detection_provider_set_update_handler_f(ar_barcode_detection_provider_t barcode_detection_provider, dispatch_queue_t barcode_detection_updates_queue, void * context, ar_barcode_detection_update_handler_function_t barcode_detection_update_handler_function);
+```
+
+## See Also
+
+### Barcode functions
+
+ar_barcode_anchor_copy_payload_data
+
+ar_barcode_anchor_get_extent
+
+ar_barcode_anchor_get_identifier
+
+ar_barcode_anchor_get_origin_from_anchor_transform
+
+ar_barcode_anchor_get_payload_string_value
+
+ar_barcode_anchor_get_symbology
+
+ar_barcode_anchor_get_timestamp
+
+ar_barcode_anchors_enumerate_anchors
+
+ar_barcode_anchors_enumerate_anchors_f
+
+ar_barcode_anchors_get_count
+
+ar_barcode_detection_configuration_create
+
+ar_barcode_detection_configuration_set_detection_symbology
+
+ar_barcode_detection_provider_create
+
+ar_barcode_detection_provider_get_required_authorization_type
+
+ar_barcode_detection_provider_is_supported
+

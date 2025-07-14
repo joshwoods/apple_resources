@@ -1,0 +1,49 @@
+
+
+- USBDriverKit
+-  kIOUSB20BitrateLow 
+
+Macro
+
+# kIOUSB20BitrateLow
+
+DriverKit 19.0+
+
+``` source
+#define kIOUSB20BitrateLow
+```
+
+## See Also
+
+### Macros
+
+IOUSBHostFamilyBit
+
+IOUSBHostFamilyBitRange
+
+IOUSBHostFamilyBitRange64
+
+IOUSBHostFamilyBitRangePhase
+
+iokit_usb_codemask
+
+iokit_usbhost_err
+
+iokit_usbhost_group
+
+iokit_usbhost_msg
+
+iokit_usblegacy_err_msg
+
+iokit_usblegacy_group
+
+kAppleCurrentExtra
+
+kAppleCurrentExtraInSleep
+
+kAppleExternalConnectorBitmap
+
+kAppleMaxPortCurrent
+
+kAppleMaxPortCurrentInSleep
+

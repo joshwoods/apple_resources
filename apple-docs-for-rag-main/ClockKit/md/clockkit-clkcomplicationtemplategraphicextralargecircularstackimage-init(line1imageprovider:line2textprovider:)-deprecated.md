@@ -1,0 +1,35 @@
+
+
+- ClockKit
+- CLKComplicationTemplateGraphicExtraLargeCircularStackImage
+-  init(line1ImageProvider:line2TextProvider:) Deprecated
+
+Initializer
+
+# init(line1ImageProvider:line2TextProvider:)
+
+Creates a template with an image and a small amount of text.
+
+watchOS 7.0–9.0Deprecated
+
+``` source
+init(
+    line1ImageProvider: CLKFullColorImageProvider,
+    line2TextProvider: CLKTextProvider
+)
+```
+
+Deprecated
+
+On watchOS 9.0 or later, use WidgetKit instead
+
+## Parameters 
+
+`line1ImageProvider`  
+
+A full-color image provider.
+
+`line2TextProvider`  
+
+The text provider for the text below the image. The template supports multicolored text from this text provider.
+

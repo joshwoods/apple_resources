@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Enumerations
+- Anonymous
+-  BIDIRECTIONAL_SPEAKERPHONE_NO_ECHO_REDX 
+
+Enumeration Case
+
+# BIDIRECTIONAL_SPEAKERPHONE_NO_ECHO_REDX
+
+macOS 10.12+
+
+``` source
+BIDIRECTIONAL_SPEAKERPHONE_NO_ECHO_REDX = 0x0403
+```
+

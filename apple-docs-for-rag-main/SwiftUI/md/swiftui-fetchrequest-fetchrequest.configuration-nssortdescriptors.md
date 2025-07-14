@@ -1,0 +1,34 @@
+
+
+- SwiftUI
+- FetchRequest
+- FetchRequest.Configuration
+-  nsSortDescriptors 
+
+Instance Property
+
+# nsSortDescriptors
+
+The request’s sort descriptors, accessed as reference types.
+
+iOS 15.0+iPadOS 15.0+Mac Catalyst 15.0+macOS 12.0+tvOS 15.0+visionOS 1.0+watchOS 8.0+
+
+``` source
+@MainActor @preconcurrency
+var nsSortDescriptors: [NSSortDescriptor]
+```
+
+## Discussion
+
+Set this configuration value to cause a FetchRequest to execute a fetch with a new collection of NSSortDescriptor instances. If you want to use SortDescriptor instances, set sortDescriptors instead.
+
+Access this value of a FetchRequest.Configuration structure for a given request by using the nsSortDescriptors property on the associated FetchedResults instance, either directly or through a Binding.
+
+## See Also
+
+### Setting sort descriptors
+
+var sortDescriptors: [SortDescriptor&lt;Result>]
+
+The request’s sort descriptors, accessed as value types.
+

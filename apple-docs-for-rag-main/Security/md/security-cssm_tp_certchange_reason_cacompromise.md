@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_TP_CERTCHANGE_REASON_CACOMPROMISE 
+
+Global Variable
+
+# CSSM_TP_CERTCHANGE_REASON_CACOMPROMISE
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_TP_CERTCHANGE_REASON_CACOMPROMISE: Int { get }
+```
+

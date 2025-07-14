@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_ACL_SUBJECT_TYPE_ASYMMETRIC_KEY 
+
+Global Variable
+
+# CSSM_ACL_SUBJECT_TYPE_ASYMMETRIC_KEY
+
+macOS 10.0+
+
+``` source
+var CSSM_ACL_SUBJECT_TYPE_ASYMMETRIC_KEY: Int { get }
+```
+

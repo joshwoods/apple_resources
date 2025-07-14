@@ -1,0 +1,3131 @@
+
+
+- Hypervisor
+- Apple Silicon
+- GIC registers
+-  Distributor registers 
+
+API Collection
+
+# Distributor registers
+
+## Topics
+
+### Interrupt configuration registers
+
+These registers determine whether the corresponding interrupt is edge-triggered or level-sensitive.
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR0: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR1: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR2: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR3: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR4: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR5: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR6: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR7: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR8: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR9: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR10: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR11: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR12: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR13: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR14: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR15: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR16: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR17: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR18: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR19: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR20: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR21: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR22: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR23: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR24: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR25: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR26: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR27: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR28: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR29: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR30: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR31: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR32: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR33: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR34: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR35: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR36: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR37: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR38: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR39: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR40: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR41: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR42: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR43: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR44: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR45: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR46: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR47: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR48: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR49: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR50: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR51: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR52: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR53: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR54: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR55: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR56: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR57: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR58: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR59: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR60: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR61: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR62: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICFGR63: hv_gic_distributor_reg_t
+
+### Control registers
+
+This register enables interrupts and affinity routing.
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_CTLR: hv_gic_distributor_reg_t
+
+### Interrupt priority registers
+
+These registers contain the priority value of the corresponding interrupt.
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR0: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR1: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR2: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR3: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR4: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR5: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR6: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR7: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR8: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR9: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR10: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR11: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR12: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR16: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR13: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR14: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR15: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR17: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR18: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR19: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR20: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR21: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR22: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR23: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR24: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR25: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR26: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR27: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR28: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR29: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR30: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR31: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR32: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR33: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR34: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR35: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR36: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR37: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR38: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR39: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR40: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR41: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR42: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR43: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR44: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR45: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR46: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR47: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR48: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR49: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR50: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR51: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR52: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR53: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR54: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR55: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR56: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR57: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR58: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR59: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR60: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR61: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR62: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR63: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR64: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR65: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR66: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR67: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR68: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR69: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR70: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR71: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR72: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR73: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR74: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR75: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR76: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR77: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR78: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR79: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR80: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR81: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR82: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR83: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR84: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR85: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR86: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR87: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR88: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR89: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR90: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR91: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR92: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR93: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR94: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR95: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR96: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR97: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR98: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR99: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR100: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR101: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR102: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR103: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR104: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR105: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR106: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR107: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR108: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR109: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR110: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR111: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR112: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR113: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR114: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR115: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR116: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR117: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR118: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR119: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR120: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR121: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR122: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR123: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR124: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR125: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR126: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR127: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR128: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR129: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR130: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR131: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR132: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR133: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR134: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR135: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR136: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR137: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR138: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR142: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR139: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR140: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR141: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR143: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR144: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR145: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR146: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR147: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR148: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR149: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR150: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR151: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR152: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR153: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR154: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR155: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR156: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR157: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR158: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR159: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR160: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR161: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR162: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR163: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR164: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR165: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR166: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR167: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR168: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR169: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR170: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR171: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR172: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR173: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR174: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR175: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR176: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR177: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR178: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR179: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR180: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR181: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR182: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR183: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR184: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR185: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR186: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR187: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR188: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR189: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR190: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR191: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR192: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR193: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR194: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR195: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR196: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR197: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR198: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR199: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR200: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR201: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR202: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR203: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR204: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR205: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR206: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR207: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR208: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR209: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR210: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR211: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR212: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR213: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR214: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR215: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR216: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR217: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR218: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR219: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR220: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR221: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR222: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR223: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR224: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR225: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR226: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR227: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR228: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR229: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR230: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR231: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR232: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR233: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR234: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR235: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR236: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR237: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR238: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR239: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR240: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR241: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR242: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR243: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR244: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR245: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR246: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR247: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR248: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR249: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR250: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR251: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR252: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR253: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IPRIORITYR254: hv_gic_distributor_reg_t
+
+### Interrupt group registers
+
+These registers control whether the corresponding interrupt is in group 0 or group 1.
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR0: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR1: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR2: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR3: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR4: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR5: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR6: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR7: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR8: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR9: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR10: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR11: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR12: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR13: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR14: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR15: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR16: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR17: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR18: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR19: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR20: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR21: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR22: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR23: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR24: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR25: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR26: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR27: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR28: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR29: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR30: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR31: hv_gic_distributor_reg_t
+
+### Interrupt clear-pending registers
+
+These registers remove the pending state from the corresponding interrupt.
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR0: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR1: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR2: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR3: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR4: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR5: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR6: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR7: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR8: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR9: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR10: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR11: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR12: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR13: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR14: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR15: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR16: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR17: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR18: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR19: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR20: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR21: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR22: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR23: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR24: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR25: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR26: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR27: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR28: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR29: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR30: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICPENDR31: hv_gic_distributor_reg_t
+
+### Interrupt set-active registers
+
+These registers activate the corresponding interrupt. Use these registers when saving and restoring generic interrupt controller (GIC) state.
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER0: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER1: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER2: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER3: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER4: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER5: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER6: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER7: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER8: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER9: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER10: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER11: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER12: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER13: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER14: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER15: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER16: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER17: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER18: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER19: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER20: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER21: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER22: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER23: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER24: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER25: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER26: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER27: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER28: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER29: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER30: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISACTIVER31: hv_gic_distributor_reg_t
+
+### Interrupt clear-enable registers
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER0: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER1: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER2: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER3: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER4: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER5: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER6: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER7: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER8: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER9: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER10: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER11: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER13: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER14: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER15: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER16: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER17: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER18: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER12: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER19: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER20: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER21: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER22: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER23: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER24: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER25: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER26: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER27: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER28: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER29: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER30: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICENABLER31: hv_gic_distributor_reg_t
+
+### Interrupt clear-active registers
+
+These registers deactivate the corresponding interrupt. Use these registers when saving and restoring generic interrupt controller (GIC) state.
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER0: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER1: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER2: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER3: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER4: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER5: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER6: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER7: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER8: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER9: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER10: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER11: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER12: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER13: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER14: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER15: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER16: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER17: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER18: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER19: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER20: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER21: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER22: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER23: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER24: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER25: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER26: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER27: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER28: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER29: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER30: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER31: hv_gic_distributor_reg_t
+
+### Interrupt set-enable registers
+
+These registers enable forwarding of the corresponding interrupts to the CPU interfaces.
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER0: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER1: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER2: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER3: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER4: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER5: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER6: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER7: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER8: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER9: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER10: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER11: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER12: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER13: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER14: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER15: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER16: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER17: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER18: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER19: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER20: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER21: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER22: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER23: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER24: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER25: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER26: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER27: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER28: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER29: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER30: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISENABLER31: hv_gic_distributor_reg_t
+
+### Interrupt set-pending registers
+
+These registers add the pending state to the corresponding interrupt.
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR0: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR1: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR2: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR3: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR4: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR5: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR6: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR7: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR8: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR9: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR10: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR11: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR12: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR13: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR14: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR15: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR16: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR17: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR18: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR19: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR20: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR21: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR22: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR23: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR24: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR25: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR26: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR27: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR28: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR29: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR30: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ISPENDR31: hv_gic_distributor_reg_t
+
+### Interrupt routing registers
+
+When affinity routing is an enabled state, these registers provide routing information for the shared peripheral interrupt (SPI) with the specified Interrupt ID number (INTID).
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER32: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER33: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER34: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER35: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER36: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER37: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER38: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER39: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER40: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER41: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER42: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER43: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER44: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER45: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER46: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER47: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER48: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER49: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER50: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER51: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER52: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER53: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER54: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER55: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER56: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER57: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER58: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER59: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER60: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER61: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER62: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER63: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER64: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER65: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER66: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER67: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER68: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER69: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER70: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER71: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER72: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER73: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER74: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER75: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER76: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER77: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER78: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER79: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER80: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER81: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER82: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER83: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER84: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER85: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER86: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER87: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER88: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER89: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER90: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER91: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER92: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER93: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER94: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER95: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER97: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER96: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER98: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER99: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER100: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER101: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER102: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER103: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER104: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER105: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER106: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER107: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER108: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER109: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER110: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER111: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER112: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER113: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER114: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER115: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER116: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER117: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER118: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER119: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER120: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER121: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER122: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER123: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER124: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER125: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER126: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER127: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER128: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER129: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER130: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER131: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER132: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER133: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER134: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER135: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER136: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER137: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER138: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER139: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER140: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER141: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER142: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER143: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER144: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER145: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER146: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER147: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER148: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER149: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER150: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER151: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER152: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER153: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER154: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER155: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER156: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER157: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER158: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER159: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER160: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER161: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER162: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER163: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER164: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER165: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER166: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER167: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER168: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER169: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER170: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER171: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER172: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER173: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER174: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER175: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER176: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER177: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER178: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER179: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER180: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER181: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER182: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER183: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER184: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER185: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER186: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER187: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER188: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER189: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER190: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER191: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER192: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER193: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER194: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER195: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER196: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER197: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER198: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER199: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER200: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER201: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER202: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER203: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER204: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER205: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER206: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER207: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER208: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER209: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER210: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER211: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER212: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER213: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER214: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER215: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER216: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER217: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER218: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER219: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER220: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER221: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER222: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER223: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER224: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER225: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER226: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER227: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER228: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER229: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER230: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER231: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER232: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER233: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER234: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER235: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER236: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER237: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER238: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER239: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER240: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER241: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER242: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER243: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER244: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER245: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER246: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER247: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER248: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER249: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER250: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER251: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER252: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER253: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER254: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER255: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER256: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER257: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER258: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER259: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER260: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER261: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER262: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER263: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER264: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER265: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER266: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER267: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER268: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER269: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER270: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER271: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER272: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER273: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER274: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER275: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER276: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER277: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER278: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER279: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER280: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER281: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER282: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER283: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER284: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER285: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER286: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER287: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER288: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER289: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER290: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER291: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER292: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER293: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER294: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER295: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER296: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER297: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER298: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER299: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER300: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER301: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER302: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER303: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER304: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER305: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER306: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER307: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER308: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER309: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER310: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER311: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER312: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER313: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER314: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER315: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER316: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER317: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER318: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER319: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER320: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER321: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER322: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER323: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER324: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER325: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER326: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER327: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER328: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER329: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER330: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER331: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER332: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER333: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER334: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER335: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER336: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER337: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER338: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER339: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER340: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER341: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER342: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER343: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER344: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER345: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER346: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER347: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER348: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER349: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER350: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER351: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER352: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER353: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER354: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER355: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER356: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER357: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER358: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER359: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER360: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER361: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER362: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER363: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER364: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER365: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER366: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER367: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER368: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER369: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER370: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER371: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER372: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER373: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER374: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER375: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER376: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER377: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER378: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER379: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER380: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER381: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER382: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER383: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER384: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER385: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER386: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER387: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER388: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER389: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER390: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER391: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER392: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER393: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER394: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER395: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER396: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER397: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER398: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER400: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER401: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER402: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER403: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER404: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER405: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER406: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER407: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER408: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER409: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER410: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER411: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER412: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER413: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER414: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER415: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER416: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER417: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER418: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER419: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER420: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER421: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER422: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER423: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER424: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER425: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER426: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER427: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER428: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER429: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER430: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER431: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER432: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER433: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER434: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER435: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER436: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER437: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER438: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER439: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER440: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER441: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER442: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER443: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER444: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER445: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER446: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER447: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER448: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER449: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER450: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER451: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER452: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER453: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER454: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER455: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER456: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER457: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER458: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER459: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER460: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER461: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER462: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER463: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER464: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER465: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER466: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER467: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER468: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER469: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER470: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER471: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER472: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER473: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER474: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER475: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER476: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER477: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER478: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER479: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER480: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER481: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER482: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER483: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER484: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER485: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER486: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER487: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER488: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER489: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER490: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER491: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER492: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER493: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER494: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER495: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER496: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER497: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER498: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER499: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER500: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER501: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER502: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER503: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER504: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER505: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER506: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER507: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER508: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER509: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER510: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER511: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER512: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER513: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER514: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER515: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER516: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER517: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER518: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER519: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER520: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER521: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER522: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER523: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER524: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER525: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER526: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER527: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER528: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER529: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER530: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER531: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER532: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER533: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER534: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER535: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER536: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER537: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER538: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER539: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER540: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER541: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER542: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER543: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER544: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER545: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER546: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER547: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER548: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER549: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER550: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER551: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER552: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER553: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER554: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER555: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER556: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER557: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER558: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER559: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER560: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER561: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER562: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER563: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER564: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER565: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER566: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER567: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER568: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER569: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER570: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER571: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER572: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER573: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER574: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER575: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER576: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER577: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER578: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER579: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER580: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER581: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER582: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER583: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER584: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER585: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER586: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER587: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER588: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER589: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER590: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER591: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER592: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER593: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER594: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER595: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER596: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER597: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER598: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER599: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER600: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER601: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER602: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER603: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER604: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER605: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER606: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER607: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER608: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER609: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER610: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER611: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER612: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER613: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER614: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER615: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER616: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER617: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER618: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER619: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER620: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER621: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER622: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER623: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER624: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER625: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER626: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER627: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER628: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER629: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER630: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER631: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER632: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER633: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER634: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER635: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER636: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER637: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER638: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER639: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER640: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER641: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER642: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER643: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER644: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER645: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER646: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER647: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER648: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER649: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER650: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER651: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER652: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER653: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER654: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER655: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER656: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER657: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER658: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER659: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER660: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER661: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER662: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER663: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER664: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER665: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER666: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER667: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER668: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER669: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER670: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER671: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER672: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER673: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER674: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER675: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER676: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER677: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER678: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER679: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER680: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER681: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER682: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER683: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER684: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER685: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER686: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER687: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER688: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER689: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER690: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER691: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER692: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER693: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER694: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER695: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER696: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER697: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER698: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER699: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER700: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER701: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER702: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER703: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER704: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER705: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER706: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER707: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER708: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER709: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER710: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER711: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER712: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER713: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER714: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER715: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER716: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER717: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER718: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER719: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER720: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER721: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER722: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER723: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER724: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER725: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER726: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER727: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER728: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER729: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER730: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER731: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER732: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER733: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER734: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER735: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER736: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER737: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER738: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER739: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER740: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER741: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER742: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER743: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER744: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER745: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER746: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER747: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER748: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER749: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER750: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER751: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER752: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER753: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER754: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER755: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER756: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER757: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER758: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER759: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER760: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER761: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER762: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER763: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER764: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER765: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER766: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER767: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER768: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER769: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER770: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER771: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER772: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER773: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER774: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER775: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER776: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER777: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER778: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER779: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER780: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER781: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER782: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER783: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER784: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER785: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER786: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER787: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER788: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER789: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER790: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER791: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER792: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER793: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER794: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER795: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER796: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER797: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER798: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER799: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER800: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER801: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER802: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER803: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER804: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER805: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER806: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER807: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER808: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER809: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER810: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER811: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER812: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER813: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER814: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER815: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER816: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER817: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER818: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER819: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER820: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER821: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER822: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER823: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER824: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER825: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER826: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER827: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER828: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER829: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER830: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER831: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER832: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER833: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER834: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER835: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER836: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER837: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER838: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER839: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER840: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER841: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER842: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER843: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER844: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER845: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER846: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER847: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER848: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER849: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER850: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER851: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER852: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER853: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER854: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER855: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER856: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER857: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER858: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER859: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER860: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER861: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER862: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER863: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER864: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER865: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER866: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER867: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER868: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER869: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER870: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER871: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER872: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER873: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER874: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER875: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER876: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER877: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER878: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER879: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER880: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER881: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER882: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER883: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER884: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER885: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER886: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER887: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER888: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER889: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER890: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER891: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER892: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER893: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER894: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER895: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER896: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER897: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER898: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER899: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER900: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER901: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER902: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER903: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER904: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER905: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER906: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER907: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER908: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER909: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER910: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER911: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER912: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER913: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER914: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER915: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER916: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER917: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER918: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER399: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER919: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER920: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER921: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER922: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER923: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER924: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER925: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER926: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER927: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER928: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER929: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER930: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER931: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER932: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER933: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER934: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER935: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER936: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER937: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER938: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER939: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER940: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER941: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER942: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER943: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER944: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER945: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER946: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER947: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER948: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER949: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER950: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER951: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER952: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER953: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER954: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER955: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER956: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER957: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER958: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER959: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER960: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER961: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER962: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER963: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER964: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER965: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER966: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER967: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER968: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER969: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER970: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER971: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER972: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER973: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER974: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER975: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER976: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER977: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER978: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER979: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER980: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER981: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER982: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER983: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER984: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER985: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER986: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER987: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER988: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER989: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER990: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER991: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER992: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER993: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER994: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER995: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER996: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER997: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER998: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER999: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER1000: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER1001: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER1002: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER1003: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER1004: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER1005: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER1006: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER1007: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER1008: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER1009: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER1010: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER1011: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER1012: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER1013: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER1014: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER1015: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER1016: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER1017: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER1018: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IROUTER1019: hv_gic_distributor_reg_t
+
+### Peripheral ID2 register
+
+This register provides a four-bit architecturally-defined architecture revision field. The remaining bits of the register are implementation defined.
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_PIDR2: hv_gic_distributor_reg_t
+
+### Interrupt controller type register
+
+This register provides information about which features the generic interrupt controller (GIC) implementation supports.
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_TYPER: hv_gic_distributor_reg_t
+

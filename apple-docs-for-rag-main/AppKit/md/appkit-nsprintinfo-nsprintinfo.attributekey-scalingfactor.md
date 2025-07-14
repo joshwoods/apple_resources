@@ -1,0 +1,35 @@
+
+
+- AppKit
+- NSPrintInfo
+- NSPrintInfo.AttributeKey
+-  scalingFactor 
+
+Type Property
+
+# scalingFactor
+
+Scale factor percentage before pagination.
+
+macOS
+
+``` source
+static let scalingFactor: NSPrintInfo.AttributeKey
+```
+
+## See Also
+
+### Page Setup Attributes
+
+static let paperName: NSPrintInfo.AttributeKey
+
+An `NSString` object containing the paper name.
+
+static let paperSize: NSPrintInfo.AttributeKey
+
+An `NSSize` value specifying the height and width of paper in points.
+
+static let orientation: NSPrintInfo.AttributeKey
+
+An `NSNumber` object containing an `NSPrintingOrientation`.
+

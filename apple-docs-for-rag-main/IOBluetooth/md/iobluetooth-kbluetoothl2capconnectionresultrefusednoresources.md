@@ -1,0 +1,33 @@
+
+
+- IOBluetooth
+-  kBluetoothL2CAPConnectionResultRefusedNoResources 
+
+Global Variable
+
+# kBluetoothL2CAPConnectionResultRefusedNoResources
+
+macOS
+
+``` source
+var kBluetoothL2CAPConnectionResultRefusedNoResources: BluetoothL2CAPConnectionResult { get }
+```
+
+## See Also
+
+### Constants
+
+var kBluetoothL2CAPConnectionResultPending: BluetoothL2CAPConnectionResult
+
+var kBluetoothL2CAPConnectionResultRefusedPSMNotSupported: BluetoothL2CAPConnectionResult
+
+var kBluetoothL2CAPConnectionResultRefusedSecurityBlock: BluetoothL2CAPConnectionResult
+
+var kBluetoothL2CAPConnectionResultSuccessful: BluetoothL2CAPConnectionResult
+
+var kBluetoothL2CAPConnectionResultRefusedInvalidSourceCID: BluetoothL2CAPConnectionResult
+
+var kBluetoothL2CAPConnectionResultRefusedReserved: BluetoothL2CAPConnectionResult
+
+var kBluetoothL2CAPConnectionResultRefusedSourceCIDAlreadyAllocated: BluetoothL2CAPConnectionResult
+

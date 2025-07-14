@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Enumerations
+- telemetry_notice_t
+-  TELEMETRY_NOTICE_KERNEL_MICROSTACKSHOT 
+
+Enumeration Case
+
+# TELEMETRY_NOTICE_KERNEL_MICROSTACKSHOT
+
+macOS 15.4+
+
+``` source
+TELEMETRY_NOTICE_KERNEL_MICROSTACKSHOT
+```
+

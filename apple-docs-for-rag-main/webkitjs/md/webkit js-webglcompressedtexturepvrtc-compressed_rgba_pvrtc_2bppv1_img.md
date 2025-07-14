@@ -1,0 +1,24 @@
+
+
+- WebKit JS
+- WebGLCompressedTexturePVRTC
+-  COMPRESSED_RGBA_PVRTC_2BPPV1_IMG 
+
+# COMPRESSED_RGBA_PVRTC_2BPPV1_IMG
+
+Safari Desktop 10.0+Safari Mobile 10.0+
+
+``` source
+const unsigned long COMPRESSED_RGBA_PVRTC_2BPPV1_IMG;
+```
+
+## See Also
+
+### Miscellaneous
+
+COMPRESSED_RGBA_PVRTC_4BPPV1_IMG
+
+COMPRESSED_RGB_PVRTC_2BPPV1_IMG
+
+COMPRESSED_RGB_PVRTC_4BPPV1_IMG
+

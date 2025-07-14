@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Data Types
+- SBCModePageRigidDiskGeometry
+-  STARTING_CYLINDER_WRITE_PRECOMPENSATION 
+
+Instance Property
+
+# STARTING_CYLINDER_WRITE_PRECOMPENSATION
+
+macOS 10.3+
+
+``` source
+UInt8 STARTING_CYLINDER_WRITE_PRECOMPENSATION[3];
+```
+

@@ -1,0 +1,88 @@
+
+
+- Address Book
+-  ABAddRecord(\_:\_:) 
+
+Function
+
+# ABAddRecord(\_:\_:)
+
+Adds a record of the specified type to the Address Book database.
+
+macOS
+
+``` source
+func ABAddRecord(
+    _ addressBook: ABAddressBookRef!,
+    _ record: ABRecordRef!
+) -> Bool
+```
+
+## Parameters 
+
+`addressBook`  
+
+The address book for the logged-in user.
+
+`record`  
+
+The record to add to the Address Book database. If this parameter is `NULL`, the function raises an exception.
+
+## Return Value
+
+`true` if the record was added successfully, `false` otherwise.
+
+## See Also
+
+### Records
+
+func ABCopyRecordForUniqueId(ABAddressBookRef!, CFString!) -> Unmanaged&lt;ABRecordRef>!
+
+Returns the record that matches the given unique ID.
+
+func ABCopyRecordTypeFromUniqueId(ABAddressBookRef!, CFString!) -> Unmanaged&lt;CFString>!
+
+Returns the type name of the record that matches a given unique ID.
+
+func ABCreateFormattedAddressFromDictionary(ABAddressBookRef!, CFDictionary!) -> Unmanaged&lt;CFString>!
+
+Returns a string containing the formatted address.
+
+func ABRecordCopyRecordType(ABRecordRef!) -> Unmanaged&lt;CFString>!
+
+Returns the type of the given record.
+
+func ABRecordCopyUniqueId(ABRecordRef!) -> Unmanaged&lt;CFString>!
+
+Returns the unique ID of the receiver.
+
+func ABRecordCopyValue(ABRecord!, ABPropertyID) -> Unmanaged&lt;CFTypeRef>!
+
+Returns the value of the given property.
+
+Deprecated
+
+func ABRecordCreateCopy(ABRecordRef!) -> Unmanaged&lt;ABRecordRef>!
+
+Returns a copy of the given record.
+
+func ABRecordIsReadOnly(ABRecordRef!) -> Bool
+
+Returns whether or not the record is read-only.
+
+func ABRecordRemoveValue(ABRecord!, ABPropertyID, UnsafeMutablePointer&lt;Unmanaged&lt;CFError>?>!) -> Bool
+
+Removes the value of the given property.
+
+Deprecated
+
+func ABRecordSetValue(ABRecord!, ABPropertyID, CFTypeRef!, UnsafeMutablePointer&lt;Unmanaged&lt;CFError>?>!) -> Bool
+
+Sets the value of a given property for a record.
+
+Deprecated
+
+func ABRemoveRecord(ABAddressBookRef!, ABRecordRef!) -> Bool
+
+Removes the specified record from the Address Book database.
+

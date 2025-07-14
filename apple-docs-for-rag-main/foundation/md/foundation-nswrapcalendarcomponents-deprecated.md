@@ -1,0 +1,85 @@
+
+
+- Foundation
+-  NSWrapCalendarComponents Deprecated
+
+Global Variable
+
+# NSWrapCalendarComponents
+
+Specifies that the components specified for an `NSDateComponents` object should be incremented and wrap around to zero/one on overflow, but should not cause higher units to be incremented.
+
+iOS 2.0–8.0DeprecatediPadOS 2.0–8.0DeprecatedMac Catalyst 13.1–13.1DeprecatedmacOS 10.4–10.10DeprecatedtvOS 9.0–9.0DeprecatedvisionOS 1.0–1.0DeprecatedwatchOS 2.0–2.0Deprecated
+
+``` source
+var NSWrapCalendarComponents: Int { get }
+```
+
+Deprecated
+
+Use wrapComponents instead.
+
+## See Also
+
+### Constants
+
+static var wrapComponents: NSCalendar.Options
+
+Specifies that the components specified for an `NSDateComponents` object should be incremented and wrap around to zero/one on overflow, but should not cause higher units to be incremented.
+
+static var matchStrictly: NSCalendar.Options
+
+Specifies that the operation should travel as far forward or backward as necessary looking for a match.
+
+static var searchBackwards: NSCalendar.Options
+
+Specifies that the operation should travel backwards to find the previous match before the given date.
+
+static var matchPreviousTimePreservingSmallerUnits: NSCalendar.Options
+
+Specifies that, when there is no matching time before the end of the next instance of the next highest unit specified in the given `NSDateComponents` object, this method uses the *previous* existing value of the missing unit and preserves the lower units’ values.
+
+static var matchNextTimePreservingSmallerUnits: NSCalendar.Options
+
+Specifies that, when there is no matching time before the end of the next instance of the next highest unit specified in the given `NSDateComponents` object, this method uses the *next* existing value of the missing unit and preserves the lower units’ values.
+
+static var matchNextTime: NSCalendar.Options
+
+Specifies that, when there is no matching time before the end of the next instance of the next highest unit specified in the given `NSDateComponents` object, this method uses the *next* existing value of the missing unit and *does not* preserve the lower units’ values.
+
+static var matchFirst: NSCalendar.Options
+
+Specifies that, if there are two or more matching times, the operation should return the first occurrence.
+
+static var matchLast: NSCalendar.Options
+
+Specifies that, if there are two or more matching times, the operation should return the last occurrence.
+
+static var wrapComponents: NSCalendar.Options
+
+Specifies that the components specified for an `NSDateComponents` object should be incremented and wrap around to zero/one on overflow, but should not cause higher units to be incremented.
+
+static var matchStrictly: NSCalendar.Options
+
+Specifies that the operation should travel as far forward or backward as necessary looking for a match.
+
+static var searchBackwards: NSCalendar.Options
+
+Specifies that the operation should travel backwards to find the previous match before the given date.
+
+static var matchPreviousTimePreservingSmallerUnits: NSCalendar.Options
+
+Specifies that, when there is no matching time before the end of the next instance of the next highest unit specified in the given `NSDateComponents` object, this method uses the *previous* existing value of the missing unit and preserves the lower units’ values.
+
+static var matchNextTimePreservingSmallerUnits: NSCalendar.Options
+
+Specifies that, when there is no matching time before the end of the next instance of the next highest unit specified in the given `NSDateComponents` object, this method uses the *next* existing value of the missing unit and preserves the lower units’ values.
+
+static var matchNextTime: NSCalendar.Options
+
+Specifies that, when there is no matching time before the end of the next instance of the next highest unit specified in the given `NSDateComponents` object, this method uses the *next* existing value of the missing unit and *does not* preserve the lower units’ values.
+
+static var matchFirst: NSCalendar.Options
+
+Specifies that, if there are two or more matching times, the operation should return the first occurrence.
+

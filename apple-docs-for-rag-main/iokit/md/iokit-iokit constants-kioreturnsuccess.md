@@ -1,0 +1,16 @@
+
+
+- IOKit
+- IOKit Constants
+-  kIOReturnSuccess 
+
+Global Variable
+
+# kIOReturnSuccess
+
+iOS 16.0+iPadOS 16.0+Mac Catalyst 13.0+macOS 10.0+visionOS 1.0+
+
+``` source
+var kIOReturnSuccess: Int32 { get }
+```
+

@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_DL_UNSUPPORTED_NUM_INDEXES 
+
+Global Variable
+
+# CSSMERR_DL_UNSUPPORTED_NUM_INDEXES
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSMERR_DL_UNSUPPORTED_NUM_INDEXES: Int { get }
+```
+

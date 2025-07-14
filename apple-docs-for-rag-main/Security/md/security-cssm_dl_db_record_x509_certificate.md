@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_DL_DB_RECORD_X509_CERTIFICATE 
+
+Global Variable
+
+# CSSM_DL_DB_RECORD_X509_CERTIFICATE
+
+macOS 10.0+
+
+``` source
+var CSSM_DL_DB_RECORD_X509_CERTIFICATE: UInt32 { get }
+```
+

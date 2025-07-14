@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_CERT_NOT_FOUND_FROM_ISSUER 
+
+Global Variable
+
+# CSSMERR_APPLETP_CERT_NOT_FOUND_FROM_ISSUER
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLETP_CERT_NOT_FOUND_FROM_ISSUER: Int { get }
+```
+

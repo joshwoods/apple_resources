@@ -1,0 +1,43 @@
+
+
+- User Notifications
+- UNNotificationContent
+-  sound 
+
+Instance Property
+
+# sound
+
+The sound that plays when the system delivers the notification.
+
+iOS 10.0+iPadOS 10.0+Mac Catalyst 13.1+macOS 10.14+visionOS 1.0+watchOS 3.0+
+
+``` source
+@NSCopying
+var sound: UNNotificationSound? { get }
+```
+
+## Discussion
+
+Notifications can play a default sound or a custom sound. For information on how to specify custom sounds for your notifications, see UNNotificationSound.
+
+## See Also
+
+### Reading system configuration
+
+var interruptionLevel: UNNotificationInterruptionLevel
+
+The notification’s importance and required delivery timing.
+
+enum UNNotificationInterruptionLevel
+
+Constants that indicate the importance and delivery timing of a notification.
+
+var relevanceScore: Double
+
+The score the system uses to determine if the notification is the summary’s featured notification.
+
+var filterCriteria: String?
+
+The criteria the system evaluates to determine if it displays the notification in the current Focus.
+

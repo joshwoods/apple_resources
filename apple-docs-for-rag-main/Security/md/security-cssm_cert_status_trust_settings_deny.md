@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_CERT_STATUS_TRUST_SETTINGS_DENY 
+
+Global Variable
+
+# CSSM_CERT_STATUS_TRUST_SETTINGS_DENY
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_CERT_STATUS_TRUST_SETTINGS_DENY: Int { get }
+```
+

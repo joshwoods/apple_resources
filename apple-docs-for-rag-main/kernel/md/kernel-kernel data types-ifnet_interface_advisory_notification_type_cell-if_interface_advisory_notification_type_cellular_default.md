@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Data Types
+- ifnet_interface_advisory_notification_type_cell
+-  IF_INTERFACE_ADVISORY_NOTIFICATION_TYPE_CELLULAR_DEFAULT 
+
+Enumeration Case
+
+# IF_INTERFACE_ADVISORY_NOTIFICATION_TYPE_CELLULAR_DEFAULT
+
+macOS 15.0+
+
+``` source
+IF_INTERFACE_ADVISORY_NOTIFICATION_TYPE_CELLULAR_DEFAULT = 0
+```
+

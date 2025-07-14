@@ -1,0 +1,18 @@
+
+
+- Kernel
+- Hardware Families
+- SCSI
+- SCSICmd_INQUIRY_PageC1_Data
+-  fReserved2 
+
+Instance Property
+
+# fReserved2
+
+DriverKitKernelDriverKit 22.0+macOS 10.12.2+
+
+``` source
+UInt16 fReserved2;
+```
+

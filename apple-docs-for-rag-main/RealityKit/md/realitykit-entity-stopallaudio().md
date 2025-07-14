@@ -1,0 +1,55 @@
+
+
+- RealityKit
+- Entity
+-  stopAllAudio() 
+
+Instance Method
+
+# stopAllAudio()
+
+Stops playback for all audio on this entity.
+
+iOS 13.0+iPadOS 13.0+Mac Catalyst 13.0+macOS 10.15+visionOS
+
+``` source
+@MainActor @preconcurrency
+func stopAllAudio()
+```
+
+## Discussion
+
+You can stop a specific AudioPlaybackController instance from playing a particular resource by calling the controller’s stop() method.
+
+## See Also
+
+### Playing audio
+
+func playAudio(AudioResource) -> AudioPlaybackController
+
+Prepares and plays a new audio playback instance on this entity.
+
+func playAudio(configuration: AudioGeneratorConfiguration, Audio.GeneratorRenderHandler) throws -> AudioGeneratorController
+
+Prepares and plays a real-time audio playback instance.
+
+func prepareAudio(configuration: AudioGeneratorConfiguration, Audio.GeneratorRenderHandler) throws -> AudioGeneratorController
+
+Prepares a real-time audio playback instances.
+
+func prepareAudio(AudioResource) -> AudioPlaybackController
+
+Prepares an audio resource for playback.
+
+var spatialAudio: SpatialAudioComponent?
+
+The component that configures the spatial rendering of sounds from this entity.
+
+var ambientAudio: AmbientAudioComponent?
+
+The component that configures the ambient rendering of sounds from this entity.
+
+var channelAudio: ChannelAudioComponent?
+
+The component that configures the channel-based rendering of sounds from this entity.
+

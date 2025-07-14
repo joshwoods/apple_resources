@@ -1,0 +1,49 @@
+
+
+- Hypervisor
+-  HV_GIC_REDISTRIBUTOR_REG_GICR_ICACTIVER0 
+
+Global Variable
+
+# HV_GIC_REDISTRIBUTOR_REG_GICR_ICACTIVER0
+
+macOS
+
+``` source
+var HV_GIC_REDISTRIBUTOR_REG_GICR_ICACTIVER0: hv_gic_redistributor_reg_t { get }
+```
+
+## See Also
+
+### Redistributor registers
+
+var HV_GIC_REDISTRIBUTOR_REG_GICR_TYPER: hv_gic_redistributor_reg_t
+
+var HV_GIC_REDISTRIBUTOR_REG_GICR_ICENABLER0: hv_gic_redistributor_reg_t
+
+var HV_GIC_REDISTRIBUTOR_REG_GICR_ICFGR0: hv_gic_redistributor_reg_t
+
+var HV_GIC_REDISTRIBUTOR_REG_GICR_ICFGR1: hv_gic_redistributor_reg_t
+
+var HV_GIC_REDISTRIBUTOR_REG_GICR_ICPENDR0: hv_gic_redistributor_reg_t
+
+var HV_GIC_REDISTRIBUTOR_REG_GICR_IGROUPR0: hv_gic_redistributor_reg_t
+
+var HV_GIC_REDISTRIBUTOR_REG_GICR_IPRIORITYR0: hv_gic_redistributor_reg_t
+
+var HV_GIC_REDISTRIBUTOR_REG_GICR_IPRIORITYR1: hv_gic_redistributor_reg_t
+
+var HV_GIC_REDISTRIBUTOR_REG_GICR_IPRIORITYR2: hv_gic_redistributor_reg_t
+
+var HV_GIC_REDISTRIBUTOR_REG_GICR_IPRIORITYR3: hv_gic_redistributor_reg_t
+
+var HV_GIC_REDISTRIBUTOR_REG_GICR_IPRIORITYR4: hv_gic_redistributor_reg_t
+
+var HV_GIC_REDISTRIBUTOR_REG_GICR_IPRIORITYR5: hv_gic_redistributor_reg_t
+
+var HV_GIC_REDISTRIBUTOR_REG_GICR_IPRIORITYR6: hv_gic_redistributor_reg_t
+
+var HV_GIC_REDISTRIBUTOR_REG_GICR_IPRIORITYR7: hv_gic_redistributor_reg_t
+
+var HV_GIC_REDISTRIBUTOR_REG_GICR_ISACTIVER0: hv_gic_redistributor_reg_t
+

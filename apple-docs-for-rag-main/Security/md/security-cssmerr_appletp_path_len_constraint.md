@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_PATH_LEN_CONSTRAINT 
+
+Global Variable
+
+# CSSMERR_APPLETP_PATH_LEN_CONSTRAINT
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLETP_PATH_LEN_CONSTRAINT: Int { get }
+```
+

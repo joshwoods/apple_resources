@@ -1,0 +1,46 @@
+
+
+- USBDriverKit
+- tIOUSBDeviceCapabilityType
+-  kIOUSBDeviceCapabilityTypeBillboardAltMode 
+
+Enumeration Case
+
+# kIOUSBDeviceCapabilityTypeBillboardAltMode
+
+DriverKit 19.0+
+
+``` source
+kIOUSBDeviceCapabilityTypeBillboardAltMode
+```
+
+## See Also
+
+### Getting the Capability Types
+
+kIOUSBDeviceCapabilityTypeBatteryInfo
+
+kIOUSBDeviceCapabilityTypeBillboard
+
+kIOUSBDeviceCapabilityTypeContainerID
+
+kIOUSBDeviceCapabilityTypePdConsumerPort
+
+kIOUSBDeviceCapabilityTypePdProviderPort
+
+kIOUSBDeviceCapabilityTypePlatform
+
+kIOUSBDeviceCapabilityTypePowerDelivery
+
+kIOUSBDeviceCapabilityTypePrecisionMeasurement
+
+kIOUSBDeviceCapabilityTypeSuperSpeed
+
+kIOUSBDeviceCapabilityTypeSuperSpeedPlus
+
+kIOUSBDeviceCapabilityTypeUSB20Extension
+
+kIOUSBDeviceCapabilityTypeWireless
+
+kIOUSBDeviceCapabilityTypeWirelessExt
+

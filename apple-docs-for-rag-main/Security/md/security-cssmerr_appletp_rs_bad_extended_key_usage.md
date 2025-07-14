@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_RS_BAD_EXTENDED_KEY_USAGE 
+
+Global Variable
+
+# CSSMERR_APPLETP_RS_BAD_EXTENDED_KEY_USAGE
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLETP_RS_BAD_EXTENDED_KEY_USAGE: Int { get }
+```
+

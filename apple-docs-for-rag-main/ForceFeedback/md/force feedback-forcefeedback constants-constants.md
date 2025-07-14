@@ -1,0 +1,121 @@
+
+
+- Force Feedback
+-  ForceFeedback Constants 
+
+API Collection
+
+# ForceFeedback Constants
+
+## Topics
+
+### Constants
+
+var FFJOFS_RX: Int32
+
+var FFJOFS_RY: Int32
+
+var FFJOFS_RZ: Int32
+
+var FFJOFS_Y: Int32
+
+var FFJOFS_Z: Int32
+
+### Macros
+
+FFDEVICESTATE
+
+FFJOFS_BUTTON
+
+FFJOFS_BUTTON0
+
+FFJOFS_BUTTON1
+
+FFJOFS_BUTTON10
+
+FFJOFS_BUTTON11
+
+FFJOFS_BUTTON12
+
+FFJOFS_BUTTON13
+
+FFJOFS_BUTTON14
+
+FFJOFS_BUTTON15
+
+FFJOFS_BUTTON16
+
+FFJOFS_BUTTON17
+
+FFJOFS_BUTTON18
+
+FFJOFS_BUTTON19
+
+FFJOFS_BUTTON2
+
+FFJOFS_BUTTON20
+
+FFJOFS_BUTTON21
+
+FFJOFS_BUTTON22
+
+FFJOFS_BUTTON23
+
+FFJOFS_BUTTON24
+
+FFJOFS_BUTTON25
+
+FFJOFS_BUTTON26
+
+FFJOFS_BUTTON27
+
+FFJOFS_BUTTON28
+
+FFJOFS_BUTTON29
+
+FFJOFS_BUTTON3
+
+FFJOFS_BUTTON30
+
+FFJOFS_BUTTON31
+
+FFJOFS_BUTTON4
+
+FFJOFS_BUTTON5
+
+FFJOFS_BUTTON6
+
+FFJOFS_BUTTON7
+
+FFJOFS_BUTTON8
+
+FFJOFS_BUTTON9
+
+FFJOFS_POV
+
+FFJOFS_SLIDER
+
+IOFORCEFEEDBACKDEVICE_FUNCS_100
+
+PFFDEVICESTATE
+
+kIOForceFeedbackDeviceInterfaceID
+
+kIOForceFeedbackLibTypeID
+
+## See Also
+
+### Reference
+
+ForceFeedback.h
+
+Public Interfaces to the Force Feedback implementation in macOS.
+
+ForceFeedbackConstants.h
+
+Constants used in the public interfaces to the Force Feedback implementation in macOS.
+
+ForceFeedback Enumerations
+
+ForceFeedback Data Types
+

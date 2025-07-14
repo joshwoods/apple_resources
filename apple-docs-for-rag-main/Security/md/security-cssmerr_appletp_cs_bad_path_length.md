@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_CS_BAD_PATH_LENGTH 
+
+Global Variable
+
+# CSSMERR_APPLETP_CS_BAD_PATH_LENGTH
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLETP_CS_BAD_PATH_LENGTH: Int { get }
+```
+

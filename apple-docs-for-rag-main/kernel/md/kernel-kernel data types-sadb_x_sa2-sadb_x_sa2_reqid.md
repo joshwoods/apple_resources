@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Data Types
+- sadb_x_sa2
+-  sadb_x_sa2_reqid 
+
+Instance Property
+
+# sadb_x_sa2_reqid
+
+macOS 10.6+
+
+``` source
+u_int32_t sadb_x_sa2_reqid;
+```
+

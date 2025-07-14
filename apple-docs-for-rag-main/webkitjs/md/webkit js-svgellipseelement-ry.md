@@ -1,0 +1,16 @@
+
+
+- WebKit JS
+- SVGEllipseElement
+-  ry 
+
+Instance Property
+
+# ry
+
+Safari Desktop 3.0+Safari Mobile 2.1+
+
+``` source
+readonly attribute SVGAnimatedLength ry;
+```
+

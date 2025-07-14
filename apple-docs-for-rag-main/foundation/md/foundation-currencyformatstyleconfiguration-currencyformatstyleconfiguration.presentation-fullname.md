@@ -1,0 +1,39 @@
+
+
+- Foundation
+- CurrencyFormatStyleConfiguration
+- CurrencyFormatStyleConfiguration.Presentation
+-  fullName 
+
+Type Property
+
+# fullName
+
+A presentation that shows the full name of the currency.
+
+iOS 15.0+iPadOS 15.0+Mac Catalyst 15.0+macOS 12.0+tvOS 15.0+visionOS 1.0+watchOS 8.0+
+
+``` source
+static var fullName: CurrencyFormatStyleConfiguration.Presentation { get }
+```
+
+## Discussion
+
+This presentation produces output like `123.00 US dollars`.
+
+## See Also
+
+### Specifying presentation
+
+static var isoCode: CurrencyFormatStyleConfiguration.Presentation
+
+A presentation that shows the ISO code of the currency.
+
+static var narrow: CurrencyFormatStyleConfiguration.Presentation
+
+A presentation that shows a condensed expression of the currency.
+
+static var standard: CurrencyFormatStyleConfiguration.Presentation
+
+A presentation that shows a standard expression of the currency.
+

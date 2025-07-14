@@ -1,0 +1,18 @@
+
+
+- Kernel
+- Hardware Families
+- FireWire
+- IOFWAsyncStreamCommand
+-  failOnReset 
+
+Instance Method
+
+# failOnReset
+
+macOS 10.11.4+
+
+``` source
+bool failOnReset(void);
+```
+

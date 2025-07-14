@@ -1,0 +1,41 @@
+
+
+- ARKit
+-  ar_object_tracking_configuration_set_maximum_trackable_instances 
+
+Function
+
+# ar_object_tracking_configuration_set_maximum_trackable_instances
+
+visionOS 2.0+
+
+``` source
+extern void ar_object_tracking_configuration_set_maximum_trackable_instances(ar_object_tracking_configuration_t object_tracking_configuration, int maximum_trackable_instances);
+```
+
+## See Also
+
+### Object tracking configuration functions
+
+ar_object_tracking_configuration_add_reference_objects
+
+ar_object_tracking_configuration_create
+
+ar_object_tracking_configuration_get_detection_rate
+
+ar_object_tracking_configuration_get_maximum_instances_per_reference_object
+
+ar_object_tracking_configuration_get_maximum_trackable_instances
+
+ar_object_tracking_configuration_get_moving_object_tracking_rate
+
+ar_object_tracking_configuration_get_stationary_object_tracking_rate
+
+ar_object_tracking_configuration_set_detection_rate
+
+ar_object_tracking_configuration_set_maximum_instances_per_reference_object
+
+ar_object_tracking_configuration_set_moving_object_tracking_rate
+
+ar_object_tracking_configuration_set_stationary_object_tracking_rate
+

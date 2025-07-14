@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLE_DOTMAC_REQ_SERVER_NOT_AVAIL 
+
+Global Variable
+
+# CSSMERR_APPLE_DOTMAC_REQ_SERVER_NOT_AVAIL
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLE_DOTMAC_REQ_SERVER_NOT_AVAIL: Int { get }
+```
+

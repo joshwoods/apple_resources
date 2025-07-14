@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_TRUST_SETTING_DENY 
+
+Global Variable
+
+# CSSMERR_APPLETP_TRUST_SETTING_DENY
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLETP_TRUST_SETTING_DENY: Int { get }
+```
+

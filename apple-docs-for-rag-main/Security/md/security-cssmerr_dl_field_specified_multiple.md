@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_DL_FIELD_SPECIFIED_MULTIPLE 
+
+Global Variable
+
+# CSSMERR_DL_FIELD_SPECIFIED_MULTIPLE
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSMERR_DL_FIELD_SPECIFIED_MULTIPLE: Int { get }
+```
+

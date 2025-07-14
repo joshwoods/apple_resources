@@ -1,0 +1,21 @@
+
+
+- Core Animation
+-  kCARendererMetalCommandQueue 
+
+Global Variable
+
+# kCARendererMetalCommandQueue
+
+iOS 12.0+iPadOS 12.0+Mac Catalyst 13.1+macOS 10.14+tvOS 12.0+visionOS 1.0+
+
+``` source
+let kCARendererMetalCommandQueue: String
+```
+
+## See Also
+
+### Constants
+
+let kCARendererColorSpace: String
+

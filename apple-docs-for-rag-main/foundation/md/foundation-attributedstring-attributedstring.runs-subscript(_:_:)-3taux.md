@@ -1,0 +1,18 @@
+
+
+- Foundation
+- AttributedString
+- AttributedString.Runs
+-  subscript(\_:\_:) 
+
+Instance Subscript
+
+# subscript(\_:\_:)
+
+iOS 15.0+iPadOS 15.0+Mac Catalyst 15.0+macOS 12.0+tvOS 15.0+visionOS 1.0+watchOS 8.0+
+
+``` source
+@preconcurrency
+subscript(t: T.Type, u: U.Type) -> AttributedString.Runs.AttributesSlice2 where T : AttributedStringKey, U : AttributedStringKey, T.Value : Sendable, U.Value : Sendable { get }
+```
+

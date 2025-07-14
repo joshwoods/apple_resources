@@ -1,0 +1,47 @@
+
+
+- Matter
+-  MTROTASoftwareUpdateRequestorClusterStateTransitionEvent 
+
+Class
+
+# MTROTASoftwareUpdateRequestorClusterStateTransitionEvent
+
+iOS 16.4+iPadOS 16.4+Mac Catalyst 16.4+macOS 13.3+tvOS 16.4+visionOS 1.0+watchOS 9.4+
+
+``` source
+class MTROTASoftwareUpdateRequestorClusterStateTransitionEvent
+```
+
+## Topics
+
+### Instance Properties
+
+var newState: NSNumber
+
+var previousState: NSNumber
+
+var reason: NSNumber
+
+var targetSoftwareVersion: NSNumber?
+
+## Relationships
+
+### Inherits From
+
+- NSObject
+
+### Inherited By
+
+- MTROtaSoftwareUpdateRequestorClusterStateTransitionEvent
+
+### Conforms To
+
+- CVarArg
+- CustomDebugStringConvertible
+- CustomStringConvertible
+- Equatable
+- Hashable
+- NSCopying
+- NSObjectProtocol
+

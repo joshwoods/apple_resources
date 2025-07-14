@@ -1,0 +1,15 @@
+
+
+- Security
+-  kSecOIDAPPLE_EKU_ICHAT_ENCRYPTION 
+
+Global Variable
+
+# kSecOIDAPPLE_EKU_ICHAT_ENCRYPTION
+
+macOS 10.7+
+
+``` source
+let kSecOIDAPPLE_EKU_ICHAT_ENCRYPTION: CFString
+```
+

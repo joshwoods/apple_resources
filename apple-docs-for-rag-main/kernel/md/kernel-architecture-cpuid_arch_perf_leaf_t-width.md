@@ -1,0 +1,17 @@
+
+
+- Kernel
+- architecture
+- cpuid_arch_perf_leaf_t
+-  width 
+
+Instance Property
+
+# width
+
+macOS 10.7+
+
+``` source
+uint8_t width;
+```
+

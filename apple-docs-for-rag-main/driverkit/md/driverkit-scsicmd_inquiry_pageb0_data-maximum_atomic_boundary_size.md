@@ -1,0 +1,16 @@
+
+
+- DriverKit
+- SCSICmd_INQUIRY_PageB0_Data
+-  MAXIMUM_ATOMIC_BOUNDARY_SIZE 
+
+Instance Property
+
+# MAXIMUM_ATOMIC_BOUNDARY_SIZE
+
+DriverKitiOSiPadOSmacOS
+
+``` source
+UInt32 MAXIMUM_ATOMIC_BOUNDARY_SIZE;
+```
+

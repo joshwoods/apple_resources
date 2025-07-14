@@ -1,0 +1,16 @@
+
+
+- WebKit JS
+- HTMLScriptElement
+-  crossOrigin 
+
+Instance Property
+
+# crossOrigin
+
+Safari Desktop 9.0+Safari Mobile 9.0+
+
+``` source
+attribute DOMString? crossOrigin;
+```
+

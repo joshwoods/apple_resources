@@ -1,0 +1,26 @@
+
+
+- RoomPlan
+- CapturedRoom
+- CapturedRoom.Object
+- CapturedRoom.Object.Category
+-  encode(to:) 
+
+Instance Method
+
+# encode(to:)
+
+Serializes an object category to the specified encoder.
+
+iOS 16.0+iPadOS 16.0+Mac Catalyst 16.0+
+
+``` source
+func encode(to encoder: any Encoder) throws
+```
+
+## Parameters 
+
+`encoder`  
+
+An object that the category serializes to.
+

@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_ALGID_MD2WithRSA 
+
+Global Variable
+
+# CSSM_ALGID_MD2WithRSA
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_ALGID_MD2WithRSA: UInt32 { get }
+```
+

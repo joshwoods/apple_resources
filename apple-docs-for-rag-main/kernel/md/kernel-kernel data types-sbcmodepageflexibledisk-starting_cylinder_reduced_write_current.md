@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Data Types
+- SBCModePageFlexibleDisk
+-  STARTING_CYLINDER_REDUCED_WRITE_CURRENT 
+
+Instance Property
+
+# STARTING_CYLINDER_REDUCED_WRITE_CURRENT
+
+macOS 10.3+
+
+``` source
+UInt16 STARTING_CYLINDER_REDUCED_WRITE_CURRENT;
+```
+

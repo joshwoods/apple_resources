@@ -1,0 +1,34 @@
+
+
+- Swift
+- Strideable
+-  -(\_:\_:) 
+
+Operator
+
+# -(\_:\_:)
+
+iOS 8.0+iPadOS 8.0+Mac Catalyst 13.0+macOS 10.10+tvOS 9.0+visionOS 1.0+watchOS 2.0+
+
+``` source
+static func - (lhs: Self, rhs: Self) -> Self.Stride
+```
+
+Available when `Self` conforms to `_Pointer`.
+
+## See Also
+
+### Getting an Offset Value
+
+func advanced(by: Self.Stride) -> Self
+
+Returns a value that is offset the specified distance from this value.
+
+**Required** Default implementation provided.
+
+static func + (Self, Self.Stride) -> Self
+
+static func + (Self.Stride, Self) -> Self
+
+static func - (Self, Self.Stride) -> Self
+

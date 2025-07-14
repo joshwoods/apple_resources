@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Data Types
+- ifnet_interface_advisory_notification_type_wifi
+-  IF_INTERFACE_ADVISORY_NOTIFICATION_TYPE_WIFI_UNDEFINED 
+
+Enumeration Case
+
+# IF_INTERFACE_ADVISORY_NOTIFICATION_TYPE_WIFI_UNDEFINED
+
+macOS 15.0+
+
+``` source
+IF_INTERFACE_ADVISORY_NOTIFICATION_TYPE_WIFI_UNDEFINED = 0
+```
+

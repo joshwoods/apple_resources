@@ -1,0 +1,22 @@
+
+
+- RealityKit
+- PhysicsCustomJoint
+-  linearMotionAlongZ 
+
+Instance Property
+
+# linearMotionAlongZ
+
+The linear motion limits along the z-axis.
+
+iOS 18.0+iPadOS 18.0+Mac Catalyst 18.0+macOS 15.0+visionOS 2.0+
+
+``` source
+var linearMotionAlongZ: PhysicsCustomJoint.MotionLimit
+```
+
+## Discussion
+
+This property sets the limits of pin1 along the z-axis of pin0.
+

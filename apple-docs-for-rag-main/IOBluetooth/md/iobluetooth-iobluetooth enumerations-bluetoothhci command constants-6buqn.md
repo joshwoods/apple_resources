@@ -1,0 +1,626 @@
+
+
+- IOBluetooth
+- IOBluetooth Enumerations
+-  BluetoothHCI command constants 
+
+API Collection
+
+# BluetoothHCI command constants
+
+## Topics
+
+### Constants
+
+var kBluetoothHCICommandAMPTest: Int
+
+var kBluetoothHCICommandAMPTestEnd: Int
+
+var kBluetoothHCICommandAcceptConnectionRequest: Int
+
+var kBluetoothHCICommandAcceptSniffRequest: Int
+
+var kBluetoothHCICommandAcceptSynchronousConnectionRequest: Int
+
+var kBluetoothHCICommandAddSCOConnection: Int
+
+var kBluetoothHCICommandAuthenticationRequested: Int
+
+var kBluetoothHCICommandChangeConnectionLinkKey: Int
+
+var kBluetoothHCICommandChangeConnectionPacketType: Int
+
+var kBluetoothHCICommandChangeLocalName: Int
+
+var kBluetoothHCICommandCreateConnection: Int
+
+var kBluetoothHCICommandCreateConnectionCancel: Int
+
+var kBluetoothHCICommandCreateNewUnitKey: Int
+
+var kBluetoothHCICommandDeleteReservedLTADDR: Int
+
+var kBluetoothHCICommandDeleteStoredLinkKey: Int
+
+var kBluetoothHCICommandDisconnect: Int
+
+var kBluetoothHCICommandEnableAMPReceiverReports: Int
+
+var kBluetoothHCICommandEnableDeviceUnderTestMode: Int
+
+var kBluetoothHCICommandEnhancedAcceptSynchronousConnectionRequest: Int
+
+var kBluetoothHCICommandEnhancedFlush: Int
+
+var kBluetoothHCICommandEnhancedSetupSynchronousConnection: Int
+
+var kBluetoothHCICommandExitParkMode: Int
+
+var kBluetoothHCICommandExitPeriodicInquiryMode: Int
+
+var kBluetoothHCICommandExitSniffMode: Int
+
+var kBluetoothHCICommandFlowSpecification: Int
+
+var kBluetoothHCICommandFlush: Int
+
+var kBluetoothHCICommandGetLinkQuality: Int
+
+var kBluetoothHCICommandGetMWSTransportLayerConfiguration: Int
+
+var kBluetoothHCICommandGroupHostController: Int
+
+var kBluetoothHCICommandGroupInformational: Int
+
+var kBluetoothHCICommandGroupLinkControl: Int
+
+var kBluetoothHCICommandGroupLinkPolicy: Int
+
+var kBluetoothHCICommandGroupLogoTesting: Int
+
+var kBluetoothHCICommandGroupLowEnergy: Int
+
+var kBluetoothHCICommandGroupMax: Int
+
+var kBluetoothHCICommandGroupNoOp: Int
+
+var kBluetoothHCICommandGroupStatus: Int
+
+var kBluetoothHCICommandGroupTesting: Int
+
+var kBluetoothHCICommandGroupVendorSpecific: Int
+
+var kBluetoothHCICommandHoldMode: Int
+
+var kBluetoothHCICommandHostBufferSize: Int
+
+var kBluetoothHCICommandHostNumberOfCompletedPackets: Int
+
+var kBluetoothHCICommandIOCapabilityRequestNegativeReply: Int
+
+var kBluetoothHCICommandIOCapabilityRequestReply: Int
+
+var kBluetoothHCICommandInquiry: Int
+
+var kBluetoothHCICommandInquiryCancel: Int
+
+var kBluetoothHCICommandLEAddDeviceToResolvingList: Int
+
+var kBluetoothHCICommandLEAddDeviceToWhiteList: Int
+
+var kBluetoothHCICommandLEClearResolvingList: Int
+
+var kBluetoothHCICommandLEClearWhiteList: Int
+
+var kBluetoothHCICommandLEConnectionUpdate: Int
+
+var kBluetoothHCICommandLECreateConnection: Int
+
+var kBluetoothHCICommandLECreateConnectionCancel: Int
+
+var kBluetoothHCICommandLEEncrypt: Int
+
+var kBluetoothHCICommandLEGenerateDHKey: Int
+
+var kBluetoothHCICommandLELongTermKeyRequestNegativeReply: Int
+
+var kBluetoothHCICommandLELongTermKeyRequestReply: Int
+
+var kBluetoothHCICommandLERand: Int
+
+var kBluetoothHCICommandLEReadAdvertisingChannelTxPower: Int
+
+var kBluetoothHCICommandLEReadBufferSize: Int
+
+var kBluetoothHCICommandLEReadChannelMap: Int
+
+var kBluetoothHCICommandLEReadLocalP256PublicKey: Int
+
+var kBluetoothHCICommandLEReadLocalResolvableAddress: Int
+
+var kBluetoothHCICommandLEReadLocalSupportedFeatures: Int
+
+var kBluetoothHCICommandLEReadMaximumDataLength: Int
+
+var kBluetoothHCICommandLEReadPeerResolvableAddress: Int
+
+var kBluetoothHCICommandLEReadRemoteUsedFeatures: Int
+
+var kBluetoothHCICommandLEReadResolvingListSize: Int
+
+var kBluetoothHCICommandLEReadSuggestedDefaultDataLength: Int
+
+var kBluetoothHCICommandLEReadSupportedStates: Int
+
+var kBluetoothHCICommandLEReadWhiteListSize: Int
+
+var kBluetoothHCICommandLEReceiverTest: Int
+
+var kBluetoothHCICommandLERemoteConnectionParameterRequestNegativeReply: Int
+
+var kBluetoothHCICommandLERemoteConnectionParameterRequestReply: Int
+
+var kBluetoothHCICommandLERemoveDeviceFromResolvingList: Int
+
+var kBluetoothHCICommandLERemoveDeviceFromWhiteList: Int
+
+var kBluetoothHCICommandLESetAddressResolutionEnable: Int
+
+var kBluetoothHCICommandLESetAdvertiseEnable: Int
+
+var kBluetoothHCICommandLESetAdvertisingData: Int
+
+var kBluetoothHCICommandLESetAdvertisingParameters: Int
+
+var kBluetoothHCICommandLESetDataLength: Int
+
+var kBluetoothHCICommandLESetEventMask: Int
+
+var kBluetoothHCICommandLESetHostChannelClassification: Int
+
+var kBluetoothHCICommandLESetRandomAddress: Int
+
+var kBluetoothHCICommandLESetResolvablePrivateAddressTimeout: Int
+
+var kBluetoothHCICommandLESetScanEnable: Int
+
+var kBluetoothHCICommandLESetScanParameters: Int
+
+var kBluetoothHCICommandLESetScanResponseData: Int
+
+var kBluetoothHCICommandLEStartEncryption: Int
+
+var kBluetoothHCICommandLETestEnd: Int
+
+var kBluetoothHCICommandLETransmitterTest: Int
+
+var kBluetoothHCICommandLEWriteSuggestedDefaultDataLength: Int
+
+var kBluetoothHCICommandLinkKeyRequestNegativeReply: Int
+
+var kBluetoothHCICommandLinkKeyRequestReply: Int
+
+var kBluetoothHCICommandMasterLinkKey: Int
+
+var kBluetoothHCICommandMax: Int
+
+var kBluetoothHCICommandNoOp: Int
+
+var kBluetoothHCICommandPINCodeRequestNegativeReply: Int
+
+var kBluetoothHCICommandPINCodeRequestReply: Int
+
+var kBluetoothHCICommandParkMode: Int
+
+var kBluetoothHCICommandPeriodicInquiryMode: Int
+
+var kBluetoothHCICommandQoSSetup: Int
+
+var kBluetoothHCICommandReadAFHChannelAssessmentMode: Int
+
+var kBluetoothHCICommandReadAFHMappings: Int
+
+var kBluetoothHCICommandReadAuthenticatedPayloadTimeout: Int
+
+var kBluetoothHCICommandReadAuthenticationEnable: Int
+
+var kBluetoothHCICommandReadAutomaticFlushTimeout: Int
+
+var kBluetoothHCICommandReadBestEffortFlushTimeout: Int
+
+var kBluetoothHCICommandReadBufferSize: Int
+
+var kBluetoothHCICommandReadClassOfDevice: Int
+
+var kBluetoothHCICommandReadClock: Int
+
+var kBluetoothHCICommandReadClockOffset: Int
+
+var kBluetoothHCICommandReadConnectionAcceptTimeout: Int
+
+var kBluetoothHCICommandReadCountryCode: Int
+
+var kBluetoothHCICommandReadCurrentIACLAP: Int
+
+var kBluetoothHCICommandReadDataBlockSize: Int
+
+var kBluetoothHCICommandReadDefaultErroneousDataReporting: Int
+
+var kBluetoothHCICommandReadDefaultLinkPolicySettings: Int
+
+var kBluetoothHCICommandReadDeviceAddress: Int
+
+var kBluetoothHCICommandReadEncryptionKeySize: Int
+
+var kBluetoothHCICommandReadEncryptionMode: Int
+
+var kBluetoothHCICommandReadEnhancedTransmitPowerLevel: Int
+
+var kBluetoothHCICommandReadExtendedInquiryLength: Int
+
+var kBluetoothHCICommandReadExtendedInquiryResponse: Int
+
+var kBluetoothHCICommandReadExtendedPageTimeout: Int
+
+var kBluetoothHCICommandReadFailedContactCounter: Int
+
+var kBluetoothHCICommandReadFlowControlMode: Int
+
+var kBluetoothHCICommandReadHoldModeActivity: Int
+
+var kBluetoothHCICommandReadInquiryMode: Int
+
+var kBluetoothHCICommandReadInquiryResponseTransmitPower: Int
+
+var kBluetoothHCICommandReadInquiryScanActivity: Int
+
+var kBluetoothHCICommandReadInquiryScanType: Int
+
+var kBluetoothHCICommandReadLEHostSupported: Int
+
+var kBluetoothHCICommandReadLMPHandle: Int
+
+var kBluetoothHCICommandReadLinkPolicySettings: Int
+
+var kBluetoothHCICommandReadLinkSupervisionTimeout: Int
+
+var kBluetoothHCICommandReadLocalAMPASSOC: Int
+
+var kBluetoothHCICommandReadLocalAMPInfo: Int
+
+var kBluetoothHCICommandReadLocalExtendedFeatures: Int
+
+var kBluetoothHCICommandReadLocalName: Int
+
+var kBluetoothHCICommandReadLocalOOBData: Int
+
+var kBluetoothHCICommandReadLocalOOBExtendedData: Int
+
+var kBluetoothHCICommandReadLocalSupportedCodecs: Int
+
+var kBluetoothHCICommandReadLocalSupportedCommands: Int
+
+var kBluetoothHCICommandReadLocalSupportedFeatures: Int
+
+var kBluetoothHCICommandReadLocalVersionInformation: Int
+
+var kBluetoothHCICommandReadLocationData: Int
+
+var kBluetoothHCICommandReadLogicalLinkAcceptTimeout: Int
+
+var kBluetoothHCICommandReadLoopbackMode: Int
+
+var kBluetoothHCICommandReadNumberOfBroadcastRetransmissions: Int
+
+var kBluetoothHCICommandReadNumberOfSupportedIAC: Int
+
+var kBluetoothHCICommandReadPINType: Int
+
+var kBluetoothHCICommandReadPageScanActivity: Int
+
+var kBluetoothHCICommandReadPageScanMode: Int
+
+var kBluetoothHCICommandReadPageScanPeriodMode: Int
+
+var kBluetoothHCICommandReadPageScanType: Int
+
+var kBluetoothHCICommandReadPageTimeout: Int
+
+var kBluetoothHCICommandReadRSSI: Int
+
+var kBluetoothHCICommandReadRemoteExtendedFeatures: Int
+
+var kBluetoothHCICommandReadRemoteSupportedFeatures: Int
+
+var kBluetoothHCICommandReadRemoteVersionInformation: Int
+
+var kBluetoothHCICommandReadSCOFlowControlEnable: Int
+
+var kBluetoothHCICommandReadScanEnable: Int
+
+var kBluetoothHCICommandReadSecureConnectionsHostSupport: Int
+
+var kBluetoothHCICommandReadSimplePairingMode: Int
+
+var kBluetoothHCICommandReadStoredLinkKey: Int
+
+var kBluetoothHCICommandReadSynchronizationTrainParameters: Int
+
+var kBluetoothHCICommandReadTransmitPowerLevel: Int
+
+var kBluetoothHCICommandReadVoiceSetting: Int
+
+var kBluetoothHCICommandReceiveSynchronizationTrain: Int
+
+var kBluetoothHCICommandRefreshEncryptionKey: Int
+
+var kBluetoothHCICommandRejectConnectionRequest: Int
+
+var kBluetoothHCICommandRejectSniffRequest: Int
+
+var kBluetoothHCICommandRejectSynchronousConnectionRequest: Int
+
+var kBluetoothHCICommandRemoteNameRequest: Int
+
+var kBluetoothHCICommandRemoteNameRequestCancel: Int
+
+var kBluetoothHCICommandRemoteOOBDataRequestNegativeReply: Int
+
+var kBluetoothHCICommandRemoteOOBDataRequestReply: Int
+
+var kBluetoothHCICommandRemoteOOBExtendedDataRequestReply: Int
+
+var kBluetoothHCICommandReset: Int
+
+var kBluetoothHCICommandResetFailedContactCounter: Int
+
+var kBluetoothHCICommandRoleDiscovery: Int
+
+var kBluetoothHCICommandSendKeypressNotification: Int
+
+var kBluetoothHCICommandSetAFHClassification: Int
+
+var kBluetoothHCICommandSetConnectionEncryption: Int
+
+var kBluetoothHCICommandSetConnectionlessSlaveBroadcast: IntDeprecated
+
+var kBluetoothHCICommandSetConnectionlessSlaveBroadcastData: IntDeprecated
+
+var kBluetoothHCICommandSetConnectionlessSlaveBroadcastReceive: IntDeprecated
+
+var kBluetoothHCICommandSetEventFilter: Int
+
+var kBluetoothHCICommandSetEventMask: Int
+
+var kBluetoothHCICommandSetEventMaskPageTwo: Int
+
+var kBluetoothHCICommandSetExternalFrameConfiguration: Int
+
+var kBluetoothHCICommandSetHostControllerToHostFlowControl: Int
+
+var kBluetoothHCICommandSetMWSChannelParameters: Int
+
+var kBluetoothHCICommandSetMWSPATTERNConfiguration: Int
+
+var kBluetoothHCICommandSetMWSScanFrequencyTable: Int
+
+var kBluetoothHCICommandSetMWSSignaling: Int
+
+var kBluetoothHCICommandSetMWSTransportLayer: Int
+
+var kBluetoothHCICommandSetReservedLTADDR: Int
+
+var kBluetoothHCICommandSetTriggeredClockCapture: Int
+
+var kBluetoothHCICommandSetupSynchronousConnection: Int
+
+var kBluetoothHCICommandShortRangeMode: Int
+
+var kBluetoothHCICommandSniffMode: Int
+
+var kBluetoothHCICommandSniffSubrating: Int
+
+var kBluetoothHCICommandStartSynchronizationTrain: Int
+
+var kBluetoothHCICommandSwitchRole: Int
+
+var kBluetoothHCICommandTruncatedPage: Int
+
+var kBluetoothHCICommandTruncatedPageCancel: Int
+
+var kBluetoothHCICommandUserConfirmationRequestNegativeReply: Int
+
+var kBluetoothHCICommandUserConfirmationRequestReply: Int
+
+var kBluetoothHCICommandUserPasskeyRequestNegativeReply: Int
+
+var kBluetoothHCICommandUserPasskeyRequestReply: Int
+
+var kBluetoothHCICommandWriteAFHChannelAssessmentMode: Int
+
+var kBluetoothHCICommandWriteAuthenticatedPayloadTimeout: Int
+
+var kBluetoothHCICommandWriteAuthenticationEnable: Int
+
+var kBluetoothHCICommandWriteAutomaticFlushTimeout: Int
+
+var kBluetoothHCICommandWriteBestEffortFlushTimeout: Int
+
+var kBluetoothHCICommandWriteClassOfDevice: Int
+
+var kBluetoothHCICommandWriteConnectionAcceptTimeout: Int
+
+var kBluetoothHCICommandWriteCurrentIACLAP: Int
+
+var kBluetoothHCICommandWriteDefaultErroneousDataReporting: Int
+
+var kBluetoothHCICommandWriteDefaultLinkPolicySettings: Int
+
+var kBluetoothHCICommandWriteEncryptionMode: Int
+
+var kBluetoothHCICommandWriteExtendedInquiryLength: Int
+
+var kBluetoothHCICommandWriteExtendedInquiryResponse: Int
+
+var kBluetoothHCICommandWriteExtendedPageTimeout: Int
+
+var kBluetoothHCICommandWriteFlowControlMode: Int
+
+var kBluetoothHCICommandWriteHoldModeActivity: Int
+
+var kBluetoothHCICommandWriteInquiryMode: Int
+
+var kBluetoothHCICommandWriteInquiryResponseTransmitPower: Int
+
+var kBluetoothHCICommandWriteInquiryScanActivity: Int
+
+var kBluetoothHCICommandWriteInquiryScanType: Int
+
+var kBluetoothHCICommandWriteLEHostSupported: Int
+
+var kBluetoothHCICommandWriteLinkPolicySettings: Int
+
+var kBluetoothHCICommandWriteLinkSupervisionTimeout: Int
+
+var kBluetoothHCICommandWriteLocationData: Int
+
+var kBluetoothHCICommandWriteLogicalLinkAcceptTimeout: Int
+
+var kBluetoothHCICommandWriteLoopbackMode: Int
+
+var kBluetoothHCICommandWriteNumberOfBroadcastRetransmissions: Int
+
+var kBluetoothHCICommandWritePINType: Int
+
+var kBluetoothHCICommandWritePageScanActivity: Int
+
+var kBluetoothHCICommandWritePageScanMode: Int
+
+var kBluetoothHCICommandWritePageScanPeriodMode: Int
+
+var kBluetoothHCICommandWritePageScanType: Int
+
+var kBluetoothHCICommandWritePageTimeout: Int
+
+var kBluetoothHCICommandWriteRemoteAMPASSOC: Int
+
+var kBluetoothHCICommandWriteSCOFlowControlEnable: Int
+
+var kBluetoothHCICommandWriteScanEnable: Int
+
+var kBluetoothHCICommandWriteSecureConnectionsHostSupport: Int
+
+var kBluetoothHCICommandWriteSimplePairingDebugMode: Int
+
+var kBluetoothHCICommandWriteSimplePairingMode: Int
+
+var kBluetoothHCICommandWriteStoredLinkKey: Int
+
+var kBluetoothHCICommandWriteSynchronizationTrainParameters: Int
+
+var kBluetoothHCICommandWriteVoiceSetting: Int
+
+var kBluetoothHCIOpCodeNoOp: Int
+
+var kBluetoothHCICommandLEAddDeviceToPeriodicAdvertiserList: Int
+
+var kBluetoothHCICommandLEClearAdvertisingSets: Int
+
+var kBluetoothHCICommandLEClearPeriodicAdvertiserList: Int
+
+var kBluetoothHCICommandLEEnhancedReceiverTest: Int
+
+var kBluetoothHCICommandLEEnhancedTransmitterTest: Int
+
+var kBluetoothHCICommandLEExtendedCreateConnection: Int
+
+var kBluetoothHCICommandLEPeriodicAdvertisingCreateSync: Int
+
+var kBluetoothHCICommandLEPeriodicAdvertisingCreateSyncCancel: Int
+
+var kBluetoothHCICommandLEPeriodicAdvertisingTerminateSync: Int
+
+var kBluetoothHCICommandLEReadMaximumAdvertisingDataLength: Int
+
+var kBluetoothHCICommandLEReadNumberofSupportedAdvertisingSets: Int
+
+var kBluetoothHCICommandLEReadPeriodicAdvertiserListSize: Int
+
+var kBluetoothHCICommandLEReadPhy: Int
+
+var kBluetoothHCICommandLEReadRFPathCompensation: Int
+
+var kBluetoothHCICommandLEReadTransmitPower: Int
+
+var kBluetoothHCICommandLERemoveAdvertisingSet: Int
+
+var kBluetoothHCICommandLERemoveDeviceFromPeriodicAdvertiserList: Int
+
+var kBluetoothHCICommandLESetAdvertisingSetRandomAddress: Int
+
+var kBluetoothHCICommandLESetDefaultPhy: Int
+
+var kBluetoothHCICommandLESetExtendedAdvertisingData: Int
+
+var kBluetoothHCICommandLESetExtendedAdvertisingEnableCommand: Int
+
+var kBluetoothHCICommandLESetExtendedAdvertisingParameters: Int
+
+var kBluetoothHCICommandLESetExtendedScanEnable: Int
+
+var kBluetoothHCICommandLESetExtendedScanParameters: Int
+
+var kBluetoothHCICommandLESetExtendedScanResponseData: Int
+
+var kBluetoothHCICommandLESetPeriodicAdvertisingData: Int
+
+var kBluetoothHCICommandLESetPeriodicAdvertisingEnable: Int
+
+var kBluetoothHCICommandLESetPeriodicAdvertisingParameters: Int
+
+var kBluetoothHCICommandLESetPhy: Int
+
+var kBluetoothHCICommandLESetPrivacyMode: Int
+
+var kBluetoothHCICommandLEWriteRFPathCompensation: Int
+
+var kBluetoothHCICommandSetConnectionlessPeripheralBroadcast: Int
+
+var kBluetoothHCICommandSetConnectionlessPeripheralBroadcastData: Int
+
+var kBluetoothHCICommandSetConnectionlessPeripheralBroadcastReceive: Int
+
+## See Also
+
+### Enumerations
+
+struct BluetoothAMPCommandRejectReason
+
+struct BluetoothAMPCreatePhysicalLinkResponseStatus
+
+struct BluetoothAMPDisconnectPhysicalLinkResponseStatus
+
+struct BluetoothAMPDiscoverResponseControllerStatus
+
+struct BluetoothAMPGetAssocResponseStatus
+
+struct BluetoothAMPGetInfoResponseStatus
+
+struct BluetoothAMPManagerCode
+
+struct BluetoothHCIPowerState
+
+struct BluetoothL2CAPCommandCode
+
+struct BluetoothL2CAPCommandRejectReason
+
+struct BluetoothL2CAPConfigurationOption
+
+struct BluetoothL2CAPConfigurationResult
+
+struct BluetoothL2CAPConfigurationRetransmissionAndFlowControlFlags
+
+struct BluetoothL2CAPConnectionResult
+
+struct BluetoothL2CAPConnectionStatus
+

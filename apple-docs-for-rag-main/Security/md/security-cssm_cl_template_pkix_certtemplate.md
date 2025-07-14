@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_CL_TEMPLATE_PKIX_CERTTEMPLATE 
+
+Global Variable
+
+# CSSM_CL_TEMPLATE_PKIX_CERTTEMPLATE
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_CL_TEMPLATE_PKIX_CERTTEMPLATE: Int { get }
+```
+

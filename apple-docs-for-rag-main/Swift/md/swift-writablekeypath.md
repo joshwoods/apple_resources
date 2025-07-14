@@ -1,0 +1,41 @@
+
+
+- Swift
+-  WritableKeyPath 
+
+Class
+
+# WritableKeyPath
+
+A key path that supports reading from and writing to the resulting value.
+
+iOS 8.0+iPadOS 8.0+Mac Catalyst 13.0+macOS 10.10+tvOS 9.0+visionOS 1.0+watchOS 2.0+
+
+``` source
+class WritableKeyPath
+```
+
+## Relationships
+
+### Inherits From
+
+- KeyPath
+
+### Inherited By
+
+- ReferenceWritableKeyPath
+
+### Conforms To
+
+- CustomDebugStringConvertible
+- Equatable
+- Hashable
+
+## See Also
+
+### Writable Key Paths
+
+class ReferenceWritableKeyPath
+
+A key path that supports reading from and writing to the resulting value with reference semantics.
+

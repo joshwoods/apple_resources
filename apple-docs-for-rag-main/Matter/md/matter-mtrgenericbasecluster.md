@@ -1,0 +1,147 @@
+
+
+- Matter
+-  MTRGenericBaseCluster 
+
+Class
+
+# MTRGenericBaseCluster
+
+iOS 17.4+iPadOS 17.4+Mac Catalyst 17.4+macOS 14.4+tvOS 17.4+visionOS 1.1+watchOS 10.4+
+
+``` source
+class MTRGenericBaseCluster
+```
+
+## Relationships
+
+### Inherits From
+
+- MTRCluster
+
+### Inherited By
+
+- MTRBaseClusterAccessControl
+- MTRBaseClusterAccountLogin
+- MTRBaseClusterActions
+- MTRBaseClusterActivatedCarbonFilterMonitoring
+- MTRBaseClusterAdministratorCommissioning
+- MTRBaseClusterAirQuality
+- MTRBaseClusterApplicationBasic
+- MTRBaseClusterApplicationLauncher
+- MTRBaseClusterAudioOutput
+- MTRBaseClusterBallastConfiguration
+- MTRBaseClusterBarrierControl
+- MTRBaseClusterBasicInformation
+- MTRBaseClusterBinaryInputBasic
+- MTRBaseClusterBinding
+- MTRBaseClusterBooleanState
+- MTRBaseClusterBooleanStateConfiguration
+- MTRBaseClusterBridgedDeviceBasicInformation
+- MTRBaseClusterCarbonDioxideConcentrationMeasurement
+- MTRBaseClusterCarbonMonoxideConcentrationMeasurement
+- MTRBaseClusterChannel
+- MTRBaseClusterColorControl
+- MTRBaseClusterCommissionerControl
+- MTRBaseClusterContentAppObserver
+- MTRBaseClusterContentLauncher
+- MTRBaseClusterDescriptor
+- MTRBaseClusterDeviceEnergyManagement
+- MTRBaseClusterDeviceEnergyManagementMode
+- MTRBaseClusterDiagnosticLogs
+- MTRBaseClusterDishwasherAlarm
+- MTRBaseClusterDishwasherMode
+- MTRBaseClusterDoorLock
+- MTRBaseClusterElectricalEnergyMeasurement
+- MTRBaseClusterElectricalMeasurement
+- MTRBaseClusterElectricalPowerMeasurement
+- MTRBaseClusterEnergyEVSE
+- MTRBaseClusterEnergyEVSEMode
+- MTRBaseClusterEthernetNetworkDiagnostics
+- MTRBaseClusterFanControl
+- MTRBaseClusterFixedLabel
+- MTRBaseClusterFlowMeasurement
+- MTRBaseClusterFormaldehydeConcentrationMeasurement
+- MTRBaseClusterGeneralCommissioning
+- MTRBaseClusterGeneralDiagnostics
+- MTRBaseClusterGroupKeyManagement
+- MTRBaseClusterGroups
+- MTRBaseClusterHEPAFilterMonitoring
+- MTRBaseClusterICDManagement
+- MTRBaseClusterIdentify
+- MTRBaseClusterIlluminanceMeasurement
+- MTRBaseClusterKeypadInput
+- MTRBaseClusterLaundryDryerControls
+- MTRBaseClusterLaundryWasherControls
+- MTRBaseClusterLaundryWasherMode
+- MTRBaseClusterLevelControl
+- MTRBaseClusterLocalizationConfiguration
+- MTRBaseClusterLowPower
+- MTRBaseClusterMediaInput
+- MTRBaseClusterMediaPlayback
+- MTRBaseClusterMessages
+- MTRBaseClusterMicrowaveOvenControl
+- MTRBaseClusterMicrowaveOvenMode
+- MTRBaseClusterModeSelect
+- MTRBaseClusterNetworkCommissioning
+- MTRBaseClusterNitrogenDioxideConcentrationMeasurement
+- MTRBaseClusterOTASoftwareUpdateProvider
+- MTRBaseClusterOTASoftwareUpdateRequestor
+- MTRBaseClusterOccupancySensing
+- MTRBaseClusterOnOff
+- MTRBaseClusterOnOffSwitchConfiguration
+- MTRBaseClusterOperationalCredentials
+- MTRBaseClusterOperationalState
+- MTRBaseClusterOvenCavityOperationalState
+- MTRBaseClusterOvenMode
+- MTRBaseClusterOzoneConcentrationMeasurement
+- MTRBaseClusterPM10ConcentrationMeasurement
+- MTRBaseClusterPM1ConcentrationMeasurement
+- MTRBaseClusterPM25ConcentrationMeasurement
+- MTRBaseClusterPowerSource
+- MTRBaseClusterPowerSourceConfiguration
+- MTRBaseClusterPowerTopology
+- MTRBaseClusterPressureMeasurement
+- MTRBaseClusterPumpConfigurationAndControl
+- MTRBaseClusterRVCCleanMode
+- MTRBaseClusterRVCOperationalState
+- MTRBaseClusterRVCRunMode
+- MTRBaseClusterRadonConcentrationMeasurement
+- MTRBaseClusterRefrigeratorAlarm
+- MTRBaseClusterRefrigeratorAndTemperatureControlledCabinetMode
+- MTRBaseClusterRelativeHumidityMeasurement
+- MTRBaseClusterServiceArea
+- MTRBaseClusterSmokeCOAlarm
+- MTRBaseClusterSoftwareDiagnostics
+- MTRBaseClusterSwitch
+- MTRBaseClusterTargetNavigator
+- MTRBaseClusterTemperatureControl
+- MTRBaseClusterTemperatureMeasurement
+- MTRBaseClusterThermostat
+- MTRBaseClusterThermostatUserInterfaceConfiguration
+- MTRBaseClusterThreadBorderRouterManagement
+- MTRBaseClusterThreadNetworkDiagnostics
+- MTRBaseClusterThreadNetworkDirectory
+- MTRBaseClusterTimeFormatLocalization
+- MTRBaseClusterTimeSynchronization
+- MTRBaseClusterTotalVolatileOrganicCompoundsConcentrationMeasurement
+- MTRBaseClusterUnitLocalization
+- MTRBaseClusterUnitTesting
+- MTRBaseClusterUserLabel
+- MTRBaseClusterValveConfigurationAndControl
+- MTRBaseClusterWakeOnLAN
+- MTRBaseClusterWaterHeaterManagement
+- MTRBaseClusterWaterHeaterMode
+- MTRBaseClusterWiFiNetworkDiagnostics
+- MTRBaseClusterWiFiNetworkManagement
+- MTRBaseClusterWindowCovering
+
+### Conforms To
+
+- CVarArg
+- CustomDebugStringConvertible
+- CustomStringConvertible
+- Equatable
+- Hashable
+- NSObjectProtocol
+

@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_APPLEDL_OPEN_PARAMETERS_VERSION 
+
+Global Variable
+
+# CSSM_APPLEDL_OPEN_PARAMETERS_VERSION
+
+macOS 10.0+
+
+``` source
+var CSSM_APPLEDL_OPEN_PARAMETERS_VERSION: Int { get }
+```
+

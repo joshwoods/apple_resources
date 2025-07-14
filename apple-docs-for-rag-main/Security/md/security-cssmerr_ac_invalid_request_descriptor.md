@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_AC_INVALID_REQUEST_DESCRIPTOR 
+
+Global Variable
+
+# CSSMERR_AC_INVALID_REQUEST_DESCRIPTOR
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSMERR_AC_INVALID_REQUEST_DESCRIPTOR: Int { get }
+```
+

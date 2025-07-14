@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLE_DOTMAC_REQ_SERVER_ERR 
+
+Global Variable
+
+# CSSMERR_APPLE_DOTMAC_REQ_SERVER_ERR
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLE_DOTMAC_REQ_SERVER_ERR: Int { get }
+```
+

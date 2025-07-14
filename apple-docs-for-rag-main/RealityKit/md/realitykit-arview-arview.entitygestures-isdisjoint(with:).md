@@ -1,0 +1,64 @@
+
+
+- RealityKit
+- ARView
+- ARView.EntityGestures
+-  isDisjoint(with:) 
+
+Instance Method
+
+# isDisjoint(with:)
+
+Returns a Boolean value that indicates whether the set has no members in common with the given set.
+
+RealityKitSwiftiOSiPadOSMac Catalyst
+
+``` source
+func isDisjoint(with other: Self) -> Bool
+```
+
+## Parameters 
+
+`other`  
+
+A set of the same type as the current set.
+
+## Return Value
+
+`true` if the set has no elements in common with `other`; otherwise, `false`.
+
+## Discussion
+
+In the following example, the `employees` set is disjoint with the `visitors` set because no name appears in both sets.
+
+```
+let employees: Set = ["Alicia", "Bethany", "Chris", "Diana", "Eric"]
+let visitors: Set = ["Marcia", "Nathaniel", "Olivia"]
+print(employees.isDisjoint(with: visitors))
+// Prints "true"
+```
+
+## See Also
+
+### Comparing options
+
+static func != (Self, Self) -> Bool
+
+Returns a Boolean value indicating whether two values are not equal.
+
+func isSubset(of: Self) -> Bool
+
+Returns a Boolean value that indicates whether the set is a subset of another set.
+
+func isStrictSubset(of: Self) -> Bool
+
+Returns a Boolean value that indicates whether this set is a strict subset of the given set.
+
+func isSuperset(of: Self) -> Bool
+
+Returns a Boolean value that indicates whether the set is a superset of the given set.
+
+func isStrictSuperset(of: Self) -> Bool
+
+Returns a Boolean value that indicates whether this set is a strict superset of the given set.
+

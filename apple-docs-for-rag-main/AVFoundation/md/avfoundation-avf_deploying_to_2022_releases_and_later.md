@@ -1,0 +1,15 @@
+
+
+- AVFoundation
+-  AVF_DEPLOYING_TO_2022_RELEASES_AND_LATER 
+
+Global Variable
+
+# AVF_DEPLOYING_TO_2022_RELEASES_AND_LATER
+
+visionOS
+
+``` source
+var AVF_DEPLOYING_TO_2022_RELEASES_AND_LATER: Int32 { get }
+```
+

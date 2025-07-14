@@ -1,0 +1,129 @@
+
+
+- Device Management
+-  Revoke Assets 
+
+Web Service Endpoint
+
+# Revoke Assets
+
+Revoke assets from client user IDs and serial numbers.
+
+Device Assignment ServicesVPP License Management
+
+## URL
+
+``` source
+POST https://vpp.itunes.apple.com/mdm/v2/assets/revoke
+```
+
+## HTTP Body
+
+RevokeAssetsRequest
+
+missing
+
+Content-Type: application/json
+
+## Response Codes
+
+` 200 ``OK`
+
+EventResponse
+
+`OK`
+
+Content-Type: application/json
+
+` 400 ``Bad Request`
+
+ErrorResponse
+
+`Bad Request`
+
+Content-Type: application/json
+
+` 401 ``Unauthorized`
+
+ErrorResponse
+
+`Unauthorized`
+
+The provided token is invalid. It may either be missing or expired.
+
+Content-Type: application/json
+
+` 500 ``Internal Server Error`
+
+ErrorResponse
+
+`Internal Server Error`
+
+An internal server error occurred. Try again later.
+
+Content-Type: application/json
+
+## Discussion
+
+### Example Request and Response
+
+- Request
+- Response
+
+```
+{
+    "clientUserIds": [
+        "client-1",
+        "client-2"
+    ],
+    "serialNumbers": [
+        "serial-1",
+        "serial-2"
+    ]
+}
+```
+
+```
+{
+    "eventId": "ed3edfc3-e617-465e-b309-a17925266e14",
+    "tokenExpirationDate": "2030-11-08T22:33:22+0000",
+    "uId": "2049025000431439"
+}
+```
+
+## Topics
+
+### Request and Response
+
+object RevokeAssetsRequest
+
+The request for asset revocation.
+
+object EventResponse
+
+The response that contains the event identifier.
+
+object ErrorResponse
+
+The response that contains the error that occurs.
+
+## See Also
+
+### Asset Management
+
+Get Assets
+
+Get the set of assets that your organization manages.
+
+Associate Assets
+
+Associate assets with client user IDs and serial numbers.
+
+Disassociate Assets
+
+Disassociate assets from client user IDs and serial numbers.
+
+Get Assignments
+
+Get the set of current assignments for users or devices.
+

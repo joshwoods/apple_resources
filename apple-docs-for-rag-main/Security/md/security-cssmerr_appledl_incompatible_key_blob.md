@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLEDL_INCOMPATIBLE_KEY_BLOB 
+
+Global Variable
+
+# CSSMERR_APPLEDL_INCOMPATIBLE_KEY_BLOB
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLEDL_INCOMPATIBLE_KEY_BLOB: Int { get }
+```
+

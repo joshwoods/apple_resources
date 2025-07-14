@@ -1,0 +1,32 @@
+
+
+- AccessorySetupKit
+- ASPickerDisplayItem
+- ASPickerDisplayItem.SetupOptions
+-  init(\_:) 
+
+Initializer
+
+# init(\_:)
+
+Creates a new set from a finite sequence of items.
+
+AccessorySetupKitSwiftiOS 18.0+iPadOS 18.0+
+
+``` source
+init(_ sequence: S) where S : Sequence, Self.Element == S.Element
+```
+
+## Parameters 
+
+`sequence`  
+
+The elements to use as members of the new set.
+
+## Discussion
+
+Use this initializer to create a new set from an existing sequence, like an array or a range:
+
+```
+let validIndices = Set(0..
+

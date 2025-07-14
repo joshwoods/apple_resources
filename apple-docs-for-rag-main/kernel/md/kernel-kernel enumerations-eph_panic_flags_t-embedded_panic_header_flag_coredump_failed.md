@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Enumerations
+- eph_panic_flags_t
+-  EMBEDDED_PANIC_HEADER_FLAG_COREDUMP_FAILED 
+
+Enumeration Case
+
+# EMBEDDED_PANIC_HEADER_FLAG_COREDUMP_FAILED
+
+macOS 10.13.1+
+
+``` source
+EMBEDDED_PANIC_HEADER_FLAG_COREDUMP_FAILED
+```
+

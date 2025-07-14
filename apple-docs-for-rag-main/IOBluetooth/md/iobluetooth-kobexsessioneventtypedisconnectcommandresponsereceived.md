@@ -1,0 +1,43 @@
+
+
+- IOBluetooth
+-  kOBEXSessionEventTypeDisconnectCommandResponseReceived 
+
+Global Variable
+
+# kOBEXSessionEventTypeDisconnectCommandResponseReceived
+
+macOS
+
+``` source
+var kOBEXSessionEventTypeDisconnectCommandResponseReceived: OBEXSessionEventTypes { get }
+```
+
+## See Also
+
+### Constants
+
+var kOBEXSessionEventTypeAbortCommandReceived: OBEXSessionEventTypes
+
+var kOBEXSessionEventTypeAbortCommandResponseReceived: OBEXSessionEventTypes
+
+var kOBEXSessionEventTypeConnectCommandReceived: OBEXSessionEventTypes
+
+var kOBEXSessionEventTypeConnectCommandResponseReceived: OBEXSessionEventTypes
+
+var kOBEXSessionEventTypeDisconnectCommandReceived: OBEXSessionEventTypes
+
+var kOBEXSessionEventTypeError: OBEXSessionEventTypes
+
+var kOBEXSessionEventTypeGetCommandReceived: OBEXSessionEventTypes
+
+var kOBEXSessionEventTypeGetCommandResponseReceived: OBEXSessionEventTypes
+
+var kOBEXSessionEventTypePutCommandReceived: OBEXSessionEventTypes
+
+var kOBEXSessionEventTypePutCommandResponseReceived: OBEXSessionEventTypes
+
+var kOBEXSessionEventTypeSetPathCommandReceived: OBEXSessionEventTypes
+
+var kOBEXSessionEventTypeSetPathCommandResponseReceived: OBEXSessionEventTypes
+

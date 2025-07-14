@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_CSSM_ATTRIBUTE_NOT_IN_CONTEXT 
+
+Global Variable
+
+# CSSMERR_CSSM_ATTRIBUTE_NOT_IN_CONTEXT
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSMERR_CSSM_ATTRIBUTE_NOT_IN_CONTEXT: Int { get }
+```
+

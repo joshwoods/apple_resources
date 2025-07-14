@@ -1,0 +1,209 @@
+
+
+- IOBluetooth
+-  BluetoothFeatureBits 
+
+Structure
+
+# BluetoothFeatureBits
+
+macOS
+
+``` source
+struct BluetoothFeatureBits
+```
+
+## Topics
+
+### Constants
+
+var kBluetoothFeature3SlotEnhancedDataRateACLPackets: BluetoothFeatureBits
+
+var kBluetoothFeature3SlotEnhancedDataRateeSCOPackets: BluetoothFeatureBits
+
+var kBluetoothFeature5SlotEnhancedDataRateACLPackets: BluetoothFeatureBits
+
+var kBluetoothFeatureAFHCapableMaster: BluetoothFeatureBits
+
+var kBluetoothFeatureAFHCapableSlave: BluetoothFeatureBitsDeprecated
+
+var kBluetoothFeatureAFHClassificationMaster: BluetoothFeatureBits
+
+var kBluetoothFeatureAFHClassificationSlave: BluetoothFeatureBitsDeprecated
+
+var kBluetoothFeatureALawLog: BluetoothFeatureBits
+
+var kBluetoothFeatureAbsenceMasks: BluetoothFeatureBits
+
+var kBluetoothFeatureAliasAuhentication: BluetoothFeatureBits
+
+var kBluetoothFeatureBroadcastEncryption: BluetoothFeatureBits
+
+var kBluetoothFeatureCVSD: BluetoothFeatureBits
+
+var kBluetoothFeatureChannelQuality: BluetoothFeatureBits
+
+var kBluetoothFeatureEV4Packets: BluetoothFeatureBits
+
+var kBluetoothFeatureEV5Packets: BluetoothFeatureBits
+
+var kBluetoothFeatureEncapsulatedPDU: BluetoothFeatureBits
+
+var kBluetoothFeatureEncryption: BluetoothFeatureBits
+
+var kBluetoothFeatureEnhancedDataRateACL2MbpsMode: BluetoothFeatureBits
+
+var kBluetoothFeatureEnhancedDataRateACL3MbpsMode: BluetoothFeatureBits
+
+var kBluetoothFeatureEnhancedDataRateeSCO2MbpsMode: BluetoothFeatureBits
+
+var kBluetoothFeatureEnhancedDataRateeSCO3MbpsMode: BluetoothFeatureBits
+
+var kBluetoothFeatureEnhancedInquiryScan: BluetoothFeatureBits
+
+var kBluetoothFeatureErroneousDataReporting: BluetoothFeatureBits
+
+var kBluetoothFeatureExtendedFeatures: BluetoothFeatureBits
+
+var kBluetoothFeatureExtendedInquiryResponse: BluetoothFeatureBits
+
+var kBluetoothFeatureExtendedSCOLink: BluetoothFeatureBits
+
+var kBluetoothFeatureFiveSlotPackets: BluetoothFeatureBits
+
+var kBluetoothFeatureFlowControlLagBit0: BluetoothFeatureBits
+
+var kBluetoothFeatureFlowControlLagBit1: BluetoothFeatureBits
+
+var kBluetoothFeatureFlowControlLagBit2: BluetoothFeatureBits
+
+var kBluetoothFeatureHV2Packets: BluetoothFeatureBits
+
+var kBluetoothFeatureHV3Packets: BluetoothFeatureBits
+
+var kBluetoothFeatureHoldMode: BluetoothFeatureBits
+
+var kBluetoothFeatureInquiryTransmissionPowerLevel: BluetoothFeatureBits
+
+var kBluetoothFeatureInterlacedInquiryScan: BluetoothFeatureBits
+
+var kBluetoothFeatureInterlacedPageScan: BluetoothFeatureBits
+
+var kBluetoothFeatureLESupportedController: BluetoothFeatureBits
+
+var kBluetoothFeatureLinkSupervisionTimeoutChangedEvent: BluetoothFeatureBits
+
+var kBluetoothFeatureNonFlushablePacketBoundaryFlag: BluetoothFeatureBits
+
+var kBluetoothFeaturePagingScheme: BluetoothFeatureBits
+
+var kBluetoothFeatureParkMode: BluetoothFeatureBits
+
+var kBluetoothFeaturePauseEncryption: BluetoothFeatureBits
+
+var kBluetoothFeaturePowerControl: BluetoothFeatureBits
+
+var kBluetoothFeaturePowerControlRequests: BluetoothFeatureBits
+
+var kBluetoothFeatureRSSI: BluetoothFeatureBits
+
+var kBluetoothFeatureRSSIWithInquiryResult: BluetoothFeatureBits
+
+var kBluetoothFeatureSCOLink: BluetoothFeatureBits
+
+var kBluetoothFeatureScatterMode: BluetoothFeatureBits
+
+var kBluetoothFeatureSecureSimplePairing: BluetoothFeatureBits
+
+var kBluetoothFeatureSlotOffset: BluetoothFeatureBits
+
+var kBluetoothFeatureSniffMode: BluetoothFeatureBits
+
+var kBluetoothFeatureSniffSubrating: BluetoothFeatureBits
+
+var kBluetoothFeatureSwitchRoles: BluetoothFeatureBits
+
+var kBluetoothFeatureThreeSlotPackets: BluetoothFeatureBits
+
+var kBluetoothFeatureTimingAccuracy: BluetoothFeatureBits
+
+var kBluetoothFeatureTransparentSCOData: BluetoothFeatureBits
+
+var kBluetoothFeatureULawLog: BluetoothFeatureBits
+
+var KBluetoothExtendedFeatureSecureConnectionsHostMode: BluetoothFeatureBits
+
+var kBluetoothExtendedFeatureLEAndBREDRToSameDeviceHostMode: BluetoothFeatureBits
+
+var kBluetoothExtendedFeatureLESupportedHostMode: BluetoothFeatureBits
+
+var kBluetoothExtendedFeaturePing: BluetoothFeatureBits
+
+var kBluetoothExtendedFeatureReserved: BluetoothFeatureBits
+
+var kBluetoothExtendedFeatureSecureConnectionsControllerSupport: BluetoothFeatureBits
+
+var kBluetoothExtendedFeatureSimpleSecurePairingHostMode: BluetoothFeatureBits
+
+var kBluetoothExtendedFeatureSlotAvailabilityMask: BluetoothFeatureBits
+
+var kBluetoothExtendedFeatureTrainNudging: BluetoothFeatureBits
+
+var kBluetoothFeatureAFHCapablePeripheral: BluetoothFeatureBits
+
+var kBluetoothFeatureAFHClassificationPeripheral: BluetoothFeatureBits
+
+### Initializers
+
+init(UInt32)
+
+init(rawValue: UInt32)
+
+### Instance Properties
+
+var rawValue: UInt32
+
+## Relationships
+
+### Conforms To
+
+- BitwiseCopyable
+- Equatable
+- Hashable
+- RawRepresentable
+- Sendable
+
+## See Also
+
+### Data Types
+
+typealias BluetoothAFHMode
+
+typealias BluetoothAirMode
+
+typealias BluetoothAllowRoleSwitch
+
+typealias BluetoothAuthenticationRequirements
+
+struct BluetoothAuthenticationRequirementsValues
+
+typealias BluetoothClassOfDevice
+
+typealias BluetoothClockOffset
+
+struct BluetoothCompanyIdentifers
+
+typealias BluetoothConnectionHandle
+
+typealias BluetoothDeviceClassMajor
+
+typealias BluetoothDeviceClassMinor
+
+typealias BluetoothDeviceName
+
+typealias BluetoothEncryptionEnable
+
+typealias BluetoothHCIACLDataByteCount
+
+typealias BluetoothHCIAFHChannelAssessmentMode
+

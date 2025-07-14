@@ -1,0 +1,31 @@
+
+
+- AGL
+-  AGL_VERSION_3_0 
+
+Global Variable
+
+# AGL_VERSION_3_0
+
+macOS 10.0+
+
+``` source
+var AGL_VERSION_3_0: Int32 { get }
+```
+
+## See Also
+
+### Constants
+
+var AGL_ALLOW_OFFLINE_RENDERERS: Int32
+
+var AGL_DISPLAY_MASK: Int32
+
+var AGL_INVALID_FUNCTION: Int32
+
+var AGL_ALLOW_OFFLINE_RENDERERS: Int32
+
+var AGL_DISPLAY_MASK: Int32
+
+var AGL_INVALID_FUNCTION: Int32
+

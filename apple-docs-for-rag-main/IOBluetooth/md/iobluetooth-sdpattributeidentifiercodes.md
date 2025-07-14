@@ -1,0 +1,191 @@
+
+
+- IOBluetooth
+-  SDPAttributeIdentifierCodes 
+
+Structure
+
+# SDPAttributeIdentifierCodes
+
+macOS
+
+``` source
+struct SDPAttributeIdentifierCodes
+```
+
+## Topics
+
+### Constants
+
+var kBluetoothSDPAttributeIdentifierAdditionalProtocolsDescriptorList: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierAudioFeedbackSupport: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierBluetoothProfileDescriptorList: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierBrowseGroupList: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierClientExecutableURL: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierDocumentationURL: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierExternalNetwork: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierFaxClass1Support: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierFaxClass2Support: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierFaxClass2_0Support: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierGroupID: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierHIDBatteryPower: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierHIDBootDevice: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierHIDCountryCode: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierHIDDescriptorList: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierHIDDeviceSubclass: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierHIDLangIDBaseList: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierHIDNormallyConnectable: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierHIDParserVersion: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierHIDProfileVersion: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierHIDReconnectInitiate: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierHIDReleaseNumber: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierHIDRemoteWake: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierHIDSDPDisable: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierHIDSSRHostMaxLatency: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierHIDSSRHostMinTimeout: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierHIDSupervisionTimeout: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierHIDVirtualCable: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierHomepageURL: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierIPSubnet: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierIconURL: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierLanguageBaseAttributeIDList: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierMaxNetAccessRate: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierNetAccessType: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierNetwork: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierNetworkAddress: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierProtocolDescriptorList: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierProviderName: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierRemoteAudioVolumeControl: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierSecurityDescription: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierServiceAvailability: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierServiceClassIDList: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierServiceDatabaseState: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierServiceDescription: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierServiceID: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierServiceInfoTimeToLive: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierServiceName: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierServiceRecordHandle: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierServiceRecordState: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierServiceVersion: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierSupportedCapabilities: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierSupportedDataStoresList: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierSupportedFeatures: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierSupportedFunctions: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierSupporterFormatsList: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierTotalImagingDataCapacity: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierVersionNumberList: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierWAPGateway: SDPAttributeIdentifierCodes
+
+var kBluetoothSDPAttributeIdentifierWAPStackType: SDPAttributeIdentifierCodes
+
+### Initializers
+
+init(UInt32)
+
+init(rawValue: UInt32)
+
+### Instance Properties
+
+var rawValue: UInt32
+
+## Relationships
+
+### Conforms To
+
+- BitwiseCopyable
+- Equatable
+- Hashable
+- RawRepresentable
+- Sendable
+
+## See Also
+
+### Data Types
+
+typealias BluetoothAFHMode
+
+typealias BluetoothAirMode
+
+typealias BluetoothAllowRoleSwitch
+
+typealias BluetoothAuthenticationRequirements
+
+struct BluetoothAuthenticationRequirementsValues
+
+typealias BluetoothClassOfDevice
+
+typealias BluetoothClockOffset
+
+struct BluetoothCompanyIdentifers
+
+typealias BluetoothConnectionHandle
+
+typealias BluetoothDeviceClassMajor
+
+typealias BluetoothDeviceClassMinor
+
+typealias BluetoothDeviceName
+
+typealias BluetoothEncryptionEnable
+
+struct BluetoothFeatureBits
+
+typealias BluetoothHCIACLDataByteCount
+

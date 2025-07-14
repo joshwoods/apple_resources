@@ -1,0 +1,192 @@
+
+
+- IOBluetooth
+- IOBluetooth Enumerations
+-  BluetoothDeviceClassMinor constants 
+
+API Collection
+
+# BluetoothDeviceClassMinor constants
+
+## Topics
+
+### Constants
+
+var kBluetoothDeviceClassMinorAny: Int
+
+var kBluetoothDeviceClassMinorAudioCamcorder: Int
+
+var kBluetoothDeviceClassMinorAudioCar: Int
+
+var kBluetoothDeviceClassMinorAudioGamingToy: Int
+
+var kBluetoothDeviceClassMinorAudioHandsFree: Int
+
+var kBluetoothDeviceClassMinorAudioHeadphones: Int
+
+var kBluetoothDeviceClassMinorAudioHeadset: Int
+
+var kBluetoothDeviceClassMinorAudioHiFi: Int
+
+var kBluetoothDeviceClassMinorAudioLoudspeaker: Int
+
+var kBluetoothDeviceClassMinorAudioMicrophone: Int
+
+var kBluetoothDeviceClassMinorAudioPortable: Int
+
+var kBluetoothDeviceClassMinorAudioReserved1: Int
+
+var kBluetoothDeviceClassMinorAudioReserved2: Int
+
+var kBluetoothDeviceClassMinorAudioSetTopBox: Int
+
+var kBluetoothDeviceClassMinorAudioUnclassified: Int
+
+var kBluetoothDeviceClassMinorAudioVCR: Int
+
+var kBluetoothDeviceClassMinorAudioVideoCamera: Int
+
+var kBluetoothDeviceClassMinorAudioVideoConferencing: Int
+
+var kBluetoothDeviceClassMinorAudioVideoDisplayAndLoudspeaker: Int
+
+var kBluetoothDeviceClassMinorAudioVideoMonitor: Int
+
+var kBluetoothDeviceClassMinorComputerDesktopWorkstation: Int
+
+var kBluetoothDeviceClassMinorComputerHandheld: Int
+
+var kBluetoothDeviceClassMinorComputerLaptop: Int
+
+var kBluetoothDeviceClassMinorComputerPalmSized: Int
+
+var kBluetoothDeviceClassMinorComputerServer: Int
+
+var kBluetoothDeviceClassMinorComputerUnclassified: Int
+
+var kBluetoothDeviceClassMinorComputerWearable: Int
+
+var kBluetoothDeviceClassMinorEnd: Int
+
+var kBluetoothDeviceClassMinorHealthBloodPressureMonitor: Int
+
+var kBluetoothDeviceClassMinorHealthDataDisplay: Int
+
+var kBluetoothDeviceClassMinorHealthGlucoseMeter: Int
+
+var kBluetoothDeviceClassMinorHealthHeartRateMonitor: Int
+
+var kBluetoothDeviceClassMinorHealthPulseOximeter: Int
+
+var kBluetoothDeviceClassMinorHealthScale: Int
+
+var kBluetoothDeviceClassMinorHealthThermometer: Int
+
+var kBluetoothDeviceClassMinorHealthUndefined: Int
+
+var kBluetoothDeviceClassMinorImaging1Camera: Int
+
+var kBluetoothDeviceClassMinorImaging1Display: Int
+
+var kBluetoothDeviceClassMinorImaging1Printer: Int
+
+var kBluetoothDeviceClassMinorImaging1Scanner: Int
+
+var kBluetoothDeviceClassMinorImaging2Unclassified: Int
+
+var kBluetoothDeviceClassMinorNone: Int
+
+var kBluetoothDeviceClassMinorPeripheral1Combo: Int
+
+var kBluetoothDeviceClassMinorPeripheral1Keyboard: Int
+
+var kBluetoothDeviceClassMinorPeripheral1Pointing: Int
+
+var kBluetoothDeviceClassMinorPeripheral2AnyPointing: Int
+
+var kBluetoothDeviceClassMinorPeripheral2CardReader: Int
+
+var kBluetoothDeviceClassMinorPeripheral2DigitalPen: Int
+
+var kBluetoothDeviceClassMinorPeripheral2DigitizerTablet: Int
+
+var kBluetoothDeviceClassMinorPeripheral2Gamepad: Int
+
+var kBluetoothDeviceClassMinorPeripheral2GesturalInputDevice: Int
+
+var kBluetoothDeviceClassMinorPeripheral2HandheldScanner: Int
+
+var kBluetoothDeviceClassMinorPeripheral2Joystick: Int
+
+var kBluetoothDeviceClassMinorPeripheral2RemoteControl: Int
+
+var kBluetoothDeviceClassMinorPeripheral2SensingDevice: Int
+
+var kBluetoothDeviceClassMinorPeripheral2Unclassified: Int
+
+var kBluetoothDeviceClassMinorPhoneCellular: Int
+
+var kBluetoothDeviceClassMinorPhoneCommonISDNAccess: Int
+
+var kBluetoothDeviceClassMinorPhoneCordless: Int
+
+var kBluetoothDeviceClassMinorPhoneSmartPhone: Int
+
+var kBluetoothDeviceClassMinorPhoneUnclassified: Int
+
+var kBluetoothDeviceClassMinorPhoneWiredModemOrVoiceGateway: Int
+
+var kBluetoothDeviceClassMinorToyController: Int
+
+var kBluetoothDeviceClassMinorToyDollActionFigure: Int
+
+var kBluetoothDeviceClassMinorToyGame: Int
+
+var kBluetoothDeviceClassMinorToyRobot: Int
+
+var kBluetoothDeviceClassMinorToyVehicle: Int
+
+var kBluetoothDeviceClassMinorWearableGlasses: Int
+
+var kBluetoothDeviceClassMinorWearableHelmet: Int
+
+var kBluetoothDeviceClassMinorWearableJacket: Int
+
+var kBluetoothDeviceClassMinorWearablePager: Int
+
+var kBluetoothDeviceClassMinorWearableWristWatch: Int
+
+## See Also
+
+### Enumerations
+
+struct BluetoothAMPCommandRejectReason
+
+struct BluetoothAMPCreatePhysicalLinkResponseStatus
+
+struct BluetoothAMPDisconnectPhysicalLinkResponseStatus
+
+struct BluetoothAMPDiscoverResponseControllerStatus
+
+struct BluetoothAMPGetAssocResponseStatus
+
+struct BluetoothAMPGetInfoResponseStatus
+
+struct BluetoothAMPManagerCode
+
+struct BluetoothHCIPowerState
+
+struct BluetoothL2CAPCommandCode
+
+struct BluetoothL2CAPCommandRejectReason
+
+struct BluetoothL2CAPConfigurationOption
+
+struct BluetoothL2CAPConfigurationResult
+
+struct BluetoothL2CAPConfigurationRetransmissionAndFlowControlFlags
+
+struct BluetoothL2CAPConnectionResult
+
+struct BluetoothL2CAPConnectionStatus
+

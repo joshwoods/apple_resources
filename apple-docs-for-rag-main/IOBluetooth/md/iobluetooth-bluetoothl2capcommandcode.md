@@ -1,0 +1,119 @@
+
+
+- IOBluetooth
+-  BluetoothL2CAPCommandCode 
+
+Structure
+
+# BluetoothL2CAPCommandCode
+
+macOS
+
+``` source
+struct BluetoothL2CAPCommandCode
+```
+
+## Topics
+
+### Constants
+
+var kBluetoothL2CAPCommandCodeCommandReject: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeConfigureRequest: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeConfigureResponse: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeConnectionParameterUpdateRequest: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeConnectionParameterUpdateResponse: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeConnectionRequest: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeConnectionResponse: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeCreateChannelRequest: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeCreateChannelResponse: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeDisconnectionRequest: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeDisconnectionResponse: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeEchoRequest: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeEchoResponse: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeInformationRequest: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeInformationResponse: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeLECreditBasedConnectionRequest: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeLECreditBasedConnectionResponse: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeLEFlowControlCredit: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeMoveChannelConfirmation: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeMoveChannelConfirmationResponse: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeMoveChannelRequest: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeMoveChannelResponse: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeReserved: BluetoothL2CAPCommandCode
+
+### Initializers
+
+init(UInt32)
+
+init(rawValue: UInt32)
+
+### Instance Properties
+
+var rawValue: UInt32
+
+## Relationships
+
+### Conforms To
+
+- BitwiseCopyable
+- Equatable
+- Hashable
+- RawRepresentable
+- Sendable
+
+## See Also
+
+### Enumerations
+
+struct BluetoothAMPCommandRejectReason
+
+struct BluetoothAMPCreatePhysicalLinkResponseStatus
+
+struct BluetoothAMPDisconnectPhysicalLinkResponseStatus
+
+struct BluetoothAMPDiscoverResponseControllerStatus
+
+struct BluetoothAMPGetAssocResponseStatus
+
+struct BluetoothAMPGetInfoResponseStatus
+
+struct BluetoothAMPManagerCode
+
+struct BluetoothHCIPowerState
+
+struct BluetoothL2CAPCommandRejectReason
+
+struct BluetoothL2CAPConfigurationOption
+
+struct BluetoothL2CAPConfigurationResult
+
+struct BluetoothL2CAPConfigurationRetransmissionAndFlowControlFlags
+
+struct BluetoothL2CAPConnectionResult
+
+struct BluetoothL2CAPConnectionStatus
+
+struct BluetoothL2CAPInformationExtendedFeaturesMask
+

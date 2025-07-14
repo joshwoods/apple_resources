@@ -1,0 +1,37 @@
+
+
+- USBDriverKit
+-  kIOUSBSuperSpeedHubCharacteristicsPowerSwitchingGanged 
+
+Enumeration Case
+
+# kIOUSBSuperSpeedHubCharacteristicsPowerSwitchingGanged
+
+DriverKit 19.0+
+
+``` source
+kIOUSBSuperSpeedHubCharacteristicsPowerSwitchingGanged
+```
+
+## See Also
+
+### Getting the Characteristics
+
+kIOUSBSuperSpeedHubCharacteristicsCompoundDevice
+
+kIOUSBSuperSpeedHubCharacteristicsOverCurrentGlobal
+
+kIOUSBSuperSpeedHubCharacteristicsOverCurrentIndividual
+
+kIOUSBSuperSpeedHubCharacteristicsOverCurrentMask
+
+kIOUSBSuperSpeedHubCharacteristicsPowerSwitchingIndividual
+
+kIOUSBSuperSpeedHubCharacteristicsPowerSwitchingMask
+
+kIOUSBSuperSpeedHubCharacteristicsReserved
+
+kIOUSBSuperSpeedHubDecodeLatencyMax
+
+kIOUSBSuperSpeedHubDelayMax
+

@@ -1,0 +1,55 @@
+
+
+- WebKit JS
+-  NodeFilter 
+
+Class
+
+# NodeFilter
+
+Safari Desktop 10.0+Safari Mobile 2.0+
+
+``` source
+interface NodeFilter
+```
+
+## Topics
+
+### Instance Methods
+
+acceptNode
+
+### Miscellaneous
+
+FILTER_ACCEPT
+
+FILTER_REJECT
+
+FILTER_SKIP
+
+SHOW_ALL
+
+SHOW_ATTRIBUTE
+
+SHOW_CDATA_SECTION
+
+SHOW_COMMENT
+
+SHOW_DOCUMENT
+
+SHOW_DOCUMENT_FRAGMENT
+
+SHOW_DOCUMENT_TYPE
+
+SHOW_ELEMENT
+
+SHOW_ENTITY
+
+SHOW_ENTITY_REFERENCE
+
+SHOW_NOTATION
+
+SHOW_PROCESSING_INSTRUCTION
+
+SHOW_TEXT
+

@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Data Types
+- SBCModePageCaching
+-  DISABLE_PREFETCH_TRANSFER_LENGTH 
+
+Instance Property
+
+# DISABLE_PREFETCH_TRANSFER_LENGTH
+
+macOS 10.3+
+
+``` source
+UInt16 DISABLE_PREFETCH_TRANSFER_LENGTH;
+```
+

@@ -1,0 +1,28 @@
+
+
+- App Intents
+- App intent domains
+- Assistant schema base protocols
+- AssistantSchema.EntitySchema
+-  PresentationEntity Implementations 
+
+API Collection
+
+# PresentationEntity Implementations
+
+## Topics
+
+### Instance Properties
+
+var document: some AssistantSchemas.Entity
+
+The app entity describes a presentation.
+
+var slide: some AssistantSchemas.Entity
+
+The app entity describes a slide.
+
+var template: some AssistantSchemas.Entity
+
+The app entity describes a template for a presentation.
+

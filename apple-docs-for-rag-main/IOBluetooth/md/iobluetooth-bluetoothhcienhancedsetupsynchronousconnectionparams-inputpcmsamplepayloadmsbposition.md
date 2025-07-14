@@ -1,0 +1,16 @@
+
+
+- IOBluetooth
+- BluetoothHCIEnhancedSetupSynchronousConnectionParams
+-  inputPCMSamplePayloadMSBPosition 
+
+Instance Property
+
+# inputPCMSamplePayloadMSBPosition
+
+macOS
+
+``` source
+var inputPCMSamplePayloadMSBPosition: UInt8
+```
+

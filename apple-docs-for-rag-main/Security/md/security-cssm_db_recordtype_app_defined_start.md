@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_DB_RECORDTYPE_APP_DEFINED_START 
+
+Global Variable
+
+# CSSM_DB_RECORDTYPE_APP_DEFINED_START
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_DB_RECORDTYPE_APP_DEFINED_START: UInt32 { get }
+```
+

@@ -1,0 +1,33 @@
+
+
+- MusicKit
+-  MusicLibraryAddable 
+
+Protocol
+
+# MusicLibraryAddable
+
+A protocol for music items that your app can add to the music library.
+
+iOS 16.0+iPadOS 16.0+tvOS 16.0+visionOS 1.0+watchOS 9.0+
+
+``` source
+protocol MusicLibraryAddable : MusicItem
+```
+
+## Relationships
+
+### Inherits From
+
+- MusicItem
+- Sendable
+
+### Conforming Types
+
+- Album
+- MusicVideo
+- Playlist
+- Playlist.Entry
+- Song
+- Track
+

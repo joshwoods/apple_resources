@@ -1,0 +1,16 @@
+
+
+- DriverKit
+- SCSICmd_INQUIRY_PageB0_Data
+-  UNMAP_GRANULARITY_ALIGNMENT 
+
+Instance Property
+
+# UNMAP_GRANULARITY_ALIGNMENT
+
+DriverKitiOSiPadOSmacOS
+
+``` source
+UInt32 UNMAP_GRANULARITY_ALIGNMENT;
+```
+

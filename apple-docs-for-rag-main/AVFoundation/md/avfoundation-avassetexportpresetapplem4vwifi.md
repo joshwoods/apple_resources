@@ -1,0 +1,45 @@
+
+
+- AVFoundation
+-  AVAssetExportPresetAppleM4VWiFi 
+
+Global Variable
+
+# AVAssetExportPresetAppleM4VWiFi
+
+A preset to export a format suitable for playing on Apple devices it streams over a WiFi network.
+
+macOS 10.7+
+
+``` source
+let AVAssetExportPresetAppleM4VWiFi: String
+```
+
+## See Also
+
+### M4V Presets
+
+let AVAssetExportPresetAppleM4V480pSD: String
+
+A preset to export a 480p Standard Definition format suitable for playing on Apple devices.
+
+let AVAssetExportPresetAppleM4V720pHD: String
+
+A preset to export a 720p High Definition format suitable for playing on Apple devices.
+
+let AVAssetExportPresetAppleM4V1080pHD: String
+
+A preset to export a 1080p High Definition format suitable for playing on Apple devices.
+
+let AVAssetExportPresetAppleM4ViPod: String
+
+A preset to export a format suitable for playing on an iPod.
+
+let AVAssetExportPresetAppleM4VAppleTV: String
+
+A preset to export a format suitable for playing on Apple TV.
+
+let AVAssetExportPresetAppleM4VCellular: String
+
+A preset to export a format suitable for playing on Apple devices when it streams over a cellular network.
+

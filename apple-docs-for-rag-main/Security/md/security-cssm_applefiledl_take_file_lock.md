@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_APPLEFILEDL_TAKE_FILE_LOCK 
+
+Global Variable
+
+# CSSM_APPLEFILEDL_TAKE_FILE_LOCK
+
+macOS 10.11.4+
+
+``` source
+var CSSM_APPLEFILEDL_TAKE_FILE_LOCK: Int { get }
+```
+

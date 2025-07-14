@@ -1,0 +1,17 @@
+
+
+- AppKit
+- NSPrintInfo
+- NSPrintInfo.PaginationMode
+-  init(rawValue:) 
+
+Initializer
+
+# init(rawValue:)
+
+macOS
+
+``` source
+init?(rawValue: UInt)
+```
+

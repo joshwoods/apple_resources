@@ -1,0 +1,67 @@
+
+
+- SpriteKit
+- SKAction
+-  follow(\_:asOffset:orientToPath:duration:) 
+
+Type Method
+
+# follow(\_:asOffset:orientToPath:duration:)
+
+Creates an action that moves the node along a path.
+
+iOSiPadOSMac CatalystmacOStvOSvisionOSwatchOS
+
+``` source
+class func follow(
+    _ path: CGPath,
+    asOffset offset: Bool,
+    orientToPath orient: Bool,
+    duration: TimeInterval
+) -> SKAction
+```
+
+## Parameters 
+
+`path`  
+
+A path to follow.
+
+`offset`  
+
+If true, the points in the path are relative offsets to the node’s starting position. If false, the points in the node are absolute coordinate values.
+
+`orient`  
+
+If true, the node’s zRotation property animates so that the node turns to follow the path. If false, the zRotation property of the node is unchanged.
+
+`duration`  
+
+The duration of the animation.
+
+## Return Value
+
+A new action object.
+
+## Discussion
+
+When the action executes, the node’s position and zRotation properties are animated along the provided path.
+
+This action is reversible; the resulting action creates a reversed path and then follows it, with the same duration.
+
+## See Also
+
+### Animating a Node’s Position Along a Custom Path
+
+class func follow(CGPath, duration: TimeInterval) -> SKAction
+
+Creates an action that moves the node along a relative path, orienting the node to the path.
+
+class func follow(CGPath, speed: CGFloat) -> SKAction
+
+Creates an action that moves the node along a relative path at a specified speed, orienting the node to the path.
+
+class func follow(CGPath, asOffset: Bool, orientToPath: Bool, speed: CGFloat) -> SKAction
+
+Creates an action that moves the node at a specified speed along a path.
+

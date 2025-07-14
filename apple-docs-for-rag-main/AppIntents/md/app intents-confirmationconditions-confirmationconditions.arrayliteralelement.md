@@ -1,0 +1,18 @@
+
+
+- App Intents
+- ConfirmationConditions
+-  ConfirmationConditions.ArrayLiteralElement 
+
+Type Alias
+
+# ConfirmationConditions.ArrayLiteralElement
+
+The type of the elements of an array literal.
+
+iOS 18.0+iPadOS 18.0+Mac Catalyst 18.0+macOS 15.0+tvOS 18.0+visionOS 2.0+watchOS 11.0+
+
+``` source
+typealias ArrayLiteralElement = ConfirmationConditions
+```
+

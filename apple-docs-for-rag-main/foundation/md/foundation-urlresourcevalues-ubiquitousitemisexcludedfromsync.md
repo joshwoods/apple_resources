@@ -1,0 +1,86 @@
+
+
+- Foundation
+- URLResourceValues
+-  ubiquitousItemIsExcludedFromSync 
+
+Instance Property
+
+# ubiquitousItemIsExcludedFromSync
+
+A Boolean value that indicates the system excludes the item from syncing.
+
+iOS 14.5+iPadOS 14.5+Mac Catalyst 14.5+macOS 11.3+tvOS 14.5+visionOS 1.0+watchOS 7.4+
+
+``` source
+var ubiquitousItemIsExcludedFromSync: Bool? { get set }
+```
+
+## Discussion
+
+The item is locally on-disk, but isn’t available on the server.
+
+## See Also
+
+### Ubiquitous values
+
+var isUbiquitousItem: Bool?
+
+A Boolean value that indicates whether the item is in the iCloud storage.
+
+var ubiquitousItemIsShared: Bool?
+
+A Boolean value that indicates a shared item.
+
+var ubiquitousSharedItemCurrentUserPermissions: URLUbiquitousSharedItemPermissions?
+
+The current user’s permissions for the shared item.
+
+var ubiquitousSharedItemCurrentUserRole: URLUbiquitousSharedItemRole?
+
+The current user’s role for the shared item.
+
+var ubiquitousSharedItemMostRecentEditorNameComponents: PersonNameComponents?
+
+The name components of the most recent editor of the shared item.
+
+var ubiquitousSharedItemOwnerNameComponents: PersonNameComponents?
+
+The name components of the owner of the shared item.
+
+var ubiquitousItemContainerDisplayName: String?
+
+The name of the item’s container as the system displays it to users.
+
+var ubiquitousItemDownloadRequested: Bool?
+
+A Boolean value that indicates whether the user or the system requests a download of the item.
+
+var ubiquitousItemDownloadingError: NSError?
+
+The error when downloading the item from iCloud fails.
+
+var ubiquitousItemDownloadingStatus: URLUbiquitousItemDownloadingStatus?
+
+The download status of the item.
+
+var ubiquitousItemHasUnresolvedConflicts: Bool?
+
+A Boolean value that indicates whether the item has outstanding conflicts.
+
+var ubiquitousItemIsDownloading: Bool?
+
+A Boolean value that indicates whether the system is downloading the item.
+
+var ubiquitousItemIsUploaded: Bool?
+
+A Boolean value that indicates whether data is present in the cloud for the item.
+
+var ubiquitousItemIsUploading: Bool?
+
+A Boolean value that indicates whether the system is uploading the item.
+
+var ubiquitousItemUploadingError: NSError?
+
+The error when uploading the item to iCloud fails.
+

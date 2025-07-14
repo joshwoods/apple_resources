@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_SMIME_NO_EMAIL_ADDRS 
+
+Global Variable
+
+# CSSMERR_APPLETP_SMIME_NO_EMAIL_ADDRS
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLETP_SMIME_NO_EMAIL_ADDRS: Int { get }
+```
+

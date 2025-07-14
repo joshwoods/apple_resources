@@ -1,0 +1,27 @@
+
+
+- IOBluetooth
+-  kBluetoothL2CAPConfigurationFlowControlModeFlag 
+
+Global Variable
+
+# kBluetoothL2CAPConfigurationFlowControlModeFlag
+
+macOS
+
+``` source
+var kBluetoothL2CAPConfigurationFlowControlModeFlag: BluetoothL2CAPConfigurationRetransmissionAndFlowControlFlags { get }
+```
+
+## See Also
+
+### Constants
+
+var kBluetoothL2CAPConfigurationBasicL2CAPModeFlag: BluetoothL2CAPConfigurationRetransmissionAndFlowControlFlags
+
+var kBluetoothL2CAPConfigurationEnhancedRetransmissionMode: BluetoothL2CAPConfigurationRetransmissionAndFlowControlFlags
+
+var kBluetoothL2CAPConfigurationRetransmissionModeFlag: BluetoothL2CAPConfigurationRetransmissionAndFlowControlFlags
+
+var kBluetoothL2CAPConfigurationStreamingMode: BluetoothL2CAPConfigurationRetransmissionAndFlowControlFlags
+

@@ -1,0 +1,18 @@
+
+
+- Kernel
+- mach
+- vm
+- vm_region_extended_info_data_t
+-  user_tag 
+
+Instance Property
+
+# user_tag
+
+macOS 10.0+
+
+``` source
+unsigned int user_tag;
+```
+

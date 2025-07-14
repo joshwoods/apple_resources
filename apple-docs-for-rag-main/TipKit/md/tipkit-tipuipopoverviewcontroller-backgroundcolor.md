@@ -1,0 +1,19 @@
+
+
+- TipKit
+- TipUIPopoverViewController
+-  backgroundColor 
+
+Instance Property
+
+# backgroundColor
+
+The background color to use for the tip view.
+
+iOS 17.0+iPadOS 17.0+Mac Catalyst 17.0+visionOS 1.0+
+
+``` source
+@MainActor @preconcurrency
+final var backgroundColor: UIColor? { get set }
+```
+

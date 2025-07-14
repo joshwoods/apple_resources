@@ -1,0 +1,28 @@
+
+
+- WebKit JS
+- SVGFEBlendElement
+-  SVG_FEBLEND_MODE_SCREEN 
+
+# SVG_FEBLEND_MODE_SCREEN
+
+Safari Desktop 9.0+Safari Mobile 9.0+
+
+``` source
+const unsigned short SVG_FEBLEND_MODE_SCREEN;
+```
+
+## See Also
+
+### Miscellaneous
+
+SVG_FEBLEND_MODE_DARKEN
+
+SVG_FEBLEND_MODE_LIGHTEN
+
+SVG_FEBLEND_MODE_MULTIPLY
+
+SVG_FEBLEND_MODE_NORMAL
+
+SVG_FEBLEND_MODE_UNKNOWN
+

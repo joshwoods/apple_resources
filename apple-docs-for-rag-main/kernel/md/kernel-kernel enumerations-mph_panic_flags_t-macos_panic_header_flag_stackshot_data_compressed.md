@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Enumerations
+- mph_panic_flags_t
+-  MACOS_PANIC_HEADER_FLAG_STACKSHOT_DATA_COMPRESSED 
+
+Enumeration Case
+
+# MACOS_PANIC_HEADER_FLAG_STACKSHOT_DATA_COMPRESSED
+
+macOS 10.13.1+
+
+``` source
+MACOS_PANIC_HEADER_FLAG_STACKSHOT_DATA_COMPRESSED
+```
+

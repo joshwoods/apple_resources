@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_UNKNOWN_CRL_EXTEN 
+
+Global Variable
+
+# CSSMERR_APPLETP_UNKNOWN_CRL_EXTEN
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLETP_UNKNOWN_CRL_EXTEN: Int { get }
+```
+

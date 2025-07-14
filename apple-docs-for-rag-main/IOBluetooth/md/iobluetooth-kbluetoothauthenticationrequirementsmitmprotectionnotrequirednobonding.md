@@ -1,0 +1,33 @@
+
+
+- IOBluetooth
+-  kBluetoothAuthenticationRequirementsMITMProtectionNotRequiredNoBonding 
+
+Global Variable
+
+# kBluetoothAuthenticationRequirementsMITMProtectionNotRequiredNoBonding
+
+macOS
+
+``` source
+var kBluetoothAuthenticationRequirementsMITMProtectionNotRequiredNoBonding: BluetoothAuthenticationRequirementsValues { get }
+```
+
+## See Also
+
+### Constants
+
+var kBluetoothAuthenticationRequirementsMITMProtectionNotRequired: BluetoothAuthenticationRequirementsValues
+
+var kBluetoothAuthenticationRequirementsMITMProtectionNotRequiredDedicatedBonding: BluetoothAuthenticationRequirementsValues
+
+var kBluetoothAuthenticationRequirementsMITMProtectionNotRequiredGeneralBonding: BluetoothAuthenticationRequirementsValues
+
+var kBluetoothAuthenticationRequirementsMITMProtectionRequired: BluetoothAuthenticationRequirementsValues
+
+var kBluetoothAuthenticationRequirementsMITMProtectionRequiredDedicatedBonding: BluetoothAuthenticationRequirementsValues
+
+var kBluetoothAuthenticationRequirementsMITMProtectionRequiredGeneralBonding: BluetoothAuthenticationRequirementsValues
+
+var kBluetoothAuthenticationRequirementsMITMProtectionRequiredNoBonding: BluetoothAuthenticationRequirementsValues
+

@@ -1,0 +1,51 @@
+
+
+- Core Haptics
+- CHHapticPattern
+-  init(events:parameterCurves:) 
+
+Initializer
+
+# init(events:parameterCurves:)
+
+Constructs a haptic pattern from a series of events and parameter curves.
+
+iOS 13.0+iPadOS 13.0+Mac Catalyst 13.0+macOS 10.15+tvOS 14.0+visionOS 1.0+
+
+``` source
+init(
+    events: [CHHapticEvent],
+    parameterCurves: [CHHapticParameterCurve]
+) throws
+```
+
+## Parameters 
+
+`events`  
+
+An array of events that make up the haptic pattern.
+
+`parameterCurves`  
+
+An array of parameter curves that define how the haptic pattern’s parameters change over time.
+
+## See Also
+
+### Creating a Haptic Pattern
+
+init(contentsOf: URL) throws
+
+Creates a haptic pattern with the contents of an AHAP file.
+
+init(events: [CHHapticEvent], parameters: [CHHapticDynamicParameter]) throws
+
+Constructs a haptic pattern from a series of events and parameters.
+
+init(dictionary: [CHHapticPattern.Key : Any]) throws
+
+Creates a haptic pattern from a property list dictionary.
+
+struct Key
+
+Constants that define the keys you use to create a haptic pattern dictionary.
+

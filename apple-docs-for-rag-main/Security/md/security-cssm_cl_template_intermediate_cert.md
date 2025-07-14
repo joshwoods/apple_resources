@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_CL_TEMPLATE_INTERMEDIATE_CERT 
+
+Global Variable
+
+# CSSM_CL_TEMPLATE_INTERMEDIATE_CERT
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_CL_TEMPLATE_INTERMEDIATE_CERT: Int { get }
+```
+

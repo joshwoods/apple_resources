@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_ACL_AUTHORIZATION_PREAUTH_BASE 
+
+Global Variable
+
+# CSSM_ACL_AUTHORIZATION_PREAUTH_BASE
+
+macOS 10.0+
+
+``` source
+var CSSM_ACL_AUTHORIZATION_PREAUTH_BASE: Int { get }
+```
+

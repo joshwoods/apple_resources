@@ -1,0 +1,18 @@
+
+
+- Kernel
+- mach
+- vm
+- vm_region_submap_info_data_t
+-  user_wired_count 
+
+Instance Property
+
+# user_wired_count
+
+macOS 10.0+
+
+``` source
+unsigned short user_wired_count;
+```
+

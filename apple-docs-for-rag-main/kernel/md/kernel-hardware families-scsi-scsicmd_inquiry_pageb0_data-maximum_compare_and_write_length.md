@@ -1,0 +1,18 @@
+
+
+- Kernel
+- Hardware Families
+- SCSI
+- SCSICmd_INQUIRY_PageB0_Data
+-  MAXIMUM_COMPARE_AND_WRITE_LENGTH 
+
+Instance Property
+
+# MAXIMUM_COMPARE_AND_WRITE_LENGTH
+
+macOS 10.12+
+
+``` source
+UInt8 MAXIMUM_COMPARE_AND_WRITE_LENGTH;
+```
+

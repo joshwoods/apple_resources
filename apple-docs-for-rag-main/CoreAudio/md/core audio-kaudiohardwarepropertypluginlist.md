@@ -1,0 +1,49 @@
+
+
+- Core Audio
+-  kAudioHardwarePropertyPlugInList 
+
+Global Variable
+
+# kAudioHardwarePropertyPlugInList
+
+Mac CatalystmacOS
+
+``` source
+var kAudioHardwarePropertyPlugInList: AudioObjectPropertySelector { get }
+```
+
+## See Also
+
+### Constants
+
+var kAudioHardwarePropertyBoxList: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyDefaultInputDevice: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyDefaultOutputDevice: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyDefaultSystemOutputDevice: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyDevices: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyHogModeIsAllowed: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyIsInitingOrExiting: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyMixStereoToMono: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyPowerHint: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyProcessIsAudible: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyProcessIsMaster: AudioObjectPropertySelectorDeprecated
+
+var kAudioHardwarePropertyServiceRestarted: AudioObjectPropertySelector
+
+var kAudioHardwarePropertySleepingIsAllowed: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyTranslateBundleIDToPlugIn: AudioObjectPropertySelector
+
+var kAudioHardwarePropertyTranslateBundleIDToTransportManager: AudioObjectPropertySelector
+

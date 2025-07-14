@@ -1,0 +1,57 @@
+
+
+- Create ML
+- MLTextClassifier
+- MLTextClassifier.ModelParameters
+-  validationData Deprecated
+
+Instance Property
+
+# validationData
+
+The validation data.
+
+iOS 15.0–16.0DeprecatediPadOS 15.0–16.0DeprecatedMac Catalyst 15.0–16.0DeprecatedmacOS 10.14–10.15DeprecatedvisionOS 1.0+
+
+``` source
+var validationData: MLDataTable? { get set }
+```
+
+Deprecated
+
+Use the validation property instead.
+
+## See Also
+
+### Deprecated
+
+init(validationData: [String : [String]], algorithm: MLTextClassifier.ModelAlgorithmType, language: NLLanguage?)
+
+Creates parameters for a text classifier with validation data in a dictionary.
+
+Deprecated
+
+init(validationData: MLDataTable?, algorithm: MLTextClassifier.ModelAlgorithmType, language: NLLanguage?, textColumnValidationData: String?, labelColumnValidationData: String?)
+
+Creates parameters for a text classifier with validation data in a data table.
+
+Deprecated
+
+init(validationData: MLTextClassifier.DataSource, algorithm: MLTextClassifier.ModelAlgorithmType, language: NLLanguage?)
+
+Creates parameters for a text classifier with validation data in a set of labeled directories.
+
+Deprecated
+
+var textColumnValidationData: String?
+
+The name of the text column in the validation data table.
+
+Deprecated
+
+var labelColumnValidationData: String?
+
+The name of the label column in the validation data table.
+
+Deprecated
+

@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Data Types
+- SBCModePageCaching
+-  DEMAND_READ_WRITE_RETENTION_PRIORITY 
+
+Instance Property
+
+# DEMAND_READ_WRITE_RETENTION_PRIORITY
+
+macOS 10.3+
+
+``` source
+UInt8 DEMAND_READ_WRITE_RETENTION_PRIORITY;
+```
+

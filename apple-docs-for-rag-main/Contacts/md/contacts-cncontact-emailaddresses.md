@@ -1,0 +1,34 @@
+
+
+- Contacts
+- CNContact
+-  emailAddresses 
+
+Instance Property
+
+# emailAddresses
+
+An array of labeled email addresses for the contact.
+
+iOS 9.0+iPadOS 9.0+Mac Catalyst 13.1+macOS 10.11+visionOS 1.0+watchOS 2.0+
+
+``` source
+var emailAddresses: [CNLabeledValue] { get }
+```
+
+## Discussion
+
+This property is an array of CNLabeledValue objects, each of which has a label and an NSString that contains the email address.
+
+## See Also
+
+### Getting Addresses
+
+var postalAddresses: [CNLabeledValue&lt;CNPostalAddress>]
+
+An array of labeled postal addresses for a contact.
+
+var urlAddresses: [CNLabeledValue&lt;NSString>]
+
+An array of labeled URL addresses for a contact.
+

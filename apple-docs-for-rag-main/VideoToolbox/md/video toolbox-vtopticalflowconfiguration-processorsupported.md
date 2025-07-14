@@ -1,0 +1,18 @@
+
+
+- Video Toolbox
+- VTOpticalFlowConfiguration
+-  processorSupported 
+
+Type Property
+
+# processorSupported
+
+A boolean value that indicates whether the processor supported on the current configuration.
+
+macOS 15.4+
+
+``` source
+class var processorSupported: Bool { get }
+```
+

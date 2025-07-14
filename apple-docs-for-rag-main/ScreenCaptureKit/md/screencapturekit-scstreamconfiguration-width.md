@@ -1,0 +1,42 @@
+
+
+- ScreenCaptureKit
+- SCStreamConfiguration
+-  width 
+
+Instance Property
+
+# width
+
+The width of the output.
+
+Mac Catalyst 18.2+macOS 12.3+
+
+``` source
+var width: Int { get set }
+```
+
+## See Also
+
+### Specifying dimensions
+
+var height: Int
+
+The height of the output.
+
+var scalesToFit: Bool
+
+A Boolean value that indicates whether to scale the output to fit the configured width and height.
+
+var sourceRect: CGRect
+
+A rectangle that specifies the source area to capture.
+
+var destinationRect: CGRect
+
+A rectangle that specifies a destination into which to write the output.
+
+var preservesAspectRatio: Bool
+
+A Boolean value that determines if the stream preserves aspect ratio.
+

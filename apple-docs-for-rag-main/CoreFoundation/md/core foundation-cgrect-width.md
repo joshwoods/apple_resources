@@ -1,0 +1,16 @@
+
+
+- Core Foundation
+- CGRect
+-  width 
+
+Instance Property
+
+# width
+
+iOS 7.0+iPadOS 7.0+Mac CatalystmacOS 10.9+tvOS 9.0+visionOS 1.0+watchOS 2.0+
+
+``` source
+var width: CGFloat { get }
+```
+

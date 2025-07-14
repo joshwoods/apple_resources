@@ -1,0 +1,49 @@
+
+
+- Hypervisor
+-  HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR23 
+
+Global Variable
+
+# HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR23
+
+macOS
+
+``` source
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR23: hv_gic_distributor_reg_t { get }
+```
+
+## See Also
+
+### Interrupt group registers
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR0: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR1: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR2: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR3: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR4: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR5: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR6: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR7: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR8: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR9: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR10: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR11: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR12: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR13: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_IGROUPR14: hv_gic_distributor_reg_t
+

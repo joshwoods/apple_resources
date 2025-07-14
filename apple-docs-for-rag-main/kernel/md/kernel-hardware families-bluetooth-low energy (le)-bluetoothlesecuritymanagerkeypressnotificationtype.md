@@ -1,0 +1,70 @@
+
+
+- Kernel
+- Hardware Families
+- Bluetooth
+- Low Energy (LE)
+-  BluetoothLESecurityManagerKeypressNotificationType 
+
+Type Alias
+
+# BluetoothLESecurityManagerKeypressNotificationType
+
+macOS 10.11+
+
+``` source
+typedef enum BluetoothLESecurityManagerKeypressNotificationType BluetoothLESecurityManagerKeypressNotificationType;
+```
+
+## Topics
+
+### Constants
+
+kBluetoothLESecurityManagerNotificationTypePasskeyCleared
+
+kBluetoothLESecurityManagerNotificationTypePasskeyDigitEntered
+
+kBluetoothLESecurityManagerNotificationTypePasskeyDigitErased
+
+kBluetoothLESecurityManagerNotificationTypePasskeyEntryCompleted
+
+kBluetoothLESecurityManagerNotificationTypePasskeyEntryStarted
+
+kBluetoothLESecurityManagerNotificationTypeReservedEnd
+
+kBluetoothLESecurityManagerNotificationTypeReservedStart
+
+## See Also
+
+### Bluetooth LE
+
+BluetoothLEAddressType
+
+BluetoothLEAdvertisingType
+
+BluetoothLEConnectionInterval
+
+BluetoothLEFeatureBits
+
+BluetoothLEScan
+
+BluetoothLEScanDuplicateFilter
+
+BluetoothLEScanFilter
+
+BluetoothLEScanType
+
+BluetoothLESecurityManagerCommandCode
+
+BluetoothLESecurityManagerIOCapability
+
+BluetoothLESecurityManagerKeyDistributionFormat
+
+BluetoothLESecurityManagerOOBData
+
+BluetoothLESecurityManagerPairingFailedReasonCode
+
+BluetoothLESecurityManagerUserInputCapability
+
+BluetoothLESecurityManagerUserOutputCapability
+

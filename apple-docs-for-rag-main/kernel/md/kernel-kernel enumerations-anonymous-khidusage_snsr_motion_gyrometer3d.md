@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Enumerations
+- Anonymous
+-  kHIDUsage_Snsr_Motion_Gyrometer3D 
+
+Enumeration Case
+
+# kHIDUsage_Snsr_Motion_Gyrometer3D
+
+macOS 10.12+
+
+``` source
+kHIDUsage_Snsr_Motion_Gyrometer3D = 0x76
+```
+

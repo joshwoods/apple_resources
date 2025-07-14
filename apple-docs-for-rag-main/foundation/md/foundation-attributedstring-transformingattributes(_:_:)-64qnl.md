@@ -1,0 +1,80 @@
+
+
+- Foundation
+- AttributedString
+-  transformingAttributes(\_:\_:) 
+
+Instance Method
+
+# transformingAttributes(\_:\_:)
+
+Returns an attributed string by calling a closure that transforms one attribute, which a key path identifies, of a source attributed string.
+
+iOS 15.0+iPadOS 15.0+Mac Catalyst 15.0+macOS 12.0+tvOS 15.0+visionOS 1.0+watchOS 8.0+
+
+``` source
+@preconcurrency
+func transformingAttributes(
+    _ k: KeyPath,
+    _ c: (inout AttributedString.SingleAttributeTransformer) -> Void
+) -> AttributedString where K : AttributedStringKey, K.Value : Sendable
+```
+
+## Parameters 
+
+`k`  
+
+The key path to the AttributedStringKey that identifies the attribute to transform.
+
+`c`  
+
+The closure that receives an AttributedString.SingleAttributeTransformer that you use to access and alter the attribute’s range and value.
+
+## Return Value
+
+An attributed string with the applied transformation to the specified attribute.
+
+## See Also
+
+### Transforming Attributes
+
+func transformingAttributes&lt;K>(K.Type, (inout AttributedString.SingleAttributeTransformer&lt;K>) -> Void) -> AttributedString
+
+Returns an attributed string by calling a closure that transforms one attribute of a source attributed string.
+
+func transformingAttributes&lt;K1, K2>(K1.Type, K2.Type, (inout AttributedString.SingleAttributeTransformer&lt;K1>, inout AttributedString.SingleAttributeTransformer&lt;K2>) -> Void) -> AttributedString
+
+Returns an attributed string by calling a closure that transforms two attributes of a source attributed string.
+
+func transformingAttributes&lt;K1, K2>(KeyPath&lt;AttributeDynamicLookup, K1>, KeyPath&lt;AttributeDynamicLookup, K2>, (inout AttributedString.SingleAttributeTransformer&lt;K1>, inout AttributedString.SingleAttributeTransformer&lt;K2>) -> Void) -> AttributedString
+
+Returns an attributed string created by calling a closure that transforms two attributes, which key paths identify, of a source attributed string.
+
+func transformingAttributes&lt;K1, K2, K3>(K1.Type, K2.Type, K3.Type, (inout AttributedString.SingleAttributeTransformer&lt;K1>, inout AttributedString.SingleAttributeTransformer&lt;K2>, inout AttributedString.SingleAttributeTransformer&lt;K3>) -> Void) -> AttributedString
+
+Returns an attributed string by calling a closure that transforms three attributes of a source attributed string.
+
+func transformingAttributes&lt;K1, K2, K3>(KeyPath&lt;AttributeDynamicLookup, K1>, KeyPath&lt;AttributeDynamicLookup, K2>, KeyPath&lt;AttributeDynamicLookup, K3>, (inout AttributedString.SingleAttributeTransformer&lt;K1>, inout AttributedString.SingleAttributeTransformer&lt;K2>, inout AttributedString.SingleAttributeTransformer&lt;K3>) -> Void) -> AttributedString
+
+Returns an attributed string by calling a closure that transforms three attributes, which key paths identify, of a source attributed string.
+
+func transformingAttributes&lt;K1, K2, K3, K4>(K1.Type, K2.Type, K3.Type, K4.Type, (inout AttributedString.SingleAttributeTransformer&lt;K1>, inout AttributedString.SingleAttributeTransformer&lt;K2>, inout AttributedString.SingleAttributeTransformer&lt;K3>, inout AttributedString.SingleAttributeTransformer&lt;K4>) -> Void) -> AttributedString
+
+Returns an attributed string by calling a closure that transforms four attributes of a source attributed string.
+
+func transformingAttributes&lt;K1, K2, K3, K4>(KeyPath&lt;AttributeDynamicLookup, K1>, KeyPath&lt;AttributeDynamicLookup, K2>, KeyPath&lt;AttributeDynamicLookup, K3>, KeyPath&lt;AttributeDynamicLookup, K4>, (inout AttributedString.SingleAttributeTransformer&lt;K1>, inout AttributedString.SingleAttributeTransformer&lt;K2>, inout AttributedString.SingleAttributeTransformer&lt;K3>, inout AttributedString.SingleAttributeTransformer&lt;K4>) -> Void) -> AttributedString
+
+Returns an attributed string created by calling a closure that transforms four attributes, which key paths identify, of a source attributed string.
+
+func transformingAttributes&lt;K1, K2, K3, K4, K5>(K1.Type, K2.Type, K3.Type, K4.Type, K5.Type, (inout AttributedString.SingleAttributeTransformer&lt;K1>, inout AttributedString.SingleAttributeTransformer&lt;K2>, inout AttributedString.SingleAttributeTransformer&lt;K3>, inout AttributedString.SingleAttributeTransformer&lt;K4>, inout AttributedString.SingleAttributeTransformer&lt;K5>) -> Void) -> AttributedString
+
+Returns an attributed string created by calling a closure that transforms five attributes of a source attributed string.
+
+func transformingAttributes&lt;K1, K2, K3, K4, K5>(KeyPath&lt;AttributeDynamicLookup, K1>, KeyPath&lt;AttributeDynamicLookup, K2>, KeyPath&lt;AttributeDynamicLookup, K3>, KeyPath&lt;AttributeDynamicLookup, K4>, KeyPath&lt;AttributeDynamicLookup, K5>, (inout AttributedString.SingleAttributeTransformer&lt;K1>, inout AttributedString.SingleAttributeTransformer&lt;K2>, inout AttributedString.SingleAttributeTransformer&lt;K3>, inout AttributedString.SingleAttributeTransformer&lt;K4>, inout AttributedString.SingleAttributeTransformer&lt;K5>) -> Void) -> AttributedString
+
+Returns an attributed string created by calling a closure that transforms five attributes, which key paths identify, of a source attributed string.
+
+struct SingleAttributeTransformer
+
+A type that transforms an attribute by altering its range or value, or by replacing it entirely.
+

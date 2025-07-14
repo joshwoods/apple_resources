@@ -1,0 +1,49 @@
+
+
+- IOBluetooth
+-  kBluetoothCompanyIdentiferFunaiElectric 
+
+Global Variable
+
+# kBluetoothCompanyIdentiferFunaiElectric
+
+macOS
+
+``` source
+var kBluetoothCompanyIdentiferFunaiElectric: BluetoothCompanyIdentifers { get }
+```
+
+## See Also
+
+### Constants
+
+var kBluetoothCompanyIdentifer3Com: BluetoothCompanyIdentifers
+
+var kBluetoothCompanyIdentifer3DSP: BluetoothCompanyIdentifers
+
+var kBluetoothCompanyIdentifer3DiJoy: BluetoothCompanyIdentifers
+
+var kBluetoothCompanyIdentiferAPT: BluetoothCompanyIdentifers
+
+var kBluetoothCompanyIdentiferAVMBerlin: BluetoothCompanyIdentifers
+
+var kBluetoothCompanyIdentiferAccelSemiconductor: BluetoothCompanyIdentifers
+
+var kBluetoothCompanyIdentiferAlcatel: BluetoothCompanyIdentifers
+
+var kBluetoothCompanyIdentiferApple: BluetoothCompanyIdentifers
+
+var kBluetoothCompanyIdentiferAtherosCommunications: BluetoothCompanyIdentifers
+
+var kBluetoothCompanyIdentiferAtmel: BluetoothCompanyIdentifers
+
+var kBluetoothCompanyIdentiferAvagoTechnologies: BluetoothCompanyIdentifers
+
+var kBluetoothCompanyIdentiferBandspeed: BluetoothCompanyIdentifers
+
+var kBluetoothCompanyIdentiferBluegiga: BluetoothCompanyIdentifers
+
+var kBluetoothCompanyIdentiferBluetoothSIG: BluetoothCompanyIdentifers
+
+var kBluetoothCompanyIdentiferBroadcom: BluetoothCompanyIdentifers
+

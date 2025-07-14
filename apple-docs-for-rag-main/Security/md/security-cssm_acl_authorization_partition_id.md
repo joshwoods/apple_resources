@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_ACL_AUTHORIZATION_PARTITION_ID 
+
+Global Variable
+
+# CSSM_ACL_AUTHORIZATION_PARTITION_ID
+
+macOS 10.11.4+
+
+``` source
+var CSSM_ACL_AUTHORIZATION_PARTITION_ID: Int { get }
+```
+

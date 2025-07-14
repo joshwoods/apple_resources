@@ -1,0 +1,40 @@
+
+
+- Kernel
+- Kernel Data Types
+-  so_tracker_attribute 
+
+# so_tracker_attribute
+
+macOS 12.0+
+
+``` source
+enum so_tracker_attribute : unsigned int {
+    ...
+};
+```
+
+## Topics
+
+### Constants
+
+SO_TRACKER_ATTRIBUTE_ADDRESS
+
+SO_TRACKER_ATTRIBUTE_ADDRESS_FAMILY
+
+SO_TRACKER_ATTRIBUTE_APP_UUID
+
+SO_TRACKER_ATTRIBUTE_DOMAIN
+
+SO_TRACKER_ATTRIBUTE_DOMAIN_OWNER
+
+SO_TRACKER_ATTRIBUTE_DUMP_ENTRY
+
+SO_TRACKER_ATTRIBUTE_FLAGS
+
+SO_TRACKER_ATTRIBUTE_INVALID
+
+SO_TRACKER_ATTRIBUTE_MAX
+
+SO_TRACKER_ATTRIBUTE_MEMORY_USED
+

@@ -1,0 +1,211 @@
+
+
+- IOBluetooth
+-  SDPServiceClasses 
+
+Structure
+
+# SDPServiceClasses
+
+macOS
+
+``` source
+struct SDPServiceClasses
+```
+
+## Topics
+
+### Constants
+
+var kBluetoothSDPUUID16ServiceClassAVRemoteControl: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassAVRemoteControlController: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassAVRemoteControlTarget: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassAdvancedAudioDistribution: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassAudioSink: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassAudioSource: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassAudioVideo: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassBasicPrinting: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassBrowseGroupDescriptor: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassCommonISDNAccess: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassCordlessTelephony: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassDialupNetworking: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassDirectPrinting: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassDirectPrintingReferenceObjectsService: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassFax: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassGN: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassGenericAudio: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassGenericFileTransfer: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassGenericNetworking: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassGenericTelephony: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassGlobalNavigationSatelliteSystem: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassGlobalNavigationSatelliteSystemServer: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassHCR_Print: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassHCR_Scan: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassHandsFree: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassHandsFreeAudioGateway: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassHardcopyCableReplacement: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassHeadset: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassHeadsetAudioGateway: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassHeadset_HS: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassHealthDevice: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassHealthDeviceSink: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassHealthDeviceSource: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassHumanInterfaceDeviceService: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassImaging: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassImagingAutomaticArchive: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassImagingReferencedObjects: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassImagingResponder: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassIntercom: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassIrMCSync: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassIrMCSyncCommand: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassLANAccessUsingPPP: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassMessageAccessProfile: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassMessageAccessServer: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassMessageNotificationServer: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassNAP: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassOBEXFileTransfer: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassOBEXObjectPush: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassPANU: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassPhonebookAccess: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassPhonebookAccess_PCE: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassPhonebookAccess_PSE: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassPnPInformation: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassPrintingStatus: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassPublicBrowseGroup: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassReferencePrinting: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassReflectedUI: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassSIM_Access: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassSerialPort: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassServiceDiscoveryServer: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassUDI_MT: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassUDI_TA: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassVideoConferencingGW: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassVideoDistribution: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassVideoSink: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassVideoSource: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassWAP: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassWAPClient: SDPServiceClasses
+
+var kBluetoothSDPUUID16ServiceClassGATT: SDPServiceClasses
+
+### Initializers
+
+init(UInt32)
+
+init(rawValue: UInt32)
+
+### Instance Properties
+
+var rawValue: UInt32
+
+## Relationships
+
+### Conforms To
+
+- BitwiseCopyable
+- Equatable
+- Hashable
+- RawRepresentable
+- Sendable
+
+## See Also
+
+### Data Types
+
+typealias BluetoothAFHMode
+
+typealias BluetoothAirMode
+
+typealias BluetoothAllowRoleSwitch
+
+typealias BluetoothAuthenticationRequirements
+
+struct BluetoothAuthenticationRequirementsValues
+
+typealias BluetoothClassOfDevice
+
+typealias BluetoothClockOffset
+
+struct BluetoothCompanyIdentifers
+
+typealias BluetoothConnectionHandle
+
+typealias BluetoothDeviceClassMajor
+
+typealias BluetoothDeviceClassMinor
+
+typealias BluetoothDeviceName
+
+typealias BluetoothEncryptionEnable
+
+struct BluetoothFeatureBits
+
+typealias BluetoothHCIACLDataByteCount
+

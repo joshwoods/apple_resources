@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_TP_CERTVERIFY_INVALID_CRL_DIST_PT 
+
+Global Variable
+
+# CSSM_TP_CERTVERIFY_INVALID_CRL_DIST_PT
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_TP_CERTVERIFY_INVALID_CRL_DIST_PT: Int { get }
+```
+

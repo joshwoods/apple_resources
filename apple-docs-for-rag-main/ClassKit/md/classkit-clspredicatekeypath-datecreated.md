@@ -1,0 +1,42 @@
+
+
+- ClassKit
+- CLSPredicateKeyPath
+-  dateCreated 
+
+Type Property
+
+# dateCreated
+
+The date on which the context was created.
+
+iOS 11.3+iPadOS 11.3+Mac Catalyst 11.3+macOS 11.0+visionOS 1.0+
+
+``` source
+static let dateCreated: CLSPredicateKeyPath
+```
+
+## See Also
+
+### Predicate Key Paths
+
+static let identifier: CLSPredicateKeyPath
+
+The context’s identifier.
+
+static let parent: CLSPredicateKeyPath
+
+The context’s direct ancestor in the context hierarchy.
+
+static let title: CLSPredicateKeyPath
+
+The human readable name of the context.
+
+static let topic: CLSPredicateKeyPath
+
+The context’s topic.
+
+static let universalLinkURL: CLSPredicateKeyPath
+
+The context’s universal URL link.
+

@@ -1,0 +1,144 @@
+
+
+- UIKit
+- UIApplication
+-  setStatusBarOrientation(\_:animated:) Deprecated
+
+Instance Method
+
+# setStatusBarOrientation(\_:animated:)
+
+Sets the app’s status bar to the specified orientation, optionally animating the transition.
+
+iOS 2.0–9.0DeprecatediPadOS 2.0–9.0DeprecatedMac Catalyst 13.1–13.1Deprecated
+
+``` source
+@MainActor
+func setStatusBarOrientation(
+    _ interfaceOrientation: UIInterfaceOrientation,
+    animated: Bool
+)
+```
+
+## Parameters 
+
+`interfaceOrientation`  
+
+A specific orientation of the status bar. See UIInterfaceOrientation for details. The default value is UIInterfaceOrientation.portrait.
+
+`animated`  
+
+true if the transition to the new orientation should be animated; false if it should be immediate, without animation.
+
+## Discussion
+
+Calling this method changes the value of the statusBarOrientation property and rotates the status bar, animating the transition if animated is true . If your app has rotatable window content, however, you should not arbitrarily set status-bar orientation using this method. The status-bar orientation set by this method does not change if the device changes orientation.
+
+## See Also
+
+### Related Documentation
+
+var statusBarOrientationAnimationDuration: TimeInterval
+
+The animation duration in seconds for the status bar during a 90 degree orientation change.
+
+Deprecated
+
+var statusBarOrientation: UIInterfaceOrientation
+
+The current orientation of the app’s status bar.
+
+Deprecated
+
+### Deprecated methods
+
+func requestSceneSessionActivation(UISceneSession?, userActivity: NSUserActivity?, options: UIScene.ActivationRequestOptions?, errorHandler: ((any Error) -> Void)?)
+
+Asks the system to activate an existing scene, or create a new scene and associate it with your app.
+
+Deprecated
+
+func beginIgnoringInteractionEvents()
+
+Tells the receiver to suspend the handling of touch-related events.
+
+Deprecated
+
+func endIgnoringInteractionEvents()
+
+Tells the receiver to resume the handling of touch-related events.
+
+Deprecated
+
+func setMinimumBackgroundFetchInterval(TimeInterval)
+
+Specifies the minimum amount of time that must elapse between background fetch operations.
+
+Deprecated
+
+func scheduleLocalNotification(UILocalNotification)
+
+Schedules a local notification for delivery at its encapsulated date and time.
+
+Deprecated
+
+func presentLocalNotificationNow(UILocalNotification)
+
+Presents a local notification immediately.
+
+Deprecated
+
+func cancelLocalNotification(UILocalNotification)
+
+Cancels the delivery of the specified scheduled local notification.
+
+Deprecated
+
+func cancelAllLocalNotifications()
+
+Cancels the delivery of all scheduled local notifications.
+
+Deprecated
+
+func setKeepAliveTimeout(TimeInterval, handler: (() -> Void)?) -> Bool
+
+Configures a periodic handler for VoIP apps in older versions of iOS.
+
+Deprecated
+
+let UIMinimumKeepAliveTimeout: TimeInterval
+
+The minimum amount of time (measured in seconds) an app may run a critical background task in the background.
+
+Deprecated
+
+func clearKeepAliveTimeout()
+
+Removes a previously installed periodic handler block.
+
+Deprecated
+
+func setStatusBarHidden(Bool, with: UIStatusBarAnimation)
+
+Hides or shows the status bar, optionally animating the transition.
+
+Deprecated
+
+func setStatusBarStyle(UIStatusBarStyle, animated: Bool)
+
+Sets the style of the status bar, optionally animating the transition to the new style.
+
+Deprecated
+
+func registerUserNotificationSettings(UIUserNotificationSettings)
+
+Registers your preferred options for notifying the user.
+
+Deprecated
+
+func registerForRemoteNotifications(matching: UIRemoteNotificationType)
+
+Register to receive remote notifications of the specified types via Apple Push Notification service.
+
+Deprecated
+

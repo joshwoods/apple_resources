@@ -1,0 +1,14 @@
+
+
+- WebKit JS
+- ANGLEInstancedArrays
+-  VERTEX_ATTRIB_ARRAY_DIVISOR_ANGLE 
+
+# VERTEX_ATTRIB_ARRAY_DIVISOR_ANGLE
+
+Safari Desktop 10.0+Safari Mobile 10.0+
+
+``` source
+const GLenum VERTEX_ATTRIB_ARRAY_DIVISOR_ANGLE;
+```
+

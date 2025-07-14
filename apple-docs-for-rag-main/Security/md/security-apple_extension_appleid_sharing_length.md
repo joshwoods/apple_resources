@@ -1,0 +1,15 @@
+
+
+- Security
+-  APPLE_EXTENSION_APPLEID_SHARING_LENGTH 
+
+Global Variable
+
+# APPLE_EXTENSION_APPLEID_SHARING_LENGTH
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var APPLE_EXTENSION_APPLEID_SHARING_LENGTH: Int32 { get }
+```
+

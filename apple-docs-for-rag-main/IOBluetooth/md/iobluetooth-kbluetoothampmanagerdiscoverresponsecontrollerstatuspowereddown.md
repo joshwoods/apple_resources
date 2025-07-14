@@ -1,0 +1,31 @@
+
+
+- IOBluetooth
+-  kBluetoothAMPManagerDiscoverResponseControllerStatusPoweredDown 
+
+Global Variable
+
+# kBluetoothAMPManagerDiscoverResponseControllerStatusPoweredDown
+
+macOS
+
+``` source
+var kBluetoothAMPManagerDiscoverResponseControllerStatusPoweredDown: BluetoothAMPDiscoverResponseControllerStatus { get }
+```
+
+## See Also
+
+### Constants
+
+var kBluetoothAMPManagerDiscoverResponseControllerStatusBluetoothOnly: BluetoothAMPDiscoverResponseControllerStatus
+
+var kBluetoothAMPManagerDiscoverResponseControllerStatusFullCapacity: BluetoothAMPDiscoverResponseControllerStatus
+
+var kBluetoothAMPManagerDiscoverResponseControllerStatusHighCapacity: BluetoothAMPDiscoverResponseControllerStatus
+
+var kBluetoothAMPManagerDiscoverResponseControllerStatusLowCapacity: BluetoothAMPDiscoverResponseControllerStatus
+
+var kBluetoothAMPManagerDiscoverResponseControllerStatusMediumCapacity: BluetoothAMPDiscoverResponseControllerStatus
+
+var kBluetoothAMPManagerDiscoverResponseControllerStatusNoCapacity: BluetoothAMPDiscoverResponseControllerStatus
+

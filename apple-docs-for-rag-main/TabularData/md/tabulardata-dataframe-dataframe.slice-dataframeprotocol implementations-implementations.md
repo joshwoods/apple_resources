@@ -1,0 +1,125 @@
+
+
+- TabularData
+- DataFrame
+- DataFrame.Slice
+-  DataFrameProtocol Implementations 
+
+API Collection
+
+# DataFrameProtocol Implementations
+
+## Topics
+
+### Instance Properties
+
+var isEmpty: Bool
+
+A Boolean that indicates whether the data frame type is empty.
+
+### Instance Methods
+
+func csvRepresentation(options: CSVWritingOptions) throws -> Data
+
+Generates a CSV data instance of the data frame type.
+
+func description(options: FormattingOptions) -> String
+
+Generates a text representation of the data frame type.
+
+func grouped&lt;T0, T1>(by: ColumnID&lt;T0>, ColumnID&lt;T1>) -> some RowGroupingProtocol
+
+Creates a grouping from two columns of different types.
+
+func grouped&lt;T0, T1, T2>(by: ColumnID&lt;T0>, ColumnID&lt;T1>, ColumnID&lt;T2>) -> some RowGroupingProtocol
+
+Creates a grouping from three columns of different types.
+
+func grouped(by: String, timeUnit: Calendar.Component) -> RowGrouping&lt;Int>
+
+Creates a grouping of rows that the method selects by choosing unique units of time in a date column you select by name.
+
+func grouped(by: ColumnID&lt;Date>, timeUnit: Calendar.Component) -> RowGrouping&lt;Int>
+
+Creates a grouping of rows that the method selects by choosing unique units of time in a date column you select by column identifier.
+
+func grouped&lt;InputKey, GroupingKey>(by: String, transform: (InputKey?) -> GroupingKey?) -> RowGrouping&lt;GroupingKey>
+
+Creates a grouping of rows that the method selects by choosing unique values the transform closure creates with elements of a column you select by name.
+
+func grouped&lt;InputKey, GroupingKey>(by: ColumnID&lt;InputKey>, transform: (InputKey?) -> GroupingKey?) -> RowGrouping&lt;GroupingKey>
+
+Creates a grouping of rows that the method selects by choosing unique values the transform closure creates with elements of a column you select by column identifier.
+
+func joined&lt;R, T>(R, on: ColumnID&lt;T>, kind: JoinKind) -> DataFrame
+
+Generates a data frame by joining with another data frame type with a common column that you select by identifier.
+
+func joined&lt;R>(R, on: (left: String, right: String), kind: JoinKind) -> DataFrame
+
+Generates a data frame by joining with another data frame type along the columns that you select by name for both data frame types.
+
+func joined&lt;R>(R, on: String, kind: JoinKind) -> DataFrame
+
+Generates a data frame by joining with another data frame type with a common column you select by name.
+
+func joined&lt;R, T>(R, on: (left: ColumnID&lt;T>, right: ColumnID&lt;T>), kind: JoinKind) -> DataFrame
+
+Generates a data frame by joining with another data frame type along the columns that you select by identifier for both data frame types.
+
+func jsonRepresentation(options: JSONWritingOptions) throws -> Data
+
+Generates a JSON data instance of the data frame.
+
+func randomSplit(by: Double, seed: Int?) -> (DataFrame.Slice, DataFrame.Slice)
+
+Generates two data frame slices by randomly splitting the rows of the data table.
+
+func randomSplit&lt;G>(by: Double, using: inout G) -> (DataFrame.Slice, DataFrame.Slice)
+
+Generates two data frame slices by randomly splitting the rows of the data table type with a random-number generator.
+
+func sorted&lt;T0, T1, T2>(on: ColumnID&lt;T0>, ColumnID&lt;T1>, ColumnID&lt;T2>, order: Order) -> DataFrame
+
+Generates a data frame by copying the data frame’s rows and then sorting the rows according to three columns that you select by their column identifiers.
+
+func sorted&lt;T>(on: String, T.Type, by: (T, T) throws -> Bool) rethrows -> DataFrame
+
+Generates a data frame by copying the data frame’s rows and then sorting the rows according to a column that you select by its name and type, with a predicate.
+
+func sorted&lt;T>(on: String, T.Type, order: Order) -> DataFrame
+
+Generates a data frame by copying the data frame’s rows and then sorting the rows according to a column that you select by its name and type.
+
+func sorted&lt;T0, T1>(on: ColumnID&lt;T0>, ColumnID&lt;T1>, order: Order) -> DataFrame
+
+Generates a data frame by copying the data frame’s rows and then sorting the rows according to two columns that you select by their column identifiers.
+
+func sorted&lt;T>(on: ColumnID&lt;T>, by: (T, T) throws -> Bool) rethrows -> DataFrame
+
+Generates a data frame by copying the data frame’s rows and then sorting the rows according to a column that you select by its column identifier, with a predicate.
+
+func sorted(on: String, order: Order) -> DataFrame
+
+Generates a data frame by copying the data frame’s rows and then sorting the rows according to a column that you select by its name.
+
+func stratifiedSplit&lt;T0, T1, T2>(on: ColumnID&lt;T0>, ColumnID&lt;T1>, ColumnID&lt;T2>, by: Double, randomSeed: Int?) -> (DataFrame, DataFrame)
+
+Generates two data frames by randomly splitting the rows of three columns, which you select by column identifiers, into strata.
+
+func stratifiedSplit&lt;T0, T1>(on: ColumnID&lt;T0>, ColumnID&lt;T1>, by: Double, randomSeed: Int?) -> (DataFrame, DataFrame)
+
+Generates two data frames by randomly splitting the rows of two columns, which you select by column identifiers, into strata.
+
+func stratifiedSplit(on: String, by: Double, randomSeed: Int?) -> (DataFrame, DataFrame)
+
+Generates two data frames by randomly splitting the rows of a column, which you select by its name, into strata.
+
+func writeCSV(to: URL, options: CSVWritingOptions) throws
+
+Creates a CSV file with the contents of the data frame type.
+
+func writeJSON(to: URL, options: JSONWritingOptions) throws
+
+Creates a JSON file with the contents of the data frame.
+

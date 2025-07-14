@@ -1,0 +1,71 @@
+
+
+- HealthKit
+- HKError
+- HKError.Code
+-  HKError.Code.errorHealthDataRestricted 
+
+Case
+
+# HKError.Code.errorHealthDataRestricted
+
+A Mobile Device Management (MDM) profile restricts the use of HealthKit on this device.
+
+iOS 8.0+iPadOS 8.0+Mac Catalyst 13.0+macOS 13.0+visionOS 1.0+watchOS 2.0+
+
+``` source
+case errorHealthDataRestricted
+```
+
+## Mentioned in 
+
+Authorizing access to health data
+
+## Discussion
+
+Because an MDM profile can disable HealthKit on a managed device, always verify that the current device supports HealthKit by calling isHealthDataAvailable() before calling any other HealthKit methods. If HealthKit is restricted (for example, in an enterprise environment), the methods fail with an errorHealthDataRestricted error.
+
+## See Also
+
+### Errors
+
+case errorHealthDataUnavailable
+
+HealthKit accessed on an unsupported device, such as an iPad.
+
+case errorInvalidArgument
+
+The app passed an invalid argument to the HealthKit API.
+
+case errorAuthorizationDenied
+
+The user hasn’t given the app permission to save data.
+
+case errorAuthorizationNotDetermined
+
+The app hasn’t yet asked the user for the authorization required to complete the task.
+
+case errorRequiredAuthorizationDenied
+
+The user hasn’t granted the application authorization to access all the required clinical record types.
+
+case errorDatabaseInaccessible
+
+The HealthKit data is unavailable because it’s protected and the device is locked.
+
+case errorUserCanceled
+
+The user canceled the operation.
+
+case errorAnotherWorkoutSessionStarted
+
+Another app started a workout session.
+
+case errorUserExitedWorkoutSession
+
+The user exited your application while a workout session was running.
+
+case errorNoData
+
+Data is unavailable for the requested query and predicate.
+

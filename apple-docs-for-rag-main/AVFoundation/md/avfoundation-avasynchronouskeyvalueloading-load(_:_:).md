@@ -1,0 +1,71 @@
+
+
+- AVFoundation
+- AVAsynchronousKeyValueLoading
+-  load(\_:\_:) 
+
+Instance Method
+
+# load(\_:\_:)
+
+Loads two properties asynchronously and returns the values.
+
+iOS 15.0+iPadOS 15.0+Mac CatalystmacOS 12.0+tvOS 15.0+visionOS 1.0+watchOS 8.0+
+
+``` source
+func load(
+    _ propertyA: AVAsyncProperty,
+    _ propertyB: AVAsyncProperty
+) async throws -> (A, B)
+```
+
+## Parameters 
+
+`propertyA`  
+
+A property to load.
+
+`propertyB`  
+
+A second property to load.
+
+## Return Value
+
+The loaded properties in a tuple.
+
+## Discussion
+
+See the load(_:) method for more information.
+
+## See Also
+
+### Loading Property Values
+
+func load&lt;T>(AVAsyncProperty&lt;Self, T>) async throws -> T
+
+Loads a property asynchronously and returns the value.
+
+func load&lt;A, B, C>(AVAsyncProperty&lt;Self, A>, AVAsyncProperty&lt;Self, B>, AVAsyncProperty&lt;Self, C>) async throws -> (A, B, C)
+
+Loads three properties asynchronously and returns the values.
+
+func load&lt;A, B, C, D>(AVAsyncProperty&lt;Self, A>, AVAsyncProperty&lt;Self, B>, AVAsyncProperty&lt;Self, C>, AVAsyncProperty&lt;Self, D>) async throws -> (A, B, C, D)
+
+Loads four properties asynchronously and returns the values.
+
+func load&lt;A, B, C, D, E>(AVAsyncProperty&lt;Self, A>, AVAsyncProperty&lt;Self, B>, AVAsyncProperty&lt;Self, C>, AVAsyncProperty&lt;Self, D>, AVAsyncProperty&lt;Self, E>) async throws -> (A, B, C, D, E)
+
+Loads five properties asynchronously and returns the values.
+
+func load&lt;A, B, C, D, E, F>(AVAsyncProperty&lt;Self, A>, AVAsyncProperty&lt;Self, B>, AVAsyncProperty&lt;Self, C>, AVAsyncProperty&lt;Self, D>, AVAsyncProperty&lt;Self, E>, AVAsyncProperty&lt;Self, F>) async throws -> (A, B, C, D, E, F)
+
+Loads six properties asynchronously and returns the values.
+
+func load&lt;A, B, C, D, E, F, G>(AVAsyncProperty&lt;Self, A>, AVAsyncProperty&lt;Self, B>, AVAsyncProperty&lt;Self, C>, AVAsyncProperty&lt;Self, D>, AVAsyncProperty&lt;Self, E>, AVAsyncProperty&lt;Self, F>, AVAsyncProperty&lt;Self, G>) async throws -> (A, B, C, D, E, F, G)
+
+Loads seven properties asynchronously and returns the values.
+
+func load&lt;A, B, C, D, E, F, G, H>(AVAsyncProperty&lt;Self, A>, AVAsyncProperty&lt;Self, B>, AVAsyncProperty&lt;Self, C>, AVAsyncProperty&lt;Self, D>, AVAsyncProperty&lt;Self, E>, AVAsyncProperty&lt;Self, F>, AVAsyncProperty&lt;Self, G>, AVAsyncProperty&lt;Self, H>) async throws -> (A, B, C, D, E, F, G, H)
+
+Loads eight properties asynchronously and returns the values.
+

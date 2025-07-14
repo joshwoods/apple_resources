@@ -1,0 +1,48 @@
+
+
+- HealthKit
+- HKWorkoutSession
+-  prepare() 
+
+Instance Method
+
+# prepare()
+
+Prepares the workout session.
+
+iOS 17.0+iPadOS 17.0+Mac Catalyst 17.0+macOSvisionOS 1.0+watchOS 5.0+
+
+``` source
+func prepare()
+```
+
+## See Also
+
+### Related Documentation
+
+case prepared
+
+The session is ready but not yet running.
+
+### Managing the workout
+
+func startActivity(with: Date?)
+
+Starts the workout session activity, and sets the start date.
+
+func pause()
+
+Pauses the workout session.
+
+func resume()
+
+Resumes the workout session.
+
+func stopActivity(with: Date?)
+
+Stops the workout session activity, and sets the end date.
+
+func end()
+
+Ends the workout session.
+

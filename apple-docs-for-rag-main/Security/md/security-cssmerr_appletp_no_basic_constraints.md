@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_NO_BASIC_CONSTRAINTS 
+
+Global Variable
+
+# CSSMERR_APPLETP_NO_BASIC_CONSTRAINTS
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLETP_NO_BASIC_CONSTRAINTS: Int { get }
+```
+

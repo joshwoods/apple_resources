@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_FIELDVALUE_COMPLEX_DATA_TYPE 
+
+Global Variable
+
+# CSSM_FIELDVALUE_COMPLEX_DATA_TYPE
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_FIELDVALUE_COMPLEX_DATA_TYPE: UInt32 { get }
+```
+

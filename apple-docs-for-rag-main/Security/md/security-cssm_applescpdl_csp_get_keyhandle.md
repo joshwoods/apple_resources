@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_APPLESCPDL_CSP_GET_KEYHANDLE 
+
+Global Variable
+
+# CSSM_APPLESCPDL_CSP_GET_KEYHANDLE
+
+macOS 10.0+
+
+``` source
+var CSSM_APPLESCPDL_CSP_GET_KEYHANDLE: Int { get }
+```
+

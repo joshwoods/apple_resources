@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_CSPDL_APPLE_DL_CONVERSION_ERROR 
+
+Global Variable
+
+# CSSMERR_CSPDL_APPLE_DL_CONVERSION_ERROR
+
+macOS 10.0+
+
+``` source
+var CSSMERR_CSPDL_APPLE_DL_CONVERSION_ERROR: Int { get }
+```
+

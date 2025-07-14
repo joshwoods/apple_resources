@@ -1,0 +1,58 @@
+
+
+- System
+- FileDescriptor
+-  writeAll(toAbsoluteOffset:\_:) 
+
+Instance Method
+
+# writeAll(toAbsoluteOffset:\_:)
+
+Writes a sequence of bytes to the given offset.
+
+iOS 14.0+iPadOS 14.0+Mac Catalyst 14.0+macOS 11.0+tvOS 14.0+visionOS 1.0+watchOS 7.0+
+
+``` source
+@discardableResult
+func writeAll(
+    toAbsoluteOffset offset: Int64,
+    _ sequence: S
+) throws -> Int where S : Sequence, S.Element == UInt8
+```
+
+## Parameters 
+
+`offset`  
+
+The file offset where writing begins.
+
+`sequence`  
+
+The bytes to write.
+
+## Return Value
+
+The number of bytes written, equal to the number of elements in `sequence`.
+
+## Discussion
+
+This method either writes the entire contents of `sequence`, or throws an error if only part of the content was written. Unlike writeAll(_:), this method preserves the file descriptor’s existing offset.
+
+If `sequence` doesn’t implement the withContiguousStorageIfAvailable(_:) method, temporary space will be allocated as needed.
+
+## See Also
+
+### Writing To A File
+
+func write(UnsafeRawBufferPointer, retryOnInterrupt: Bool) throws -> Int
+
+Writes the contents of a buffer at the current file offset.
+
+func write(toAbsoluteOffset: Int64, UnsafeRawBufferPointer, retryOnInterrupt: Bool) throws -> Int
+
+Writes the contents of a buffer at the specified offset.
+
+func writeAll&lt;S>(S) throws -> Int
+
+Writes a sequence of bytes to the current offset and then updates the offset.
+

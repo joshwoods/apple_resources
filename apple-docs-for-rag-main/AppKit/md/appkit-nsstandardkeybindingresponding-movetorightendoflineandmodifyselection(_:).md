@@ -1,0 +1,35 @@
+
+
+- AppKit
+- NSStandardKeyBindingResponding
+-  moveToRightEndOfLineAndModifySelection(\_:) 
+
+Instance Method
+
+# moveToRightEndOfLineAndModifySelection(\_:)
+
+macOS 10.6+
+
+``` source
+@MainActor
+optional func moveToRightEndOfLineAndModifySelection(_ sender: Any?)
+```
+
+## See Also
+
+### Moving the Selection in Lines of Text
+
+func moveToBeginningOfLine(Any?)
+
+func moveToBeginningOfLineAndModifySelection(Any?)
+
+func moveToEndOfLine(Any?)
+
+func moveToEndOfLineAndModifySelection(Any?)
+
+func moveToLeftEndOfLine(Any?)
+
+func moveToLeftEndOfLineAndModifySelection(Any?)
+
+func moveToRightEndOfLine(Any?)
+

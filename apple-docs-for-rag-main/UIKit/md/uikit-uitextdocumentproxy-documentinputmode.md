@@ -1,0 +1,25 @@
+
+
+- UIKit
+- UITextDocumentProxy
+-  documentInputMode 
+
+Instance Property
+
+# documentInputMode
+
+The text-input mode for the keyboard.
+
+iOS 10.0+iPadOS 10.0+Mac Catalyst 13.1+tvOS 10.0+visionOS 1.0+
+
+``` source
+@MainActor
+var documentInputMode: UITextInputMode? { get }
+```
+
+**Required**
+
+## Discussion
+
+Use the value of this key to configure the keyboard for the specified region and language.
+

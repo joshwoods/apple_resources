@@ -1,0 +1,15 @@
+
+
+- Security
+-  OID_ANSI_X9_42_SCHEME_LEN 
+
+Global Variable
+
+# OID_ANSI_X9_42_SCHEME_LEN
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var OID_ANSI_X9_42_SCHEME_LEN: Int32 { get }
+```
+

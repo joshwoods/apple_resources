@@ -1,0 +1,35 @@
+
+
+- RealityKit
+- BindTarget
+- BindTarget.EntityPath
+-  jointTransforms 
+
+Instance Property
+
+# jointTransforms
+
+A bind target for the entity’s joint transforms.
+
+iOS 15.0+iPadOS 15.0+Mac Catalyst 15.0+macOS 12.0+visionOS
+
+``` source
+var jointTransforms: BindTarget { get }
+```
+
+## See Also
+
+### Accessing a bind target
+
+var transform: BindTarget
+
+A bind target for the entity’s transform.
+
+var `self`: BindTarget
+
+A bind target for the entity.
+
+func parameter(String) -> BindTarget
+
+Provides a bind target for a particular animated property.
+

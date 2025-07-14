@@ -1,0 +1,501 @@
+
+
+- IOBluetooth
+-  IOBluetooth Data Types 
+
+API Collection
+
+# IOBluetooth Data Types
+
+## Topics
+
+### Data Types
+
+typealias BluetoothAFHMode
+
+typealias BluetoothAirMode
+
+typealias BluetoothAllowRoleSwitch
+
+typealias BluetoothAuthenticationRequirements
+
+struct BluetoothAuthenticationRequirementsValues
+
+typealias BluetoothClassOfDevice
+
+typealias BluetoothClockOffset
+
+struct BluetoothCompanyIdentifers
+
+typealias BluetoothConnectionHandle
+
+typealias BluetoothDeviceClassMajor
+
+typealias BluetoothDeviceClassMinor
+
+typealias BluetoothDeviceName
+
+typealias BluetoothEncryptionEnable
+
+struct BluetoothFeatureBits
+
+typealias BluetoothHCIACLDataByteCount
+
+typealias BluetoothHCIAFHChannelAssessmentMode
+
+struct BluetoothHCIAFHChannelAssessmentModes
+
+typealias BluetoothHCIAuthenticationEnable
+
+struct BluetoothHCIAuthentionEnableModes
+
+typealias BluetoothHCIAutomaticFlushTimeout
+
+typealias BluetoothHCICommandOpCode
+
+typealias BluetoothHCICommandOpCodeCommand
+
+typealias BluetoothHCICommandOpCodeGroup
+
+typealias BluetoothHCIConnectionAcceptTimeout
+
+typealias BluetoothHCIConnectionMode
+
+struct BluetoothHCIConnectionModes
+
+typealias BluetoothHCIContentFormat
+
+typealias BluetoothHCICountryCode
+
+typealias BluetoothHCIDataID
+
+typealias BluetoothHCIDeleteStoredLinkKeyFlag
+
+struct BluetoothHCIDeleteStoredLinkKeyFlags
+
+typealias BluetoothHCIEncryptionMode
+
+struct BluetoothHCIEncryptionModes
+
+typealias BluetoothHCIErroneousDataReporting
+
+typealias BluetoothHCIEventCode
+
+typealias BluetoothHCIEventID
+
+typealias BluetoothHCIEventMask
+
+typealias BluetoothHCIEventStatus
+
+typealias BluetoothHCIExtendedInquiryResponseDataType
+
+struct BluetoothHCIExtendedInquiryResponseDataTypes
+
+typealias BluetoothHCIFECRequired
+
+struct BluetoothHCIFECRequiredValues
+
+typealias BluetoothHCIFailedContactCount
+
+typealias BluetoothHCIFlowControlState
+
+struct BluetoothHCIGeneralFlowControlStates
+
+typealias BluetoothHCIHoldModeActivity
+
+struct BluetoothHCIHoldModeActivityStates
+
+typealias BluetoothHCIInputBandwidth
+
+typealias BluetoothHCIInputCodedDataSize
+
+typealias BluetoothHCIInputCodingFormat
+
+typealias BluetoothHCIInputDataPath
+
+typealias BluetoothHCIInputPCMDataFormat
+
+typealias BluetoothHCIInputPCMSamplePayloadMSBPosition
+
+typealias BluetoothHCIInputTransportUnitSize
+
+typealias BluetoothHCIInquiryAccessCodeCount
+
+typealias BluetoothHCIInquiryLength
+
+typealias BluetoothHCIInquiryMode
+
+struct BluetoothHCIInquiryModes
+
+typealias BluetoothHCIInquiryScanType
+
+struct BluetoothHCIInquiryScanTypes
+
+typealias BluetoothHCILESupportedFeatures
+
+typealias BluetoothHCILEUsedFeatures
+
+typealias BluetoothHCILinkPolicySettings
+
+struct BluetoothHCILinkPolicySettingsValues
+
+typealias BluetoothHCILinkQuality
+
+typealias BluetoothHCILoopbackMode
+
+typealias BluetoothHCIMaxLatency
+
+typealias BluetoothHCIModeInterval
+
+typealias BluetoothHCINumBroadcastRetransmissions
+
+typealias BluetoothHCINumLinkKeysDeleted
+
+typealias BluetoothHCINumLinkKeysToWrite
+
+typealias BluetoothHCIOperationID
+
+typealias BluetoothHCIOutputBandwidth
+
+typealias BluetoothHCIOutputCodedDataSize
+
+typealias BluetoothHCIOutputCodingFormat
+
+typealias BluetoothHCIOutputDataPath
+
+typealias BluetoothHCIOutputPCMDataFormat
+
+typealias BluetoothHCIOutputPCMSamplePayloadMSBPosition
+
+typealias BluetoothHCIOutputTransportUnitSize
+
+typealias BluetoothHCIPageNumber
+
+typealias BluetoothHCIPageScanEnableState
+
+struct BluetoothHCIPageScanEnableStates
+
+typealias BluetoothHCIPageScanMode
+
+struct BluetoothHCIPageScanModes
+
+typealias BluetoothHCIPageScanPeriodMode
+
+struct BluetoothHCIPageScanPeriodModes
+
+typealias BluetoothHCIPageScanType
+
+struct BluetoothHCIPageScanTypes
+
+typealias BluetoothHCIPageTimeout
+
+typealias BluetoothHCIParamByteCount
+
+typealias BluetoothHCIParkModeBeaconInterval
+
+typealias BluetoothHCIQoSFlags
+
+typealias BluetoothHCIRSSIValue
+
+typealias BluetoothHCIReadStoredLinkKeysFlag
+
+struct BluetoothHCIReadStoredLinkKeysFlags
+
+typealias BluetoothHCIReceiveBandwidth
+
+typealias BluetoothHCIReceiveCodecFrameSize
+
+typealias BluetoothHCIReceiveCodingFormat
+
+typealias BluetoothHCIRequestID
+
+typealias BluetoothHCIResponseCount
+
+typealias BluetoothHCIRetransmissionEffort
+
+struct BluetoothHCIRetransmissionEffortTypes
+
+typealias BluetoothHCIRole
+
+struct BluetoothHCIRoles
+
+typealias BluetoothHCISCODataByteCount
+
+struct BluetoothHCISCOFlowControlStates
+
+typealias BluetoothHCISignalID
+
+typealias BluetoothHCISimplePairingMode
+
+struct BluetoothHCISimplePairingModes
+
+typealias BluetoothHCISniffAttemptCount
+
+typealias BluetoothHCISniffTimeout
+
+typealias BluetoothHCIStatus
+
+typealias BluetoothHCISupportedIAC
+
+struct BluetoothHCITimeoutValues
+
+typealias BluetoothHCITransmitBandwidth
+
+typealias BluetoothHCITransmitCodecFrameSize
+
+typealias BluetoothHCITransmitCodingFormat
+
+typealias BluetoothHCITransmitPowerLevel
+
+typealias BluetoothHCITransmitPowerLevelType
+
+struct BluetoothHCITransmitReadPowerLevelTypes
+
+typealias BluetoothHCITransportCommandID
+
+typealias BluetoothHCITransportID
+
+typealias BluetoothHCIVendorCommandSelector
+
+struct BluetoothHCIVersions
+
+typealias BluetoothHCIVoiceSetting
+
+struct BluetoothIOCapabilities
+
+typealias BluetoothIOCapability
+
+typealias BluetoothKeyFlag
+
+typealias BluetoothKeyType
+
+typealias BluetoothKeypressNotificationType
+
+struct BluetoothKeypressNotificationTypes
+
+typealias BluetoothL2CAPByteCount
+
+typealias BluetoothL2CAPChannelID
+
+typealias BluetoothL2CAPCommandByteCount
+
+typealias BluetoothL2CAPCommandID
+
+typealias BluetoothL2CAPFlushTimeout
+
+typealias BluetoothL2CAPGroupID
+
+typealias BluetoothL2CAPLinkTimeout
+
+typealias BluetoothL2CAPMTU
+
+typealias BluetoothL2CAPPSM
+
+typealias BluetoothLAP
+
+struct BluetoothLEFeatureBits
+
+struct BluetoothLESecurityManagerKeyDistributionFormat
+
+typealias BluetoothLMPHandle
+
+typealias BluetoothLMPSubversion
+
+typealias BluetoothLMPVersion
+
+struct BluetoothLMPVersions
+
+typealias BluetoothLinkType
+
+struct BluetoothLinkTypes
+
+typealias BluetoothManufacturerName
+
+typealias BluetoothMaxSlots
+
+typealias BluetoothNumericValue
+
+typealias BluetoothOOBDataPresence
+
+struct BluetoothOOBDataPresenceValues
+
+typealias BluetoothPINType
+
+typealias BluetoothPacketType
+
+typealias BluetoothPageScanMode
+
+typealias BluetoothPageScanPeriodMode
+
+typealias BluetoothPageScanRepetitionMode
+
+typealias BluetoothPasskey
+
+typealias BluetoothRFCOMMChannelID
+
+typealias BluetoothRFCOMMMTU
+
+typealias BluetoothReasonCode
+
+typealias BluetoothRole
+
+typealias BluetoothSDPDataElementSizeDescriptor
+
+typealias BluetoothSDPDataElementTypeDescriptor
+
+typealias BluetoothSDPErrorCode
+
+typealias BluetoothSDPPDUID
+
+typealias BluetoothSDPServiceAttributeID
+
+typealias BluetoothSDPServiceRecordHandle
+
+typealias BluetoothSDPTransactionID
+
+typealias BluetoothSDPUUID16
+
+typealias BluetoothSDPUUID32
+
+typealias BluetoothServiceClassMajor
+
+typealias BluetoothSimplePairingDebugMode
+
+struct BluetoothSimplePairingDebugModes
+
+typealias BluetoothTransportInfoPtr
+
+struct BluetoothTransportTypes
+
+struct FTSFileType
+
+struct IOBluetoothDeviceSearchOptionsBits
+
+typealias IOBluetoothDeviceSearchTypes
+
+struct IOBluetoothDeviceSearchTypesBits
+
+Bits to determine what Bluetooth devices to search for
+
+typealias IOBluetoothL2CAPChannelIncomingDataListener
+
+typealias IOBluetoothL2CAPChannelIncomingEventListener
+
+typealias IOBluetoothOBEXSessionOpenConnectionCallback
+
+typealias IOBluetoothObjectID
+
+struct OBEXConnectFlagValues
+
+Flags for Connect command.
+
+typealias OBEXConstants
+
+struct OBEXErrorCodes
+
+typealias OBEXFlags
+
+typealias OBEXHeaderIdentifier
+
+struct OBEXHeaderIdentifiers
+
+Identifiers for OBEX Headers.
+
+typealias OBEXMaxPacketLength
+
+struct OBEXNonceFlagValues
+
+Flags for Nonce command during digest challenge.
+
+typealias OBEXOpCode
+
+struct OBEXOpCodeCommandValues
+
+Operation OpCode values for commands.
+
+struct OBEXOpCodeResponseValues
+
+Response opCode values.
+
+struct OBEXOpCodeSessionValues
+
+Operation OpCode values for sessions. From the OBEX 1.3 specification.
+
+struct OBEXPutFlagValues
+
+struct OBEXRealmValues
+
+Values for Realm during digest response.
+
+typealias OBEXSessionEventCallback
+
+typealias OBEXSessionEventType
+
+struct OBEXSessionEventTypes
+
+Type identifiers for OBEX sessions.
+
+struct OBEXSessionParameterTags
+
+Tags for SessionParameters.
+
+typealias OBEXSessionRef
+
+typealias OBEXTransportEventType
+
+struct OBEXTransportEventTypes
+
+typealias OBEXVersion
+
+struct OBEXVersions
+
+The available/supported OBEX versions.
+
+typealias PrivOBEXSessionDataRef
+
+struct ProtocolParameters
+
+struct SDPAttributeDeviceIdentificationRecord
+
+struct SDPAttributeIdentifierCodes
+
+struct SDPServiceClasses
+
+typealias TransmissionPower
+
+typealias BluetoothHCIEncryptionKeySize
+
+## See Also
+
+### Reference
+
+Bluetooth.h User-Space
+
+Bluetooth wireless technology
+
+IOBluetoothUserLib.h
+
+Public Interfaces for Apple’s implementation of Bluetooth technology.
+
+IOBluetoothUtilities.h
+
+See the Overview section above for header-level documentation.
+
+OBEX.h
+
+Public OBEX technology interfaces.
+
+OBEXBluetooth.h
+
+Object Exchange over Bluetooth.
+
+OBEXFileTransferServices.h
+
+IOBluetooth Structures
+
+IOBluetooth Enumerations
+
+IOBluetooth Constants
+
+IOBluetooth Functions
+

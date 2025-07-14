@@ -1,0 +1,115 @@
+
+
+- ML Compute
+-  MLCGradientClippingType Deprecated
+
+Enumeration
+
+# MLCGradientClippingType
+
+A clipping type the system applies to a gradient.
+
+iOS 15.0–17.4DeprecatediPadOS 15.0–17.4DeprecatedMac Catalyst 15.0–17.4DeprecatedmacOS 12.0–14.3DeprecatedtvOS 15.0–17.4Deprecated
+
+``` source
+enum MLCGradientClippingType
+```
+
+## Topics
+
+### Gradient Clipping Types
+
+case byValue
+
+An option that clips by value.
+
+case byNorm
+
+An option that clips by norm.
+
+case byGlobalNorm
+
+An option that clips by global norm.
+
+var debugDescription: String
+
+A textual description of the gradient clipping type, suitable for debugging.
+
+### Initializers
+
+init?(rawValue: Int32)
+
+## Relationships
+
+### Conforms To
+
+- BitwiseCopyable
+- Equatable
+- Hashable
+- RawRepresentable
+- Sendable
+
+## See Also
+
+### Inspecting an Optimizer
+
+var learningRate: Float
+
+The learning rate.
+
+Deprecated
+
+var gradientRescale: Float
+
+The rescale value the optimizer applies to gradients during updates.
+
+Deprecated
+
+var appliesGradientClipping: Bool
+
+A Boolean value that indicates whether you apply gradient clipping.
+
+Deprecated
+
+var gradientClipMax: Float
+
+The maximum gradient value before the optimizer rescales the gradient, if you enable gradient clipping.
+
+Deprecated
+
+var gradientClipMin: Float
+
+The minimum gradient value before the optimizer rescales the gradient, if you enable gradient clipping.
+
+Deprecated
+
+var regularizationScale: Float
+
+The regularization scale.
+
+Deprecated
+
+var regularizationType: MLCRegularizationType
+
+The regularization type.
+
+Deprecated
+
+var gradientClippingType: MLCGradientClippingType
+
+The type of clipping the system applies to the gradient.
+
+Deprecated
+
+var maximumClippingNorm: Float
+
+The maximum clipping value.
+
+Deprecated
+
+var customGlobalNorm: Float
+
+A custom norm the system uses in place of the global norm.
+
+Deprecated
+

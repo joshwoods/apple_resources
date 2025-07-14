@@ -1,0 +1,49 @@
+
+
+- Hypervisor
+-  HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER26 
+
+Global Variable
+
+# HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER26
+
+macOS
+
+``` source
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER26: hv_gic_distributor_reg_t { get }
+```
+
+## See Also
+
+### Interrupt clear-active registers
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER0: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER1: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER2: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER3: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER4: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER5: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER6: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER7: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER8: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER9: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER10: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER11: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER12: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER13: hv_gic_distributor_reg_t
+
+var HV_GIC_DISTRIBUTOR_REG_GICD_ICACTIVER14: hv_gic_distributor_reg_t
+

@@ -1,0 +1,18 @@
+
+
+- Create ML Components
+- SlidingWindows
+-  mapAnnotations(\_:) 
+
+Instance Method
+
+# mapAnnotations(\_:)
+
+Returns an array containing the results of mapping the given async closure over the sequence’s annotations.
+
+Create ML ComponentsSwiftiOS 16.0+iPadOS 16.0+Mac Catalyst 16.0+macOS 13.0+tvOS 16.0+visionOS 1.0+watchOS 11.0+
+
+``` source
+func mapAnnotations(_ transform: (Input) async throws -> Output) async rethrows -> [AnnotatedFeature] where Self.Element == AnnotatedFeature
+```
+

@@ -1,0 +1,16 @@
+
+
+- Swift
+- AnyCollection
+-  subscript(\_:) 
+
+Instance Subscript
+
+# subscript(\_:)
+
+iOS 8.0+iPadOS 8.0+Mac Catalyst 13.0+macOS 10.10+tvOS 9.0+visionOS 1.0+watchOS 2.0+
+
+``` source
+subscript(x: (UnboundedRange_) -> ()) -> Self.SubSequence { get }
+```
+

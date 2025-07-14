@@ -1,0 +1,126 @@
+
+
+- USBDriverKit
+- USB Device Descriptors
+-  Endpoint Attributes 
+
+API Collection
+
+# Endpoint Attributes
+
+Constants for endpoint attributes.
+
+## Topics
+
+### Getting the Options
+
+kIOUSBEndpointDescriptorNumber
+
+kIOUSBEndpointDescriptorNumberPhase
+
+kIOUSBEndpointDescriptorEndpointAddressReserved
+
+kIOUSBEndpointDescriptorDirection
+
+kIOUSBEndpointDescriptorDirectionPhase
+
+kIOUSBEndpointDescriptorDirectionOut
+
+kIOUSBEndpointDescriptorDirectionIn
+
+kIOUSBEndpointDescriptorTransferType
+
+kIOUSBEndpointDescriptorTransferTypePhase
+
+kIOUSBEndpointDescriptorTransferTypeControl
+
+kIOUSBEndpointDescriptorTransferTypeIsochronous
+
+kIOUSBEndpointDescriptorTransferTypeBulk
+
+kIOUSBEndpointDescriptorTransferTypeInterrupt
+
+kIOUSBEndpointDescriptorSynchronizationType
+
+kIOUSBEndpointDescriptorSynchronizationTypePhase
+
+kIOUSBEndpointDescriptorSynchronizationTypeNone
+
+kIOUSBEndpointDescriptorSynchronizationTypeAsynchronous
+
+kIOUSBEndpointDescriptorSynchronizationTypeAdaptive
+
+kIOUSBEndpointDescriptorSynchronizationTypeSynchronous
+
+kIOUSBEndpointDescriptorUsageType
+
+kIOUSBEndpointDescriptorUsageTypePhase
+
+kIOUSBEndpointDescriptorUsageTypeInterruptPeriodic
+
+kIOUSBEndpointDescriptorUsageTypeInterruptNotification
+
+kIOUSBEndpointDescriptorUsageTypeInterruptReserved1
+
+kIOUSBEndpointDescriptorUsageTypeInterruptReserved2
+
+kIOUSBEndpointDescriptorUsageTypeIsocData
+
+kIOUSBEndpointDescriptorUsageTypeIsocFeedback
+
+kIOUSBEndpointDescriptorUsageTypeIsocImplicit
+
+kIOUSBEndpointDescriptorUsageTypeIsocReserved
+
+kIOUSBEndpointDescriptorPacketSize
+
+kIOUSBEndpointDescriptorPacketSizePhase
+
+kIOUSBEndpointDescriptorPacketSizeMult
+
+kIOUSBEndpointDescriptorPacketSizeMultPhase
+
+kIOUSBEndpointDescriptorReserved
+
+kIOUSBEndpointDescriptorReservedPhase
+
+## See Also
+
+### Endpoint Descriptors
+
+IOUSBEndpointDescriptor
+
+The structure for storing an endpoint descriptor.
+
+IOUSBSuperSpeedEndpointCompanionDescriptor
+
+The descriptor for a SuperSpeed USB Endpoint Companion.
+
+IOUSBSuperSpeedPlusIsochronousEndpointCompanionDescriptor
+
+The descriptor for a SuperSpeedPlus Isochronous USB Endpoint Companion.
+
+tIOUSBEndpointType
+
+Constants describing the types of endpoints.
+
+SuperSpeed USB Endpoint Descriptor Options
+
+Constants for super-speed endpoint attributes.
+
+tIOUSBEndpointDirection
+
+The direction of data transfers on an endpoint.
+
+tIOUSBEndpointSynchronizationType
+
+Constants for the endpoint synchronization types.
+
+tIOUSBEndpointUsageType
+
+Constants for the endpoint usage types.
+
+tIOUSBLanguageID
+
+Constants for the USB language identifiers.
+

@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_CSP_APPLE_INVALID_KEY_START_DATE 
+
+Global Variable
+
+# CSSMERR_CSP_APPLE_INVALID_KEY_START_DATE
+
+macOS 10.0+
+
+``` source
+var CSSMERR_CSP_APPLE_INVALID_KEY_START_DATE: Int { get }
+```
+

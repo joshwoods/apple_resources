@@ -1,0 +1,141 @@
+
+
+- BrowserEngineKit
+- BETextInput
+-  moveSelection(atBoundary:in:completionHandler:) 
+
+Instance Method
+
+# moveSelection(atBoundary:in:completionHandler:)
+
+Moves the caret to relative to the current position in the `direction` to the given `granularity`. The `direction` is “forward” or “backward” in accordance with the directionality of the language.
+
+iOS 17.4+iPadOS 17.4+tvOS 17.4+visionOS 1.1+
+
+``` source
+func moveSelection(
+    atBoundary granularity: UITextGranularity,
+    in direction: UITextStorageDirection,
+    completionHandler: @escaping () -> Void
+)
+```
+
+``` source
+func moveSelection(
+    atBoundary granularity: UITextGranularity,
+    in direction: UITextStorageDirection
+) async
+```
+
+**Required**
+
+## Parameters 
+
+`granularity`  
+
+The amount by which to move the caret.
+
+`direction`  
+
+The direction in which to move the caret, relative to the base writing direction.
+
+`completionHandler`  
+
+A block you call when your text view has handled the gesture.
+
+## Mentioned in 
+
+Integrating custom browser text views with UIKit
+
+## Discussion
+
+This method is invoked only when -\[BETextInput textInteractionGesture:shouldBeginAtPoint:\] returns YES.
+
+Moves the text-selection caret relative to the current position.
+
+## Overview
+
+If you return `false` from textInteractionGesture(_:shouldBeginAt:) for the gesture that moves the caret, then the text systen doesn’t call this method.
+
+## See Also
+
+### Selecting text
+
+var selectedText: String?
+
+String representing the selected text.
+
+**Required**
+
+var selectedTextRange: UITextRange?
+
+Range representing the selected text.
+
+**Required**
+
+var isSelectionAtDocumentStart: Bool
+
+Represents whether the current selection is at the beginning of the document
+
+**Required**
+
+func caretRect(for: UITextPosition) -> CGRect
+
+Returns a rectangle to draw the caret at a specified insertion point.
+
+**Required**
+
+func selectionRects(for: UITextRange) -> [UITextSelectionRect]
+
+Returns an array of selection rects corresponding to the range of text.
+
+**Required**
+
+func selectWordForReplacement()
+
+Selects a word with autocorrect replacement suggestions when it is tapped
+
+**Required**
+
+func updateSelection(extent: CGPoint, boundary: UITextGranularity, completionHandler: (Bool) -> Void)
+
+Includes the text up to the given point in the current text selection.
+
+**Required**
+
+func selectText(in: UITextGranularity, at: CGPoint, completionHandler: () -> Void)
+
+Selects the text within the given granularity at the given point in the text view.
+
+**Required**
+
+func selectPosition(at: CGPoint, completionHandler: () -> Void)
+
+Sets the selection caret to the given point
+
+**Required**
+
+func selectPosition(at: CGPoint, for: BETextDocumentRequest, completionHandler: (BETextDocumentContext) -> Void)
+
+Sets the selection caret to the given point. Also includes a convenience document context request.
+
+**Required**
+
+func adjustSelection(by: BEDirectionalTextRange, completionHandler: () -> Void)
+
+Adjusts the selection by the moving the selected range by the given `range`, in character granularity units.
+
+**Required**
+
+func move(byOffset: Int)
+
+Adjusts the current selection by `offset` in character granularity units
+
+**Required**
+
+func selectTextForEditMenuWithLocation(inView: CGPoint, completionHandler: (Bool, String?, NSRange) -> Void)
+
+Indicates the edit menu is being shown at the given location in the text input view’s coordinate space.
+
+**Required**
+

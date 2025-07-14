@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_CSSM_PRIVILEGE_NOT_GRANTED 
+
+Global Variable
+
+# CSSMERR_CSSM_PRIVILEGE_NOT_GRANTED
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSMERR_CSSM_PRIVILEGE_NOT_GRANTED: Int { get }
+```
+

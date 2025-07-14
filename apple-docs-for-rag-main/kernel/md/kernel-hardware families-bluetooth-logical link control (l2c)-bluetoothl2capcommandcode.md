@@ -1,0 +1,118 @@
+
+
+- Kernel
+- Hardware Families
+- Bluetooth
+- Logical Link Control (L2C)
+-  BluetoothL2CAPCommandCode 
+
+Type Alias
+
+# BluetoothL2CAPCommandCode
+
+macOS 10.6+
+
+``` source
+typedef enum BluetoothL2CAPCommandCode BluetoothL2CAPCommandCode;
+```
+
+## Topics
+
+### Constants
+
+kBluetoothL2CAPCommandCodeCommandReject
+
+kBluetoothL2CAPCommandCodeConfigureRequest
+
+kBluetoothL2CAPCommandCodeConfigureResponse
+
+kBluetoothL2CAPCommandCodeConnectionParameterUpdateRequest
+
+kBluetoothL2CAPCommandCodeConnectionParameterUpdateResponse
+
+kBluetoothL2CAPCommandCodeConnectionRequest
+
+kBluetoothL2CAPCommandCodeConnectionResponse
+
+kBluetoothL2CAPCommandCodeCreateChannelRequest
+
+kBluetoothL2CAPCommandCodeCreateChannelResponse
+
+kBluetoothL2CAPCommandCodeDisconnectionRequest
+
+kBluetoothL2CAPCommandCodeDisconnectionResponse
+
+kBluetoothL2CAPCommandCodeEchoRequest
+
+kBluetoothL2CAPCommandCodeEchoResponse
+
+kBluetoothL2CAPCommandCodeInformationRequest
+
+kBluetoothL2CAPCommandCodeInformationResponse
+
+kBluetoothL2CAPCommandCodeLECreditBasedConnectionRequest
+
+kBluetoothL2CAPCommandCodeLECreditBasedConnectionResponse
+
+kBluetoothL2CAPCommandCodeLEFlowControlCredit
+
+kBluetoothL2CAPCommandCodeMoveChannelConfirmation
+
+kBluetoothL2CAPCommandCodeMoveChannelConfirmationResponse
+
+kBluetoothL2CAPCommandCodeMoveChannelRequest
+
+kBluetoothL2CAPCommandCodeMoveChannelResponse
+
+kBluetoothL2CAPCommandCodeReserved
+
+## See Also
+
+### Bluetooth L2C
+
+BluetoothL2CAPByteCount
+
+BluetoothL2CAPChannelID
+
+BluetoothL2CAPCommandByteCount
+
+BluetoothL2CAPCommandID
+
+BluetoothL2CAPCommandRejectReason
+
+BluetoothL2CAPConfigurationOption
+
+BluetoothL2CAPConfigurationResult
+
+BluetoothL2CAPConfigurationRetransmissionAndFlowControlFlags
+
+BluetoothL2CAPConnectionResult
+
+BluetoothL2CAPConnectionStatus
+
+BluetoothL2CAPFlushTimeout
+
+BluetoothL2CAPGroupID
+
+BluetoothL2CAPInformationExtendedFeaturesMask
+
+BluetoothL2CAPInformationResult
+
+BluetoothL2CAPInformationType
+
+BluetoothL2CAPLinkTimeout
+
+BluetoothL2CAPMTU
+
+BluetoothL2CAPPSM
+
+BluetoothL2CAPQoSType
+
+BluetoothL2CAPQualityOfServiceOptions
+
+BluetoothL2CAPRetransmissionAndFlowControlOptions
+
+BluetoothL2CAPSegmentationAndReassembly
+
+BluetoothL2CAPSupervisoryFuctionType
+

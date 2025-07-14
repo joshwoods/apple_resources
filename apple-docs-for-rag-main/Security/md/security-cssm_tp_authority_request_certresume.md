@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_TP_AUTHORITY_REQUEST_CERTRESUME 
+
+Global Variable
+
+# CSSM_TP_AUTHORITY_REQUEST_CERTRESUME
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_TP_AUTHORITY_REQUEST_CERTRESUME: Int { get }
+```
+

@@ -1,0 +1,482 @@
+
+
+- AppKit
+-  NSEvent 
+
+Class
+
+# NSEvent
+
+An object that contains information about an input action, such as a mouse click or a key press.
+
+macOS
+
+``` source
+class NSEvent
+```
+
+## Overview
+
+AppKit reports events that occur in a window to the app that created the window. Events include mouse clicks, key presses, and other types of input to the system. An NSEvent object contains pertinent information about each event, such as the event type and when the event occurred. The event type defines what other information is available in the event object. For example, a keyboard event contains information about the pressed keys.
+
+Although you can create NSEvent objects directly, you typically don’t. The system generates them automatically in response to input from the mouse, keyboard, trackpad, or other peripherals such as connected tablets. It enqueues those events in its event queue, and dequeues them when it’s ready to process them. The system delivers events to the most relevant NSResponder object, which might be the first responder or the object where the event occurred. For example, the system delivers mouse-click events to the view that contains the event location.
+
+To handle events, add support to your app’s NSResponder objects. You can also use gesture recognizers to handle some events for you and execute your app’s code at appropriate times. For more information, see the NSResponder reference.
+
+You can also monitor the events your app receives and modify or cancel some events as needed. Install a local monitor using the addLocalMonitorForEvents(matching:handler:) method to detect specific types of events and take action when your app receives them. Install a global monitor using the addGlobalMonitorForEvents(matching:handler:) method to monitor events systemwide, although without the ability to modify them.
+
+## Topics
+
+### Creating an event object
+
+class func keyEvent(with: NSEvent.EventType, location: NSPoint, modifierFlags: NSEvent.ModifierFlags, timestamp: TimeInterval, windowNumber: Int, context: NSGraphicsContext?, characters: String, charactersIgnoringModifiers: String, isARepeat: Bool, keyCode: UInt16) -> NSEvent?
+
+Creates and returns a new event object that describes a key event.
+
+class func mouseEvent(with: NSEvent.EventType, location: NSPoint, modifierFlags: NSEvent.ModifierFlags, timestamp: TimeInterval, windowNumber: Int, context: NSGraphicsContext?, eventNumber: Int, clickCount: Int, pressure: Float) -> NSEvent?
+
+Creates and returns a new event object that describes a mouse-down, -up, -moved, or -dragged event.
+
+class func enterExitEvent(with: NSEvent.EventType, location: NSPoint, modifierFlags: NSEvent.ModifierFlags, timestamp: TimeInterval, windowNumber: Int, context: NSGraphicsContext?, eventNumber: Int, trackingNumber: Int, userData: UnsafeMutableRawPointer?) -> NSEvent?
+
+Creates and returns a new event object that describes a tracking-rectangle or cursor-update event.
+
+class func otherEvent(with: NSEvent.EventType, location: NSPoint, modifierFlags: NSEvent.ModifierFlags, timestamp: TimeInterval, windowNumber: Int, context: NSGraphicsContext?, subtype: Int16, data1: Int, data2: Int) -> NSEvent?
+
+Creates and returns a new event object that describes a custom event.
+
+init?(eventRef: UnsafeRawPointer)
+
+Creates and returns a new event object for a Carbon event.
+
+init?(cgEvent: CGEvent)
+
+Creates and returns an event object for a Core Graphics event.
+
+### Getting the event type
+
+var type: NSEvent.EventType
+
+The event’s type.
+
+enum EventType
+
+Constants for the types of events that responder objects can handle.
+
+struct EventTypeMask
+
+Constants that you use to filter out specific event types from the stream of incoming events.
+
+var subtype: NSEvent.EventSubtype
+
+The event’s subtype.
+
+enum EventSubtype
+
+Subtypes for various types of events.
+
+### Getting general event information
+
+var locationInWindow: NSPoint
+
+The event location in the base coordinate system of the associated window.
+
+var timestamp: TimeInterval
+
+The time when the event occurred in seconds since system startup.
+
+var window: NSWindow?
+
+The window object associated with the event.
+
+var windowNumber: Int
+
+The identifier for the window device associated with the event.
+
+var eventRef: UnsafeRawPointer?
+
+An opaque Carbon type associated with this event.
+
+var cgEvent: CGEvent?
+
+The Core Graphics event object corresponding to this event.
+
+class let foreverDuration: TimeInterval
+
+The longest time duration possible.
+
+### Getting modifier flags
+
+var modifierFlags: NSEvent.ModifierFlags
+
+An integer bit field that indicates the pressed modifier keys.
+
+struct ModifierFlags
+
+Flags that represent key states in an event object.
+
+class var modifierFlags: NSEvent.ModifierFlags
+
+The currently pressed modifier keys.
+
+### Getting key event information
+
+var characters: String?
+
+The characters associated with a key-up or key-down event.
+
+var charactersIgnoringModifiers: String?
+
+The characters generated by a key event as if no modifier key (except for Shift) applies.
+
+var keyCode: UInt16
+
+The virtual code for the key associated with the event.
+
+func characters(byApplyingModifiers: NSEvent.ModifierFlags) -> String?
+
+Returns the new characters that result if you apply the specified modifier keys to the event.
+
+class var keyRepeatDelay: TimeInterval
+
+The number of seconds someone must hold down a key before the first key repeat event occurs.
+
+class var keyRepeatInterval: TimeInterval
+
+The number of seconds someone must hold down a key to generate key-repeat events after the initial delay.
+
+var specialKey: NSEvent.SpecialKey?
+
+The code associated with a function key or other special key.
+
+Function-Key Unicode Values
+
+Constants for reserved keyboard function keys that correspond to unicode characters.
+
+struct SpecialKey
+
+Constants for reserved function keys on the keyboard.
+
+var isARepeat: Bool
+
+A Boolean value that indicates whether the key event is a repeat.
+
+### Getting mouse event information
+
+class var pressedMouseButtons: Int
+
+The indices of the currently pressed mouse buttons.
+
+class var doubleClickInterval: TimeInterval
+
+The maximum number of seconds in which a second mouse click must occur for an event to be a double-click event.
+
+class var mouseLocation: NSPoint
+
+Reports the current mouse position in screen coordinates.
+
+var buttonNumber: Int
+
+The button number for a mouse event.
+
+var clickCount: Int
+
+The number of mouse clicks associated with a mouse-down or mouse-up event.
+
+var associatedEventsMask: NSEvent.EventTypeMask
+
+The associated events mask of a mouse event.
+
+### Getting scroll wheel and flick events
+
+var deltaX: CGFloat
+
+The x-coordinate change for scroll wheel, mouse-move, mouse-drag, and swipe events.
+
+var deltaY: CGFloat
+
+The y-coordinate change for scroll wheel, mouse-move, mouse-drag, and swipe events.
+
+var deltaZ: CGFloat
+
+The z-coordinate change for a scroll wheel, mouse-move, or mouse-drag event.
+
+var hasPreciseScrollingDeltas: Bool
+
+A Boolean value that indicates whether precise scrolling deltas are available.
+
+var scrollingDeltaX: CGFloat
+
+The scroll wheel’s horizontal delta.
+
+var scrollingDeltaY: CGFloat
+
+The scroll wheel’s vertical delta.
+
+var momentumPhase: NSEvent.Phase
+
+The momentum phase for a scroll or flick gesture.
+
+var isDirectionInvertedFromDevice: Bool
+
+A Boolean value that indicates whether the user has changed the device inversion.
+
+### Configuring swipe event behaviors
+
+class var isSwipeTrackingFromScrollEventsEnabled: Bool
+
+A Boolean value that indicates whether to track fluid swipe gestures using scroll events.
+
+func trackSwipeEvent(options: NSEvent.SwipeTrackingOptions, dampenAmountThresholdMin: CGFloat, max: CGFloat, usingHandler: (CGFloat, NSEvent.Phase, Bool, UnsafeMutablePointer&lt;ObjCBool>) -> Void)
+
+Allows tracking and user interface feedback of scroll wheel events.
+
+struct SwipeTrackingOptions
+
+Constants that specify swipe-tracking options.
+
+### Getting gesture and touch information
+
+var phase: NSEvent.Phase
+
+The phase of a gesture event, such as a magnify, scroll, or pressure change.
+
+struct Phase
+
+Constants that represent the possible phases during an event phase.
+
+var magnification: CGFloat
+
+The amount of change to add to a magnification gesture.
+
+func touches(matching: NSTouch.Phase, in: NSView?) -> Set&lt;NSTouch>
+
+Returns the touch objects associated with the specified phase.
+
+func allTouches() -> Set&lt;NSTouch>
+
+Returns all touch objects associated with the event.
+
+func touches(for: NSView) -> Set&lt;NSTouch>
+
+Returns the touch objects from the event that belong to the specified view.
+
+func coalescedTouches(for: NSTouch) -> [NSTouch]
+
+Returns all of the touch objects associated with the specified main touch.
+
+class var isMouseCoalescingEnabled: Bool
+
+A Boolean value that indicates whether the system coalesces mouse movement events.
+
+enum GestureAxis
+
+Constants that specify the direction of travel for a gesture.
+
+### Getting pressure information
+
+var pressure: Float
+
+A normalized value that indicates the degree of pressure applied to an appropriate input device.
+
+var stage: Int
+
+A value that indicates the stage of a pressure gesture event.
+
+var stageTransition: CGFloat
+
+The transition value for the stage of a pressure gesture event.
+
+var pressureBehavior: NSEvent.PressureBehavior
+
+The behavior and progression for a pressure event.
+
+enum PressureBehavior
+
+These constants describe the behavior and progression of a pressure gesture.
+
+### Getting tablet proximity information
+
+var capabilityMask: Int
+
+A mask that indicates the capabilities of the tablet device that generated this event.
+
+var deviceID: Int
+
+A special identifier the system matches against tablet-pointer and tablet-proximity events.
+
+var isEnteringProximity: Bool
+
+A Boolean value that indicates whether a pointing device is entering or leaving the proximity of its tablet.
+
+var pointingDeviceID: Int
+
+The index of the pointing device currently in proximity with the tablet.
+
+var pointingDeviceSerialNumber: Int
+
+The vendor-assigned serial number of a pointing device.
+
+var pointingDeviceType: NSEvent.PointingDeviceType
+
+The kind of pointing device associated with this event.
+
+enum PointingDeviceType
+
+The pointing-device types for tablet-proximity events or mouse events with a proximity event subtype.
+
+var systemTabletID: Int
+
+The index of the tablet device connected to the system.
+
+var tabletID: Int
+
+The USB model identifier of the tablet device associated with this event.
+
+var uniqueID: UInt64
+
+The unique identifier of the pointing device that generated this event.
+
+var vendorID: Int
+
+The vendor identifier of the tablet associated with the event.
+
+var vendorPointingDeviceType: Int
+
+A coded bit field whose set bits indicate the type of pointing device (within a vendor selection) associated with the event.
+
+### Getting tablet pointing information
+
+var absoluteX: Int
+
+The absolute x coordinate of a pointing device on its tablet at full tablet resolution.
+
+var absoluteY: Int
+
+The absolute y coordinate of a pointing device on its tablet at full tablet resolution.
+
+var absoluteZ: Int
+
+The absolute z coordinate of pointing device on its tablet at full tablet resolution.
+
+var buttonMask: NSEvent.ButtonMask
+
+A bit mask identifying the buttons pressed for a tablet event.
+
+struct ButtonMask
+
+Constants you use to identify the activated tablet buttons in an event.
+
+var rotation: Float
+
+The rotation in degrees of the tablet pointing device associated with this event.
+
+var tangentialPressure: Float
+
+The tangential pressure on the device that generated this event.
+
+var tilt: NSPoint
+
+The scaled tilt values of the pointing device that generated this event.
+
+var vendorDefined: Any
+
+An array of three vendor-defined number objects associated with a pointing-type event.
+
+### Getting tracking area information
+
+var eventNumber: Int
+
+The counter value of the latest mouse or tracking-rectangle event object.
+
+var trackingNumber: Int
+
+The identifier of a mouse-tracking event.
+
+var trackingArea: NSTrackingArea?
+
+The tracking area for the event.
+
+var userData: UnsafeMutableRawPointer?
+
+The data associated with a mouse-tracking event.
+
+### Getting custom event information
+
+var data1: Int
+
+Additional data associated with this event.
+
+var data2: Int
+
+Additional data associated with this event.
+
+### Requesting and stopping periodic events
+
+class func startPeriodicEvents(afterDelay: TimeInterval, withPeriod: TimeInterval)
+
+Begins generating periodic events for the current thread.
+
+class func stopPeriodicEvents()
+
+Stops generating periodic events for the current thread and discards any periodic events remaining in the queue.
+
+### Monitoring app events
+
+class func addGlobalMonitorForEvents(matching: NSEvent.EventTypeMask, handler: (NSEvent) -> Void) -> Any?
+
+Installs an event monitor that receives copies of events the system posts to other applications.
+
+class func addLocalMonitorForEvents(matching: NSEvent.EventTypeMask, handler: (NSEvent) -> NSEvent?) -> Any?
+
+Installs an event monitor that receives copies of events the system posts to this app prior to their dispatch.
+
+class func removeMonitor(Any)
+
+Removes the specified event monitor.
+
+### Converting a mouse event’s position into a SpriteKit node’s coordinate space
+
+func location(in: SKNode) -> CGPoint
+
+Returns the location of the receiver in the coordinate system of the given node.
+
+### Deprecated
+
+var context: NSGraphicsContext?
+
+The display graphics context for this event.
+
+Deprecated
+
+### Instance Methods
+
+func deadKeyCharacter() -> unichar
+
+func willBeHandledByComplexInputMethod() -> Bool
+
+## Relationships
+
+### Inherits From
+
+- NSObject
+
+### Conforms To
+
+- CVarArg
+- CustomDebugStringConvertible
+- CustomStringConvertible
+- Equatable
+- Hashable
+- NSCoding
+- NSCopying
+- NSObjectProtocol
+
+## See Also
+
+### Mouse, Keyboard, and Touch Events
+
+class NSTouch
+
+A snapshot of a particular touch at an instant in time.
+

@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_DL_DB_RECORD_EXTENDED_ATTRIBUTE 
+
+Global Variable
+
+# CSSM_DL_DB_RECORD_EXTENDED_ATTRIBUTE
+
+macOS 10.0+
+
+``` source
+var CSSM_DL_DB_RECORD_EXTENDED_ATTRIBUTE: UInt32 { get }
+```
+

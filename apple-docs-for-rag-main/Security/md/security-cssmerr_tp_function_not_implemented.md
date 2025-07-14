@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_TP_FUNCTION_NOT_IMPLEMENTED 
+
+Global Variable
+
+# CSSMERR_TP_FUNCTION_NOT_IMPLEMENTED
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSMERR_TP_FUNCTION_NOT_IMPLEMENTED: Int { get }
+```
+

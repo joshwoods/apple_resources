@@ -1,0 +1,17 @@
+
+
+- AppKit
+- NSScroller
+- NSScroller.UsableParts
+-  init(rawValue:) 
+
+Initializer
+
+# init(rawValue:)
+
+macOS
+
+``` source
+init?(rawValue: UInt)
+```
+

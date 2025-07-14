@@ -1,0 +1,123 @@
+
+
+- NetworkingDriverKit
+- IOUserNetworkEthernet
+- IOUserNetworkMediaType
+-  Media Type Constants 
+
+API Collection
+
+# Media Type Constants
+
+The types of networking media your driver supports.
+
+## Topics
+
+### Getting the Media Types
+
+kIOUserNetworkMediaEthernetAuto
+
+kIOUserNetworkMediaEthernetManual
+
+kIOUserNetworkMediaEthernetNone
+
+kIOUserNetworkMediaEthernet10BaseT
+
+kIOUserNetworkMediaEthernet10Base2
+
+kIOUserNetworkMediaEthernet10Base5
+
+kIOUserNetworkMediaEthernet100BaseTX
+
+kIOUserNetworkMediaEthernet100BaseFX
+
+kIOUserNetworkMediaEthernet100BaseT4
+
+kIOUserNetworkMediaEthernet100BaseVG
+
+kIOUserNetworkMediaEthernet100BaseT2
+
+kIOUserNetworkMediaEthernet1000BaseSX
+
+kIOUserNetworkMediaEthernet10BaseSTP
+
+kIOUserNetworkMediaEthernet10BaseFL
+
+kIOUserNetworkMediaEthernet1000BaseLX
+
+kIOUserNetworkMediaEthernet1000BaseCX
+
+kIOUserNetworkMediaEthernet1000BaseT
+
+kIOUserNetworkMediaEthernetHomePNA1
+
+kIOUserNetworkMediaEthernet10GBaseSR
+
+kIOUserNetworkMediaEthernet10GBaseLR
+
+kIOUserNetworkMediaEthernet10GBaseCX4
+
+kIOUserNetworkMediaEthernet10GBaseT
+
+kIOUserNetworkMediaEthernet2500BaseT
+
+kIOUserNetworkMediaEthernet5000BaseT
+
+kIOUserNetworkMediaEthernet1000BaseCX_SGMII
+
+kIOUserNetworkMediaEthernet1000BaseKX
+
+kIOUserNetworkMediaEthernet10GBaseKX4
+
+kIOUserNetworkMediaEthernet10GBaseKR
+
+kIOUserNetworkMediaEthernet10GBaseCR1
+
+kIOUserNetworkMediaEthernet10GBaseER
+
+kIOUserNetworkMediaEthernet20GBaseKR2
+
+kIOUserNetworkMediaEthernet25GBaseCR
+
+kIOUserNetworkMediaEthernet25GBaseKR
+
+kIOUserNetworkMediaEthernet25GBaseSR
+
+kIOUserNetworkMediaEthernet25GBaseLR
+
+kIOUserNetworkMediaEthernet40GBaseCR4
+
+kIOUserNetworkMediaEthernet40GBaseSR4
+
+kIOUserNetworkMediaEthernet40GBaseLR4
+
+kIOUserNetworkMediaEthernet40GBaseKR4
+
+kIOUserNetworkMediaEthernet50GBaseCR2
+
+kIOUserNetworkMediaEthernet50GBaseKR2
+
+kIOUserNetworkMediaEthernet50GBaseSR2
+
+kIOUserNetworkMediaEthernet50GBaseLR2
+
+kIOUserNetworkMediaEthernet56GBaseR4
+
+kIOUserNetworkMediaEthernet100GBaseCR4
+
+kIOUserNetworkMediaEthernet100GBaseSR4
+
+kIOUserNetworkMediaEthernet100GBaseKR4
+
+kIOUserNetworkMediaEthernet100GBaseLR4
+
+kIOUserNetworkMediaEthernetMask
+
+## See Also
+
+### Configuring the Media Type Information
+
+Configuration Options
+
+The configuration options that you support for a specific network media type.
+

@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_TP_CRLISSUE_UNKNOWN_IDENTIFIER 
+
+Global Variable
+
+# CSSM_TP_CRLISSUE_UNKNOWN_IDENTIFIER
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_TP_CRLISSUE_UNKNOWN_IDENTIFIER: Int { get }
+```
+

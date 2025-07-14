@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_ERRCODE_NO_USER_INTERACTION 
+
+Global Variable
+
+# CSSM_ERRCODE_NO_USER_INTERACTION
+
+macOS 10.0+
+
+``` source
+var CSSM_ERRCODE_NO_USER_INTERACTION: Int { get }
+```
+

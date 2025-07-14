@@ -1,0 +1,139 @@
+
+
+- Core Data
+- NSManagedObjectContext
+-  NSManagedObjectContext.NotificationKey 
+
+Enumeration
+
+# NSManagedObjectContext.NotificationKey
+
+Keys to access details in user info dictionaries of managed object context notifications.
+
+iOS 3.0+iPadOS 3.0+Mac CatalystmacOS 10.4+tvOS 3.0+visionOSwatchOS 1.0+
+
+``` source
+enum NotificationKey
+```
+
+## Topics
+
+### Constants
+
+case deletedObjectIDs
+
+A key for the set of deleted object identifiers.
+
+case deletedObjects
+
+A key for the context’s set of deleted objects.
+
+case insertedObjectIDs
+
+A key for the set of inserted object identifiers.
+
+case insertedObjects
+
+A key for the context’s set of inserted objects.
+
+case invalidatedAllObjects
+
+A key for the context’s set of all invalidated objects.
+
+case invalidatedObjectIDs
+
+A key for the set of invalidated object identifiers.
+
+case invalidatedObjects
+
+A key for the context’s set of invalidated objects.
+
+case queryGeneration
+
+A key for the token that indicates which generation of the persistent store Core Data is accessing
+
+case refreshedObjectIDs
+
+A key for the set of refreshed object identifiers.
+
+case refreshedObjects
+
+A key for the context’s set of refreshed objects.
+
+case updatedObjectIDs
+
+A key for the set of updated object identifiers.
+
+case updatedObjects
+
+A key for the context’s set of updated objects.
+
+## Relationships
+
+### Conforms To
+
+- Copyable
+- Equatable
+- Hashable
+- RawRepresentable
+
+## See Also
+
+### Managing notifications
+
+static let didChangeObjectsNotification: Notification.Name
+
+A notification that posts when a context makes changes to its registered objects.
+
+static let NSManagedObjectContextObjectsDidChange: NSNotification.Name
+
+A notification that posts when there are changes to context’s registered managed objects.
+
+static let didSaveObjectsNotification: Notification.Name
+
+A notification that posts after a context completes a save.
+
+static let NSManagedObjectContextDidSave: NSNotification.Name
+
+A notification that posts after a context finishes writing unsaved changes.
+
+static let willSaveObjectsNotification: Notification.Name
+
+A notification that posts before a context writes pending changes to disk.
+
+static let NSManagedObjectContextWillSave: NSNotification.Name
+
+A notification that posts before a context writes unsaved changes.
+
+let NSInsertedObjectsKey: String
+
+A key for the set of objects that were inserted into the context.
+
+let NSUpdatedObjectsKey: String
+
+A key for the set of objects that were updated.
+
+let NSDeletedObjectsKey: String
+
+A key for the set of objects that were marked for deletion during the previous event.
+
+let NSRefreshedObjectsKey: String
+
+A key for the set of objects that were refreshed but were not dirtied in the scope of this context.
+
+let NSInvalidatedObjectsKey: String
+
+A key for the set of objects that were invalidated.
+
+let NSInvalidatedAllObjectsKey: String
+
+A key that specifies that all objects in the context have been invalidated.
+
+static let didMergeChangesObjectIDsNotification: Notification.Name
+
+A notification that posts after a context finishes merging changes from another notification.
+
+static let didSaveObjectIDsNotification: Notification.Name
+
+A notification that posts after a context finishes saving changes to its managed objects.
+

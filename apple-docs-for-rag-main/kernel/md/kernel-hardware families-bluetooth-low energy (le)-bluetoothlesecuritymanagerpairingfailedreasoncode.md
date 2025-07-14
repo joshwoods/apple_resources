@@ -1,0 +1,90 @@
+
+
+- Kernel
+- Hardware Families
+- Bluetooth
+- Low Energy (LE)
+-  BluetoothLESecurityManagerPairingFailedReasonCode 
+
+Type Alias
+
+# BluetoothLESecurityManagerPairingFailedReasonCode
+
+macOS 10.7+
+
+``` source
+typedef enum BluetoothLESecurityManagerPairingFailedReasonCode BluetoothLESecurityManagerPairingFailedReasonCode;
+```
+
+## Topics
+
+### Constants
+
+kBluetoothLESecurityManagerReasonCodeAuthenticationRequirements
+
+kBluetoothLESecurityManagerReasonCodeBREDRPairingInProgress
+
+kBluetoothLESecurityManagerReasonCodeCommandNotSupported
+
+kBluetoothLESecurityManagerReasonCodeConfirmValueFailed
+
+kBluetoothLESecurityManagerReasonCodeCrossTransportKeyDerivationGenerationNotAllowed
+
+kBluetoothLESecurityManagerReasonCodeDHKeyCheckFailed
+
+kBluetoothLESecurityManagerReasonCodeEncryptionKeySize
+
+kBluetoothLESecurityManagerReasonCodeInvalidParameters
+
+kBluetoothLESecurityManagerReasonCodeNumericComparisonFailed
+
+kBluetoothLESecurityManagerReasonCodeOOBNotAvailbale
+
+kBluetoothLESecurityManagerReasonCodePairingNotSupported
+
+kBluetoothLESecurityManagerReasonCodePasskeyEntryFailed
+
+kBluetoothLESecurityManagerReasonCodeRepeatedAttempts
+
+kBluetoothLESecurityManagerReasonCodeReserved
+
+kBluetoothLESecurityManagerReasonCodeReservedEnd
+
+kBluetoothLESecurityManagerReasonCodeReservedStart
+
+kBluetoothLESecurityManagerReasonCodeUnspecifiedReason
+
+## See Also
+
+### Bluetooth LE
+
+BluetoothLEAddressType
+
+BluetoothLEAdvertisingType
+
+BluetoothLEConnectionInterval
+
+BluetoothLEFeatureBits
+
+BluetoothLEScan
+
+BluetoothLEScanDuplicateFilter
+
+BluetoothLEScanFilter
+
+BluetoothLEScanType
+
+BluetoothLESecurityManagerCommandCode
+
+BluetoothLESecurityManagerIOCapability
+
+BluetoothLESecurityManagerKeyDistributionFormat
+
+BluetoothLESecurityManagerKeypressNotificationType
+
+BluetoothLESecurityManagerOOBData
+
+BluetoothLESecurityManagerUserInputCapability
+
+BluetoothLESecurityManagerUserOutputCapability
+

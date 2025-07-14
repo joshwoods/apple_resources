@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_CSP_SERVICE_NOT_AVAILABLE 
+
+Global Variable
+
+# CSSMERR_CSP_SERVICE_NOT_AVAILABLE
+
+macOS 10.0+
+
+``` source
+var CSSMERR_CSP_SERVICE_NOT_AVAILABLE: Int { get }
+```
+

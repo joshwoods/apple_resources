@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_CSP_APPLE_SIGNATURE_MISMATCH 
+
+Global Variable
+
+# CSSMERR_CSP_APPLE_SIGNATURE_MISMATCH
+
+macOS 10.0+
+
+``` source
+var CSSMERR_CSP_APPLE_SIGNATURE_MISMATCH: Int { get }
+```
+

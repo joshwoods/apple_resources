@@ -1,0 +1,561 @@
+
+
+- Matter
+-  Other symbols 
+
+API Collection
+
+# Other symbols
+
+## Topics
+
+### Structures
+
+struct MTRActivatedCarbonFilterMonitoringFeature
+
+struct MTRAdministratorCommissioningFeature
+
+struct MTRAirQualityFeature
+
+struct MTRBooleanStateConfigurationAlarmModeBitmap
+
+struct MTRBooleanStateConfigurationFeature
+
+struct MTRBooleanStateConfigurationSensorFaultBitmap
+
+struct MTRCarbonDioxideConcentrationMeasurementFeature
+
+struct MTRCarbonMonoxideConcentrationMeasurementFeature
+
+struct MTRContentLauncherSupportedProtocolsBitmap
+
+struct MTRElectricalEnergyMeasurementFeature
+
+struct MTRElectricalPowerMeasurementFeature
+
+struct MTRFanControlRockBitmap
+
+struct MTRFanControlWindBitmap
+
+struct MTRFormaldehydeConcentrationMeasurementFeature
+
+struct MTRGroupsNameSupportBitmap
+
+struct MTRHEPAFilterMonitoringFeature
+
+struct MTRLevelControlOptionsBitmap
+
+struct MTRNetworkCommissioningWiFiSecurityBitmap
+
+struct MTRNitrogenDioxideConcentrationMeasurementFeature
+
+struct MTROnOffControlBitmap
+
+struct MTROzoneConcentrationMeasurementFeature
+
+struct MTRPM10ConcentrationMeasurementFeature
+
+struct MTRPM1ConcentrationMeasurementFeature
+
+struct MTRPM25ConcentrationMeasurementFeature
+
+struct MTRRVCCleanModeFeature
+
+struct MTRRVCRunModeFeature
+
+struct MTRRadonConcentrationMeasurementFeature
+
+struct MTRSmokeCOAlarmFeature
+
+struct MTRThermostatScheduleDayOfWeekBitmap
+
+struct MTRThermostatScheduleModeBitmap
+
+struct MTRTimeFormatLocalizationFeature
+
+struct MTRTotalVolatileOrganicCompoundsConcentrationMeasurementFeature
+
+struct MTRValveConfigurationAndControlFeature
+
+struct MTRValveConfigurationAndControlValveFaultBitmap
+
+### Classes
+
+class MTRAccessControlClusterAccessControlTargetStruct
+
+class MTRAccessGrant
+
+class MTRActivatedCarbonFilterMonitoringClusterReplacementProductStruct
+
+class MTRActivatedCarbonFilterMonitoringClusterResetConditionParams
+
+class MTRBaseClusterActivatedCarbonFilterMonitoring
+
+class MTRBaseClusterAirQuality
+
+class MTRBaseClusterBooleanStateConfiguration
+
+class MTRBaseClusterCarbonDioxideConcentrationMeasurement
+
+class MTRBaseClusterCarbonMonoxideConcentrationMeasurement
+
+class MTRBaseClusterElectricalEnergyMeasurement
+
+class MTRBaseClusterElectricalPowerMeasurement
+
+class MTRBaseClusterFormaldehydeConcentrationMeasurement
+
+class MTRBaseClusterHEPAFilterMonitoring
+
+class MTRBaseClusterNitrogenDioxideConcentrationMeasurement
+
+class MTRBaseClusterOperationalState
+
+class MTRBaseClusterOzoneConcentrationMeasurement
+
+class MTRBaseClusterPM10ConcentrationMeasurement
+
+class MTRBaseClusterPM1ConcentrationMeasurement
+
+class MTRBaseClusterPM25ConcentrationMeasurement
+
+class MTRBaseClusterRVCCleanMode
+
+class MTRBaseClusterRVCOperationalState
+
+class MTRBaseClusterRVCRunMode
+
+class MTRBaseClusterRadonConcentrationMeasurement
+
+class MTRBaseClusterSmokeCOAlarm
+
+class MTRBaseClusterTotalVolatileOrganicCompoundsConcentrationMeasurement
+
+class MTRBaseClusterValveConfigurationAndControl
+
+class MTRBooleanStateConfigurationClusterAlarmsStateChangedEvent
+
+class MTRBooleanStateConfigurationClusterEnableDisableAlarmParams
+
+class MTRBooleanStateConfigurationClusterSensorFaultEvent
+
+class MTRBooleanStateConfigurationClusterSuppressAlarmParams
+
+class MTRClusterActivatedCarbonFilterMonitoring
+
+class MTRClusterAirQuality
+
+class MTRClusterBooleanStateConfiguration
+
+class MTRClusterCarbonDioxideConcentrationMeasurement
+
+class MTRClusterCarbonMonoxideConcentrationMeasurement
+
+class MTRClusterElectricalEnergyMeasurement
+
+class MTRClusterElectricalPowerMeasurement
+
+class MTRClusterFormaldehydeConcentrationMeasurement
+
+class MTRClusterHEPAFilterMonitoring
+
+class MTRClusterNitrogenDioxideConcentrationMeasurement
+
+class MTRClusterOperationalState
+
+class MTRClusterOzoneConcentrationMeasurement
+
+class MTRClusterPM10ConcentrationMeasurement
+
+class MTRClusterPM1ConcentrationMeasurement
+
+class MTRClusterPM25ConcentrationMeasurement
+
+class MTRClusterRVCCleanMode
+
+class MTRClusterRVCOperationalState
+
+class MTRClusterRVCRunMode
+
+class MTRClusterRadonConcentrationMeasurement
+
+class MTRClusterSmokeCOAlarm
+
+class MTRClusterTotalVolatileOrganicCompoundsConcentrationMeasurement
+
+class MTRClusterValveConfigurationAndControl
+
+class MTRCommissionableBrowserResult
+
+class MTRDeviceControllerAbstractParameters
+
+class MTRDeviceControllerExternalCertificateParameters
+
+class MTRDeviceStorageBehaviorConfiguration
+
+Class that configures how MTRDevice objects persist their attributes to storage, so as to not overwhelm the underlying storage system.
+
+class MTRDeviceControllerParameters
+
+class MTRDeviceTypeRevision
+
+class MTRElectricalEnergyMeasurementClusterCumulativeEnergyMeasuredEvent
+
+class MTRElectricalEnergyMeasurementClusterCumulativeEnergyResetStruct
+
+class MTRElectricalEnergyMeasurementClusterEnergyMeasurementStruct
+
+class MTRElectricalEnergyMeasurementClusterMeasurementAccuracyStruct
+
+class MTRElectricalEnergyMeasurementClusterPeriodicEnergyMeasuredEvent
+
+class MTRElectricalPowerMeasurementClusterHarmonicMeasurementStruct
+
+class MTRElectricalPowerMeasurementClusterMeasurementAccuracyRangeStruct
+
+class MTRElectricalPowerMeasurementClusterMeasurementAccuracyStruct
+
+class MTRElectricalPowerMeasurementClusterMeasurementPeriodRangesEvent
+
+class MTRElectricalPowerMeasurementClusterMeasurementRangeStruct
+
+class MTRFanControlClusterStepParams
+
+class MTRGenericBaseCluster
+
+class MTRGenericCluster
+
+class MTRHEPAFilterMonitoringClusterReplacementProductStruct
+
+class MTRHEPAFilterMonitoringClusterResetConditionParams
+
+class MTRMetricData
+
+class MTRMetrics
+
+class MTRNetworkCommissioningClusterNetworkInfoStruct
+
+class MTRNetworkCommissioningClusterThreadInterfaceScanResultStruct
+
+class MTRNetworkCommissioningClusterWiFiInterfaceScanResultStruct
+
+class MTROperationalStateClusterErrorStateStruct
+
+class MTROperationalStateClusterOperationCompletionEvent
+
+class MTROperationalStateClusterOperationalCommandResponseParams
+
+class MTROperationalStateClusterOperationalErrorEvent
+
+class MTROperationalStateClusterOperationalStateStruct
+
+class MTROperationalStateClusterPauseParams
+
+class MTROperationalStateClusterResumeParams
+
+class MTROperationalStateClusterStartParams
+
+class MTROperationalStateClusterStopParams
+
+class MTRRVCCleanModeClusterChangeToModeParams
+
+class MTRRVCCleanModeClusterChangeToModeResponseParams
+
+class MTRRVCCleanModeClusterModeOptionStruct
+
+class MTRRVCCleanModeClusterModeTagStruct
+
+class MTRRVCOperationalStateClusterErrorStateStruct
+
+class MTRRVCOperationalStateClusterOperationCompletionEvent
+
+class MTRRVCOperationalStateClusterOperationalCommandResponseParams
+
+class MTRRVCOperationalStateClusterOperationalErrorEvent
+
+class MTRRVCOperationalStateClusterOperationalStateStruct
+
+class MTRRVCOperationalStateClusterPauseParams
+
+class MTRRVCOperationalStateClusterResumeParams
+
+class MTRRVCRunModeClusterChangeToModeParams
+
+class MTRRVCRunModeClusterChangeToModeResponseParams
+
+class MTRRVCRunModeClusterModeOptionStruct
+
+class MTRRVCRunModeClusterModeTagStruct
+
+class MTRServerAttribute
+
+class MTRServerCluster
+
+class MTRServerEndpoint
+
+class MTRSmokeCOAlarmClusterAlarmMutedEvent
+
+class MTRSmokeCOAlarmClusterAllClearEvent
+
+class MTRSmokeCOAlarmClusterCOAlarmEvent
+
+class MTRSmokeCOAlarmClusterEndOfServiceEvent
+
+class MTRSmokeCOAlarmClusterHardwareFaultEvent
+
+class MTRSmokeCOAlarmClusterInterconnectCOAlarmEvent
+
+class MTRSmokeCOAlarmClusterInterconnectSmokeAlarmEvent
+
+class MTRSmokeCOAlarmClusterLowBatteryEvent
+
+class MTRSmokeCOAlarmClusterMuteEndedEvent
+
+class MTRSmokeCOAlarmClusterSelfTestCompleteEvent
+
+class MTRSmokeCOAlarmClusterSelfTestRequestParams
+
+class MTRSmokeCOAlarmClusterSmokeAlarmEvent
+
+class MTRThermostatClusterWeeklyScheduleTransitionStruct
+
+class MTRThreadNetworkDiagnosticsClusterNeighborTableStruct
+
+class MTRThreadNetworkDiagnosticsClusterRouteTableStruct
+
+class MTRTimeSynchronizationClusterSetUTCTimeParams
+
+class MTRValveConfigurationAndControlClusterCloseParams
+
+class MTRValveConfigurationAndControlClusterOpenParams
+
+class MTRValveConfigurationAndControlClusterValveFaultEvent
+
+class MTRValveConfigurationAndControlClusterValveStateChangedEvent
+
+### Protocols
+
+protocol MTRCommissionableBrowserDelegate
+
+protocol MTRDeviceControllerStorageDelegate
+
+### Enumerations
+
+enum MTRActivatedCarbonFilterMonitoringChangeIndication
+
+enum MTRActivatedCarbonFilterMonitoringDegradationDirection
+
+struct MTRActivatedCarbonFilterMonitoringFeature
+
+enum MTRActivatedCarbonFilterMonitoringProductIdentifierType
+
+struct MTRAdministratorCommissioningFeature
+
+enum MTRAirQuality
+
+struct MTRAirQualityFeature
+
+struct MTRBooleanStateConfigurationAlarmModeBitmap
+
+struct MTRBooleanStateConfigurationFeature
+
+struct MTRBooleanStateConfigurationSensorFaultBitmap
+
+struct MTRCarbonDioxideConcentrationMeasurementFeature
+
+enum MTRCarbonDioxideConcentrationMeasurementLevelValue
+
+enum MTRCarbonDioxideConcentrationMeasurementMeasurementMedium
+
+enum MTRCarbonDioxideConcentrationMeasurementMeasurementUnit
+
+struct MTRCarbonMonoxideConcentrationMeasurementFeature
+
+enum MTRCarbonMonoxideConcentrationMeasurementLevelValue
+
+enum MTRCarbonMonoxideConcentrationMeasurementMeasurementMedium
+
+enum MTRCarbonMonoxideConcentrationMeasurementMeasurementUnit
+
+enum MTRContentLauncherStatus
+
+struct MTRContentLauncherSupportedProtocolsBitmap
+
+enum MTRDiagnosticLogType
+
+struct MTRElectricalEnergyMeasurementFeature
+
+struct MTRElectricalPowerMeasurementFeature
+
+enum MTRElectricalPowerMeasurementMeasurementType
+
+enum MTRElectricalPowerMeasurementPowerMode
+
+enum MTRFanControlAirflowDirection
+
+enum MTRFanControlFanMode
+
+enum MTRFanControlFanModeSequence
+
+struct MTRFanControlRockBitmap
+
+enum MTRFanControlStepDirection
+
+struct MTRFanControlWindBitmap
+
+struct MTRFormaldehydeConcentrationMeasurementFeature
+
+enum MTRFormaldehydeConcentrationMeasurementLevelValue
+
+enum MTRFormaldehydeConcentrationMeasurementMeasurementMedium
+
+enum MTRFormaldehydeConcentrationMeasurementMeasurementUnit
+
+struct MTRGroupsNameSupportBitmap
+
+enum MTRHEPAFilterMonitoringChangeIndication
+
+enum MTRHEPAFilterMonitoringDegradationDirection
+
+struct MTRHEPAFilterMonitoringFeature
+
+enum MTRHEPAFilterMonitoringProductIdentifierType
+
+enum MTRKeypadInputCECKeyCode
+
+struct MTRLevelControlOptionsBitmap
+
+struct MTRNetworkCommissioningWiFiSecurityBitmap
+
+struct MTRNitrogenDioxideConcentrationMeasurementFeature
+
+enum MTRNitrogenDioxideConcentrationMeasurementLevelValue
+
+enum MTRNitrogenDioxideConcentrationMeasurementMeasurementMedium
+
+enum MTRNitrogenDioxideConcentrationMeasurementMeasurementUnit
+
+enum MTROTASoftwareUpdateProviderApplyUpdateAction
+
+enum MTROTASoftwareUpdateProviderDownloadProtocol
+
+enum MTROTASoftwareUpdateProviderStatus
+
+enum MTROTASoftwareUpdateRequestorAnnouncementReason
+
+enum MTROTASoftwareUpdateRequestorChangeReason
+
+enum MTROTASoftwareUpdateRequestorUpdateState
+
+struct MTROnOffControlBitmap
+
+enum MTROperationalState
+
+enum MTROperationalStateErrorState
+
+struct MTROzoneConcentrationMeasurementFeature
+
+enum MTROzoneConcentrationMeasurementLevelValue
+
+enum MTROzoneConcentrationMeasurementMeasurementMedium
+
+enum MTROzoneConcentrationMeasurementMeasurementUnit
+
+struct MTRPM10ConcentrationMeasurementFeature
+
+enum MTRPM10ConcentrationMeasurementLevelValue
+
+enum MTRPM10ConcentrationMeasurementMeasurementMedium
+
+enum MTRPM10ConcentrationMeasurementMeasurementUnit
+
+struct MTRPM1ConcentrationMeasurementFeature
+
+enum MTRPM1ConcentrationMeasurementLevelValue
+
+enum MTRPM1ConcentrationMeasurementMeasurementMedium
+
+enum MTRPM1ConcentrationMeasurementMeasurementUnit
+
+struct MTRPM25ConcentrationMeasurementFeature
+
+enum MTRPM25ConcentrationMeasurementLevelValue
+
+enum MTRPM25ConcentrationMeasurementMeasurementMedium
+
+enum MTRPM25ConcentrationMeasurementMeasurementUnit
+
+struct MTRRVCCleanModeFeature
+
+enum MTRRVCCleanModeModeTag
+
+enum MTRRVCCleanModeStatusCode
+
+enum MTRRVCOperationalStateErrorState
+
+enum MTRRVCOperationalStateOperationalState
+
+struct MTRRVCRunModeFeature
+
+enum MTRRVCRunModeModeTag
+
+enum MTRRVCRunModeStatusCode
+
+struct MTRRadonConcentrationMeasurementFeature
+
+enum MTRRadonConcentrationMeasurementLevelValue
+
+enum MTRRadonConcentrationMeasurementMeasurementMedium
+
+enum MTRRadonConcentrationMeasurementMeasurementUnit
+
+enum MTRSmokeCOAlarmAlarmState
+
+enum MTRSmokeCOAlarmContaminationState
+
+enum MTRSmokeCOAlarmEndOfService
+
+enum MTRSmokeCOAlarmExpressedState
+
+struct MTRSmokeCOAlarmFeature
+
+enum MTRSmokeCOAlarmMuteState
+
+enum MTRSmokeCOAlarmSensitivity
+
+enum MTRStorageSecurityLevel
+
+enum MTRStorageSharingType
+
+enum MTRThermostatControlSequenceOfOperation
+
+struct MTRThermostatScheduleDayOfWeekBitmap
+
+struct MTRThermostatScheduleModeBitmap
+
+enum MTRThermostatSetpointRaiseLowerMode
+
+enum MTRThermostatUserInterfaceConfigurationKeypadLockout
+
+enum MTRThermostatUserInterfaceConfigurationScheduleProgrammingVisibility
+
+enum MTRThermostatUserInterfaceConfigurationTemperatureDisplayMode
+
+struct MTRTimeFormatLocalizationFeature
+
+struct MTRTotalVolatileOrganicCompoundsConcentrationMeasurementFeature
+
+enum MTRTotalVolatileOrganicCompoundsConcentrationMeasurementLevelValue
+
+enum MTRTotalVolatileOrganicCompoundsConcentrationMeasurementMeasurementMedium
+
+enum MTRTotalVolatileOrganicCompoundsConcentrationMeasurementMeasurementUnit
+
+struct MTRValveConfigurationAndControlFeature
+
+enum MTRValveConfigurationAndControlStatusCode
+
+struct MTRValveConfigurationAndControlValveFaultBitmap
+
+enum MTRValveConfigurationAndControlValveState
+

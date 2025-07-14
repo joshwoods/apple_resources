@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Enumerations
+- mph_panic_flags_t
+-  MACOS_PANIC_HEADER_FLAG_COREFILE_UNLINKED 
+
+Enumeration Case
+
+# MACOS_PANIC_HEADER_FLAG_COREFILE_UNLINKED
+
+macOS 13.0+
+
+``` source
+MACOS_PANIC_HEADER_FLAG_COREFILE_UNLINKED
+```
+

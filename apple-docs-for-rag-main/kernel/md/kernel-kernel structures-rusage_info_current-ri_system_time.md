@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Structures
+- rusage_info_current
+-  ri_system_time 
+
+Instance Property
+
+# ri_system_time
+
+macOS 10.10+
+
+``` source
+uint64_t ri_system_time;
+```
+

@@ -1,0 +1,1871 @@
+
+
+- Matter
+-  Clusters 
+
+API Collection
+
+# Clusters
+
+Interact with groups of related functionality that Matter accessories expose.
+
+## Overview
+
+A cluster defines data and a set of related commands that operate on that data. For example, a temperature sensor exposes the Temperature Measurement cluster that provides ambient temperature. A door lock exposes the Door Lock cluster that provides the state of the lock, as well as commands to lock, unlock, and add access codes.
+
+## Topics
+
+### Interacting with the Application Launcher cluster
+
+struct MTRApplicationLauncherFeature
+
+class MTRBaseClusterApplicationLauncher
+
+class MTRApplicationLauncherClusterApplicationEPStruct
+
+class MTRApplicationLauncherClusterApplicationStruct
+
+class MTRApplicationLauncherClusterHideAppParams
+
+class MTRApplicationLauncherClusterLaunchAppParams
+
+class MTRApplicationLauncherClusterLauncherResponseParams
+
+class MTRApplicationLauncherClusterStopAppParams
+
+class MTRApplicationLauncherClusterApplicationDeprecated
+
+class MTRApplicationLauncherClusterApplicationEPDeprecated
+
+### Interacting with the Content Launcher cluster
+
+enum MTRContentLauncherContentLaunchStatusDeprecated
+
+struct MTRContentLauncherFeature
+
+enum MTRContentLauncherMetricType
+
+enum MTRContentLauncherParameter
+
+struct MTRContentLauncherSupportedStreamingProtocolDeprecated
+
+class MTRBaseClusterContentLauncher
+
+class MTRContentLauncherClusterAdditionalInfoStruct
+
+class MTRContentLauncherClusterBrandingInformationStruct
+
+class MTRContentLauncherClusterContentSearchStruct
+
+class MTRContentLauncherClusterDimensionStruct
+
+class MTRContentLauncherClusterAdditionalInfoDeprecated
+
+class MTRContentLauncherClusterBrandingInformationDeprecated
+
+class MTRContentLauncherClusterContentSearchDeprecated
+
+class MTRContentLauncherClusterDimensionDeprecated
+
+### Interacting with the Pump Configuration and Control cluster
+
+struct MTRPumpConfigurationAndControlPumpStatusDeprecated
+
+struct MTRPumpConfigurationAndControlFeature
+
+struct MTRPumpConfigurationAndControlPumpFeatureDeprecated
+
+struct MTRPumpConfigurationAndControlPumpStatusBitmap
+
+class MTRPumpConfigurationAndControlClusterAirDetectionEvent
+
+class MTRPumpConfigurationAndControlClusterDryRunningEvent
+
+class MTRPumpConfigurationAndControlClusterElectronicFatalFailureEvent
+
+class MTRPumpConfigurationAndControlClusterElectronicNonFatalFailureEvent
+
+class MTRPumpConfigurationAndControlClusterElectronicTemperatureHighEvent
+
+class MTRPumpConfigurationAndControlClusterGeneralFaultEvent
+
+class MTRPumpConfigurationAndControlClusterLeakageEvent
+
+class MTRPumpConfigurationAndControlClusterMotorTemperatureHighEvent
+
+class MTRPumpConfigurationAndControlClusterPowerMissingPhaseEvent
+
+class MTRPumpConfigurationAndControlClusterPumpBlockedEvent
+
+class MTRPumpConfigurationAndControlClusterPumpMotorFatalFailureEvent
+
+class MTRPumpConfigurationAndControlClusterSensorFailureEvent
+
+class MTRPumpConfigurationAndControlClusterSupplyVoltageHighEvent
+
+class MTRPumpConfigurationAndControlClusterSupplyVoltageLowEvent
+
+class MTRPumpConfigurationAndControlClusterSystemPressureHighEvent
+
+class MTRPumpConfigurationAndControlClusterSystemPressureLowEvent
+
+class MTRPumpConfigurationAndControlClusterTurbineOperationEvent
+
+### Interacting with the Level Control cluster
+
+class MTRBaseClusterLevelControl
+
+struct MTRLevelControlFeature
+
+enum MTRLevelControlMoveMode
+
+struct MTRLevelControlOptionsDeprecated
+
+enum MTRLevelControlStepMode
+
+class MTRLevelControlClusterMoveParams
+
+class MTRLevelControlClusterMoveToClosestFrequencyParams
+
+class MTRLevelControlClusterMoveToLevelParams
+
+class MTRLevelControlClusterMoveToLevelWithOnOffParams
+
+class MTRLevelControlClusterMoveWithOnOffParams
+
+class MTRLevelControlClusterStepParams
+
+class MTRLevelControlClusterStepWithOnOffParams
+
+class MTRLevelControlClusterStopParams
+
+class MTRLevelControlClusterStopWithOnOffParams
+
+### Interacting with the Switch cluster
+
+class MTRSwitchClusterMultiPressOngoingEvent
+
+class MTRSwitchClusterShortReleaseEvent
+
+class MTRSwitchClusterSwitchLatchedEvent
+
+class MTRSwitchClusterInitialPressEvent
+
+class MTRSwitchClusterLongPressEvent
+
+class MTRSwitchClusterLongReleaseEvent
+
+class MTRSwitchClusterMultiPressCompleteEvent
+
+### Interacting with the On Off cluster
+
+struct MTROnOffControlDeprecated
+
+struct MTROnOffFeature
+
+class MTROnOffClusterOffParams
+
+class MTROnOffClusterOffWithEffectParams
+
+class MTROnOffClusterOnParams
+
+class MTROnOffClusterOnWithRecallGlobalSceneParams
+
+class MTROnOffClusterOnWithTimedOffParams
+
+class MTROnOffClusterToggleParams
+
+### Interacting with the Door Lock cluster
+
+enum MTRDoorLockAlarmCode
+
+enum MTRDoorLockCredentialRule
+
+enum MTRDoorLockCredentialType
+
+enum MTRDoorLockDataOperationType
+
+enum MTRDoorLockDlLockState
+
+enum MTRDoorLockDlLockType
+
+enum MTRDoorLockDlStatus
+
+enum MTRDoorLockDoorState
+
+enum MTRDoorLockLockDataType
+
+enum MTRDoorLockLockOperationType
+
+enum MTRDoorLockOperatingMode
+
+enum MTRDoorLockOperationError
+
+enum MTRDoorLockOperationSource
+
+enum MTRDoorLockUserStatus
+
+enum MTRDoorLockUserType
+
+struct MTRDoorLockDayOfWeek
+
+struct MTRDoorLockDaysMaskMap
+
+struct MTRDoorLockDlCredentialRuleMask
+
+struct MTRDoorLockDlCredentialRulesSupport
+
+struct MTRDoorLockDlDefaultConfigurationRegister
+
+struct MTRDoorLockDlKeypadOperationEventMask
+
+struct MTRDoorLockDlKeypadProgrammingEventMask
+
+struct MTRDoorLockDlLocalProgrammingFeatures
+
+struct MTRDoorLockDlManualOperationEventMask
+
+struct MTRDoorLockDlRFIDOperationEventMask
+
+struct MTRDoorLockDlRFIDProgrammingEventMask
+
+struct MTRDoorLockDlRemoteOperationEventMask
+
+struct MTRDoorLockDlRemoteProgrammingEventMask
+
+struct MTRDoorLockDlSupportedOperatingModes
+
+struct MTRDoorLockFeature
+
+class MTRBaseClusterDoorLock
+
+class MTRDoorLockClusterLockOperationEvent
+
+class MTRDoorLockClusterLockUserChangeEvent
+
+class MTRDoorLockClusterSetCredentialParams
+
+class MTRDoorLockClusterSetCredentialResponseParams
+
+class MTRDoorLockClusterSetHolidayScheduleParams
+
+class MTRDoorLockClusterSetUserParams
+
+class MTRDoorLockClusterSetWeekDayScheduleParams
+
+class MTRDoorLockClusterSetYearDayScheduleParams
+
+class MTRDoorLockClusterUnlockDoorParams
+
+class MTRDoorLockClusterUnlockWithTimeoutParams
+
+class MTRElectricalMeasurementClusterGetMeasurementProfileCommandParamsDeprecated
+
+class MTRDoorLockClusterGetUserParams
+
+class MTRDoorLockClusterGetUserResponseParams
+
+class MTRDoorLockClusterGetWeekDayScheduleParams
+
+class MTRDoorLockClusterGetWeekDayScheduleResponseParams
+
+class MTRDoorLockClusterGetYearDayScheduleParams
+
+class MTRDoorLockClusterGetYearDayScheduleResponseParams
+
+class MTRDoorLockClusterLockDoorParams
+
+class MTRDoorLockClusterLockOperationErrorEvent
+
+class MTRDoorLockClusterClearYearDayScheduleParams
+
+class MTRDoorLockClusterCredentialStruct
+
+class MTRDoorLockClusterDoorLockAlarmEvent
+
+class MTRDoorLockClusterDoorStateChangeEvent
+
+class MTRDoorLockClusterGetCredentialStatusParams
+
+class MTRDoorLockClusterGetCredentialStatusResponseParams
+
+class MTRDoorLockClusterGetHolidayScheduleParams
+
+class MTRDoorLockClusterGetHolidayScheduleResponseParams
+
+class MTRDoorLockClusterClearCredentialParams
+
+class MTRDoorLockClusterClearHolidayScheduleParams
+
+class MTRDoorLockClusterClearUserParams
+
+class MTRDoorLockClusterClearWeekDayScheduleParams
+
+struct MTRDoorLockDlDaysMaskMapDeprecated
+
+### Interacting with the Thermostat cluster
+
+struct MTRThermostatModeForSequenceDeprecated
+
+struct MTRThermostatDayOfWeekDeprecated
+
+class MTRBaseClusterThermostat
+
+class MTRThermostatClusterClearWeeklyScheduleParams
+
+class MTRThermostatClusterGetWeeklyScheduleParams
+
+class MTRThermostatClusterGetWeeklyScheduleResponseParams
+
+class MTRThermostatClusterSetWeeklyScheduleParams
+
+class MTRThermostatClusterSetpointRaiseLowerParams
+
+class MTRThermostatClusterThermostatScheduleTransitionDeprecated
+
+### Interacting with the Wi-Fi Network Diagnostics cluster
+
+class MTRBaseClusterWiFiNetworkDiagnostics
+
+class MTRWiFiNetworkDiagnosticsClusterAssociationFailureEvent
+
+class MTRWiFiNetworkDiagnosticsClusterConnectionStatusEvent
+
+class MTRWiFiNetworkDiagnosticsClusterDisconnectionEvent
+
+class MTRWiFiNetworkDiagnosticsClusterResetCountsParams
+
+struct MTRWiFiNetworkDiagnosticsFeature
+
+enum MTRWiFiNetworkDiagnosticsAssociationFailureCause
+
+enum MTRWiFiNetworkDiagnosticsConnectionStatus
+
+enum MTRWiFiNetworkDiagnosticsSecurityType
+
+enum MTRWiFiNetworkDiagnosticsWiFiVersion
+
+enum MTRWiFiNetworkDiagnosticsWiFiConnectionStatusDeprecated
+
+enum MTRWiFiNetworkDiagnosticsWiFiVersionTypeDeprecated
+
+### Interacting with the Window Covering cluster
+
+class MTRBaseClusterWindowCovering
+
+struct MTRWindowCoveringConfigStatus
+
+enum MTRWindowCoveringEndProductType
+
+struct MTRWindowCoveringFeature
+
+struct MTRActionsCommandBits
+
+struct MTRWindowCoveringMode
+
+struct MTRWindowCoveringOperationalStatus
+
+struct MTRWindowCoveringSafetyStatus
+
+enum MTRWindowCoveringType
+
+class MTRWindowCoveringClusterDownOrCloseParams
+
+class MTRWindowCoveringClusterGoToLiftPercentageParams
+
+class MTRWindowCoveringClusterGoToLiftValueParams
+
+class MTRWindowCoveringClusterGoToTiltPercentageParams
+
+class MTRWindowCoveringClusterGoToTiltValueParams
+
+class MTRWindowCoveringClusterStopMotionParams
+
+class MTRWindowCoveringClusterUpOrOpenParams
+
+### Interacting with the Power Source cluster
+
+struct MTRPowerSourceFeature
+
+class MTRPowerSourceClusterBatChargeFaultChangeEvent
+
+class MTRPowerSourceClusterBatFaultChangeEvent
+
+class MTRPowerSourceClusterWiredFaultChangeEvent
+
+class MTRPowerSourceClusterBatFaultChangeTypeDeprecated
+
+class MTRPowerSourceClusterBatChargeFaultChangeTypeDeprecated
+
+class MTRPowerSourceClusterWiredFaultChangeTypeDeprecated
+
+### Interacting with the Thread Network Diagnostics cluster
+
+enum MTRThreadNetworkDiagnosticsConnectionStatus
+
+struct MTRThreadNetworkDiagnosticsFeature
+
+enum MTRThreadNetworkDiagnosticsNetworkFault
+
+enum MTRThreadNetworkDiagnosticsRoutingRole
+
+class MTRThreadNetworkDiagnosticsClusterNeighborTableDeprecated
+
+class MTRThreadNetworkDiagnosticsClusterNetworkFaultChangeEvent
+
+class MTRThreadNetworkDiagnosticsClusterOperationalDatasetComponents
+
+class MTRThreadNetworkDiagnosticsClusterResetCountsParams
+
+class MTRThreadNetworkDiagnosticsClusterRouteTableDeprecated
+
+class MTRThreadNetworkDiagnosticsClusterSecurityPolicy
+
+### Interacting with the Color Control cluster
+
+class MTRBaseClusterColorControl
+
+struct MTRColorControlColorCapabilitiesDeprecated
+
+enum MTRColorControlColorLoopAction
+
+enum MTRColorControlColorLoopDirection
+
+struct MTRColorControlColorLoopUpdateFlagsDeprecated
+
+enum MTRColorControlColorMode
+
+struct MTRColorControlFeature
+
+enum MTRColorControlHueDirectionDeprecated
+
+enum MTRColorControlHueMoveModeDeprecated
+
+enum MTRColorControlHueStepModeDeprecated
+
+enum MTRColorControlSaturationMoveModeDeprecated
+
+enum MTRColorControlSaturationStepModeDeprecated
+
+class MTRColorControlClusterColorLoopSetParams
+
+class MTRColorControlClusterEnhancedMoveHueParams
+
+class MTRColorControlClusterEnhancedMoveToHueAndSaturationParams
+
+class MTRColorControlClusterEnhancedMoveToHueParams
+
+class MTRColorControlClusterEnhancedStepHueParams
+
+class MTRColorControlClusterMoveColorParams
+
+class MTRColorControlClusterMoveColorTemperatureParams
+
+class MTRColorControlClusterMoveHueParams
+
+class MTRColorControlClusterMoveSaturationParams
+
+class MTRColorControlClusterMoveToColorParams
+
+class MTRColorControlClusterMoveToColorTemperatureParams
+
+class MTRColorControlClusterMoveToHueAndSaturationParams
+
+class MTRColorControlClusterMoveToHueParams
+
+class MTRColorControlClusterMoveToSaturationParams
+
+class MTRColorControlClusterStepColorParams
+
+class MTRColorControlClusterStepColorTemperatureParams
+
+class MTRColorControlClusterStepHueParams
+
+class MTRColorControlClusterStepSaturationParams
+
+class MTRColorControlClusterStopMoveStepParams
+
+### Interacting with the Operational Credentials cluster
+
+class MTROperationalCredentialsClusterAddNOCParams
+
+class MTROperationalCredentialsClusterAddTrustedRootCertificateParams
+
+class MTROperationalCredentialsClusterAttestationRequestParams
+
+class MTROperationalCredentialsClusterAttestationResponseParams
+
+class MTROperationalCredentialsClusterCSRRequestParams
+
+class MTROperationalCredentialsClusterCSRResponseParams
+
+class MTROperationalCredentialsClusterCertificateChainRequestParams
+
+class MTROperationalCredentialsClusterCertificateChainResponseParams
+
+class MTROperationalCredentialsClusterFabricDescriptorStruct
+
+class MTROperationalCredentialsClusterNOCResponseParams
+
+class MTROperationalCredentialsClusterNOCStruct
+
+class MTROperationalCredentialsClusterRemoveFabricParams
+
+class MTROperationalCredentialsClusterUpdateFabricLabelParams
+
+class MTROperationalCredentialsClusterUpdateNOCParams
+
+class MTROperationalCredentialsClusterFabricDescriptorDeprecated
+
+### Interacting with the Actions cluster
+
+class MTRBaseClusterActions
+
+class MTRActionsClusterActionFailedEvent
+
+class MTRActionsClusterActionStruct
+
+class MTRActionsClusterDisableActionParams
+
+class MTRActionsClusterDisableActionWithDurationParams
+
+class MTRActionsClusterEnableActionParams
+
+class MTRActionsClusterEnableActionWithDurationParams
+
+class MTRActionsClusterEndpointListStruct
+
+class MTRActionsClusterInstantActionParams
+
+class MTRActionsClusterInstantActionWithTransitionParams
+
+class MTRActionsClusterPauseActionParams
+
+class MTRActionsClusterPauseActionWithDurationParams
+
+class MTRActionsClusterResumeActionParams
+
+class MTRActionsClusterStartActionParams
+
+class MTRActionsClusterStartActionWithDurationParams
+
+class MTRActionsClusterStateChangedEvent
+
+class MTRActionsClusterStopActionParams
+
+enum MTRActionsActionError
+
+enum MTRActionsActionState
+
+enum MTRActionsActionType
+
+struct MTRActionsCommandBits
+
+enum MTRActionsEndpointListType
+
+### Interacting with the Software Diagnostics cluster
+
+struct MTRThermostatFeature
+
+struct MTRSoftwareDiagnosticsFeature
+
+class MTRBaseClusterSoftwareDiagnostics
+
+class MTRSoftwareDiagnosticsClusterResetWatermarksParams
+
+class MTRSoftwareDiagnosticsClusterSoftwareFaultEvent
+
+class MTRSoftwareDiagnosticsClusterThreadMetricsStruct
+
+class MTRSoftwareDiagnosticsClusterThreadMetricsDeprecated
+
+### Interacting with the Time Synchronization cluster
+
+enum MTRTimeFormatLocalizationCalendarType
+
+enum MTRTimeFormatLocalizationHourFormat
+
+enum MTRTimeSynchronizationGranularity
+
+enum MTRTimeSynchronizationTimeSource
+
+class MTRTimeSynchronizationClusterDSTOffsetStruct
+
+class MTRTimeSynchronizationClusterTimeZoneStruct
+
+class MTRTimeSynchronizationClusterDstOffsetTypeDeprecated
+
+class MTRTimeSynchronizationClusterTimeZoneTypeDeprecated
+
+### Interacting with the OTA Software Update Provider cluster
+
+class MTRBaseClusterOTASoftwareUpdateProvider
+
+class MTROTAHeader
+
+class MTROTASoftwareUpdateProviderClusterApplyUpdateRequestParams
+
+class MTROTASoftwareUpdateProviderClusterApplyUpdateResponseParams
+
+class MTROTASoftwareUpdateProviderClusterNotifyUpdateAppliedParams
+
+class MTROTASoftwareUpdateProviderClusterQueryImageParams
+
+class MTROTASoftwareUpdateProviderClusterQueryImageResponseParams
+
+class MTROTASoftwareUpdateRequestorClusterAnnounceOTAProviderParams
+
+class MTROTASoftwareUpdateRequestorClusterDownloadErrorEvent
+
+class MTROTASoftwareUpdateRequestorClusterProviderLocation
+
+class MTROTASoftwareUpdateRequestorClusterStateTransitionEvent
+
+class MTROTASoftwareUpdateRequestorClusterVersionAppliedEvent
+
+enum MTROTAImageDigestType
+
+enum MTROTASoftwareUpdateProviderOTAApplyUpdateActionDeprecated
+
+enum MTROTASoftwareUpdateProviderOTADownloadProtocolDeprecated
+
+enum MTROTASoftwareUpdateProviderOTAQueryStatusDeprecated
+
+enum MTROTASoftwareUpdateRequestorOTAAnnouncementReasonDeprecated
+
+enum MTROTASoftwareUpdateRequestorOTAChangeReasonDeprecated
+
+enum MTROTASoftwareUpdateRequestorOTAUpdateStateDeprecated
+
+class MTROtaSoftwareUpdateRequestorClusterStateTransitionEventDeprecated
+
+class MTROtaSoftwareUpdateRequestorClusterVersionAppliedEventDeprecated
+
+class MTROtaSoftwareUpdateRequestorClusterAnnounceOtaProviderParamsDeprecated
+
+class MTROtaSoftwareUpdateRequestorClusterDownloadErrorEventDeprecated
+
+class MTROtaSoftwareUpdateRequestorClusterProviderLocationDeprecated
+
+enum MTROtaSoftwareUpdateRequestorOTAAnnouncementReasonDeprecated
+
+enum MTROtaSoftwareUpdateRequestorOTAChangeReasonDeprecated
+
+enum MTROtaSoftwareUpdateRequestorOTAUpdateStateDeprecated
+
+### Interacting with the OTA Software Update Requestor cluster
+
+class MTRBaseClusterOTASoftwareUpdateRequestor
+
+class MTROtaSoftwareUpdateProviderClusterApplyUpdateRequestParamsDeprecated
+
+class MTROtaSoftwareUpdateProviderClusterApplyUpdateResponseParamsDeprecated
+
+class MTROtaSoftwareUpdateProviderClusterNotifyUpdateAppliedParamsDeprecated
+
+class MTROtaSoftwareUpdateProviderClusterQueryImageParamsDeprecated
+
+class MTROtaSoftwareUpdateProviderClusterQueryImageResponseParamsDeprecated
+
+enum MTROtaSoftwareUpdateProviderOTAApplyUpdateActionDeprecated
+
+enum MTROtaSoftwareUpdateProviderOTADownloadProtocolDeprecated
+
+enum MTROtaSoftwareUpdateProviderOTAQueryStatusDeprecated
+
+### Interacting with the Unit Testing cluster
+
+struct MTRUnitTestingBitmap16MaskMap
+
+struct MTRUnitTestingBitmap32MaskMap
+
+struct MTRUnitTestingBitmap64MaskMap
+
+struct MTRUnitTestingBitmap8MaskMap
+
+enum MTRUnitTestingSimple
+
+struct MTRUnitTestingSimpleBitmap
+
+class MTRUnitTestingClusterTestFabricScoped
+
+class MTRUnitTestingClusterTestFabricScopedEventEvent
+
+class MTRUnitTestingClusterTestListInt8UArgumentRequestParams
+
+class MTRUnitTestingClusterTestListInt8UReverseRequestParams
+
+class MTRUnitTestingClusterTestListInt8UReverseResponseParams
+
+class MTRUnitTestingClusterTestListNestedStructListArgumentRequestParams
+
+class MTRUnitTestingClusterTestListStructArgumentRequestParams
+
+class MTRUnitTestingClusterTestListStructOctet
+
+class MTRUnitTestingClusterTestNestedStructArgumentRequestParams
+
+class MTRUnitTestingClusterTestNestedStructListArgumentRequestParams
+
+class MTRUnitTestingClusterTestNotHandledParams
+
+class MTRUnitTestingClusterTestNullableOptionalRequestParams
+
+class MTRUnitTestingClusterTestNullableOptionalResponseParams
+
+class MTRUnitTestingClusterTestParams
+
+class MTRUnitTestingClusterTestSimpleArgumentRequestParams
+
+class MTRUnitTestingClusterTestSimpleArgumentResponseParams
+
+class MTRUnitTestingClusterTestSimpleOptionalArgumentRequestParams
+
+class MTRUnitTestingClusterTestSpecificParams
+
+class MTRUnitTestingClusterTestSpecificResponseParams
+
+class MTRUnitTestingClusterTestStructArgumentRequestParams
+
+class MTRUnitTestingClusterTestStructArrayArgumentRequestParams
+
+class MTRUnitTestingClusterTestStructArrayArgumentResponseParams
+
+class MTRUnitTestingClusterTestUnknownCommandParams
+
+class MTRUnitTestingClusterTimedInvokeRequestParams
+
+class MTRUserLabelClusterLabelStruct
+
+class MTRTimeSynchronizationClusterSetUtcTimeParams
+
+class MTRUnitTestingClusterBooleanResponseParams
+
+class MTRUnitTestingClusterDoubleNestedStructList
+
+class MTRUnitTestingClusterNestedStruct
+
+class MTRUnitTestingClusterNestedStructList
+
+class MTRUnitTestingClusterNullablesAndOptionalsStruct
+
+class MTRUnitTestingClusterSimpleStruct
+
+class MTRUnitTestingClusterSimpleStructEchoRequestParams
+
+class MTRUnitTestingClusterSimpleStructResponseParams
+
+class MTRUnitTestingClusterTestAddArgumentsParams
+
+class MTRUnitTestingClusterTestAddArgumentsResponseParams
+
+class MTRUnitTestingClusterTestComplexNullableOptionalRequestParams
+
+class MTRUnitTestingClusterTestComplexNullableOptionalResponseParams
+
+class MTRUnitTestingClusterTestEmitTestEventRequestParams
+
+class MTRUnitTestingClusterTestEmitTestEventResponseParams
+
+class MTRUnitTestingClusterTestEmitTestFabricScopedEventRequestParams
+
+class MTRUnitTestingClusterTestEmitTestFabricScopedEventResponseParams
+
+class MTRUnitTestingClusterTestEnumsRequestParams
+
+class MTRUnitTestingClusterTestEnumsResponseParams
+
+class MTRUnitTestingClusterTestEventEvent
+
+class MTRTestClusterClusterBooleanResponseParamsDeprecated
+
+class MTRTestClusterClusterDoubleNestedStructListDeprecated
+
+class MTRTestClusterClusterNestedStructDeprecated
+
+class MTRTestClusterClusterNestedStructListDeprecated
+
+class MTRTestClusterClusterNullablesAndOptionalsStructDeprecated
+
+class MTRTestClusterClusterSimpleStructDeprecated
+
+class MTRTestClusterClusterSimpleStructEchoRequestParamsDeprecated
+
+class MTRTestClusterClusterSimpleStructResponseParamsDeprecated
+
+class MTRTestClusterClusterTestAddArgumentsParamsDeprecated
+
+class MTRTestClusterClusterTestAddArgumentsResponseParamsDeprecated
+
+class MTRTestClusterClusterTestComplexNullableOptionalRequestParamsDeprecated
+
+class MTRTestClusterClusterTestComplexNullableOptionalResponseParamsDeprecated
+
+class MTRTestClusterClusterTestEmitTestEventRequestParamsDeprecated
+
+class MTRTestClusterClusterTestEmitTestEventResponseParamsDeprecated
+
+class MTRTestClusterClusterTestEmitTestFabricScopedEventRequestParamsDeprecated
+
+class MTRTestClusterClusterTestEmitTestFabricScopedEventResponseParamsDeprecated
+
+struct MTRTestClusterBitmap16MaskMapDeprecated
+
+struct MTRTestClusterBitmap32MaskMapDeprecated
+
+struct MTRTestClusterBitmap64MaskMapDeprecated
+
+struct MTRTestClusterBitmap8MaskMapDeprecated
+
+struct MTRTestClusterSimpleBitmapDeprecated
+
+### Interacting with the Media Playback cluster
+
+class MTRMediaPlaybackClusterFastForwardParams
+
+class MTRMediaPlaybackClusterNextParams
+
+class MTRMediaPlaybackClusterPauseParams
+
+class MTRMediaPlaybackClusterPlayParams
+
+class MTRMediaPlaybackClusterPlaybackPositionStruct
+
+class MTRMediaPlaybackClusterPlaybackResponseParams
+
+class MTRMediaPlaybackClusterPreviousParams
+
+class MTRMediaPlaybackClusterRewindParams
+
+class MTRMediaPlaybackClusterSeekParams
+
+class MTRMediaPlaybackClusterSkipBackwardParams
+
+class MTRMediaPlaybackClusterSkipForwardParams
+
+class MTRMediaPlaybackClusterStartOverParams
+
+class MTRMediaPlaybackClusterStopParams
+
+### Interacting with other clusters
+
+struct MTRPressureMeasurementFeature
+
+class MTRBasicInformationClusterProductAppearanceStruct
+
+class MTRBridgedDeviceBasicInformationClusterProductAppearanceStruct
+
+class MTRBaseClusterAccessControl
+
+class MTRBaseClusterAccountLogin
+
+class MTRBaseClusterAdministratorCommissioning
+
+class MTRBaseClusterApplicationBasic
+
+class MTRBaseClusterAudioOutput
+
+class MTRBaseClusterBallastConfiguration
+
+class MTRBaseClusterBarrierControlDeprecated
+
+class MTRBaseClusterBasicInformation
+
+class MTRBaseClusterBinaryInputBasicDeprecated
+
+class MTRBaseClusterBinding
+
+class MTRBaseClusterBooleanState
+
+class MTRBaseClusterBridgedDeviceBasicDeprecated
+
+class MTRBaseClusterBridgedDeviceBasicInformation
+
+class MTRBaseClusterChannel
+
+class MTRBaseClusterDescriptor
+
+class MTRBaseClusterDiagnosticLogs
+
+class MTRBaseClusterElectricalMeasurementDeprecated
+
+class MTRBaseClusterEthernetNetworkDiagnostics
+
+class MTRBaseClusterFanControl
+
+class MTRBaseClusterFixedLabel
+
+class MTRBaseClusterFlowMeasurement
+
+class MTRBaseClusterGeneralCommissioning
+
+class MTRBaseClusterGeneralDiagnostics
+
+class MTRBaseClusterGroupKeyManagement
+
+class MTRBaseClusterGroups
+
+class MTRBaseClusterIdentify
+
+class MTRBaseClusterIlluminanceMeasurement
+
+class MTRBaseClusterKeypadInput
+
+class MTRBaseClusterLocalizationConfiguration
+
+class MTRBaseClusterLowPower
+
+class MTRBaseClusterMediaInput
+
+class MTRBaseClusterMediaPlayback
+
+class MTRBaseClusterModeSelect
+
+class MTRBaseClusterNetworkCommissioning
+
+class MTRBaseClusterOccupancySensing
+
+class MTRBaseClusterOnOff
+
+class MTRBaseClusterOnOffSwitchConfigurationDeprecated
+
+class MTRBaseClusterOperationalCredentials
+
+class MTRBaseClusterPowerSource
+
+class MTRBaseClusterPowerSourceConfiguration
+
+class MTRBaseClusterPressureMeasurement
+
+class MTRBaseClusterPumpConfigurationAndControl
+
+class MTRBaseClusterRelativeHumidityMeasurement
+
+class MTRBaseClusterSwitch
+
+class MTRBaseClusterTargetNavigator
+
+class MTRBaseClusterTemperatureMeasurement
+
+class MTRBaseClusterThermostatUserInterfaceConfiguration
+
+class MTRBaseClusterThreadNetworkDiagnostics
+
+class MTRBaseClusterTimeFormatLocalization
+
+class MTRBaseClusterUnitLocalization
+
+class MTRBaseClusterUnitTesting
+
+class MTRBaseClusterUserLabel
+
+class MTRBaseClusterWakeOnLAN
+
+class MTRCluster
+
+class MTRThreadNetworkDiagnosticsClusterConnectionStatusEvent
+
+class MTRTargetNavigatorClusterNavigateTargetParams
+
+class MTRTargetNavigatorClusterNavigateTargetResponseParams
+
+class MTRTargetNavigatorClusterTargetInfoStruct
+
+class MTRSetupPayload
+
+class MTRNetworkCommissioningClusterScanNetworksResponseParams
+
+class MTRNetworkCommissioningClusterThreadInterfaceScanResultDeprecated
+
+class MTRNetworkCommissioningClusterWiFiInterfaceScanResultDeprecated
+
+class MTRMediaInputClusterShowInputStatusParams
+
+class MTRModeSelectClusterChangeToModeParams
+
+class MTRModeSelectClusterModeOptionStruct
+
+class MTRModeSelectClusterSemanticTagStruct
+
+class MTRNetworkCommissioningClusterAddOrUpdateThreadNetworkParams
+
+class MTRNetworkCommissioningClusterAddOrUpdateWiFiNetworkParams
+
+class MTRNetworkCommissioningClusterConnectNetworkParams
+
+class MTRNetworkCommissioningClusterConnectNetworkResponseParams
+
+class MTRNetworkCommissioningClusterNetworkConfigResponseParams
+
+class MTRNetworkCommissioningClusterNetworkInfoDeprecated
+
+class MTRNetworkCommissioningClusterRemoveNetworkParams
+
+class MTRNetworkCommissioningClusterReorderNetworkParams
+
+class MTRNetworkCommissioningClusterScanNetworksParams
+
+class MTRIdentifyClusterTriggerEffectParams
+
+class MTRKeypadInputClusterSendKeyParams
+
+class MTRKeypadInputClusterSendKeyResponseParams
+
+class MTRLowPowerClusterSleepParams
+
+class MTRMediaInputClusterHideInputStatusParams
+
+class MTRMediaInputClusterInputInfoStruct
+
+class MTRMediaInputClusterRenameInputParams
+
+class MTRMediaInputClusterSelectInputParams
+
+class MTRGroupKeyManagementClusterKeySetWriteParams
+
+struct MTRGroupsFeature
+
+class MTRGroupsClusterAddGroupIfIdentifyingParams
+
+class MTRGroupsClusterAddGroupParams
+
+class MTRGroupsClusterAddGroupResponseParams
+
+class MTRGroupsClusterGetGroupMembershipParams
+
+class MTRGroupsClusterGetGroupMembershipResponseParams
+
+class MTRGroupsClusterRemoveAllGroupsParams
+
+class MTRGroupsClusterRemoveGroupParams
+
+class MTRGroupsClusterRemoveGroupResponseParams
+
+class MTRGroupsClusterViewGroupParams
+
+class MTRGroupsClusterViewGroupResponseParams
+
+class MTRIdentifyClusterIdentifyParams
+
+class MTRGeneralDiagnosticsClusterRadioFaultChangeEvent
+
+class MTRGeneralDiagnosticsClusterTestEventTriggerParams
+
+class MTRGroupKeyManagementClusterGroupInfoMapStruct
+
+class MTRGroupKeyManagementClusterGroupKeyMapStruct
+
+class MTRGroupKeyManagementClusterGroupKeySetStruct
+
+class MTRGroupKeyManagementClusterKeySetReadAllIndicesParams
+
+class MTRGroupKeyManagementClusterKeySetReadAllIndicesResponseParams
+
+class MTRGroupKeyManagementClusterKeySetReadParams
+
+class MTRGroupKeyManagementClusterKeySetReadResponseParams
+
+class MTRGroupKeyManagementClusterKeySetRemoveParams
+
+class MTRGeneralCommissioningClusterBasicCommissioningInfo
+
+class MTRGeneralCommissioningClusterCommissioningCompleteParams
+
+class MTRGeneralCommissioningClusterCommissioningCompleteResponseParams
+
+class MTRGeneralCommissioningClusterSetRegulatoryConfigParams
+
+class MTRGeneralCommissioningClusterSetRegulatoryConfigResponseParams
+
+class MTRGeneralDiagnosticsClusterBootReasonEvent
+
+class MTRGeneralDiagnosticsClusterHardwareFaultChangeEvent
+
+class MTRGeneralDiagnosticsClusterNetworkFaultChangeEvent
+
+class MTRGeneralDiagnosticsClusterNetworkInterface
+
+class MTRElectricalMeasurementClusterGetMeasurementProfileResponseCommandParamsDeprecated
+
+class MTRElectricalMeasurementClusterGetProfileInfoCommandParamsDeprecated
+
+class MTRElectricalMeasurementClusterGetProfileInfoResponseCommandParamsDeprecated
+
+class MTREthernetNetworkDiagnosticsClusterResetCountsParams
+
+class MTRFixedLabelClusterLabelStruct
+
+class MTRGeneralCommissioningClusterArmFailSafeParams
+
+class MTRGeneralCommissioningClusterArmFailSafeResponseParams
+
+class MTRContentLauncherClusterStyleInformationStruct
+
+class MTRDescriptorClusterDeviceTypeStruct
+
+class MTRDiagnosticLogsClusterRetrieveLogsRequestParams
+
+class MTRDiagnosticLogsClusterRetrieveLogsResponseParams
+
+class MTRContentLauncherClusterLaunchContentParams
+
+class MTRContentLauncherClusterLaunchURLParams
+
+class MTRContentLauncherClusterLauncherResponseParams
+
+class MTRContentLauncherClusterParameterStruct
+
+class MTRAccessControlClusterAccessControlEntryChangedEvent
+
+class MTRAccessControlClusterAccessControlEntryStruct
+
+class MTRAccessControlClusterAccessControlExtensionChangedEvent
+
+class MTRAccessControlClusterAccessControlExtensionStruct
+
+class MTRAccessControlClusterTargetDeprecated
+
+class MTRAccountLoginClusterGetSetupPINParams
+
+class MTRAccountLoginClusterGetSetupPINResponseParams
+
+class MTRAccountLoginClusterLoginParams
+
+class MTRAccountLoginClusterLogoutParams
+
+class MTRAdministratorCommissioningClusterOpenBasicCommissioningWindowParams
+
+class MTRAdministratorCommissioningClusterOpenCommissioningWindowParams
+
+class MTRAdministratorCommissioningClusterRevokeCommissioningParams
+
+class MTRApplicationBasicClusterApplicationStruct
+
+class MTRAudioOutputClusterOutputInfoStruct
+
+class MTRAudioOutputClusterRenameOutputParams
+
+class MTRAudioOutputClusterSelectOutputParams
+
+class MTRBarrierControlClusterBarrierControlGoToPercentParamsDeprecated
+
+class MTRBarrierControlClusterBarrierControlStopParamsDeprecated
+
+class MTRBasicInformationClusterCapabilityMinimaStruct
+
+class MTRBasicInformationClusterLeaveEvent
+
+class MTRBasicInformationClusterReachableChangedEvent
+
+class MTRBasicInformationClusterStartUpEvent
+
+class MTRBindingClusterTargetStruct
+
+class MTRBooleanStateClusterStateChangeEvent
+
+class MTRBridgedDeviceBasicInformationClusterReachableChangedEvent
+
+class MTRBridgedDeviceBasicInformationClusterStartUpEvent
+
+class MTRCertificates
+
+class MTRChannelClusterChangeChannelByNumberParams
+
+class MTRChannelClusterChangeChannelParams
+
+class MTRChannelClusterChangeChannelResponseParams
+
+class MTRChannelClusterChannelInfoStruct
+
+class MTRChannelClusterLineupInfoStruct
+
+class MTRChannelClusterSkipChannelParams
+
+class MTRClusterAccessControl
+
+class MTRClusterAccountLogin
+
+class MTRClusterAdministratorCommissioning
+
+class MTRClusterApplicationBasic
+
+class MTRClusterApplicationLauncher
+
+class MTRClusterAudioOutput
+
+class MTRClusterBallastConfiguration
+
+class MTRClusterBarrierControlDeprecated
+
+class MTRClusterBasicInformation
+
+class MTRClusterBinaryInputBasicDeprecated
+
+class MTRClusterBinding
+
+class MTRClusterBooleanState
+
+class MTRClusterBridgedDeviceBasicDeprecated
+
+class MTRClusterBridgedDeviceBasicInformation
+
+class MTRClusterChannel
+
+class MTRClusterColorControl
+
+class MTRClusterContentLauncher
+
+class MTRClusterDescriptor
+
+class MTRClusterDiagnosticLogs
+
+class MTRClusterDoorLock
+
+class MTRClusterElectricalMeasurementDeprecated
+
+class MTRClusterEthernetNetworkDiagnostics
+
+class MTRClusterFanControl
+
+class MTRClusterFixedLabel
+
+class MTRClusterFlowMeasurement
+
+class MTRClusterGeneralCommissioning
+
+class MTRClusterGeneralDiagnostics
+
+class MTRClusterGroupKeyManagement
+
+class MTRClusterGroups
+
+class MTRClusterIdentify
+
+class MTRClusterIlluminanceMeasurement
+
+class MTRClusterKeypadInput
+
+class MTRClusterLevelControl
+
+class MTRClusterLocalizationConfiguration
+
+class MTRClusterLowPower
+
+class MTRClusterMediaInput
+
+class MTRClusterMediaPlayback
+
+class MTRClusterModeSelect
+
+class MTRClusterNetworkCommissioning
+
+class MTRClusterOTASoftwareUpdateProvider
+
+class MTRClusterOTASoftwareUpdateRequestor
+
+class MTRClusterOccupancySensing
+
+class MTRClusterOnOff
+
+class MTRClusterOnOffSwitchConfigurationDeprecated
+
+class MTRClusterOperationalCredentials
+
+class MTRClusterPowerSource
+
+class MTRClusterPowerSourceConfiguration
+
+class MTRClusterPressureMeasurement
+
+class MTRClusterPumpConfigurationAndControl
+
+class MTRClusterRelativeHumidityMeasurement
+
+class MTRClusterSoftwareDiagnostics
+
+class MTRClusterSwitch
+
+class MTRClusterTargetNavigator
+
+class MTRClusterTemperatureMeasurement
+
+class MTRClusterThermostat
+
+class MTRClusterThermostatUserInterfaceConfiguration
+
+class MTRClusterThreadNetworkDiagnostics
+
+class MTRClusterTimeFormatLocalization
+
+class MTRClusterUnitLocalization
+
+class MTRClusterUnitTesting
+
+class MTRClusterUserLabel
+
+class MTRClusterWakeOnLAN
+
+class MTRClusterWiFiNetworkDiagnostics
+
+class MTRClusterWindowCovering
+
+class MTRClusterActions
+
+class MTRBridgedDeviceBasicClusterLeaveEventDeprecated
+
+class MTRBridgedDeviceBasicClusterReachableChangedEventDeprecated
+
+class MTRBridgedDeviceBasicClusterShutDownEventDeprecated
+
+class MTRBridgedDeviceBasicClusterStartUpEventDeprecated
+
+class MTRBridgedDeviceBasicInformationClusterLeaveEvent
+
+class MTRBridgedDeviceBasicInformationClusterShutDownEvent
+
+class MTRBasicInformationClusterShutDownEvent
+
+class MTRClusterOtaSoftwareUpdateProviderDeprecated
+
+class MTRTestClusterClusterTestEnumsRequestParamsDeprecated
+
+class MTRTestClusterClusterTestEnumsResponseParamsDeprecated
+
+class MTRTestClusterClusterTestEventEventDeprecated
+
+class MTRTestClusterClusterTestFabricScopedDeprecated
+
+class MTRTestClusterClusterTestFabricScopedEventEventDeprecated
+
+class MTRTestClusterClusterTestListInt8UArgumentRequestParamsDeprecated
+
+class MTRTestClusterClusterTestListInt8UReverseRequestParamsDeprecated
+
+class MTRTestClusterClusterTestListInt8UReverseResponseParamsDeprecated
+
+class MTRTestClusterClusterTestListNestedStructListArgumentRequestParamsDeprecated
+
+class MTRTestClusterClusterTestListStructArgumentRequestParamsDeprecated
+
+class MTRTestClusterClusterTestListStructOctetDeprecated
+
+class MTRTestClusterClusterTestNestedStructArgumentRequestParamsDeprecated
+
+class MTRTestClusterClusterTestNestedStructListArgumentRequestParamsDeprecated
+
+class MTRTestClusterClusterTestNotHandledParamsDeprecated
+
+class MTRTestClusterClusterTestNullableOptionalRequestParamsDeprecated
+
+class MTRTestClusterClusterTestNullableOptionalResponseParamsDeprecated
+
+class MTRTestClusterClusterTestParamsDeprecated
+
+class MTRTestClusterClusterTestSimpleArgumentRequestParamsDeprecated
+
+class MTRTestClusterClusterTestSimpleArgumentResponseParamsDeprecated
+
+class MTRTestClusterClusterTestSimpleOptionalArgumentRequestParamsDeprecated
+
+class MTRTestClusterClusterTestSpecificParamsDeprecated
+
+class MTRTestClusterClusterTestSpecificResponseParamsDeprecated
+
+class MTRTestClusterClusterTestStructArgumentRequestParamsDeprecated
+
+class MTRTestClusterClusterTestStructArrayArgumentRequestParamsDeprecated
+
+class MTRTestClusterClusterTestStructArrayArgumentResponseParamsDeprecated
+
+class MTRTestClusterClusterTestUnknownCommandParamsDeprecated
+
+class MTRTestClusterClusterTimedInvokeRequestParamsDeprecated
+
+class MTRChannelClusterChannelInfoDeprecated
+
+class MTRChannelClusterLineupInfoDeprecated
+
+class MTRContentLauncherClusterStyleInformationDeprecated
+
+class MTRDescriptorClusterDeviceTypeDeprecated
+
+class MTRContentLauncherClusterLaunchResponseParamsDeprecated
+
+class MTRContentLauncherClusterParameterDeprecated
+
+class MTRAccessControlClusterAccessControlEntryDeprecated
+
+class MTRAccessControlClusterExtensionEntryDeprecated
+
+class MTRApplicationBasicClusterApplicationBasicApplicationDeprecated
+
+class MTRAudioOutputClusterOutputInfoDeprecated
+
+class MTRTargetNavigatorClusterTargetInfoDeprecated
+
+class MTRMediaPlaybackClusterPlaybackPositionDeprecated
+
+class MTRMediaPlaybackClusterStopPlaybackParamsDeprecated
+
+class MTRModeSelectClusterSemanticTagDeprecated
+
+class MTRMediaInputClusterInputInfoDeprecated
+
+class MTRDoorLockClusterDlCredentialDeprecated
+
+class MTRClusterWakeOnLanDeprecated
+
+class MTRClusterTestClusterDeprecated
+
+class MTRClusterBasicDeprecated
+
+class MTRBasicClusterMfgSpecificPingParamsDeprecated
+
+class MTRGeneralDiagnosticsClusterNetworkInterfaceTypeDeprecated
+
+class MTRManualSetupPayloadParserDeprecated
+
+class MTRClusterOtaSoftwareUpdateRequestorDeprecated
+
+class MTRBaseClusterBasicDeprecated
+
+class MTRBaseClusterOtaSoftwareUpdateProviderDeprecated
+
+class MTRBaseClusterOtaSoftwareUpdateRequestorDeprecated
+
+class MTRBaseClusterTestClusterDeprecated
+
+class MTRBaseClusterWakeOnLanDeprecated
+
+class MTRBasicClusterCapabilityMinimaStructDeprecated
+
+class MTRBasicClusterLeaveEventDeprecated
+
+class MTRBasicClusterReachableChangedEventDeprecated
+
+class MTRBasicClusterShutDownEventDeprecated
+
+class MTRBasicClusterStartUpEventDeprecated
+
+### Data types
+
+typealias MTRAsyncCallbackReadyHandler
+
+typealias MTRCSRDERBytes
+
+typealias MTRCertificateDERBytes
+
+typealias MTRCertificateTLVBytes
+
+typealias MTRDeviceControllerGetterHandler
+
+typealias MTRDeviceOpenCommissioningWindowHandler
+
+typealias MTRDeviceReportHandler
+
+typealias MTRDeviceResponseHandler
+
+typealias MTRDeviceResubscriptionScheduledHandler
+
+typealias MTRStatusCompletion
+
+typealias MTRSubscriptionEstablishedHandler
+
+typealias MTRTLVBytes
+
+typealias MTRValuesHandler
+
+typealias MTRXPCConnectBlock
+
+typealias ResponseHandlerDeprecated
+
+typealias StatusCompletionDeprecated
+
+typealias SubscriptionEstablishedHandlerDeprecated
+
+typealias MTRDeviceConnectionCallbackDeprecated
+
+typealias MTRNOCChainGenerationCompleteHandlerDeprecated
+
+### Constants
+
+let MTRArrayValueType: String
+
+let MTRAttributePathKey: String
+
+let MTRBooleanValueType: String
+
+let MTRCommandPathKey: String
+
+let MTRContextTagKey: String
+
+let MTRDataKey: String
+
+let MTRDoubleValueType: String
+
+let MTRErrorDomain: String
+
+let MTRErrorKey: String
+
+let MTREventNumberKey: String
+
+let MTREventPathKey: String
+
+let MTREventPriorityKey: String
+
+let MTREventSystemUpTimeKey: String
+
+let MTREventTimeTypeKey: String
+
+let MTREventTimestampDateKey: String
+
+let MTRFloatValueType: String
+
+let MTRInteractionErrorDomain: String
+
+let MTRNullValueType: String
+
+let MTROctetStringValueType: String
+
+let MTRSignedIntegerValueType: String
+
+let MTRSizeThreadMasterKey: Int
+
+let MTRSizeThreadNetworkName: Int
+
+let MTRSizeThreadPANID: Int
+
+let MTRSizeThreadPSKc: Int
+
+let MTRStructureValueType: String
+
+let MTRTypeKey: String
+
+let MTRUTF8StringValueType: String
+
+let MTRUnsignedIntegerValueType: String
+
+let MTRValueKey: String
+
+let MTRSizeThreadExtendedPANID: Int
+
+let MTRSizeThreadExtendedPanId: IntDeprecated
+
+### Structures
+
+struct MTRApplicationLauncherFeature
+
+struct MTRAudioOutputFeature
+
+struct MTRChannelFeature
+
+struct MTRContentLauncherFeature
+
+struct MTRContentLauncherSupportedStreamingProtocolDeprecated
+
+struct MTRDiscoveryCapabilities
+
+struct MTREthernetNetworkDiagnosticsFeature
+
+struct MTRFanControlFeature
+
+struct MTRFanControlRockSupportMaskDeprecated
+
+struct MTRFanControlWindSettingMaskDeprecated
+
+struct MTRFanControlWindSupportMaskDeprecated
+
+struct MTRGroupsGroupClusterFeatureDeprecated
+
+struct MTRInteractionError
+
+struct MTRKeypadInputFeature
+
+struct MTRMediaInputFeature
+
+struct MTRMediaPlaybackFeature
+
+struct MTRModeSelectFeature
+
+struct MTRNetworkCommissioningFeature
+
+struct MTRNetworkCommissioningWiFiSecurityDeprecated
+
+struct MTROccupancySensingOccupancyBitmap
+
+struct MTROccupancySensingOccupancySensorTypeBitmap
+
+struct MTRPressureMeasurementPressureFeatureDeprecated
+
+struct MTRSwitchFeature
+
+struct MTRUnitLocalizationFeature
+
+### Enumerations
+
+enum MTRAccessControlAuthModeDeprecated
+
+enum MTRAccessControlChangeType
+
+enum MTRAccessControlEntryAuthMode
+
+enum MTRAccessControlEntryPrivilege
+
+enum MTRAccessControlPrivilegeDeprecated
+
+enum MTRAdministratorCommissioningCommissioningWindowStatus
+
+enum MTRAdministratorCommissioningStatusCode
+
+enum MTRApplicationBasicApplicationStatus
+
+enum MTRApplicationLauncherStatus
+
+enum MTRAttributeIDType
+
+struct MTRAudioOutputFeature
+
+enum MTRAudioOutputOutputType
+
+enum MTRBasicInformationColor
+
+enum MTRBasicInformationProductFinish
+
+enum MTRBridgedDeviceBasicInformationColor
+
+enum MTRBridgedDeviceBasicInformationProductFinish
+
+struct MTRChannelFeature
+
+enum MTRChannelLineupInfoType
+
+enum MTRChannelStatus
+
+enum MTRClusterIDType
+
+enum MTRCommandIDType
+
+enum MTRCommissioningFlow
+
+enum MTRCommissioningStatus
+
+enum MTRDeviceState
+
+enum MTRDiagnosticLogsIntent
+
+enum MTRDiagnosticLogsLogsIntentDeprecated
+
+enum MTRDiagnosticLogsLogsStatusDeprecated
+
+enum MTRDiagnosticLogsLogsTransferProtocolDeprecated
+
+enum MTRDiagnosticLogsStatus
+
+enum MTRDiagnosticLogsTransferProtocol
+
+struct MTRDiscoveryCapabilities
+
+enum MTRDoorLockDlAlarmCodeDeprecated
+
+enum MTRDoorLockDlCredentialRuleDeprecated
+
+enum MTRDoorLockDlCredentialTypeDeprecated
+
+enum MTRDoorLockDlDataOperationTypeDeprecated
+
+enum MTRDoorLockDlDoorStateDeprecated
+
+enum MTRDoorLockDlLockDataTypeDeprecated
+
+enum MTRDoorLockDlLockOperationTypeDeprecated
+
+enum MTRDoorLockDlOperatingModeDeprecated
+
+enum MTRDoorLockDlOperationErrorDeprecated
+
+enum MTRDoorLockDlOperationSourceDeprecated
+
+enum MTRDoorLockDlUserStatusDeprecated
+
+enum MTRDoorLockDlUserTypeDeprecated
+
+enum MTRDoorLockOperationEventCodeDeprecated
+
+enum MTRDoorLockProgrammingEventCodeDeprecated
+
+enum MTRDoorLockSetPinOrIdStatusDeprecated
+
+struct MTREthernetNetworkDiagnosticsFeature
+
+enum MTREthernetNetworkDiagnosticsPHYRate
+
+enum MTREthernetNetworkDiagnosticsPHYRateTypeDeprecated
+
+enum MTREventIDType
+
+enum MTREventPriority
+
+enum MTREventTimeType
+
+enum MTRFanControlFanModeSequenceTypeDeprecated
+
+enum MTRFanControlFanModeTypeDeprecated
+
+struct MTRFanControlFeature
+
+struct MTRFanControlRockSupportMaskDeprecated
+
+struct MTRFanControlWindSettingMaskDeprecated
+
+struct MTRFanControlWindSupportMaskDeprecated
+
+enum MTRGeneralCommissioningCommissioningError
+
+enum MTRGeneralCommissioningRegulatoryLocationType
+
+enum MTRGeneralDiagnosticsBootReason
+
+enum MTRGeneralDiagnosticsBootReasonTypeDeprecated
+
+enum MTRGeneralDiagnosticsHardwareFault
+
+enum MTRGeneralDiagnosticsHardwareFaultTypeDeprecated
+
+enum MTRGeneralDiagnosticsInterfaceType
+
+enum MTRGeneralDiagnosticsNetworkFault
+
+enum MTRGeneralDiagnosticsNetworkFaultTypeDeprecated
+
+enum MTRGeneralDiagnosticsRadioFault
+
+enum MTRGeneralDiagnosticsRadioFaultTypeDeprecated
+
+enum MTRGroupKeyManagementGroupKeySecurityPolicy
+
+struct MTRGroupsFeature
+
+struct MTRGroupsGroupClusterFeatureDeprecated
+
+enum MTRIdentifyEffectIdentifier
+
+enum MTRIdentifyEffectVariant
+
+enum MTRIdentifyType
+
+enum MTRIlluminanceMeasurementLightSensorType
+
+enum Code
+
+enum MTRKeypadInputCecKeyCodeDeprecated
+
+struct MTRKeypadInputFeature
+
+enum MTRKeypadInputStatus
+
+enum MTRLogType
+
+struct MTRMediaInputFeature
+
+enum MTRMediaInputInputType
+
+struct MTRMediaPlaybackFeature
+
+enum MTRMediaPlaybackPlaybackState
+
+enum MTRMediaPlaybackStatus
+
+struct MTRModeSelectFeature
+
+struct MTRNetworkCommissioningFeature
+
+enum MTRNetworkCommissioningStatus
+
+enum MTRNetworkCommissioningWiFiBand
+
+struct MTRNetworkCommissioningWiFiSecurityDeprecated
+
+struct MTROccupancySensingOccupancyBitmap
+
+enum MTROccupancySensingOccupancySensorType
+
+struct MTROccupancySensingOccupancySensorTypeBitmap
+
+enum MTROnOffDelayedAllOffEffectVariant
+
+enum MTROnOffDyingLightEffectVariant
+
+enum MTROnOffEffectIdentifier
+
+enum MTROnOffStartUpOnOff
+
+enum MTROnboardingPayloadTypeDeprecated
+
+enum MTROperationalCredentialsCertificateChainType
+
+enum MTROperationalCredentialsNodeOperationalCertStatus
+
+enum MTROperationalCredentialsOperationalCertStatusDeprecated
+
+enum MTROptionalQRCodeInfoType
+
+enum MTRPairingStatusDeprecated
+
+enum MTRPowerSourceBatApprovedChemistry
+
+enum MTRPowerSourceBatChargeFault
+
+enum MTRPowerSourceBatChargeLevel
+
+enum MTRPowerSourceBatChargeState
+
+enum MTRPowerSourceBatCommonDesignation
+
+enum MTRPowerSourceBatFault
+
+enum MTRPowerSourceBatReplaceability
+
+struct MTRPowerSourceFeature
+
+enum MTRPowerSourceStatus
+
+enum MTRPowerSourceWiredCurrentType
+
+enum MTRPowerSourceWiredFault
+
+struct MTRPressureMeasurementFeature
+
+struct MTRPressureMeasurementPressureFeatureDeprecated
+
+enum MTRPumpConfigurationAndControlControlMode
+
+struct MTRPumpConfigurationAndControlFeature
+
+enum MTRPumpConfigurationAndControlOperationMode
+
+enum MTRPumpConfigurationAndControlPumpControlModeDeprecated
+
+enum MTRPumpConfigurationAndControlPumpOperationModeDeprecated
+
+struct MTRSwitchFeature
+
+enum MTRTargetNavigatorStatus
+
+enum MTRTestClusterSimpleDeprecated
+
+enum MTRThermostatControlSequenceDeprecated
+
+enum MTRThermostatRunningMode
+
+enum MTRThermostatSetpointAdjustModeDeprecated
+
+enum MTRThermostatSystemMode
+
+enum MTRThreadNetworkDiagnosticsThreadConnectionStatusDeprecated
+
+enum MTRTransportType
+
+struct MTRUnitLocalizationFeature
+
+enum MTRUnitLocalizationTempUnit
+

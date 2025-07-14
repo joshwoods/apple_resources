@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Enumerations
+- Anonymous
+-  CS_LINKAGE_APPLICATION_XOJIT_PREVIEWS 
+
+Enumeration Case
+
+# CS_LINKAGE_APPLICATION_XOJIT_PREVIEWS
+
+macOS 13.0+
+
+``` source
+CS_LINKAGE_APPLICATION_XOJIT_PREVIEWS = 1
+```
+

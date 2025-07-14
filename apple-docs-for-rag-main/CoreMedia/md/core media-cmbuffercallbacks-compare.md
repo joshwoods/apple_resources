@@ -1,0 +1,68 @@
+
+
+- Core Media
+- CMBufferCallbacks
+-  compare 
+
+Instance Property
+
+# compare
+
+This callback is called multiple times from CMBufferQueueEnqueue(_:buffer:), to perform an insertion sort.
+
+iOS 4.0+iPadOS 4.0+Mac Catalyst 13.1+macOS 10.7+tvOS 9.0+visionOS 1.0+watchOS 6.0+
+
+``` source
+var compare: CMBufferCompareCallback?
+```
+
+## Discussion
+
+This may be `NULL` (queue will be FIFO).
+
+## See Also
+
+### Properties
+
+typealias CMBufferCompareCallback
+
+Callback that compares one `CMBuffer` with another.
+
+typealias CMBufferGetBooleanCallback
+
+Callback that returns a Boolean value from a `CMBuffer`.
+
+typealias CMBufferGetTimeCallback
+
+Callback that returns a `CMTime` from a `CMBuffer`.
+
+var dataBecameReadyNotification: Unmanaged&lt;CFString>?
+
+If triggers of type `kCMBufferQueueTrigger_WhenDataBecomesReady` are installed, the queue will listen for this notification on the head buffer.
+
+var getDecodeTimeStamp: CMBufferGetTimeCallback?
+
+Client callback that returns a `CMTime` from a `CMBuffer`.
+
+var getDuration: CMBufferGetTimeCallback
+
+This callback is called (once) during enqueue and dequeue operations to update the total duration of the queue.
+
+var getPresentationTimeStamp: CMBufferGetTimeCallback?
+
+Client callback that returns a `CMTime` from a `CMBuffer`.
+
+var getSize: CMBufferGetSizeCallback?
+
+var isDataReady: CMBufferGetBooleanCallback?
+
+This callback is called from CMBufferQueueDequeueIfDataReady(_:), to ask if the buffer that is about to be dequeued is ready.
+
+var refcon: UnsafeMutableRawPointer?
+
+Contextual data to be passed to all callbacks.
+
+var version: UInt32
+
+The callback version.
+

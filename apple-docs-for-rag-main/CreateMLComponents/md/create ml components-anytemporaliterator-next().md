@@ -1,0 +1,22 @@
+
+
+- Create ML Components
+- AnyTemporalIterator
+-  next() 
+
+Instance Method
+
+# next()
+
+Asynchronously advances to the next element and returns it, or ends the sequence if there is no next element.
+
+iOS 16.0+iPadOS 16.0+Mac Catalyst 16.0+macOS 13.0+tvOS 16.0+visionOS 1.0+watchOS 11.0+
+
+``` source
+func next() async throws -> Element?
+```
+
+## Return Value
+
+The next element, if it exists, or `nil` to signal the end of the sequence.
+

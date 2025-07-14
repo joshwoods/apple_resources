@@ -1,0 +1,56 @@
+
+
+- Kernel
+- Kernel Enumerations
+-  kf_override_flag_t 
+
+Enumeration
+
+# kf_override_flag_t
+
+macOS 13.3+
+
+``` source
+typedef enum kf_override_flag_t : uint32_t {
+    ...
+} kf_override_flag_t;
+```
+
+## Topics
+
+### Constants
+
+KF_COMPRSV_OVRD
+
+KF_DISABLE_FP_POPC_ON_PGFLT
+
+KF_DISABLE_PROCREF_TRACKING_OVRD
+
+KF_DISABLE_PROD_TRC_VALIDATION
+
+KF_INTERRUPT_MASKED_DEBUG_OVRD
+
+KF_INTERRUPT_MASKED_DEBUG_STACKSHOT_OVRD
+
+KF_IOTRACE_OVRD
+
+KF_IO_TIMEOUT_OVRD
+
+KF_MACH_ASSERT_OVRD
+
+KF_MADVISE_FREE_DEBUG_OVRD
+
+KF_MATV_OVRD
+
+KF_PMAPV_OVRD
+
+KF_PREEMPTION_DISABLED_DEBUG_OVRD
+
+KF_SCHED_HYGIENE_DEBUG_PMC_OVRD
+
+KF_SERIAL_OVRD
+
+KF_STACKSHOT_OVRD
+
+KF_TRAPTRACE_OVRD
+

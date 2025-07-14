@@ -1,0 +1,19 @@
+
+
+- AVFAudio
+- AVAudioSequencer
+- AVAudioSequencer.InfoDictionaryKey
+-  recordedDate 
+
+Type Property
+
+# recordedDate
+
+A key that represents the date of the recording.
+
+iOS 16.0+iPadOS 16.0+Mac Catalyst 16.0+macOS 13.0+tvOS 16.0+visionOS 1.0+
+
+``` source
+static let recordedDate: AVAudioSequencer.InfoDictionaryKey
+```
+

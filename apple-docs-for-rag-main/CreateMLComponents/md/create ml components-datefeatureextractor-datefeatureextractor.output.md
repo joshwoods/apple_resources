@@ -1,0 +1,18 @@
+
+
+- Create ML Components
+- DateFeatureExtractor
+-  DateFeatureExtractor.Output 
+
+Type Alias
+
+# DateFeatureExtractor.Output
+
+The output type.
+
+iOS 18.0+iPadOS 18.0+Mac Catalyst 18.0+macOS 15.0+tvOS 18.0+visionOS 2.0+watchOS 11.0+
+
+``` source
+typealias Output = [Scalar]
+```
+

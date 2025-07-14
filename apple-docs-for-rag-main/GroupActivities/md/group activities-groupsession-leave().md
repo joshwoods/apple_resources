@@ -1,0 +1,40 @@
+
+
+- Group Activities
+- GroupSession
+-  leave() 
+
+Instance Method
+
+# leave()
+
+Leaves the current activity and stops receiving synchronized data.
+
+iOS 15.0+iPadOS 15.0+Mac Catalyst 15.0+macOS 12.0+tvOS 15.0+visionOS 1.0+
+
+``` source
+final func leave()
+```
+
+## Mentioned in 
+
+Joining and managing a shared activity
+
+## Discussion
+
+When you call this method, the session transitions to the GroupSession.State.invalidated(reason:) state and stops the delivery of session-related updates. Call this method when the user dismisses your app’s activity-related UI.
+
+Don’t call this method on a session already in the GroupSession.State.invalidated(reason:) state.
+
+## See Also
+
+### Joining and leaving the session
+
+func join()
+
+Starts the shared activity on the current device.
+
+func end()
+
+Ends the activity for the entire group and stops the transfer of synchronized data.
+

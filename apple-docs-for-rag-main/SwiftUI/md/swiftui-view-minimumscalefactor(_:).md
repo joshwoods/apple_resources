@@ -1,0 +1,88 @@
+
+
+- SwiftUI
+- View
+-  minimumScaleFactor(\_:) 
+
+Instance Method
+
+# minimumScaleFactor(\_:)
+
+Sets the minimum amount that text in this view scales down to fit in the available space.
+
+iOS 13.0+iPadOS 13.0+Mac Catalyst 13.0+macOS 10.15+tvOS 13.0+visionOS 1.0+watchOS 6.0+
+
+``` source
+nonisolated
+func minimumScaleFactor(_ factor: CGFloat) -> some View
+```
+
+## Parameters 
+
+`factor`  
+
+A fraction between 0 and 1 (inclusive) you use to specify the minimum amount of text scaling that this view permits.
+
+## Return Value
+
+A view that limits the amount of text downscaling.
+
+## Discussion
+
+Use the `minimumScaleFactor(_:)` modifier if the text you place in a view doesn’t fit and it’s okay if the text shrinks to accommodate. For example, a label with a minimum scale factor of `0.5` draws its text in a font size as small as half of the actual font if needed.
+
+In the example below, the HStack contains a Text label with a line limit of `1`, that is next to a TextField. To allow the label to fit into the available space, the `minimumScaleFactor(_:)` modifier shrinks the text as needed to fit into the available space.
+
+```
+HStack {
+    Text("This is a long label that will be scaled to fit:")
+        .lineLimit(1)
+        .minimumScaleFactor(0.5)
+    TextField("My Long Text Field", text: $myTextField)
+}
+```
+
+## See Also
+
+### Managing text layout
+
+func truncationMode(Text.TruncationMode) -> some View
+
+Sets the truncation mode for lines of text that are too long to fit in the available space.
+
+var truncationMode: Text.TruncationMode
+
+A value that indicates how the layout truncates the last line of text to fit into the available space.
+
+func allowsTightening(Bool) -> some View
+
+Sets whether text in this view can compress the space between characters when necessary to fit text in a line.
+
+var allowsTightening: Bool
+
+A Boolean value that indicates whether inter-character spacing should tighten to fit the text into the available space.
+
+var minimumScaleFactor: CGFloat
+
+The minimum permissible proportion to shrink the font size to fit the text into the available space.
+
+func baselineOffset(CGFloat) -> some View
+
+Sets the vertical offset for the text relative to its baseline in this view.
+
+func kerning(CGFloat) -> some View
+
+Sets the spacing, or kerning, between characters for the text in this view.
+
+func tracking(CGFloat) -> some View
+
+Sets the tracking for the text in this view.
+
+func flipsForRightToLeftLayoutDirection(Bool) -> some View
+
+Sets whether this view mirrors its contents horizontally when the layout direction is right-to-left.
+
+enum TextAlignment
+
+An alignment position for text along the horizontal axis.
+

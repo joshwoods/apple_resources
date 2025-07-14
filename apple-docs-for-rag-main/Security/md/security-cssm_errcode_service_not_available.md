@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_ERRCODE_SERVICE_NOT_AVAILABLE 
+
+Global Variable
+
+# CSSM_ERRCODE_SERVICE_NOT_AVAILABLE
+
+macOS 10.0+
+
+``` source
+var CSSM_ERRCODE_SERVICE_NOT_AVAILABLE: Int { get }
+```
+

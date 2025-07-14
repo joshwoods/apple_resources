@@ -1,0 +1,16 @@
+
+
+- WebKit JS
+- SVGAnimationElement
+-  endElement 
+
+Instance Method
+
+# endElement
+
+Safari Desktop 9.0+Safari Mobile 9.0+
+
+``` source
+void endElement();
+```
+

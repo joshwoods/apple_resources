@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_APPLETP_IDENTIFIER_MISSING 
+
+Global Variable
+
+# CSSMERR_APPLETP_IDENTIFIER_MISSING
+
+macOS 10.0+
+
+``` source
+var CSSMERR_APPLETP_IDENTIFIER_MISSING: Int { get }
+```
+

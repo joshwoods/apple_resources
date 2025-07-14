@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Data Types
+- SBCModePageFlexibleDisk
+-  STARTING_CYLINDER_WRITE_PRECOMPENSATION 
+
+Instance Property
+
+# STARTING_CYLINDER_WRITE_PRECOMPENSATION
+
+macOS 10.3+
+
+``` source
+UInt16 STARTING_CYLINDER_WRITE_PRECOMPENSATION;
+```
+

@@ -1,0 +1,44 @@
+
+
+- Kernel
+- Kernel Enumerations
+-  tcp_connection_server_accurate_ecn_state_t 
+
+Enumeration
+
+# tcp_connection_server_accurate_ecn_state_t
+
+macOS 14.0+
+
+``` source
+typedef enum tcp_connection_server_accurate_ecn_state_t : unsigned int {
+    ...
+} tcp_connection_server_accurate_ecn_state_t;
+```
+
+## Topics
+
+### Constants
+
+tcp_connection_server_accurate_ecn_ace_bleaching_detected
+
+tcp_connection_server_accurate_ecn_feature_disabled
+
+tcp_connection_server_accurate_ecn_feature_enabled
+
+tcp_connection_server_accurate_ecn_invalid
+
+tcp_connection_server_accurate_ecn_negotiation_blackholed
+
+tcp_connection_server_accurate_ecn_negotiation_success
+
+tcp_connection_server_accurate_ecn_negotiation_success_ect_bleaching_detected
+
+tcp_connection_server_accurate_ecn_negotiation_success_ect_mangling_detected
+
+tcp_connection_server_accurate_ecn_requested
+
+tcp_connection_server_classic_ecn_requested
+
+tcp_connection_server_no_ecn_requested
+

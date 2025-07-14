@@ -1,0 +1,22 @@
+
+
+- SwiftUI
+- OffsetShape
+-  shape 
+
+Instance Property
+
+# shape
+
+iOS 13.0+iPadOS 13.0+Mac Catalyst 13.0+macOS 10.15+tvOS 13.0+visionOS 1.0+watchOS 6.0+
+
+``` source
+var shape: Content
+```
+
+## See Also
+
+### Getting the shape’s characteristics
+
+var offset: CGSize
+

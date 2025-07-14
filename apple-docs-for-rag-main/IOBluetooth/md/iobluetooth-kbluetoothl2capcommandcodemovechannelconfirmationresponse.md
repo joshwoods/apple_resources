@@ -1,0 +1,49 @@
+
+
+- IOBluetooth
+-  kBluetoothL2CAPCommandCodeMoveChannelConfirmationResponse 
+
+Global Variable
+
+# kBluetoothL2CAPCommandCodeMoveChannelConfirmationResponse
+
+macOS
+
+``` source
+var kBluetoothL2CAPCommandCodeMoveChannelConfirmationResponse: BluetoothL2CAPCommandCode { get }
+```
+
+## See Also
+
+### Constants
+
+var kBluetoothL2CAPCommandCodeCommandReject: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeConfigureRequest: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeConfigureResponse: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeConnectionParameterUpdateRequest: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeConnectionParameterUpdateResponse: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeConnectionRequest: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeConnectionResponse: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeCreateChannelRequest: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeCreateChannelResponse: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeDisconnectionRequest: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeDisconnectionResponse: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeEchoRequest: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeEchoResponse: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeInformationRequest: BluetoothL2CAPCommandCode
+
+var kBluetoothL2CAPCommandCodeInformationResponse: BluetoothL2CAPCommandCode
+

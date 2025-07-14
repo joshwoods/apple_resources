@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_ACL_KEYCHAIN_PROMPT_UNSIGNED 
+
+Global Variable
+
+# CSSM_ACL_KEYCHAIN_PROMPT_UNSIGNED
+
+macOS 10.0+
+
+``` source
+var CSSM_ACL_KEYCHAIN_PROMPT_UNSIGNED: Int { get }
+```
+

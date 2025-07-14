@@ -1,0 +1,20 @@
+
+
+- RealityKit
+- RealityViewContent
+- RealityViewContent.Body
+-  tableStyle(\_:) 
+
+Instance Method
+
+# tableStyle(\_:)
+
+Sets the style for tables within this view.
+
+RealityKitSwiftUIiOS 16.0+iPadOS 16.0+macOS 12.0+visionOS
+
+``` source
+nonisolated
+func tableStyle(_ style: S) -> some View where S : TableStyle
+```
+

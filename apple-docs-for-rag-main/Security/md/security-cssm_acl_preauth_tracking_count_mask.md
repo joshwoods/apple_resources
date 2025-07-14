@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_ACL_PREAUTH_TRACKING_COUNT_MASK 
+
+Global Variable
+
+# CSSM_ACL_PREAUTH_TRACKING_COUNT_MASK
+
+macOS 10.0+
+
+``` source
+var CSSM_ACL_PREAUTH_TRACKING_COUNT_MASK: UInt32 { get }
+```
+

@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Enumerations
+- Anonymous
+-  CS_LINKAGE_APPLICATION_OOPJIT_INVALID 
+
+Enumeration Case
+
+# CS_LINKAGE_APPLICATION_OOPJIT_INVALID
+
+macOS 13.0+
+
+``` source
+CS_LINKAGE_APPLICATION_OOPJIT_INVALID = 0
+```
+

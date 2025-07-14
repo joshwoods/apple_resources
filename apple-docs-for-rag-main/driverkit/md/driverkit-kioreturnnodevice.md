@@ -1,0 +1,49 @@
+
+
+- DriverKit
+-  kIOReturnNoDevice 
+
+Macro
+
+# kIOReturnNoDevice
+
+DriverKitiOSiPadOSmacOS
+
+``` source
+#define kIOReturnNoDevice
+```
+
+## See Also
+
+### Errors
+
+kIOReturnAborted
+
+kIOReturnBadArgument
+
+kIOReturnBadMedia
+
+kIOReturnBadMessageID
+
+kIOReturnBusy
+
+kIOReturnCannotLock
+
+kIOReturnCannotWire
+
+kIOReturnDeviceError
+
+kIOReturnDMAError
+
+kIOReturnError
+
+kIOReturnExclusiveAccess
+
+kIOReturnInternalError
+
+kIOReturnInvalid
+
+kIOReturnIOError
+
+kIOReturnIPCError
+

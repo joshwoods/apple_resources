@@ -1,0 +1,76 @@
+
+
+- Swift
+- Float
+-  significandWidth 
+
+Instance Property
+
+# significandWidth
+
+The number of bits required to represent the value’s significand.
+
+iOS 8.0+iPadOS 8.0+Mac Catalyst 13.0+macOS 10.10+tvOS 9.0+visionOS 1.0+watchOS 2.0+
+
+``` source
+var significandWidth: Int { get }
+```
+
+## Discussion
+
+If this value is a finite nonzero number, `significandWidth` is the number of fractional bits required to represent the value of `significand`; otherwise, `significandWidth` is -1. The value of `significandWidth` is always -1 or between zero and `significandBitCount`. For example:
+
+- For any representable power of two, `significandWidth` is zero, because `significand` is `1.0`.
+
+- If `x` is 10, `x.significand` is `1.01` in binary, so `x.significandWidth` is 2.
+
+- If `x` is Float.pi, `x.significand` is `1.10010010000111111011011` in binary, and `x.significandWidth` is 23.
+
+## See Also
+
+### Working with Binary Representation
+
+var bitPattern: UInt32
+
+The bit pattern of the value’s encoding.
+
+var significandBitPattern: UInt32
+
+The raw encoding of the value’s significand field.
+
+var exponentBitPattern: UInt
+
+The raw encoding of the value’s exponent field.
+
+static var significandBitCount: Int
+
+The available number of fractional significand bits.
+
+static var exponentBitCount: Int
+
+The number of bits used to represent the type’s exponent.
+
+static var radix: Int
+
+The radix, or base of exponentiation, for a floating-point type.
+
+init(bitPattern: UInt32)
+
+Creates a new value with the given bit pattern.
+
+init(sign: FloatingPointSign, exponentBitPattern: UInt, significandBitPattern: UInt32)
+
+Creates a new instance from the specified sign and bit patterns.
+
+init(nan: Float.RawSignificand, signaling: Bool)
+
+Creates a NaN (“not a number”) value with the specified payload.
+
+typealias Exponent
+
+A type that can represent any written exponent.
+
+typealias RawSignificand
+
+A type that represents the encoded significand of a value.
+

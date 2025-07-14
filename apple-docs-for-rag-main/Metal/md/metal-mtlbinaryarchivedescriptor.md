@@ -1,0 +1,63 @@
+
+
+- Metal
+-  MTLBinaryArchiveDescriptor 
+
+Class
+
+# MTLBinaryArchiveDescriptor
+
+A description of a binary shader archive that you want to create.
+
+iOS 14.0+iPadOS 14.0+Mac Catalyst 14.0+macOS 11.0+tvOS 14.0+visionOS 1.0+
+
+``` source
+class MTLBinaryArchiveDescriptor
+```
+
+## Mentioned in 
+
+Creating Binary Archives from Device-Built Pipeline State Objects
+
+## Topics
+
+### Choosing an Archive File
+
+var url: URL?
+
+A URL to a Metal binary archive file.
+
+## Relationships
+
+### Inherits From
+
+- NSObject
+
+### Conforms To
+
+- CVarArg
+- CustomDebugStringConvertible
+- CustomStringConvertible
+- Equatable
+- Hashable
+- NSCopying
+- NSObjectProtocol
+
+## See Also
+
+### Creating Binary Shader Archives
+
+func makeBinaryArchive(descriptor: MTLBinaryArchiveDescriptor) throws -> any MTLBinaryArchive
+
+Creates a Metal binary archive instance.
+
+**Required**
+
+enum Code
+
+Error codes when creating binary archives of compiled shader code.
+
+let MTLBinaryArchiveDomain: String
+
+The domain for Metal binary archive errors.
+

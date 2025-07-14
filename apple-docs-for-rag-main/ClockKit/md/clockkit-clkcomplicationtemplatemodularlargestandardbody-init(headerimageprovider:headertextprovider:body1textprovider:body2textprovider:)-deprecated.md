@@ -1,0 +1,63 @@
+
+
+- ClockKit
+- CLKComplicationTemplateModularLargeStandardBody
+-  init(headerImageProvider:headerTextProvider:body1TextProvider:body2TextProvider:) Deprecated
+
+Initializer
+
+# init(headerImageProvider:headerTextProvider:body1TextProvider:body2TextProvider:)
+
+Creates a new template that has a header row with an image and text, and two rows of body text.
+
+watchOS 7.0–9.0Deprecated
+
+``` source
+init(
+    headerImageProvider: CLKImageProvider?,
+    headerTextProvider: CLKTextProvider,
+    body1TextProvider: CLKTextProvider,
+    body2TextProvider: CLKTextProvider?
+)
+```
+
+## Parameters 
+
+`headerImageProvider`  
+
+An image provider for the header. The system renders the image as a tinted template image, a bitmap image where only the opacity of the image matters. For more information, see Providing images for different appearances.
+
+`headerTextProvider`  
+
+The text provider for the header. For multicolor faces, like the Utility face, the system uses the text provider’s tint color for the text. For other faces, the system ignores the provided tint color, and uses a system color instead.
+
+`body1TextProvider`  
+
+The text provider for the first row of body text. For multicolor faces, like the Utility face, the system uses the text provider’s tint color for the text. For other faces, the system ignores the provided tint color, and uses a system color instead.
+
+`body2TextProvider`  
+
+The text provider for the second row of body text. For multicolor faces, like the Utility face, the system uses the text provider’s tint color for the text. For other faces, the system ignores the provided tint color, and uses a system color instead.
+
+## See Also
+
+### Creating the Template
+
+init(headerTextProvider: CLKTextProvider, body1TextProvider: CLKTextProvider)
+
+Creates a new template that has a row of header text and a row of body text.
+
+Deprecated
+
+init(headerTextProvider: CLKTextProvider, body1TextProvider: CLKTextProvider, body2TextProvider: CLKTextProvider?)
+
+Creates a new template that has a row of header text and two rows of body text.
+
+Deprecated
+
+init(headerImageProvider: CLKImageProvider?, headerTextProvider: CLKTextProvider, body1TextProvider: CLKTextProvider)
+
+Creates a new template that has a header row with an image and text, and a row of body text.
+
+Deprecated
+

@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_KEYBLOB_RAW_FORMAT_VENDOR_DEFINED 
+
+Global Variable
+
+# CSSM_KEYBLOB_RAW_FORMAT_VENDOR_DEFINED
+
+macOS 10.0+
+
+``` source
+var CSSM_KEYBLOB_RAW_FORMAT_VENDOR_DEFINED: UInt32 { get }
+```
+

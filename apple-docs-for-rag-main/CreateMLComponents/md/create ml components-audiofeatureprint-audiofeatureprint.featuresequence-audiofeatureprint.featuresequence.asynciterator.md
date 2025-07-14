@@ -1,0 +1,35 @@
+
+
+- Create ML Components
+- AudioFeaturePrint
+- AudioFeaturePrint.FeatureSequence
+-  AudioFeaturePrint.FeatureSequence.AsyncIterator 
+
+Type Alias
+
+# AudioFeaturePrint.FeatureSequence.AsyncIterator
+
+The type of asynchronous iterator that produces elements of this asynchronous sequence.
+
+iOS 16.0+iPadOS 16.0+Mac Catalyst 16.0+macOS 13.0+tvOS 16.0+visionOS 1.0+
+
+``` source
+typealias AsyncIterator = AudioFeaturePrint.FeatureSequence.Iterator
+```
+
+## See Also
+
+### Creating an iterator
+
+func makeAsyncIterator() -> AudioFeaturePrint.FeatureSequence.AsyncIterator
+
+Constructs an iterator.
+
+struct Iterator
+
+An async iterator of audio buffers.
+
+typealias Feature
+
+The feature type.
+

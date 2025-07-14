@@ -1,0 +1,16 @@
+
+
+- WebKit JS
+- HTMLTableColElement
+-  span 
+
+Instance Property
+
+# span
+
+Safari Desktop 3.0+Safari Mobile 2.0+
+
+``` source
+attribute unsigned long span;
+```
+

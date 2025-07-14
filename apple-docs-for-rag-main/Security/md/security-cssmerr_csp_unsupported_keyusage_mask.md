@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_CSP_UNSUPPORTED_KEYUSAGE_MASK 
+
+Global Variable
+
+# CSSMERR_CSP_UNSUPPORTED_KEYUSAGE_MASK
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSMERR_CSP_UNSUPPORTED_KEYUSAGE_MASK: Int { get }
+```
+

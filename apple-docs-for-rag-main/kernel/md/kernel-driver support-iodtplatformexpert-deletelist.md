@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Driver Support
+- IODTPlatformExpert
+-  deleteList 
+
+Instance Method
+
+# deleteList
+
+macOS 10.11.4+
+
+``` source
+virtual const char * deleteList(void);
+```
+

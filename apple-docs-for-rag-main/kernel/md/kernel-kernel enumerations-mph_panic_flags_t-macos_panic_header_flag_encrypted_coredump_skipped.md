@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Enumerations
+- mph_panic_flags_t
+-  MACOS_PANIC_HEADER_FLAG_ENCRYPTED_COREDUMP_SKIPPED 
+
+Enumeration Case
+
+# MACOS_PANIC_HEADER_FLAG_ENCRYPTED_COREDUMP_SKIPPED
+
+macOS 12.0+
+
+``` source
+MACOS_PANIC_HEADER_FLAG_ENCRYPTED_COREDUMP_SKIPPED
+```
+

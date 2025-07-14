@@ -1,0 +1,18 @@
+
+
+- WebKit JS
+- SVGLengthList
+-  initialize 
+
+Instance Method
+
+# initialize
+
+Safari Desktop 10.0+Safari Mobile 10.0+
+
+``` source
+SVGLength initialize(
+    SVGLength item
+);
+```
+

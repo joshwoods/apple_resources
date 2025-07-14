@@ -1,0 +1,69 @@
+
+
+- AppKit
+- NSImageView
+-  setSymbolImage(\_:contentTransition:options:) 
+
+Instance Method
+
+# setSymbolImage(\_:contentTransition:options:)
+
+Sets a symbol image using the specified content-transition effect and options.
+
+macOS 14.0+
+
+``` source
+@MainActor @preconcurrency
+func setSymbolImage(
+    _ image: NSImage,
+    contentTransition: some ContentTransitionSymbolEffect & SymbolEffect,
+    options: SymbolEffectOptions = .default
+)
+```
+
+## Parameters 
+
+`image`  
+
+The symbol image to set.
+
+`contentTransition`  
+
+The content transition to use when setting the symbol image.
+
+`options`  
+
+The options to use when setting the symbol image.
+
+## See Also
+
+### Configuring symbol effects
+
+func addSymbolEffect(some IndefiniteSymbolEffect &amp; SymbolEffect, options: SymbolEffectOptions, animated: Bool)
+
+Adds an indefinite symbol effect to the image view with the specified options and animation.
+
+func addSymbolEffect(some DiscreteSymbolEffect &amp; SymbolEffect, options: SymbolEffectOptions, animated: Bool)
+
+Adds a discrete symbol effect to the image view with the specified options and animation.
+
+func addSymbolEffect(some DiscreteSymbolEffect &amp; IndefiniteSymbolEffect &amp; SymbolEffect, options: SymbolEffectOptions, animated: Bool)
+
+Adds a discrete, indefinite symbol effect to the image view with the specified options and animation.
+
+func removeSymbolEffect(ofType: some IndefiniteSymbolEffect &amp; SymbolEffect, options: SymbolEffectOptions, animated: Bool)
+
+Removes the symbol effect that matches the specified indefinite effect type, using the specified options and animation setting.
+
+func removeSymbolEffect(ofType: some DiscreteSymbolEffect &amp; IndefiniteSymbolEffect &amp; SymbolEffect, options: SymbolEffectOptions, animated: Bool)
+
+Removes the symbol effect that matches the specified discrete, indefinite effect type, using the specified options and animation setting.
+
+func removeSymbolEffect(ofType: some DiscreteSymbolEffect &amp; SymbolEffect, options: SymbolEffectOptions, animated: Bool)
+
+Removes the symbol effect that matches the specified discrete effect type, using the specified options and animation setting.
+
+func removeAllSymbolEffects(options: SymbolEffectOptions, animated: Bool)
+
+Removes all symbol effects from the image view, using the specified options and animation setting.
+

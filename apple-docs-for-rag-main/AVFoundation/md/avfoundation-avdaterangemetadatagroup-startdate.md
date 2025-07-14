@@ -1,0 +1,30 @@
+
+
+- AVFoundation
+- AVDateRangeMetadataGroup
+-  startDate 
+
+Instance Property
+
+# startDate
+
+The start date for the metadata date range group.
+
+iOS 9.0+iPadOS 9.0+Mac Catalyst 13.1+macOS 10.11+tvOS 9.0+visionOS 1.0+watchOS 2.0+
+
+``` source
+var startDate: Date { get }
+```
+
+## Discussion
+
+The `startDate` defines the starting date on the timeline for which the associated metadata is valid.
+
+## See Also
+
+### Accessing the Date Range
+
+var endDate: Date?
+
+The end date for the metadata date range group.
+

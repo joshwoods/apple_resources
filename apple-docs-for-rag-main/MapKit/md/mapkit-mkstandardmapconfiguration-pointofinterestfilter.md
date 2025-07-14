@@ -1,0 +1,35 @@
+
+
+- MapKit
+- MKStandardMapConfiguration
+-  pointOfInterestFilter 
+
+Instance Property
+
+# pointOfInterestFilter
+
+The filter used to determine the points of interest shown on the map.
+
+iOS 16.0+iPadOS 16.0+Mac Catalyst 16.0+macOS 13.0+tvOS 16.0+visionOS 1.0+
+
+``` source
+@NSCopying
+var pointOfInterestFilter: MKPointOfInterestFilter? { get set }
+```
+
+## See Also
+
+### Customizing the map display
+
+var emphasisStyle: MKStandardMapConfiguration.EmphasisStyle
+
+The value that indicates how the framework emphasizes map features.
+
+enum EmphasisStyle
+
+Values that control how the framework emphasizes map features.
+
+var showsTraffic: Bool
+
+A Boolean value that controls whether the map displays traffic conditions.
+

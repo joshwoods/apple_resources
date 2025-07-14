@@ -1,0 +1,49 @@
+
+
+- Core Audio
+-  kAudioObjectPropertyControlList 
+
+Global Variable
+
+# kAudioObjectPropertyControlList
+
+Mac CatalystmacOS
+
+``` source
+var kAudioObjectPropertyControlList: AudioObjectPropertySelector { get }
+```
+
+## See Also
+
+### Constants
+
+var kAudioDevicePropertyAvailableNominalSampleRates: AudioObjectPropertySelector
+
+var kAudioDevicePropertyClockDomain: AudioObjectPropertySelector
+
+var kAudioDevicePropertyConfigurationApplication: AudioObjectPropertySelector
+
+var kAudioDevicePropertyDeviceCanBeDefaultDevice: AudioObjectPropertySelector
+
+var kAudioDevicePropertyDeviceCanBeDefaultSystemDevice: AudioObjectPropertySelector
+
+var kAudioDevicePropertyDeviceIsAlive: AudioObjectPropertySelector
+
+var kAudioDevicePropertyDeviceIsRunning: AudioObjectPropertySelector
+
+var kAudioDevicePropertyDeviceUID: AudioObjectPropertySelector
+
+var kAudioDevicePropertyIcon: AudioObjectPropertySelector
+
+var kAudioDevicePropertyIsHidden: AudioObjectPropertySelector
+
+var kAudioDevicePropertyLatency: AudioObjectPropertySelector
+
+var kAudioDevicePropertyModelUID: AudioObjectPropertySelector
+
+var kAudioDevicePropertyNominalSampleRate: AudioObjectPropertySelector
+
+var kAudioDevicePropertyPreferredChannelLayout: AudioObjectPropertySelector
+
+var kAudioDevicePropertyPreferredChannelsForStereo: AudioObjectPropertySelector
+

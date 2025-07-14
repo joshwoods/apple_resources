@@ -1,0 +1,16 @@
+
+
+- DriverKit
+- SCSICmd_INQUIRY_Page89_Data
+-  SAT_PRODUCT_REVISION_LEVEL 
+
+Instance Property
+
+# SAT_PRODUCT_REVISION_LEVEL
+
+DriverKitiOSiPadOSmacOS
+
+``` source
+UInt8 SAT_PRODUCT_REVISION_LEVEL[4];
+```
+

@@ -1,0 +1,32 @@
+
+
+- Spatial
+- Axis3D
+-  init(rawValue:) 
+
+Initializer
+
+# init(rawValue:)
+
+Creates a new instance with the specified raw value.
+
+iOSiPadOSMac CatalystmacOStvOSvisionOSwatchOS
+
+``` source
+init(rawValue: UInt32)
+```
+
+## Parameters 
+
+`rawValue`  
+
+The raw value to use for the new instance.
+
+## See Also
+
+### Initializers
+
+init(UInt32)
+
+Creates a new 3D axis structure.
+

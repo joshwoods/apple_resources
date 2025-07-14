@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSMERR_AC_INVALID_TUPLE_CREDENTIALS 
+
+Global Variable
+
+# CSSMERR_AC_INVALID_TUPLE_CREDENTIALS
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSMERR_AC_INVALID_TUPLE_CREDENTIALS: Int { get }
+```
+

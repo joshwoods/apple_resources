@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_DB_CONTAINS_INITIAL_SUBSTRING 
+
+Global Variable
+
+# CSSM_DB_CONTAINS_INITIAL_SUBSTRING
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_DB_CONTAINS_INITIAL_SUBSTRING: Int { get }
+```
+

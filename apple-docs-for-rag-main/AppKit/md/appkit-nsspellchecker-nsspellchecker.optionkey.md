@@ -1,0 +1,83 @@
+
+
+- AppKit
+- NSSpellChecker
+-  NSSpellChecker.OptionKey 
+
+Structure
+
+# NSSpellChecker.OptionKey
+
+The constants are optional keys that can be used in the options dictionary parameter of the check(_:range:types:options:inSpellDocumentWithTag:orthography:wordCount:), requestChecking(of:range:types:options:inSpellDocumentWithTag:completionHandler:), and menu(for:string:options:atLocation:in:) methods.
+
+macOS
+
+``` source
+struct OptionKey
+```
+
+## Topics
+
+### Spell Checker Options
+
+static let documentAuthor: NSSpellChecker.OptionKey
+
+An NSString containing the name of an author to be associated with the document
+
+static let documentTitle: NSSpellChecker.OptionKey
+
+An NSString containing the title to be associated with the document.
+
+static let documentURL: NSSpellChecker.OptionKey
+
+An NSURL to be associated with the document.
+
+static let orthography: NSSpellChecker.OptionKey
+
+An NSOrthography instance indicating an orthography to be used as a starting point for orthography checking, or as the orthography if orthography checking is not enabled.
+
+static let quotes: NSSpellChecker.OptionKey
+
+An NSArray containing four strings to be used with quote (opening double quote, closing double quote, opening single quote, and closing single quote in that order); if not specified, values will be taken from user’s preferences.
+
+static let referenceDate: NSSpellChecker.OptionKey
+
+An NSDate to be associated with the document, used as a referent for relative dates; if not specified, the current date will be used.
+
+static let referenceTimeZone: NSSpellChecker.OptionKey
+
+An NSTimeZone to be associated with the document, used as a reference for dates without time zones; if not specified, the current time zone will be used.
+
+static let regularExpressions: NSSpellChecker.OptionKey
+
+static let replacements: NSSpellChecker.OptionKey
+
+An NSDictionary containing replacements to be used with NSTextCheckingTypeReplacement; if not specified, values will be taken from user’s preferences.
+
+static let selectedRange: NSSpellChecker.OptionKey
+
+### Initializers
+
+init(rawValue: String)
+
+### Type Properties
+
+static let generateInlinePredictionsKey: NSSpellChecker.OptionKey
+
+## Relationships
+
+### Conforms To
+
+- Equatable
+- Hashable
+- RawRepresentable
+- Sendable
+
+## See Also
+
+### Data Detector Interaction
+
+func menu(for: NSTextCheckingResult, string: String, options: [NSSpellChecker.OptionKey : Any]?, atLocation: NSPoint, in: NSView) -> NSMenu?
+
+Provides a menu containing contextual menu items suitable for certain kinds of detected results.
+

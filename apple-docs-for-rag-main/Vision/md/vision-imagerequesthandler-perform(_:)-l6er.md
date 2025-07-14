@@ -1,0 +1,34 @@
+
+
+- Vision
+- ImageRequestHandler
+-  perform(\_:) 
+
+Instance Method
+
+# perform(\_:)
+
+Performs one or more framework requests on the handler’s image.
+
+iOS 18.0+iPadOS 18.0+Mac Catalyst 18.0+macOS 15.0+tvOS 18.0+visionOS 2.0+
+
+``` source
+final func perform(_ request: repeat each T) async throws -> (repeat (each T).Result) where repeat each T : VisionRequest
+```
+
+## Discussion
+
+The function returns after all requests complete.
+
+## See Also
+
+### Performing the request
+
+func perform&lt;T>(T) async throws -> T.Result
+
+Performs a framework request on the handler’s image.
+
+func performAll(some Collection&lt;any VisionRequest>) -> some AsyncSequence&lt;VisionResult, Never> 
+
+Schedules a collection of framework requests to perform on the handler’s image.
+

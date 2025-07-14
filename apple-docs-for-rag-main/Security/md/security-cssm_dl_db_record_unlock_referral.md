@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_DL_DB_RECORD_UNLOCK_REFERRAL 
+
+Global Variable
+
+# CSSM_DL_DB_RECORD_UNLOCK_REFERRAL
+
+macOS 10.0+
+
+``` source
+var CSSM_DL_DB_RECORD_UNLOCK_REFERRAL: UInt32 { get }
+```
+

@@ -1,0 +1,50 @@
+
+
+- Kernel
+- mach
+-  mig_get_reply_port 
+
+Function
+
+# mig_get_reply_port
+
+macOS 10.0+
+
+``` source
+mach_port_t mig_get_reply_port(void);
+```
+
+## See Also
+
+### MIG
+
+mig_allocate
+
+mig_dealloc_reply_port
+
+mig_deallocate
+
+mig_put_reply_port
+
+mig_strncpy
+
+mig_strncpy_zerofill
+
+arcade_upcall
+
+arcade_upcall_server
+
+arcade_upcall_server_routine
+
+mig_impl_routine_t
+
+mig_routine_arg_descriptor_t
+
+mig_routine_descriptor_t
+
+mig_routine_t
+
+mig_server_routine_t
+
+mig_stub_routine_t
+

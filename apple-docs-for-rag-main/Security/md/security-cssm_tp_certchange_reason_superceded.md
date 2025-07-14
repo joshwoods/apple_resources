@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_TP_CERTCHANGE_REASON_SUPERCEDED 
+
+Global Variable
+
+# CSSM_TP_CERTCHANGE_REASON_SUPERCEDED
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_TP_CERTCHANGE_REASON_SUPERCEDED: Int { get }
+```
+

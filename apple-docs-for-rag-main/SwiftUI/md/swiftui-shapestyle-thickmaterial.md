@@ -1,0 +1,44 @@
+
+
+- SwiftUI
+- ShapeStyle
+-  thickMaterial 
+
+Type Property
+
+# thickMaterial
+
+A material that’s more opaque than translucent.
+
+iOS 15.0+iPadOS 15.0+Mac Catalyst 15.0+macOS 12.0+tvOS 15.0+visionOS 1.0+watchOS 10.0+
+
+``` source
+static var thickMaterial: Material { get }
+```
+
+Available when `Self` is `Material`.
+
+## See Also
+
+### Materials
+
+static var ultraThinMaterial: Material
+
+A mostly translucent material.
+
+static var thinMaterial: Material
+
+A material that’s more translucent than opaque.
+
+static var regularMaterial: Material
+
+A material that’s somewhat translucent.
+
+static var ultraThickMaterial: Material
+
+A mostly opaque material.
+
+static var bar: Material
+
+A material matching the style of system toolbars.
+

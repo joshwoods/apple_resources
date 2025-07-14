@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_ACL_AUTHORIZATION_CHANGE_OWNER 
+
+Global Variable
+
+# CSSM_ACL_AUTHORIZATION_CHANGE_OWNER
+
+macOS 10.0+
+
+``` source
+var CSSM_ACL_AUTHORIZATION_CHANGE_OWNER: Int { get }
+```
+

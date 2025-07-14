@@ -1,0 +1,87 @@
+
+
+- App Intents
+-  ResultsCollection 
+
+Protocol
+
+# ResultsCollection
+
+A protocol representing a collection of returned items with support for sectioning.
+
+iOS 16.0+iPadOS 16.0+Mac Catalyst 16.0+macOS 13.0+tvOS 16.0+visionOS 1.0+watchOS 9.0+
+
+``` source
+protocol ResultsCollection
+```
+
+## Topics
+
+### Associated Types
+
+associatedtype Result : _IntentValue
+
+**Required**
+
+### Instance Properties
+
+var items: [Self.Result.ValueType]
+
+All result items.
+
+**Required**
+
+var promptLabel: LocalizedStringResource?
+
+A text prompt shown at the top of the view that presents the options.
+
+**Required**
+
+var usesIndexedCollation: Bool
+
+If set to true, presents the list of options with an alphabetical index on the right side of the screen (table view section index titles).
+
+**Required**
+
+### Type Properties
+
+static var empty: Self
+
+An empty result.
+
+**Required**
+
+## Relationships
+
+### Conforming Types
+
+- IntentItemCollection
+
+## See Also
+
+### Results
+
+protocol IntentResult
+
+A type that contains the result of performing an action, and includes optional information to deliver back to the initiator.
+
+struct IntentResultContainer
+
+An object that represents the output of a completed intent.
+
+protocol OpensIntent
+
+The result of performing an action that delivers an app intent back to the initiator of the action.
+
+protocol ProvidesDialog
+
+The result of performing an action that delivers a dialog back to the initiator of the action.
+
+protocol ReturnsValue
+
+The result of performing an action that delivers a value back to the initiator.
+
+protocol ShowsSnippetView
+
+The result of performing an action that delivers a view back to the initiator of the action.
+

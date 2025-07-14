@@ -1,0 +1,83 @@
+
+
+- AVFoundation
+- AVError
+- AVError.Code
+-  AVError.Code.contentKeyRequestCancelled 
+
+Case
+
+# AVError.Code.contentKeyRequestCancelled
+
+The app canceled a request to retrieve a content key.
+
+iOS 14.6+iPadOS 14.6+Mac Catalyst 14.6+macOS 11.4+tvOS 14.6+visionOS 1.0+watchOS 7.5+
+
+``` source
+case contentKeyRequestCancelled
+```
+
+## See Also
+
+### Error Codes
+
+case airPlayControllerRequiresInternet
+
+The AirPlay controller requires an internet connection to function.
+
+case airPlayReceiverRequiresInternet
+
+The AirPlay receiver requires an internet connection to function.
+
+case airPlayReceiverTemporarilyUnavailable
+
+An AirPlay receiver is temporarily unavailable.
+
+case applicationIsNotAuthorized
+
+The app isn’t authorized to play media.
+
+case applicationIsNotAuthorizedToUseDevice
+
+The user denied this app permission to capture media.
+
+case compositionTrackSegmentsNotContiguous
+
+The composition can’t add the source media because it contains gaps.
+
+case contentIsNotAuthorized
+
+The user isn’t authorized to play the media.
+
+case contentIsProtected
+
+The app isn’t authorized to open the media.
+
+case contentIsUnavailable
+
+The captured content is unavailable.
+
+case contentNotUpdated
+
+The system couldn’t update the captured content.
+
+case createContentKeyRequestFailed
+
+The app couldn’t create a content key request.
+
+case decodeFailed
+
+The system failed to decode the media.
+
+case decoderNotFound
+
+The system can’t find a suitable decoder for the media.
+
+case decoderTemporarilyUnavailable
+
+A suitable decoder for the media is temporarily available.
+
+case deviceAlreadyUsedByAnotherSession
+
+Your app can’t access the device because another session is currently using it.
+

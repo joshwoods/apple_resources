@@ -1,0 +1,45 @@
+
+
+- SwiftUI
+- DocumentGroupLaunchScene
+-  init(\_:\_:background:) 
+
+Initializer
+
+# init(\_:\_:background:)
+
+Creates a launch scene for document-based applications with a title, a set of actions, and a background.
+
+iOS 18.0+iPadOS 18.0+Mac Catalyst 18.0+visionOS 2.0+
+
+``` source
+nonisolated
+init(
+    _ title: LocalizedStringKey,
+    @ViewBuilder _ actions: () -> Actions,
+    @ViewBuilder background: () -> some View
+)
+```
+
+Available when `Actions` conforms to `View`.
+
+Show all declarations
+
+## Parameters 
+
+`title`  
+
+A key to use for the view title.
+
+`actions`  
+
+A view builder for returning the view’s actions.
+
+`background`  
+
+The background of the scene.
+
+## Discussion
+
+Use a `DocumentGroupLaunchScene` alongside any DocumentGroup scenes. If you don’t implement a `DocumentGroup` in the app declaration, you can get the same design by implementing a DocumentLaunchView.
+

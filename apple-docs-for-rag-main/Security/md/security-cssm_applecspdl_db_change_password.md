@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_APPLECSPDL_DB_CHANGE_PASSWORD 
+
+Global Variable
+
+# CSSM_APPLECSPDL_DB_CHANGE_PASSWORD
+
+macOS 10.0+
+
+``` source
+var CSSM_APPLECSPDL_DB_CHANGE_PASSWORD: Int { get }
+```
+

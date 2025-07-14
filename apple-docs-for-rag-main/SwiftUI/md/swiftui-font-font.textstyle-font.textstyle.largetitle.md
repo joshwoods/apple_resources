@@ -1,0 +1,71 @@
+
+
+- SwiftUI
+- Font
+- Font.TextStyle
+-  Font.TextStyle.largeTitle 
+
+Case
+
+# Font.TextStyle.largeTitle
+
+The font style for large titles.
+
+iOS 13.0+iPadOS 13.0+Mac Catalyst 13.0+macOS 10.15+tvOS 13.0+visionOS 1.0+watchOS 6.0+
+
+``` source
+case largeTitle
+```
+
+## See Also
+
+### Getting font text styles
+
+case extraLargeTitle2
+
+The font used for second level extra large titles.
+
+case extraLargeTitle
+
+The font used for extra large titles.
+
+case title
+
+The font used for first level hierarchical headings.
+
+case title2
+
+The font used for second level hierarchical headings.
+
+case title3
+
+The font used for third level hierarchical headings.
+
+case headline
+
+The font used for headings.
+
+case subheadline
+
+The font used for subheadings.
+
+case body
+
+The font used for body text.
+
+case callout
+
+The font used for callouts.
+
+case caption
+
+The font used for standard captions.
+
+case caption2
+
+The font used for alternate captions.
+
+case footnote
+
+The font used in footnotes.
+

@@ -1,0 +1,209 @@
+
+
+- NetworkingDriverKit
+-  NetworkingDriverKit Constants 
+
+API Collection
+
+# NetworkingDriverKit Constants
+
+## Topics
+
+### Enumerations
+
+IOUserNetworkPacketBufferPoolFlags
+
+### Blocking behavior
+
+kIOUserNetworkBlocking
+
+kIOUserNetworkNonBlocking
+
+### Network packet service classes
+
+kIOUserNetworkPacketServiceClassAV
+
+kIOUserNetworkPacketServiceClassBE
+
+kIOUserNetworkPacketServiceClassBK
+
+kIOUserNetworkPacketServiceClassBKSYS
+
+kIOUserNetworkPacketServiceClassCTL
+
+kIOUserNetworkPacketServiceClassNone
+
+kIOUserNetworkPacketServiceClassOAM
+
+kIOUserNetworkPacketServiceClassRD
+
+kIOUserNetworkPacketServiceClassRV
+
+kIOUserNetworkPacketServiceClassVI
+
+kIOUserNetworkPacketServiceClassVO
+
+### Network packet polling events
+
+kIOUserNetworkPacketPollerEventPollStart
+
+kIOUserNetworkPacketPollerEventPollStop
+
+kIOUserNetworkPacketPollerEventTypeMask
+
+### Network features
+
+kIOUserNetworkFeatureFlagNicProxy
+
+kIOUserNetworkFeatureFlagSoftwareVlan
+
+kIOUserNetworkFeatureFlagWOMP
+
+kIOUserNetworkFeatureHWTimeStamp
+
+kIOUserNetworkFeatureSWTimeStamp
+
+### Local port detection
+
+kIOUserNetworkGetLocalPortsActiveOnly
+
+kIOUserNetworkGetLocalPortsAnyTCPStateOK
+
+kIOUserNetworkGetLocalPortsExtendedBackgroundIdleOnly
+
+kIOUserNetworkGetLocalPortsNoWakeupOk
+
+kIOUserNetworkGetLocalPortsRecvAnyInterfaceOnly
+
+kIOUserNetworkGetLocalPortsTCPOnly
+
+kIOUserNetworkGetLocalPortsUDPOnly
+
+kIOUserNetworkGetLocalPortsWildCardOk
+
+### Packet types
+
+kIOUserNetworkPacketTSOIPV4
+
+kIOUserNetworkPacketTSOIPV6
+
+kIOUserNetworkPacketLROIPV4
+
+kIOUserNetworkPacketLROIPV6
+
+### Packet checksums
+
+kIOUserNetworkPacketRxCsumDataValid
+
+kIOUserNetworkPacketRxCsumIPChecked
+
+kIOUserNetworkPacketRxCsumIPValid
+
+kIOUserNetworkPacketRxCsumPseudoHdr
+
+kIOUserNetworkPacketTxCsumIPHdr
+
+kIOUserNetworkPacketTxCsumPartial
+
+kIOUserNetworkPacketTxCsumTCPIPV4
+
+kIOUserNetworkPacketTxCsumTCPIPV6
+
+kIOUserNetworkPacketTxCsumUDPIPV4
+
+kIOUserNetworkPacketTxCsumUDPIPV6
+
+kIOUserNetworkPacketTxCsumZeroInvert
+
+### Proxy keepalive
+
+nicproxy_keepalive_ethertype_ip
+
+nicproxy_keepalive_tcp
+
+### Hardware assist features
+
+kIOUserNetworkHWAssistHWTimeStamp
+
+kIOUserNetworkHWAssistLRO
+
+kIOUserNetworkHWAssistNicProxy
+
+kIOUserNetworkHWAssistRxChecksum
+
+kIOUserNetworkHWAssistSWTimeStamp
+
+kIOUserNetworkHWAssistSoftwareVlan
+
+kIOUserNetworkHWAssistTSO4
+
+kIOUserNetworkHWAssistTSO6
+
+kIOUserNetworkHWAssistTxChecksumIPHdr
+
+kIOUserNetworkHWAssistTxChecksumTCP
+
+kIOUserNetworkHWAssistTxChecksumUDP
+
+kIOUserNetworkHWAssistWOMP
+
+### Enumeration cases
+
+IFNET_FAMILY_ANY
+
+IFNET_FAMILY_ETHERNET
+
+IFNET_SUBFAMILY_ANY
+
+IONetworkPacketTypeNetwork
+
+rr_length_mask
+
+rr_ptr_mask
+
+### Macros
+
+IOUSERNETWORKKEEPALIVEOFFLOADFRAME_AIRPLAY
+
+IOUSERNETWORKKEEPALIVEOFFLOADFRAME_IPSEC
+
+IOUSERNETWORKKEEPALIVEOFFLOADFRAME_TCP
+
+IOUSERNETWORKKEEPALIVEOFFLOAD_DATA_SIZE
+
+IOUSERNETWORKKEEPALIVEOFFLOAD_ETHERTYPE_IPV4
+
+IOUSERNETWORKKEEPALIVEOFFLOAD_ETHERTYPE_IPV6
+
+IOUSERNETWORKKEEPALIVEOFFLOAD_FLAG_NOWAKEFROMSLEEP
+
+IOUSERNETWORKKEEPALIVEOFFLOAD_MAX_ADDR_SIZE
+
+IOUSERNETWORKLINKLAYERREACHABILITYINFO_ADDRLEN
+
+IOUSERNETWORKPRIVATEDEFINED
+
+IP_PORTRANGE_BITFIELD_LEN
+
+NDK_20
+
+NDK_21
+
+NDK_22
+
+NDK_23
+
+NDK_24
+
+NIC_PROXY_FLAGS_WOMP
+
+NIC_PROXY_FLAGS_WONLINK
+
+## See Also
+
+### Reference
+
+NetworkingDriverKit Structures
+
+NetworkingDriverKit Data Types
+

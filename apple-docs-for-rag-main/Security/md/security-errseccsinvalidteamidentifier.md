@@ -1,0 +1,17 @@
+
+
+- Security
+-  errSecCSInvalidTeamIdentifier 
+
+Global Variable
+
+# errSecCSInvalidTeamIdentifier
+
+A Team Identifier string is invalid.
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var errSecCSInvalidTeamIdentifier: OSStatus { get }
+```
+

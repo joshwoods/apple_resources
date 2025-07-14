@@ -1,0 +1,122 @@
+
+
+- IOBluetooth
+- IOBluetooth Enumerations
+-  BluetoothHCIEventMask constants 
+
+API Collection
+
+# BluetoothHCIEventMask constants
+
+## Topics
+
+### Constants
+
+var kBluetoothHCIEventMaskAll: UInt32
+
+var kBluetoothHCIEventMaskAuthenticationComplete: UInt32
+
+var kBluetoothHCIEventMaskChangeConnectionLinkKeyComplete: UInt32
+
+var kBluetoothHCIEventMaskCommandComplete: UInt32
+
+var kBluetoothHCIEventMaskCommandStatus: UInt32
+
+var kBluetoothHCIEventMaskConnectionComplete: UInt32
+
+var kBluetoothHCIEventMaskConnectionPacketTypeChanged: UInt32
+
+var kBluetoothHCIEventMaskConnectionRequest: UInt32
+
+var kBluetoothHCIEventMaskDataBufferOverflow: UInt32
+
+var kBluetoothHCIEventMaskDefault: UInt32
+
+var kBluetoothHCIEventMaskDisconnectionComplete: UInt32
+
+var kBluetoothHCIEventMaskEncryptionChange: UInt32
+
+var kBluetoothHCIEventMaskFlushOccurred: UInt32
+
+var kBluetoothHCIEventMaskHardwareError: UInt32
+
+var kBluetoothHCIEventMaskInquiryComplete: UInt32
+
+var kBluetoothHCIEventMaskInquiryResult: UInt32
+
+var kBluetoothHCIEventMaskLinkKeyNotification: UInt32
+
+var kBluetoothHCIEventMaskLinkKeyRequest: UInt32
+
+var kBluetoothHCIEventMaskLoopbackCommand: UInt32
+
+var kBluetoothHCIEventMaskMasterLinkKeyComplete: UInt32
+
+var kBluetoothHCIEventMaskMaxSlotsChange: UInt32
+
+var kBluetoothHCIEventMaskModeChange: UInt32
+
+var kBluetoothHCIEventMaskNone: UInt32
+
+var kBluetoothHCIEventMaskNumberOfCompletedPackets: UInt32
+
+var kBluetoothHCIEventMaskPINCodeRequest: UInt32
+
+var kBluetoothHCIEventMaskPageScanModeChange: UInt32
+
+var kBluetoothHCIEventMaskPageScanRepetitionModeChange: UInt32
+
+var kBluetoothHCIEventMaskQoSSetupComplete: UInt32
+
+var kBluetoothHCIEventMaskQoSViolation: UInt32
+
+var kBluetoothHCIEventMaskReadClockOffsetComplete: UInt32
+
+var kBluetoothHCIEventMaskReadRemoteSupportedFeaturesComplete: UInt32
+
+var kBluetoothHCIEventMaskReadRemoteVersionInformationComplete: UInt32
+
+var kBluetoothHCIEventMaskRemoteNameRequestComplete: UInt32
+
+var kBluetoothHCIEventMaskReturnLinkKeys: UInt32
+
+var kBluetoothHCIEventMaskRoleChange: UInt32
+
+var kBluetoothHCIEvnetMaskEnhancedFlushCompleteEvent: Int64
+
+var kBluetoothHCIEvnetMaskLinkSupervisionTimeoutChangedEvent: Int64
+
+## See Also
+
+### Enumerations
+
+struct BluetoothAMPCommandRejectReason
+
+struct BluetoothAMPCreatePhysicalLinkResponseStatus
+
+struct BluetoothAMPDisconnectPhysicalLinkResponseStatus
+
+struct BluetoothAMPDiscoverResponseControllerStatus
+
+struct BluetoothAMPGetAssocResponseStatus
+
+struct BluetoothAMPGetInfoResponseStatus
+
+struct BluetoothAMPManagerCode
+
+struct BluetoothHCIPowerState
+
+struct BluetoothL2CAPCommandCode
+
+struct BluetoothL2CAPCommandRejectReason
+
+struct BluetoothL2CAPConfigurationOption
+
+struct BluetoothL2CAPConfigurationResult
+
+struct BluetoothL2CAPConfigurationRetransmissionAndFlowControlFlags
+
+struct BluetoothL2CAPConnectionResult
+
+struct BluetoothL2CAPConnectionStatus
+

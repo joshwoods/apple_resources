@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_KEYBLOB_WRAPPED_FORMAT_OPENSSL 
+
+Global Variable
+
+# CSSM_KEYBLOB_WRAPPED_FORMAT_OPENSSL
+
+macOS 10.0+
+
+``` source
+var CSSM_KEYBLOB_WRAPPED_FORMAT_OPENSSL: Int { get }
+```
+

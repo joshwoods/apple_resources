@@ -1,0 +1,30 @@
+
+
+- os
+- OSSignpostType
+-  begin 
+
+Type Property
+
+# begin
+
+A signpost that marks the start of a time interval of interest in your code.
+
+iOS 12.0+iPadOS 12.0+Mac CatalystmacOS 10.14+tvOS 12.0+visionOSwatchOS 5.0+
+
+``` source
+static let begin: OSSignpostType
+```
+
+## See Also
+
+### Specifying Signpost Types
+
+static let end: OSSignpostType
+
+A signpost that marks the end of a time interval of interest in your code.
+
+static let event: OSSignpostType
+
+A signpost that marks an event in your code.
+

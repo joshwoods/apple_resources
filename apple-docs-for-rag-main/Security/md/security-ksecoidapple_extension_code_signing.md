@@ -1,0 +1,15 @@
+
+
+- Security
+-  kSecOIDAPPLE_EXTENSION_CODE_SIGNING 
+
+Global Variable
+
+# kSecOIDAPPLE_EXTENSION_CODE_SIGNING
+
+macOS 10.7+
+
+``` source
+let kSecOIDAPPLE_EXTENSION_CODE_SIGNING: CFString
+```
+

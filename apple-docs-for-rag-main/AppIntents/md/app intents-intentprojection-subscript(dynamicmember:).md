@@ -1,0 +1,16 @@
+
+
+- App Intents
+- IntentProjection
+-  subscript(dynamicMember:) 
+
+Instance Subscript
+
+# subscript(dynamicMember:)
+
+iOS 17.0+iPadOS 17.0+Mac Catalyst 17.0+macOS 14.0+tvOS 17.0+visionOS 1.0+watchOS 10.0+
+
+``` source
+final subscript(dynamicMember keyPath: KeyPath) -> Value.UnwrappedType where Value : _IntentValue { get }
+```
+

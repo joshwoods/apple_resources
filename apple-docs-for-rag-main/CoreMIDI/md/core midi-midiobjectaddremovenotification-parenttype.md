@@ -1,0 +1,42 @@
+
+
+- Core MIDI
+- MIDIObjectAddRemoveNotification
+-  parentType 
+
+Instance Property
+
+# parentType
+
+The parent object type.
+
+iOSiPadOSMac CatalystmacOStvOSvisionOSwatchOS
+
+``` source
+var parentType: MIDIObjectType
+```
+
+## See Also
+
+### Inspecting the Notification
+
+var messageID: MIDINotificationMessageID
+
+The message type.
+
+var messageSize: UInt32
+
+The message size.
+
+var parent: MIDIObjectRef
+
+The parent object of the added or removed child.
+
+var child: MIDIObjectRef
+
+The added or removed child object.
+
+var childType: MIDIObjectType
+
+The child object type.
+

@@ -1,0 +1,49 @@
+
+
+- Core Audio
+-  kAudioDevicePropertyBufferSize 
+
+Global Variable
+
+# kAudioDevicePropertyBufferSize
+
+Mac CatalystmacOS
+
+``` source
+var kAudioDevicePropertyBufferSize: AudioObjectPropertySelector { get }
+```
+
+## See Also
+
+### Constants
+
+var kAudioDevicePropertyBufferSizeRange: AudioObjectPropertySelector
+
+var kAudioDevicePropertyChannelCategoryName: AudioObjectPropertySelector
+
+var kAudioDevicePropertyChannelCategoryNameCFString: AudioObjectPropertySelector
+
+var kAudioDevicePropertyChannelName: AudioObjectPropertySelector
+
+var kAudioDevicePropertyChannelNameCFString: AudioObjectPropertySelector
+
+var kAudioDevicePropertyChannelNominalLineLevelNameForID: AudioObjectPropertySelector
+
+var kAudioDevicePropertyChannelNumberName: AudioObjectPropertySelector
+
+var kAudioDevicePropertyChannelNumberNameCFString: AudioObjectPropertySelector
+
+var kAudioDevicePropertyClockSourceNameForID: AudioObjectPropertySelector
+
+var kAudioDevicePropertyDataSourceNameForID: AudioObjectPropertySelector
+
+var kAudioDevicePropertyDeviceManufacturer: AudioObjectPropertySelector
+
+var kAudioDevicePropertyDeviceManufacturerCFString: AudioObjectPropertySelector
+
+var kAudioDevicePropertyDeviceName: AudioObjectPropertySelector
+
+var kAudioDevicePropertyDeviceNameCFString: AudioObjectPropertySelector
+
+var kAudioDevicePropertyHighPassFilterSettingNameForID: AudioObjectPropertySelector
+

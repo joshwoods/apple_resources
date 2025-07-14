@@ -1,0 +1,20 @@
+
+
+- RealityKit
+- RealityRenderer
+- RealityRenderer.CameraOutput
+- RealityRenderer.CameraOutput.Descriptor
+-  viewports 
+
+Instance Property
+
+# viewports
+
+Viewports to use for rendering with a camera.
+
+iOS 18.0+iPadOS 18.0+Mac Catalyst 18.0+macOS 15.0+visionOS 1.0+
+
+``` source
+var viewports: [RealityRenderer.CameraOutput.RelativeViewport]
+```
+

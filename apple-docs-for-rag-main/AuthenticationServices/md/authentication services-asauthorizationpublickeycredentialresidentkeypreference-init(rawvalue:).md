@@ -1,0 +1,32 @@
+
+
+- Authentication Services
+- ASAuthorizationPublicKeyCredentialResidentKeyPreference
+-  init(rawValue:) 
+
+Initializer
+
+# init(rawValue:)
+
+Creates the object with a preference.
+
+iOS 15.0+iPadOS 15.0+Mac Catalyst 15.0+macOS 12.0+visionOS 1.0+
+
+``` source
+init(rawValue: String)
+```
+
+## Parameters 
+
+`rawValue`  
+
+The key storage preference.
+
+## See Also
+
+### Creating the preference
+
+init(String)
+
+Creates the object with a preference.
+

@@ -1,0 +1,17 @@
+
+
+- Kernel
+- hfs
+- HFSCatalogFile
+-  modifyDate 
+
+Instance Property
+
+# modifyDate
+
+macOS 10.6+
+
+``` source
+u_int32_t modifyDate;
+```
+

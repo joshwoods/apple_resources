@@ -1,0 +1,28 @@
+
+
+- WebKit JS
+- SVGMarkerElement
+-  SVG_MARKER_ORIENT_UNKNOWN 
+
+# SVG_MARKER_ORIENT_UNKNOWN
+
+Safari Desktop 3.0+Safari Mobile 2.1+
+
+``` source
+const unsigned short SVG_MARKER_ORIENT_UNKNOWN;
+```
+
+## See Also
+
+### Miscellaneous
+
+SVG_MARKERUNITS_STROKEWIDTH
+
+SVG_MARKERUNITS_UNKNOWN
+
+SVG_MARKERUNITS_USERSPACEONUSE
+
+SVG_MARKER_ORIENT_ANGLE
+
+SVG_MARKER_ORIENT_AUTO
+

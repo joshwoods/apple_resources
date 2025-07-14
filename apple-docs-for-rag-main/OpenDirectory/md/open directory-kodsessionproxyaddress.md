@@ -1,0 +1,37 @@
+
+
+- Open Directory
+-  kODSessionProxyAddress 
+
+Global Variable
+
+# kODSessionProxyAddress
+
+The address to connect to via proxy. The value is of type `CFString`.
+
+Mac CatalystmacOS 10.6+
+
+``` source
+let kODSessionProxyAddress: CFString!
+```
+
+## See Also
+
+### Constants
+
+var kODSessionDefault: Unmanaged&lt;ODSessionRef>!
+
+The default session. Used if there is no need to create a specific reference.
+
+let kODSessionProxyPort: CFString!
+
+The port to connect to via proxy. The value is of type `CFNumber`.
+
+let kODSessionProxyUsername: CFString!
+
+The username to connect with via proxy. The value is of type `CFString`.
+
+let kODSessionProxyPassword: CFString!
+
+The password to connect with via proxy. The value is of type `CFString`.
+

@@ -1,0 +1,50 @@
+
+
+- SwiftUI
+- View
+-  dialogPreventsAppTermination(\_:) 
+
+Instance Method
+
+# dialogPreventsAppTermination(\_:)
+
+Whether the alert or confirmation dialog prevents the app from being quit/terminated by the system or app termination menu item.
+
+macOS 15.4+
+
+``` source
+nonisolated
+func dialogPreventsAppTermination(_ prevents: Bool?) -> some View
+```
+
+## Discussion
+
+SwiftUI uses the actions passed to the above dialogs to determine whether the dialog should block app termination by default when presented. If all of the following are satisfied, the dialog will not block app quit:
+
+- There is only a single button and its role is not destructive
+
+- The dialogSeverity(_:) is not \`DialogSeverity/critical\`\`
+
+- There are no TextFields
+
+Use this modifier after a `View/alert` or `View/confirmationDialog` to specify whether the dialog should prevent app termination. Pass `nil` to explicitly request the automatic behavior/for the inert version of this modifier.
+
+```
+struct ConfirmLogoutView: View {
+  @State private var isConfirming = false
+
+  var body: some View {
+    Button("Logout") { isConfirming = true }
+      .confirmationDialog(
+        Text("Logout?"),
+          isPresented: $isConfirming
+        ) {
+          Button("Yes") {
+            // Handle logout action.
+          }
+        }
+        .dialogPreventsAppTermination(false)
+    }
+}
+```
+

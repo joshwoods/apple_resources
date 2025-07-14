@@ -1,0 +1,16 @@
+
+
+- WebKit JS
+- HTMLImageElement
+-  longDesc 
+
+Instance Property
+
+# longDesc
+
+Safari Desktop 10.0+Safari Mobile 10.0+
+
+``` source
+attribute USVString longDesc;
+```
+

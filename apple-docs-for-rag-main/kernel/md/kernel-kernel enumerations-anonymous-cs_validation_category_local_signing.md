@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Enumerations
+- Anonymous
+-  CS_VALIDATION_CATEGORY_LOCAL_SIGNING 
+
+Enumeration Case
+
+# CS_VALIDATION_CATEGORY_LOCAL_SIGNING
+
+macOS 13.0+
+
+``` source
+CS_VALIDATION_CATEGORY_LOCAL_SIGNING = 7
+```
+

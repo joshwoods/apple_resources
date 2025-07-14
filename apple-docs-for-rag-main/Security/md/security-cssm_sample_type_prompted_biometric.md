@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_SAMPLE_TYPE_PROMPTED_BIOMETRIC 
+
+Global Variable
+
+# CSSM_SAMPLE_TYPE_PROMPTED_BIOMETRIC
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_SAMPLE_TYPE_PROMPTED_BIOMETRIC: Int { get }
+```
+

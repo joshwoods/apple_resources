@@ -1,0 +1,68 @@
+
+
+- Kernel
+- Kernel Data Types
+-  SBCModePageFlexibleDisk 
+
+Type Alias
+
+# SBCModePageFlexibleDisk
+
+macOS 10.3+
+
+``` source
+typedef struct SBCModePageFlexibleDisk SBCModePageFlexibleDisk;
+```
+
+## Discussion
+
+Flexible Disk Mode Page (PAGE CODE 0x05) format.
+
+## Topics
+
+### Instance Properties
+
+DATA_BYTES_PER_SECTOR
+
+DEVICE_STEP_PULSE_WIDTH
+
+DEVICE_STEP_RATE
+
+HEAD_LOAD_DELAY
+
+HEAD_SETTLE_DELAY
+
+HEAD_UNLOAD_DELAY
+
+MEDIUM_ROTATION_RATE
+
+MOTOR_OFF_DELAY
+
+MOTOR_ON_DELAY
+
+NUMBER_OF_CYLINDERS
+
+NUMBER_OF_HEADS
+
+PIN_34_PIN_2
+
+PIN_4_PIN_1
+
+RESERVED
+
+SECTORS_PER_TRACK
+
+SPC
+
+STARTING_CYLINDER_REDUCED_WRITE_CURRENT
+
+STARTING_CYLINDER_WRITE_PRECOMPENSATION
+
+TRANSFER_RATE
+
+TRDY_SSN_MO
+
+WRITE_COMPENSATION
+
+header
+

@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_ATTRIBUTE_VERIFY_PASSPHRASE 
+
+Global Variable
+
+# CSSM_ATTRIBUTE_VERIFY_PASSPHRASE
+
+macOS 10.0+
+
+``` source
+var CSSM_ATTRIBUTE_VERIFY_PASSPHRASE: Int { get }
+```
+

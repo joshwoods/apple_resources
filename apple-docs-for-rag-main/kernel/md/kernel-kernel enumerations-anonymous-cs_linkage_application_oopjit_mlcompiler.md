@@ -1,0 +1,17 @@
+
+
+- Kernel
+- Kernel Enumerations
+- Anonymous
+-  CS_LINKAGE_APPLICATION_OOPJIT_MLCOMPILER 
+
+Enumeration Case
+
+# CS_LINKAGE_APPLICATION_OOPJIT_MLCOMPILER
+
+macOS 14.0+
+
+``` source
+CS_LINKAGE_APPLICATION_OOPJIT_MLCOMPILER = 2
+```
+

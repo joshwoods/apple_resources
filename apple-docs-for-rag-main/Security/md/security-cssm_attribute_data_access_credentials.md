@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_ATTRIBUTE_DATA_ACCESS_CREDENTIALS 
+
+Global Variable
+
+# CSSM_ATTRIBUTE_DATA_ACCESS_CREDENTIALS
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_ATTRIBUTE_DATA_ACCESS_CREDENTIALS: UInt32 { get }
+```
+

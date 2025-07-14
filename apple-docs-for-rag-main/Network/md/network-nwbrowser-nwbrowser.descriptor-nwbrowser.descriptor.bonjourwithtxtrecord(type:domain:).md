@@ -1,0 +1,30 @@
+
+
+- Network
+- NWBrowser
+- NWBrowser.Descriptor
+-  NWBrowser.Descriptor.bonjourWithTXTRecord(type:domain:) 
+
+Case
+
+# NWBrowser.Descriptor.bonjourWithTXTRecord(type:domain:)
+
+A service descriptor used to discover a Bonjour service with associated TXT records.
+
+iOS 13.0+iPadOS 13.0+Mac Catalyst 13.0+macOS 10.15+tvOS 13.0+visionOS 1.0+watchOS 6.0+
+
+``` source
+case bonjourWithTXTRecord(
+    type: String,
+    domain: String?
+)
+```
+
+## See Also
+
+### Descriptor Types
+
+case bonjour(type: String, domain: String?)
+
+A service descriptor used to discover a Bonjour service.
+

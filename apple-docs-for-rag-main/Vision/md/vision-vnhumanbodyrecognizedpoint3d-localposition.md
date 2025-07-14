@@ -1,0 +1,22 @@
+
+
+- Vision
+- VNHumanBodyRecognizedPoint3D
+-  localPosition 
+
+Instance Property
+
+# localPosition
+
+The three-dimensional position.
+
+iOS 17.0+iPadOS 17.0+Mac Catalyst 17.0+macOS 14.0+tvOS 17.0+visionOS 1.0+
+
+``` source
+var localPosition: simd_float4x4 { get }
+```
+
+## Mentioned in 
+
+Identifying 3D human body poses in images
+

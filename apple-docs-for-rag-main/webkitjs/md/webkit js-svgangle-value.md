@@ -1,0 +1,16 @@
+
+
+- WebKit JS
+- SVGAngle
+-  value 
+
+Instance Property
+
+# value
+
+Safari Desktop 3.0+Safari Mobile 2.1+
+
+``` source
+attribute unrestricted float value;
+```
+

@@ -1,0 +1,22 @@
+
+
+- Create ML Components
+- AnnotatedBatch
+-  Equatable Implementations 
+
+API Collection
+
+# Equatable Implementations
+
+## Topics
+
+### Operators
+
+static func != (Self, Self) -> Bool
+
+Returns a Boolean value indicating whether two values are not equal.
+
+static func == (AnnotatedBatch&lt;Scalar>, AnnotatedBatch&lt;Scalar>) -> Bool
+
+Returns a Boolean value indicating whether two values are equal.
+

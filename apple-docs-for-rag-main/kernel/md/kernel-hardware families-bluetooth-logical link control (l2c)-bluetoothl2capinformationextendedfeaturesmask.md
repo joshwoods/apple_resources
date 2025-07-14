@@ -1,0 +1,94 @@
+
+
+- Kernel
+- Hardware Families
+- Bluetooth
+- Logical Link Control (L2C)
+-  BluetoothL2CAPInformationExtendedFeaturesMask 
+
+Type Alias
+
+# BluetoothL2CAPInformationExtendedFeaturesMask
+
+macOS 10.6+
+
+``` source
+typedef enum BluetoothL2CAPInformationExtendedFeaturesMask BluetoothL2CAPInformationExtendedFeaturesMask;
+```
+
+## Topics
+
+### Constants
+
+kBluetoothL2CAPInformationBidirectionalQoS
+
+kBluetoothL2CAPInformationEnhancedRetransmissionMode
+
+kBluetoothL2CAPInformationExtendedFlowSpecification
+
+kBluetoothL2CAPInformationExtendedWindowSize
+
+kBluetoothL2CAPInformationFCSOption
+
+kBluetoothL2CAPInformationFixedChannels
+
+kBluetoothL2CAPInformationFlowControlMode
+
+kBluetoothL2CAPInformationNoExtendedFeatures
+
+kBluetoothL2CAPInformationRetransmissionMode
+
+kBluetoothL2CAPInformationStreamingMode
+
+kBluetoothL2CAPUnicastConnectionlessDataReception
+
+## See Also
+
+### Bluetooth L2C
+
+BluetoothL2CAPByteCount
+
+BluetoothL2CAPChannelID
+
+BluetoothL2CAPCommandByteCount
+
+BluetoothL2CAPCommandCode
+
+BluetoothL2CAPCommandID
+
+BluetoothL2CAPCommandRejectReason
+
+BluetoothL2CAPConfigurationOption
+
+BluetoothL2CAPConfigurationResult
+
+BluetoothL2CAPConfigurationRetransmissionAndFlowControlFlags
+
+BluetoothL2CAPConnectionResult
+
+BluetoothL2CAPConnectionStatus
+
+BluetoothL2CAPFlushTimeout
+
+BluetoothL2CAPGroupID
+
+BluetoothL2CAPInformationResult
+
+BluetoothL2CAPInformationType
+
+BluetoothL2CAPLinkTimeout
+
+BluetoothL2CAPMTU
+
+BluetoothL2CAPPSM
+
+BluetoothL2CAPQoSType
+
+BluetoothL2CAPQualityOfServiceOptions
+
+BluetoothL2CAPRetransmissionAndFlowControlOptions
+
+BluetoothL2CAPSegmentationAndReassembly
+
+BluetoothL2CAPSupervisoryFuctionType
+

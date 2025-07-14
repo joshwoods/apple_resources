@@ -1,0 +1,15 @@
+
+
+- Security
+-  CSSM_SAMPLE_TYPE_HASHED_PASSWORD 
+
+Global Variable
+
+# CSSM_SAMPLE_TYPE_HASHED_PASSWORD
+
+Mac Catalyst 13.0+macOS 10.0+
+
+``` source
+var CSSM_SAMPLE_TYPE_HASHED_PASSWORD: Int { get }
+```
+
