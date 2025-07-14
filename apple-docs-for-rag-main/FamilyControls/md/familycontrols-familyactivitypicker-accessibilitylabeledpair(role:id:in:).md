@@ -1,0 +1,69 @@
+
+
+- FamilyControls
+- FamilyActivityPicker
+-  accessibilityLabeledPair(role:id:in:) 
+
+Instance Method
+
+# accessibilityLabeledPair(role:id:in:)
+
+Pairs an accessibility element representing a label with the element for the matching content.
+
+FamilyControlsSwiftUIiOS 14.0+iPadOS 14.0+Mac Catalyst 14.0+macOS 11.0+tvOS 14.0+watchOS 7.0+
+
+``` source
+nonisolated
+func accessibilityLabeledPair(
+    role: AccessibilityLabeledPairRole,
+    id: ID,
+    in namespace: Namespace.ID
+) -> some View where ID : Hashable
+```
+
+## Parameters 
+
+`role`  
+
+Determines whether this element should be used as the label in the pair, or the content in the pair.
+
+`id`  
+
+The identifier for the label / content pair. Elements with matching identifiers within the same namespace will be paired together.
+
+`namespace`  
+
+The namespace used to organize label and content. Label and content under the same namespace with matching identifiers will be paired together.
+
+## Discussion
+
+Use `accessibilityLabeledPair` with a role of `AccessibilityLabeledPairRole.label` to identify the label, and a role of `AccessibilityLabeledPairRole.content` to identify the content. This improves the behavior of accessibility features such as VoiceOver when navigating such elements, allowing users to better understand the relationship between them.
+
+## See Also
+
+### Accessibility Labels
+
+func accessibilityLabel&lt;S>(S) -> ModifiedContent&lt;Self, AccessibilityAttachmentModifier>
+
+Adds a label to the view that describes its contents.
+
+func accessibilityLabel(Text) -> ModifiedContent&lt;Self, AccessibilityAttachmentModifier>
+
+Adds a label to the view that describes its contents.
+
+func accessibilityLabel(LocalizedStringKey) -> ModifiedContent&lt;Self, AccessibilityAttachmentModifier>
+
+Adds a label to the view that describes its contents.
+
+func accessibilityInputLabels([LocalizedStringKey]) -> ModifiedContent&lt;Self, AccessibilityAttachmentModifier>
+
+Sets alternate input labels with which users identify a view.
+
+func accessibilityInputLabels([Text]) -> ModifiedContent&lt;Self, AccessibilityAttachmentModifier>
+
+Sets alternate input labels with which users identify a view.
+
+func accessibilityInputLabels&lt;S>([S]) -> ModifiedContent&lt;Self, AccessibilityAttachmentModifier>
+
+Sets alternate input labels with which users identify a view.
+

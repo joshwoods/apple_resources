@@ -1,0 +1,45 @@
+
+
+- Audio Toolbox
+-  kAudioCodecPropertyMinimumNumberOutputPackets 
+
+Global Variable
+
+# kAudioCodecPropertyMinimumNumberOutputPackets
+
+iOSiPadOSMac CatalystmacOStvOSvisionOS
+
+``` source
+var kAudioCodecPropertyMinimumNumberOutputPackets: AudioCodecPropertyID { get }
+```
+
+## See Also
+
+### Constants
+
+var kAudioCodecPropertyAvailableBitRateRange: AudioCodecPropertyID
+
+var kAudioCodecPropertyAvailableInputChannelLayoutTags: AudioCodecPropertyID
+
+var kAudioCodecPropertyAvailableInputSampleRates: AudioCodecPropertyID
+
+var kAudioCodecPropertyAvailableNumberChannels: AudioCodecPropertyID
+
+var kAudioCodecPropertyAvailableOutputChannelLayoutTags: AudioCodecPropertyID
+
+var kAudioCodecPropertyAvailableOutputSampleRates: AudioCodecPropertyID
+
+var kAudioCodecPropertyDoesSampleRateConversion: AudioCodecPropertyID
+
+var kAudioCodecPropertyFormatInfo: AudioCodecPropertyID
+
+var kAudioCodecPropertyInputFormatsForOutputFormat: AudioCodecPropertyID
+
+var kAudioCodecPropertyMinimumNumberInputPackets: AudioCodecPropertyID
+
+var kAudioCodecPropertyOutputFormatsForInputFormat: AudioCodecPropertyID
+
+var kAudioCodecPropertySupportedInputFormats: AudioCodecPropertyID
+
+var kAudioCodecPropertySupportedOutputFormats: AudioCodecPropertyID
+

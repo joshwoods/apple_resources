@@ -1,0 +1,53 @@
+
+
+- WebKit
+- WKWebView
+-  stopLoading(\_:) 
+
+Instance Method
+
+# stopLoading(\_:)
+
+Stops loading all resources on the current page.
+
+macOS
+
+``` source
+@IBAction @MainActor
+func stopLoading(_ sender: Any?)
+```
+
+## Parameters 
+
+`sender`  
+
+The object that sent the message.
+
+## Discussion
+
+Make this method the action of any controls that stop the loading of your web content. Connect your controls to this method programmatically or in Interface Builder.
+
+## See Also
+
+### Managing the loading process
+
+func reload() -> WKNavigation?
+
+Reloads the current webpage.
+
+func reload(Any?)
+
+Reloads the current webpage.
+
+func reloadFromOrigin() -> WKNavigation?
+
+Reloads the current webpage, and performs end-to-end revalidation of the content using cache-validating conditionals, if possible.
+
+func reloadFromOrigin(Any?)
+
+Reloads the current webpage, and performs end-to-end revalidation of the content using cache-validating conditionals, if possible.
+
+func stopLoading()
+
+Stops loading all resources on the current page.
+

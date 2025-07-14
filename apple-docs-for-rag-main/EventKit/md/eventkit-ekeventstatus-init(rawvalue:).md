@@ -1,0 +1,16 @@
+
+
+- EventKit
+- EKEventStatus
+-  init(rawValue:) 
+
+Initializer
+
+# init(rawValue:)
+
+iOSiPadOSMac CatalystmacOSvisionOSwatchOS
+
+``` source
+init?(rawValue: Int)
+```
+

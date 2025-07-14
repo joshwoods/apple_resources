@@ -1,0 +1,16 @@
+
+
+- ImageCaptureCore
+- ICDeviceBrowser
+-  isSuspended 
+
+Instance Property
+
+# isSuspended
+
+iOS 14.0+iPadOS 14.0+Mac Catalyst 14.0+visionOS 1.0+
+
+``` source
+var isSuspended: Bool { get }
+```
+

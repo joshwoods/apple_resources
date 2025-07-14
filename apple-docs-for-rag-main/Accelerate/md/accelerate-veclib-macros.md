@@ -1,0 +1,90 @@
+
+
+- Accelerate
+- vecLib
+-  Macros 
+
+API Collection
+
+# Macros
+
+## Topics
+
+### Macros
+
+var LA_ATTRIBUTE_ENABLE_LOGGING: UInt32
+
+LA_AVAILABILITY
+
+LA_CONST
+
+var LA_DEFAULT_ATTRIBUTES: Int32
+
+var LA_DIMENSION_MISMATCH_ERROR: Int32
+
+LA_EXPORT
+
+var LA_FEATURE_DIAGONALLY_DOMINANT: UInt32
+
+var LA_FEATURE_POSITIVE_DEFINITE: UInt32
+
+var LA_FEATURE_SYMMETRIC: UInt32
+
+LA_FUNCTION
+
+var LA_INTERNAL_ERROR: Int32
+
+var LA_INVALID_PARAMETER_ERROR: Int32
+
+var LA_L1_NORM: Int32
+
+var LA_L2_NORM: Int32
+
+var LA_LINF_NORM: Int32
+
+LA_NONNULL
+
+LA_NONNULL1
+
+LA_NOTHROW
+
+var LA_NO_HINT: UInt32
+
+var LA_PRECISION_MISMATCH_ERROR: Int32
+
+LA_RETURNS_RETAINED
+
+var LA_SCALAR_TYPE_DOUBLE: Int32
+
+var LA_SCALAR_TYPE_FLOAT: Int32
+
+var LA_SHAPE_DIAGONAL: UInt32
+
+var LA_SHAPE_LOWER_TRIANGULAR: UInt32
+
+var LA_SHAPE_UPPER_TRIANGULAR: UInt32
+
+var LA_SINGULAR_ERROR: Int32
+
+var LA_SLICE_OUT_OF_BOUNDS_ERROR: Int32
+
+var LA_SUCCESS: Int32
+
+var LA_WARNING_POORLY_CONDITIONED: Int32
+
+var USE_NON_APPLE_STANDARD_DATATYPES: Int32
+
+la_release
+
+la_retain
+
+la_vector_from_double_buffer
+
+la_vector_from_double_buffer_nocopy
+
+la_vector_from_float_buffer
+
+la_vector_from_float_buffer_nocopy
+
+la_vector_reverse
+

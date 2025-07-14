@@ -1,0 +1,16 @@
+
+
+- Accelerate
+- CBLAS_TRANSPOSE
+-  rawValue 
+
+Instance Property
+
+# rawValue
+
+iOSiPadOSMac CatalystmacOStvOSvisionOSwatchOS
+
+``` source
+var rawValue: UInt32
+```
+

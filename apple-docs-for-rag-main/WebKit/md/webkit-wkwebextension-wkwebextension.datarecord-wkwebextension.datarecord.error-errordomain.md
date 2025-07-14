@@ -1,0 +1,20 @@
+
+
+- WebKit
+- WKWebExtension
+- WKWebExtension.DataRecord
+- WKWebExtension.DataRecord.Error
+-  errorDomain 
+
+Type Property
+
+# errorDomain
+
+Indicates a WKWebExtension.DataRecord error.
+
+iOS 18.4+iPadOS 18.4+Mac Catalyst 18.4+macOS 15.4+visionOS 2.4+
+
+``` source
+static var errorDomain: String { get }
+```
+

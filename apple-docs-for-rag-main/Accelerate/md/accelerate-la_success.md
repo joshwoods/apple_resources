@@ -1,0 +1,49 @@
+
+
+- Accelerate
+-  LA_SUCCESS 
+
+Global Variable
+
+# LA_SUCCESS
+
+iOSiPadOSMac CatalystmacOStvOSvisionOSwatchOS
+
+``` source
+var LA_SUCCESS: Int32 { get }
+```
+
+## See Also
+
+### Macros
+
+var LA_ATTRIBUTE_ENABLE_LOGGING: UInt32
+
+var LA_DEFAULT_ATTRIBUTES: Int32
+
+var LA_DIMENSION_MISMATCH_ERROR: Int32
+
+var LA_FEATURE_DIAGONALLY_DOMINANT: UInt32
+
+var LA_FEATURE_POSITIVE_DEFINITE: UInt32
+
+var LA_FEATURE_SYMMETRIC: UInt32
+
+var LA_INTERNAL_ERROR: Int32
+
+var LA_INVALID_PARAMETER_ERROR: Int32
+
+var LA_L1_NORM: Int32
+
+var LA_L2_NORM: Int32
+
+var LA_LINF_NORM: Int32
+
+var LA_NO_HINT: UInt32
+
+var LA_PRECISION_MISMATCH_ERROR: Int32
+
+var LA_SCALAR_TYPE_DOUBLE: Int32
+
+var LA_SCALAR_TYPE_FLOAT: Int32
+

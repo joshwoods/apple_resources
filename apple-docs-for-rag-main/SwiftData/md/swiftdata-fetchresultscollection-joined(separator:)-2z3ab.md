@@ -1,0 +1,41 @@
+
+
+- SwiftData
+- FetchResultsCollection
+-  joined(separator:) 
+
+Instance Method
+
+# joined(separator:)
+
+Returns a new string by concatenating the elements of the sequence, adding the given separator between each element.
+
+SwiftDataSwiftiOS 17.0+iPadOS 17.0+Mac Catalyst 17.0+macOS 14.0+tvOS 17.0+visionOS 1.0+watchOS 10.0+
+
+``` source
+func joined(separator: String = "") -> String
+```
+
+Available when `Element` is `String`.
+
+## Parameters 
+
+`separator`  
+
+A string to insert between each of the elements in this sequence. The default separator is an empty string.
+
+## Return Value
+
+A single, concatenated string.
+
+## Discussion
+
+The following example shows how an array of strings can be joined to a single, comma-separated string:
+
+```
+let cast = ["Vivien", "Marlon", "Kim", "Karl"]
+let list = cast.joined(separator: ", ")
+print(list)
+// Prints "Vivien, Marlon, Kim, Karl"
+```
+

@@ -1,0 +1,85 @@
+
+
+- Accelerate
+- vImage
+- vImage.PixelBuffer
+-  contrastStretch(destination:) 
+
+Instance Method
+
+# contrastStretch(destination:)
+
+Stretches the histogram of an 8-bit-per-channel, 4-channel interleaved pixel buffer.
+
+iOS 16.0+iPadOS 16.0+Mac CatalystmacOS 13.0+tvOS 16.0+visionOSwatchOS 9.0+
+
+``` source
+func contrastStretch(destination: vImage.PixelBuffer)
+```
+
+Available when `Format` is `vImage.Interleaved8x4`.
+
+## Parameters 
+
+`destination`  
+
+The destination pixel buffer.
+
+## Discussion
+
+Use this function to evenly distributes a histogram’s pixel values across the full range of available pixel values.
+
+For example, the following code stretches the contrast of an image:
+
+```
+let srcImage =  imageLiteral(resourceName: " ... ").cgImage(
+    forProposedRect: nil,
+    context: nil,
+    hints: nil)!
+
+var cgImageFormat = vImage_CGImageFormat(
+    bitsPerComponent: 8,
+    bitsPerPixel: 8 * 4,
+    colorSpace: CGColorSpaceCreateDeviceRGB(),
+    bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipFirst.rawValue))!
+
+let buffer = try vImage.PixelBuffer(
+    cgImage: srcImage,
+    cgImageFormat: &cgImageFormat,
+    pixelFormat: vImage.Interleaved8x4.self)
+
+buffer.contrastStretch(destination: buffer)
+
+let outputImage = buffer.makeCGImage(cgImageFormat: cgImageFormat)
+```
+
+## See Also
+
+### Related Documentation
+
+Enhancing image contrast with histogram manipulation
+
+Enhance and adjust the contrast of an image with histogram equalization and contrast stretching.
+
+### Contrast stretching
+
+func contrastStretch(destination: vImage.PixelBuffer&lt;vImage.Planar8>)
+
+Stretches the histogram of an 8-bit planar pixel buffer.
+
+func contrastStretch(binCount: Int, destination: vImage.PixelBuffer&lt;vImage.PlanarF>)
+
+Stretches the histogram of a 32-bit planar pixel buffer.
+
+func contrastStretch(binCount: Int, destination: vImage.PixelBuffer&lt;vImage.InterleavedFx4>)
+
+Stretches the histogram of a 32-bit-per-channel, 4-channel interleaved pixel buffer.
+
+func contrastStretch(destination: vImage.PixelBuffer&lt;Format>)
+
+Stretches the histogram of a multiple-plane 8-bit pixel buffer.
+
+func contrastStretch(binCount: Int, destination: vImage.PixelBuffer&lt;Format>)
+
+Stretches the histogram of a multiple-plane 32-bit pixel buffer.
+

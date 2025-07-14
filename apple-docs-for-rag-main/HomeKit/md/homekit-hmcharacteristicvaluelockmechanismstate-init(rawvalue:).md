@@ -1,0 +1,16 @@
+
+
+- HomeKit
+- HMCharacteristicValueLockMechanismState
+-  init(rawValue:) 
+
+Initializer
+
+# init(rawValue:)
+
+iOS 8.0+iPadOS 8.0+Mac Catalyst 8.0+tvOS 10.0+visionOS 1.0+watchOS 2.0+
+
+``` source
+init?(rawValue: Int)
+```
+

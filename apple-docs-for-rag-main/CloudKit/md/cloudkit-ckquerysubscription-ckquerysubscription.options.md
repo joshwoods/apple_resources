@@ -1,0 +1,68 @@
+
+
+- CloudKit
+- CKQuerySubscription
+-  CKQuerySubscription.Options 
+
+Structure
+
+# CKQuerySubscription.Options
+
+Configuration options for a query subscription.
+
+iOS 10.0+iPadOS 10.0+Mac Catalyst 13.1+macOS 10.12+tvOS 10.0+visionOS 1.0+watchOS 6.0+
+
+``` source
+struct Options
+```
+
+## Topics
+
+### Creating Query Subscription Options
+
+init(rawValue: UInt)
+
+Creates a query subscription option using the specified raw value.
+
+### Accessing Subscription Options
+
+static var firesOnRecordCreation: CKQuerySubscription.Options
+
+An option that instructs CloudKit to send a push notification when it creates a record that matches a subscription’s criteria.
+
+static var firesOnRecordDeletion: CKQuerySubscription.Options
+
+An option that instructs CloudKit to send a push notification when it deletes a record that matches a subscription’s criteria.
+
+static var firesOnRecordUpdate: CKQuerySubscription.Options
+
+An option that instructs CloudKit to send a push notification when it modifies a record that matches a subscription’s criteria.
+
+static var firesOnce: CKQuerySubscription.Options
+
+An option that instructs CloudKit to send a push notification only once.
+
+## Relationships
+
+### Conforms To
+
+- BitwiseCopyable
+- Equatable
+- ExpressibleByArrayLiteral
+- OptionSet
+- RawRepresentable
+- Sendable
+- SetAlgebra
+
+## See Also
+
+### Accessing the Subscription Search Parameters
+
+var predicate: NSPredicate
+
+The matching criteria to apply to records.
+
+var querySubscriptionOptions: CKQuerySubscription.Options
+
+Options that define the behavior of the subscription.
+

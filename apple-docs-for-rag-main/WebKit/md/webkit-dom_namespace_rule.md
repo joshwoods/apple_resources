@@ -1,0 +1,45 @@
+
+
+- WebKit
+-  DOM_NAMESPACE_RULE 
+
+Global Variable
+
+# DOM_NAMESPACE_RULE
+
+macOS
+
+``` source
+var DOM_NAMESPACE_RULE: Int { get }
+```
+
+## See Also
+
+### Constants
+
+var DOM_CHARSET_RULE: Int
+
+var DOM_FONT_FACE_RULE: Int
+
+var DOM_IMPORT_RULE: Int
+
+var DOM_KEYFRAMES_RULE: Int
+
+var DOM_KEYFRAME_RULE: Int
+
+var DOM_MEDIA_RULE: Int
+
+var DOM_PAGE_RULE: Int
+
+var DOM_STYLE_RULE: Int
+
+var DOM_SUPPORTS_RULE: Int
+
+var DOM_UNKNOWN_RULE: Int
+
+var DOM_WEBKIT_KEYFRAMES_RULE: Int
+
+var DOM_WEBKIT_KEYFRAME_RULE: Int
+
+var DOM_WEBKIT_REGION_RULE: Int
+

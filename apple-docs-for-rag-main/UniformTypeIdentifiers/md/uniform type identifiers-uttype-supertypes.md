@@ -1,0 +1,38 @@
+
+
+- Uniform Type Identifiers
+- UTType
+-  supertypes 
+
+Instance Property
+
+# supertypes
+
+The set of types the type directly or indirectly conforms to.
+
+iOS 14.0+iPadOS 14.0+Mac Catalyst 14.0+macOS 11.0+tvOS 14.0+visionOS 1.0+watchOS 7.0+
+
+``` source
+var supertypes: Set { get }
+```
+
+## See Also
+
+### Checking a type’s relationship to another type
+
+func conforms(to: UTType) -> Bool
+
+Returns a Boolean value that indicates whether a type conforms to the type.
+
+func isSubtype(of: UTType) -> Bool
+
+Returns a Boolean value that indicates whether a type is higher in a hierarchy than the type.
+
+func isSupertype(of: UTType) -> Bool
+
+Returns a Boolean value that indicates whether a type is lower in a hierarchy than the type.
+
+Navigating Hierarchical Data Using Outline and Split Views
+
+Build a structured user interface that simplifies navigation in your app.
+

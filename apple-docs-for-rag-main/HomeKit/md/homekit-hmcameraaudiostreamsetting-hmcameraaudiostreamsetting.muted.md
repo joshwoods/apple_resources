@@ -1,0 +1,30 @@
+
+
+- HomeKit
+- HMCameraAudioStreamSetting
+-  HMCameraAudioStreamSetting.muted 
+
+Case
+
+# HMCameraAudioStreamSetting.muted
+
+The setting that mutes both incoming and outgoing audio.
+
+iOS 10.0+iPadOS 10.0+Mac Catalyst 10.0+tvOS 10.0+visionOS 1.0+watchOS 3.0+
+
+``` source
+case muted
+```
+
+## See Also
+
+### Configuring the Audio Stream
+
+case incomingAudioAllowed
+
+The setting that permits incoming audio.
+
+case bidirectionalAudioAllowed
+
+The setting that permits both incoming and outgoing audio.
+

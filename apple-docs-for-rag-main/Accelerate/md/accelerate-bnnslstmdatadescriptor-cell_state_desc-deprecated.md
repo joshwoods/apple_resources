@@ -1,0 +1,38 @@
+
+
+- Accelerate
+- BNNSLSTMDataDescriptor
+-  cell_state_desc Deprecated
+
+Instance Property
+
+# cell_state_desc
+
+The descriptor of the cell-state input-output.
+
+iOS 14.0–18.0DeprecatediPadOS 14.0–18.0DeprecatedMac Catalyst 14.0–18.0DeprecatedmacOS 11.0–15.0DeprecatedtvOS 14.0–18.0DeprecatedvisionOS 1.0–2.0DeprecatedwatchOS 7.0–11.0Deprecated
+
+``` source
+var cell_state_desc: BNNSNDArrayDescriptor
+```
+
+Deprecated
+
+Use BNNSGraph\* APIs
+
+## See Also
+
+### Instance Properties
+
+var data_desc: BNNSNDArrayDescriptor
+
+The descriptor of the input-output.
+
+Deprecated
+
+var hidden_desc: BNNSNDArrayDescriptor
+
+The descriptor of the hidden input-output.
+
+Deprecated
+

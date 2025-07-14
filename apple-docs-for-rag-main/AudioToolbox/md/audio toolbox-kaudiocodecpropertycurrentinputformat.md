@@ -1,0 +1,49 @@
+
+
+- Audio Toolbox
+-  kAudioCodecPropertyCurrentInputFormat 
+
+Global Variable
+
+# kAudioCodecPropertyCurrentInputFormat
+
+iOSiPadOSMac CatalystmacOStvOSvisionOS
+
+``` source
+var kAudioCodecPropertyCurrentInputFormat: AudioCodecPropertyID { get }
+```
+
+## See Also
+
+### Constants
+
+var kAudioCodecPropertyAdjustLocalQuality: AudioCodecPropertyID
+
+var kAudioCodecPropertyApplicableBitRateRange: AudioCodecPropertyID
+
+var kAudioCodecPropertyApplicableInputSampleRates: AudioCodecPropertyID
+
+var kAudioCodecPropertyApplicableOutputSampleRates: AudioCodecPropertyID
+
+var kAudioCodecPropertyBitRateControlMode: AudioCodecPropertyID
+
+var kAudioCodecPropertyCurrentInputChannelLayout: AudioCodecPropertyID
+
+var kAudioCodecPropertyCurrentInputSampleRate: AudioCodecPropertyID
+
+var kAudioCodecPropertyCurrentOutputChannelLayout: AudioCodecPropertyID
+
+var kAudioCodecPropertyCurrentOutputFormat: AudioCodecPropertyID
+
+var kAudioCodecPropertyCurrentOutputSampleRate: AudioCodecPropertyID
+
+var kAudioCodecPropertyCurrentTargetBitRate: AudioCodecPropertyID
+
+var kAudioCodecPropertyDelayMode: AudioCodecPropertyID
+
+var kAudioCodecPropertyDynamicRangeControlMode: AudioCodecPropertyID
+
+var kAudioCodecPropertyFormatList: AudioCodecPropertyID
+
+var kAudioCodecPropertyHasVariablePacketByteSizes: AudioCodecPropertyID
+

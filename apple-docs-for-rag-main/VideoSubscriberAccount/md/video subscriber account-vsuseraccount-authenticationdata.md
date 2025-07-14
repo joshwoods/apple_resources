@@ -1,0 +1,76 @@
+
+
+- Video Subscriber Account
+- VSUserAccount
+-  authenticationData 
+
+Instance Property
+
+# authenticationData
+
+A string that represents an authentication token for the user account to authenticate with a provider.
+
+iOS 16.4+iPadOS 16.4+macOS 13.3+tvOS 16.4+visionOS
+
+``` source
+var authenticationData: String? { get set }
+```
+
+## Discussion
+
+The authentication token or data used to maintain the authentication state for the account in your application. The system provides the token or data to the application JS during account refresh requests so that the account can fetch billing cycle dates, account validity, or any other account data.
+
+When you fetch accounts using VSUserAccountManager, if an account is pulled from a different device and the user is not signed in to the current device, you can use the token or data to authenticate the user seamlessly without requiring their username and password. This data is not accessible by Apple.
+
+## See Also
+
+### User account information
+
+var accountProviderIdentifier: String?
+
+A string that uniquely identifies a provider known to Apple that provides the user account.
+
+var accountType: VSUserAccount.AccountType
+
+A constant that represents whether a user has access to paid content.
+
+var billingIdentifier: String?
+
+A string that Identifies the billing group associated with the user account’s subscription.
+
+var deviceCategory: VSUserAccount.OriginatingDeviceCategory
+
+A constant that indicates whether the device from which the user registered is mobile.
+
+enum OriginatingDeviceCategory
+
+Constants that represent whether the device from which the user originally registered is mobile.
+
+var identifier: String?
+
+A string you provide that uniquely identifies the account.
+
+var isFromCurrentDevice: Bool
+
+A Boolean value that indicates whether the user originated their account on the current device.
+
+var isSignedOut: Bool
+
+A Boolean value that indicates whether the user has signed out of their account.
+
+var requiresSystemTrust: Bool
+
+A Boolean value that indicates whether the update URL must have a system-trusted certificate.
+
+var subscriptionBillingCycleEndDate: Date?
+
+A date that indicates when the billing cycle ends for a paid account.
+
+var tierIdentifiers: [String]?
+
+An array of strings that identify a subset of content from your catalog that the subscriber can play.
+
+var updateURL: URL?
+
+A URL that points to the application’s JavaScript endpoint for update requests.
+

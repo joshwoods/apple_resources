@@ -1,0 +1,51 @@
+
+
+- HomeKit
+- HMError
+- HMError.Code
+-  HMError.Code.cannotActivateTriggerTooFarInFuture 
+
+Case
+
+# HMError.Code.cannotActivateTriggerTooFarInFuture
+
+An error indicating the trigger cannot be activated because it is set too far in the future.
+
+iOS 8.0+iPadOS 8.0+Mac Catalyst 8.0+tvOS 10.0+visionOS 1.0+watchOS 2.0+
+
+``` source
+case cannotActivateTriggerTooFarInFuture
+```
+
+## See Also
+
+### Limit errors
+
+case dateMustBeOnSpecifiedBoundaries
+
+An error indicating the date is not on the specified boundaries.
+
+case fireDateInPast
+
+An attempt to activate a timer trigger with a date in the past.
+
+case invalidMessageSize
+
+An error indicating an invalid message size.
+
+case maximumObjectLimitReached
+
+An error indicating the maximum object count has been reached.
+
+case recurrenceTooLarge
+
+An attempt to use a recurrence period that is too large.
+
+case recurrenceTooSmall
+
+An error indicating the recurrence interval is too short.
+
+case recurrenceMustBeOnSpecifiedBoundaries
+
+An error indicating the recurrence rule is not on the specified boundaries.
+

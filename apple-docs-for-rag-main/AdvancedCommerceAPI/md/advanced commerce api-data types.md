@@ -1,0 +1,121 @@
+
+
+- Advanced Commerce API
+-  Data types 
+
+API Collection
+
+# Data types
+
+Objects and data types for the Advanced Commerce API.
+
+## Topics
+
+### Objects
+
+object Descriptors
+
+The display name and description of a subscription product.
+
+object Offer
+
+A discount offer for an auto-renewable subscription.
+
+object RequestInfo
+
+The metadata to include in server requests.
+
+object SubscriptionModifyAddItem
+
+The data your app provides to add items when it makes changes to an auto-renewable subscription.
+
+object SubscriptionModifyChangeItem
+
+The data your app provides to change an item of an auto-renewable subscription.
+
+object SubscriptionModifyDescriptors
+
+The data your app provides to change the description and display name of an auto-renewable subscription.
+
+object SubscriptionModifyPeriodChange
+
+The data your app provides to change the period of an auto-renewable subscription.
+
+object SubscriptionModifyRemoveItem
+
+The data your app provides to remove an item from an auto-renewable subscription.
+
+object SubscriptionPriceChangeItem
+
+The data your app provides to change a subscription price.
+
+### Data types
+
+type currency
+
+The three-letter ISO 4217 currency code for the price of a product.
+
+type description
+
+A string you provide that describes a SKU.
+
+type displayName
+
+A string with a product name that you can localize and is suitable for display to customers.
+
+type effective
+
+A string value that indicates when a requested change to an auto-renewable subscription goes into effect.
+
+type period
+
+The duration of a single cycle of an auto-renewable subscription.
+
+type price
+
+A price, in milliunits of a currency, for an Advanced Commerce API SKU.
+
+type proratedPrice
+
+A prorated price, in milliunits of a currency, for an Advanced Commerce API SKU.
+
+type retainBillingCycle
+
+A Boolean value that determines whether to keep the existing billing cycle with the change you request.
+
+type refundAmount
+
+A refund amount, in milliunits of the currency.
+
+type refundReason
+
+A reason to request a refund.
+
+type refundRiskingPreference
+
+A Boolean value that indicates whether the App Store asks you for consumption data to help inform the refund decision.
+
+type SKU
+
+The product identifier of an in-app purchase product you manage in your own system.
+
+type storefront
+
+A three-letter code that represents the country or region associated with the App Store storefront.
+
+type taxCode
+
+A tax code that applies to a SKU.
+
+type targetProductId
+
+A generic product identifier that represents all Advanced Commerce API products to App Store Connect, which you use when you migrate a product.
+
+type transactionId
+
+A unique identifier that the App Store generates for a transaction.
+
+type version
+
+A number that represents the version of the data structure or Advanced Commerce API.
+

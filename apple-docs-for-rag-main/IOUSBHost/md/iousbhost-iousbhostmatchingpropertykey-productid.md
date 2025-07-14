@@ -1,0 +1,46 @@
+
+
+- IOUSBHost
+- IOUSBHostMatchingPropertyKey
+-  productID 
+
+Type Property
+
+# productID
+
+The matching property for the device’s product ID.
+
+Mac Catalyst 14.0+macOS 10.15+
+
+``` source
+static let productID: IOUSBHostMatchingPropertyKey
+```
+
+## See Also
+
+### Device Properties
+
+static let vendorID: IOUSBHostMatchingPropertyKey
+
+The matching property for the device’s vendor ID.
+
+static let deviceReleaseNumber: IOUSBHostMatchingPropertyKey
+
+The matching property for the device’s release number.
+
+static let configurationValue: IOUSBHostMatchingPropertyKey
+
+The matching property for the device’s current configuration value.
+
+static let speed: IOUSBHostMatchingPropertyKey
+
+The matching property for the device’s enumeration speed.
+
+static let productIDArray: IOUSBHostMatchingPropertyKey
+
+The matching property on a list of product IDs.
+
+static let productIDMask: IOUSBHostMatchingPropertyKey
+
+The matching property on a mask of product IDs.
+

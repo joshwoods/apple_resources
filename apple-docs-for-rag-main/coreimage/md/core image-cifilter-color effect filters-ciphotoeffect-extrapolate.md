@@ -1,0 +1,20 @@
+
+
+- Core Image
+- CIFilter
+- Color Effect Filters
+- CIPhotoEffect
+-  extrapolate 
+
+Instance Property
+
+# extrapolate
+
+iOS 17.0+iPadOS 17.0+Mac Catalyst 17.5+macOS 14.0+tvOS 17.0+visionOS 1.0+
+
+``` source
+var extrapolate: Bool { get set }
+```
+
+**Required**
+

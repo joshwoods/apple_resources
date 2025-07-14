@@ -1,0 +1,49 @@
+
+
+- vmnet
+-  vmnet Constants 
+
+API Collection
+
+# vmnet Constants
+
+## Topics
+
+### Constants
+
+var vmnet_allocate_mac_address_key: UnsafePointer&lt;CChar>
+
+var vmnet_enable_checksum_offload_key: UnsafePointer&lt;CChar>
+
+var vmnet_enable_isolation_key: UnsafePointer&lt;CChar>
+
+var vmnet_enable_tso_key: UnsafePointer&lt;CChar>
+
+var vmnet_end_address_key: UnsafePointer&lt;CChar>
+
+var vmnet_host_ip_address_key: UnsafePointer&lt;CChar>
+
+var vmnet_host_ipv6_address_key: UnsafePointer&lt;CChar>
+
+var vmnet_host_subnet_mask_key: UnsafePointer&lt;CChar>
+
+var vmnet_nat66_prefix_key: UnsafePointer&lt;CChar>
+
+var vmnet_nat66_prefix_length_key: UnsafePointer&lt;CChar>
+
+var vmnet_network_identifier_key: UnsafePointer&lt;CChar>
+
+var vmnet_shared_interface_name_key: UnsafePointer&lt;CChar>
+
+var vmnet_start_address_key: UnsafePointer&lt;CChar>
+
+var vmnet_subnet_mask_key: UnsafePointer&lt;CChar>
+
+## See Also
+
+### Reference
+
+vmnet Functions
+
+vmnet Data Types
+

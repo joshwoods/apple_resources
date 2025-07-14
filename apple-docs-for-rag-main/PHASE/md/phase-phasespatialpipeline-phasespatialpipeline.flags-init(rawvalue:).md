@@ -1,0 +1,25 @@
+
+
+- PHASE
+- PHASESpatialPipeline
+- PHASESpatialPipeline.Flags
+-  init(rawValue:) 
+
+Initializer
+
+# init(rawValue:)
+
+Initializes a spatial flag with the given string.
+
+iOS 15.0+iPadOS 15.0+Mac Catalyst 15.0+macOS 12.0+tvOS 15.0+visionOS 1.0+
+
+``` source
+init(rawValue: UInt)
+```
+
+## Parameters 
+
+`rawValue`  
+
+The enumeration case’s underlying string value.
+

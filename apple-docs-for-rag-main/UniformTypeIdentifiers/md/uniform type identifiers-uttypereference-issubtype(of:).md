@@ -1,0 +1,44 @@
+
+
+- Uniform Type Identifiers
+- UTTypeReference
+-  isSubtype(of:) 
+
+Instance Method
+
+# isSubtype(of:)
+
+Returns a Boolean value that indicates whether a type is higher in a hierarchy than the type.
+
+iOS 14.0+iPadOS 14.0+Mac Catalyst 14.0+macOS 11.0+tvOS 14.0+visionOS 1.0+watchOS 7.0+
+
+``` source
+func isSubtype(of type: UTType) -> Bool
+```
+
+## Parameters 
+
+`type`  
+
+A UTType instance.
+
+## Return Value
+
+true if the type directly or indirectly conforms to `type`, but returns false if it’s equal to `type`.
+
+## See Also
+
+### Checking a type’s relationship to another type
+
+var supertypes: Set&lt;UTType>
+
+The set of types the type directly or indirectly conforms to.
+
+func conforms(to: UTType) -> Bool
+
+Returns a Boolean value that indicates whether a type conforms to the type.
+
+func isSupertype(of: UTType) -> Bool
+
+Returns a Boolean value that indicates whether a type is lower in a hierarchy than the type.
+

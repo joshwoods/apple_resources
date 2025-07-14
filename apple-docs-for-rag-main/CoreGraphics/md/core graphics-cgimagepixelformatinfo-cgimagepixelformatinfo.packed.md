@@ -1,0 +1,30 @@
+
+
+- Core Graphics
+- CGImagePixelFormatInfo
+-  CGImagePixelFormatInfo.packed 
+
+Case
+
+# CGImagePixelFormatInfo.packed
+
+iOS 12.0+iPadOS 12.0+Mac Catalyst 13.1+macOS 10.14+tvOS 12.0+visionOS 1.0+watchOS 5.0+
+
+``` source
+case packed
+```
+
+## See Also
+
+### Enumeration Cases
+
+case RGB101010
+
+case RGB555
+
+case RGB565
+
+case RGBCIF10
+
+case mask
+

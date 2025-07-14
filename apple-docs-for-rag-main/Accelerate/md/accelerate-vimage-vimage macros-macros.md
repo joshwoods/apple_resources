@@ -1,0 +1,66 @@
+
+
+- Accelerate
+- vImage
+-  vImage Macros 
+
+API Collection
+
+# vImage Macros
+
+## Topics
+
+### Macros
+
+vImageClipToAlpha_BGRA8888
+
+vImageClipToAlpha_BGRAFFFF
+
+vImageConvert_BGRA5551toBGRA8888
+
+vImageConvert_BGRA8888toBGRA5551_dithered
+
+vImageConvert_BGRA8888toBGRA5551
+
+vImageConvert_BGRA8888toPlanar8
+
+vImageConvert_BGRAFFFFtoPlanarF
+
+vImageConvert_BGRFFFtoBGRAFFFF
+
+vImageConvert_BGRFFFtoRGBAFFFF
+
+vImageConvert_PlanarFtoBGRAFFFF
+
+vImageConvert_PlanarFtoRGBAFFFF
+
+vImageConvert_RGBA8888toPlanar8
+
+vImageConvert_RGBAFFFFtoPlanarF
+
+vImageConvert_RGBX8888ToPlanar8
+
+vImageConvert_RGBXFFFFToPlanarF
+
+vImageFlatten_BGRAFFFFToBGRFFF
+
+vImageFlatten_RGBAFFFFToBGRFFF
+
+vImagePremultiplyData_BGRA16F
+
+vImagePremultiplyData_BGRA16U
+
+vImageUnpremultiplyData_BGRA16F
+
+vImageUnpremultiplyData_BGRA16U
+
+VIMAGE_CHOICE_ENUM
+
+VIMAGE_ENUM_AVAILABLE_STARTING
+
+VIMAGE_NON_NULL
+
+VIMAGE_OPTIONS_ENUM
+
+VIMAGE_PF
+

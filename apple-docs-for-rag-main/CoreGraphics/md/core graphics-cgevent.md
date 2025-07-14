@@ -1,0 +1,218 @@
+
+
+- Core Graphics
+-  CGEvent 
+
+Class
+
+# CGEvent
+
+Defines an opaque type that represents a low-level hardware event.
+
+Mac CatalystmacOS
+
+``` source
+class CGEvent
+```
+
+## Overview
+
+Low-level hardware events of this type are referred to as Quartz events. A typical event in macOS originates when the user manipulates an input device such as a mouse or a keyboard. The device driver associated with that device, through the I/O Kit, creates a low-level event, puts it in the window server’s event queue, and notifies the window server. The window server creates a Quartz event, annotates the event, and dispatches the event to the appropriate run-loop port of the target process. There the event is picked up by the Carbon Event Manager and forwarded to the event-handling mechanism appropriate to the application environment. You can use event taps to gain access to Quartz events at several different steps in this process.
+
+This opaque type is derived from CFType and inherits the properties that all Core Foundation types have in common. For more information, see doc://com.apple.documentation/documentation/corefoundation/cftype.
+
+## Topics
+
+### Initializers
+
+func copy() -> CGEvent?
+
+Returns a copy of an existing Quartz event.
+
+init?(keyboardEventSource: CGEventSource?, virtualKey: CGKeyCode, keyDown: Bool)
+
+Returns a new Quartz keyboard event.
+
+init?(mouseEventSource: CGEventSource?, mouseType: CGEventType, mouseCursorPosition: CGPoint, mouseButton: CGMouseButton)
+
+Returns a new Quartz mouse event.
+
+init?(source: CGEventSource?)
+
+Returns a new Quartz event.
+
+init?(withDataAllocator: CFAllocator?, data: CFData?)
+
+Returns a Quartz event created from a flattened data representation of the event.
+
+init?(scrollWheelEvent2Source: CGEventSource?, units: CGScrollEventUnit, wheelCount: UInt32, wheel1: Int32, wheel2: Int32, wheel3: Int32)
+
+### Instance Properties
+
+var flags: CGEventFlags
+
+Returns the event flags of a Quartz event.
+
+var location: CGPoint
+
+Returns the location of a Quartz mouse event.
+
+var timestamp: CGEventTimestamp
+
+Returns the timestamp of a Quartz event.
+
+var type: CGEventType
+
+Returns the event type of a Quartz event (left mouse down, for example).
+
+var unflippedLocation: CGPoint
+
+Returns the location of a Quartz mouse event.
+
+var data: CFData?
+
+### Type Properties
+
+class var typeID: CFTypeID
+
+Returns the type identifier for the opaque type `CGEventRef`.
+
+### Instance Methods
+
+func getDoubleValueField(CGEventField) -> Double
+
+Returns the floating-point value of a field in a Quartz event.
+
+func getIntegerValueField(CGEventField) -> Int64
+
+Returns the integer value of a field in a Quartz event.
+
+func keyboardGetUnicodeString(maxStringLength: Int, actualStringLength: UnsafeMutablePointer&lt;Int>?, unicodeString: UnsafeMutablePointer&lt;UniChar>?)
+
+Returns the Unicode string associated with a Quartz keyboard event.
+
+func keyboardSetUnicodeString(stringLength: Int, unicodeString: UnsafePointer&lt;UniChar>?)
+
+Sets the Unicode string associated with a Quartz keyboard event.
+
+func post(tap: CGEventTapLocation)
+
+Posts a Quartz event into the event stream at a specified location.
+
+func postToPSN(processSerialNumber: UnsafeMutableRawPointer?)
+
+Posts a Quartz event into the event stream for a specific application.
+
+func postToPid(pid_t)
+
+func setDoubleValueField(CGEventField, value: Double)
+
+Sets the floating-point value of a field in a Quartz event.
+
+func setIntegerValueField(CGEventField, value: Int64)
+
+Sets the integer value of a field in a Quartz event.
+
+func setSource(CGEventSource?)
+
+Sets the event source of a Quartz event.
+
+func tapPostEvent(CGEventTapProxy?)
+
+Posts a Quartz event from an event tap into the event stream.
+
+### Type Methods
+
+class func tapCreate(tap: CGEventTapLocation, place: CGEventTapPlacement, options: CGEventTapOptions, eventsOfInterest: CGEventMask, callback: CGEventTapCallBack, userInfo: UnsafeMutableRawPointer?) -> CFMachPort?
+
+Creates an event tap.
+
+class func tapCreateForPSN(processSerialNumber: UnsafeMutableRawPointer, place: CGEventTapPlacement, options: CGEventTapOptions, eventsOfInterest: CGEventMask, callback: CGEventTapCallBack, userInfo: UnsafeMutableRawPointer?) -> CFMachPort?
+
+Creates an event tap for a specified process.
+
+class func tapCreateForPid(pid: pid_t, place: CGEventTapPlacement, options: CGEventTapOptions, eventsOfInterest: CGEventMask, callback: CGEventTapCallBack, userInfo: UnsafeMutableRawPointer?) -> CFMachPort?
+
+class func tapEnable(tap: CFMachPort, enable: Bool)
+
+Enables or disables an event tap.
+
+class func tapIsEnabled(tap: CFMachPort) -> Bool
+
+Returns a Boolean value indicating whether an event tap is enabled.
+
+## Relationships
+
+### Conforms To
+
+- Equatable
+- Hashable
+
+## See Also
+
+### Data Types
+
+typealias CGButtonCount
+
+Represents the number of buttons being set in a synthetic mouse event.
+
+typealias CGCharCode
+
+Represents a character generated by pressing one or more keys on a keyboard.
+
+typealias CGDirectDisplayID
+
+A unique identifier for an attached display.
+
+typealias CGDisplayBlendFraction
+
+The percentage of blend color used in a fade operation.
+
+typealias CGDisplayConfigRef
+
+A reference to a display configuration transaction.
+
+typealias CGDisplayCount
+
+The number of displays in various lists.
+
+Deprecated
+
+typealias CGDisplayErr
+
+A uniform type for result codes returned by functions in Quartz Display Services.
+
+Deprecated
+
+typealias CGDisplayFadeInterval
+
+The duration in seconds of a fade operation or a fade hardware reservation.
+
+typealias CGDisplayFadeReservationToken
+
+A token issued by Quartz when reserving one or more displays for a fade operation during a specified interval.
+
+class CGDisplayMode
+
+A reference to a display mode object.
+
+typealias CGDisplayReconfigurationCallBack
+
+A client-supplied callback function that’s invoked whenever the configuration of a local display is changed.
+
+typealias CGDisplayReservationInterval
+
+The time interval for a fade reservation.
+
+class CGDisplayStream
+
+A reference to a display stream object.
+
+typealias CGDisplayStreamFrameAvailableHandler
+
+A block called when a data stream has a new frame event to process.
+
+class CGDisplayStreamUpdate
+
+A reference to frame update’s metadata.
+

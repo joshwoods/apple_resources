@@ -1,0 +1,23 @@
+
+
+- TVUIKit
+- TVCollectionViewFullScreenCell
+-  parallaxOffset 
+
+Instance Property
+
+# parallaxOffset
+
+The number of pixels by which to shift the background from the center when moving focus.
+
+tvOS 13.0+
+
+``` source
+@MainActor
+var parallaxOffset: CGFloat { get }
+```
+
+## Discussion
+
+A larger offset value creates a more dramatic parallax effect, and a smaller offset value creates a less dramatic effect.
+

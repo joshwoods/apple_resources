@@ -1,0 +1,82 @@
+
+
+- Network Extension
+- NEVPNIKEv2DiffieHellmanGroup
+-  NEVPNIKEv2DiffieHellmanGroup.group5 Deprecated
+
+Case
+
+# NEVPNIKEv2DiffieHellmanGroup.group5
+
+Diffie Hellman group 5 (1536-bit modular exponential \[MODP\]).
+
+iOS 8.0–17.0DeprecatediPadOS 8.0–17.0DeprecatedMac Catalyst 13.1–17.0DeprecatedmacOS 10.11–14.0DeprecatedvisionOS 1.0–1.0Deprecated
+
+``` source
+case group5
+```
+
+Deprecated
+
+Use Diffie Hellman group 14 or greater instead
+
+## See Also
+
+### Diffie-Hellman groups
+
+case groupInvalid
+
+A value indicating the group is not a valid Diffie-Hellman group.
+
+case group1
+
+Diffie Hellman group 1 (768-bit modular exponential \[MODP\]).
+
+Deprecated
+
+case group2
+
+Diffie Hellman group 2 (1024-bit modular exponential \[MODP\]).
+
+Deprecated
+
+case group14
+
+Diffie Hellman group 14 (2048-bit modular exponential \[MODP\]).
+
+case group15
+
+Diffie Hellman group 15 (3072-bit modular exponential \[MODP\]).
+
+case group16
+
+Diffie Hellman group 16 (4096-bit modular exponential \[MODP\]).
+
+case group17
+
+Diffie Hellman group 17 (6144-bit modular exponential \[MODP\]).
+
+case group18
+
+Diffie Hellman group 18 (8192-bit modular exponential \[MODP\]).
+
+case group19
+
+Diffie Hellman group 19 (256-bit random elliptic curve group over GF\[P\] \[ECP\]).
+
+case group20
+
+Diffie Hellman group 20 (384-bit random elliptic curve group over GF\[P\] \[ECP\]).
+
+case group21
+
+Diffie Hellman group 21 (521-bit random elliptic curve group over GF\[P\] \[ECP\]).
+
+case group31
+
+Diffie Hellman group 31 (Curve 25519).
+
+case group32
+
+Diffie Hellman group 32 (Curve 448).
+

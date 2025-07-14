@@ -1,0 +1,30 @@
+
+
+- Network Extension
+- NEVPNConnectionError
+-  NEVPNConnectionError.serverCertificateInvalid 
+
+Case
+
+# NEVPNConnectionError.serverCertificateInvalid
+
+An error code that indicates the server certfiicate is invalid.
+
+iOS 16.0+iPadOS 16.0+Mac Catalyst 16.0+macOS 13.0+tvOS 17.0+visionOS 1.0+
+
+``` source
+case serverCertificateInvalid
+```
+
+## See Also
+
+### Server certificate error codes
+
+case serverCertificateNotYetValid
+
+An error code that indicates the server certfiicate won’t be valid until some time in the future.
+
+case serverCertificateExpired
+
+An error code that indicates the server certfiicate’s validity period has passed.
+

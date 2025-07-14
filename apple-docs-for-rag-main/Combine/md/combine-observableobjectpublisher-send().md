@@ -1,0 +1,18 @@
+
+
+- Combine
+- ObservableObjectPublisher
+-  send() 
+
+Instance Method
+
+# send()
+
+Sends the changed value to the downstream subscriber.
+
+iOS 13.0+iPadOS 13.0+Mac Catalyst 13.0+macOS 10.15+tvOS 13.0+visionOS 1.0+watchOS 6.0+
+
+``` source
+final func send()
+```
+

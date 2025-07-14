@@ -1,0 +1,22 @@
+
+
+- Core Graphics
+- CGFunctionCallbacks
+-  init() 
+
+Initializer
+
+# init()
+
+iOSiPadOSMac CatalystmacOStvOSvisionOSwatchOS
+
+``` source
+init()
+```
+
+## See Also
+
+### Initializers
+
+init(version: UInt32, evaluate: CGFunctionEvaluateCallback?, releaseInfo: CGFunctionReleaseInfoCallback?)
+
