@@ -1,0 +1,199 @@
+---
+Title:  What's New in Core Data on iOS
+Year:   2011
+Web:    https://nonstrict.eu/wwdcindex/wwdc2011/303/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Good afternoon to you all. Welcome to What's New in Core Data on iOS. I'm Adam Swift, a senior software engineer on the Core Data team. So we got a lot of great stuff to cover today. Going to talk to you about concurrency, data protection, ordered relationships, UI managed document, iCloud, incremental stores, and we'll wrap up with developer tools. So let's get started talking about concurrency. The managed object context is really the focal point of Core Data's concurrency policy. And in iOS 5, we've introduced some new concurrency types, some block-based methods, and support for nested contexts.
+
+So before we get into those things, I want to talk about where we were. And up until iOS 5, since Core Data was first introduced on iOS, we've used the model of thread confinement. Thread confinement means that each context is associated with a thread. And the objects that are owned by that context can only be accessed on the thread that the context was created on. And in terms of communicating between threads that are between contexts that are on different threads, you use managed object IDs, which are a safe immutable data type.
+
+So this has some benefits, and it's an easy model to understand, and it provides a safe, efficient way to perform transactions at the context level. The implementation of this, to do this correctly, is left as an exercise to you, the developer. And so you would need to make sure that you only accessed an object on the thread that its context was created on. And passing changes between contexts could be a challenge. So we tried to figure out what could we do at the Core Data level to make this job easier for you.
+
+So we came up with some formal concurrency policies to try and simplify this. And these are available through Manage Object Context concurrency types. And you use them with this new initializer, init with concurrency type. And the three values you can pass in are the confinement concurrency type, private queue concurrency type, and main queue concurrency type.
+
+So let's take a look at these. The first one, NSConfinement concurrency type, is actually the same thing you've been using in Core Data since it was first introduced on iOS. It's the model of thread confinement just formalized as a concurrency type. So in this same way, context can only be accessed by the thread or queue that created them. And this is also, if you simply alloc init a Manage Object Context, this is the default behavior you will get.
+
+So this first new concurrency type is the Private Queue concurrency type. This is new to iOS 5 and online. And in this concurrency type, the context can only be accessed on its own private queue. And because it is a private queue, it's not exposed, you need to use a new method on the context called perform block to perform any interactions with the context APIs through that block that you pass to the context.
+
+The main queue concurrency type is very similar. It's the same idea, but instead of it working with a private queue, the context is connected to the main queue. And this is a great way to work with user interface controllers or other things that are running on the main thread, because they can message that context directly, because they are running on the main queue.
+
+Other threads need to use the perform block API so that the access to the context APIs is executed on the main queue. And this is a great way to configure context that you want to use to receive results from background processing or something like that, and then turn around and present those results to your users through a user interface.
+
+So those last two really represent the queue-based concurrency changes we've introduced on the managed object context. And that's the main queue concurrency type and private queue concurrency type.
+
+[Transcript missing]
+
+And important to note, it is illegal to throw an exception out of the block you pass in to perform block.
+
+Perform Block and Wait, on the other hand, executes its block of code synchronously. It does it right in line. And because it's executed immediately, we don't consider it to be a separate user event. We also don't wrap it in an auto-release pool. Also, perform block and wait, if you call it within a block executing and perform block and wait, will execute immediately, so it is reentrant. But again, it is illegal to throw an exception out of your block.
+
+So I mentioned Core Data treats the code executing in the perform block as a user event. So what do I mean by a user event? A user event is normally what happens every time you cycle through the main event loop in an application. And what it means is a user has performed some action, and at the end of that event processing, Core Data takes that time to do change coalescing, delete propagation, take an undo snapshot, and post any notifications that need to be posted around the runtime to inform other parts of your application of changes.
+
+Well, when you're doing a perform block, we treat that as a user event, and so we're going to do all of these things to wrap up the work that was performed asynchronously and post a sort of terminating wrapper on a user event to trigger all of these actions. Another way to think about a user event is that it is the time between calls to process pending changes.
+
+So let's look a little more deeply at the private queue concurrency type. And when you configure a context with this concurrency type, that queue owned by the context is really private. We don't expose it to you, and we don't want you to use dispatch get current queue. Excuse me.
+
+Working with the queue directly is going to cause problems. Things are going to break. So if you want to interface with the dispatch APIs or NSOperation APIs, the way to do that is to embed the references to your private queue within the block you pass to perform block or perform block and wait.
+
+So what if you're in the situation where you want to perform a couple of different tasks on background queues with private queues between multiple contexts, and then you want to coordinate the results of that work? Well, this is a time where you can use a dispatch group to coordinate that work between multiple blocks running in the background. And the way you do that is you create the dispatch group, and then as you're going to initiate the work to be performed asynchronously, you call dispatch group enter, passing in the group.
+
+And then at the end of the worker block that you've passed to perform block, you call dispatch group leave. And when you balanced out all the enters and leaves, the dispatch group will be completed. And you can use dispatch group wait or dispatch group notify on another block running on another queue to monitor that change.
+
+So I've talked about how we've introduced some new mechanisms for working with context concurrently. And what I haven't touched on yet is what about sharing data between those contexts where they're running in different queues? And this is where nested context really helped solve that. So to use a nested context, you simply use one new piece of API, set parent context, and you assign a parent to a child context.
+
+So what does that give you? What do you get out of using nested contexts? Well, it gives you an easy way to implement asynchronous saving, sharing unsaved changes between contexts, and also an easy way to implement background fetching. So let's take a look at how that actually works.
+
+To implement asynchronous saving with nested context, You create a parent and a child context, assign the parent to the child, and then you save changes on the child. And what happens is those changes just get pushed up to the parent. So there's no actual I/O happening at that time. Then you use a perform block to execute the save on the parent context asynchronously, and so those changes are written out without holding up the thread that called that.
+
+And we'll take another look at this when we get to the Manage Documents section. We'll see how that's working for us there. In terms of the code that's involved, this is a little code snippet for you. You can see I'm initializing the parent context with the private queue concurrency type. And then the child gets the parent context, the child sets its parent context, and then the child saves synchronously, and then the parent, we use perform block and pass in the parent, the block that tells the parent to save its changes.
+
+So what about sharing unsaved changes with nested contexts? Well, this is actually a really nice, elegant solution for this. You create a pair of child contexts and have them share a common parent. Then when you save changes from one child, they're pushed up to the parent, and then the other child can pull down those changes by simply accessing the properties on the managed objects.
+
+This is one way you can implement support for inheriting changes in a detail inspector. So create a child context, save pushes the changes to the parent, and then a fetch from the detail inspector will incorporate those changes that are present in the parent context. And if you go to make further changes in the child context and decide you don't want to keep them, you can simply toss that child context and wipe out those changes.
+
+Some things to keep in mind when you're working with nested contexts. Saving only pushes up to the next level, so to the parent of the context you call save on. Fetching will pull data down through all levels. Using Object with ID pulls as few levels as necessary, and that's how you can implement the background fetching effectively, by using a parent context to fetch all that data, and then the child context can use Object with ID to just pick objects for Objects IDs that it wants the data. And also, very important, a parent context must adopt a queue type to be settable as a parent context.
+
+So now I'd like to shift gears a little bit and talk about your data, specifically data protection. Data protection is a feature of iOS that allows you to encrypt your user's data. It's a file-level protection, so you're encrypting whole files, and that encryption is tied to the user's passcode.
+
+In iOS 4, data protection was first introduced through NS File Manager with the keys file protection none and file protection complete. And what these protection classes mean, file protection none actually means you're not getting any data protection. But file protection complete means that any time the device is locked, the file cannot be opened, created, read, or written.
+
+New in iOS 5, we've got two new data protection classes, and these are a little bit more nuanced. There's file protection complete unless open, and file protection complete until first user authentication. So let's take a closer look and put these in context. When you first boot up the device, if the user has set a passcode and you're using file protection complete until first user authentication, the file is completely inaccessible. It's completely protected because the user hasn't authenticated yet. File protection complete unless open. Well, the file is protected against being opened, but you can create a new file and you can read and write a new file if you've created it.
+
+Then later on, once the user is authenticated and once again the device is locked, file protection complete until first user authentication is now no longer protecting that file. You've gotten past the first user authentication and now appears to be a usable file to your process. File protection complete unless open still has the same behavior it did on the first boot. You can't open new files, you can't open files, but you can create new files or read and write those files that you've created.
+
+So how can you use this with Core Data? Well, we've added support for marking persistent stores with data protection. And you do that through a new key, a new option on the persistent store called persistent store file protection key. So you pass that in when you're opening your store as one of the options, and you use the file manager values to set the protection class for your store file. The default behavior if you compile your application against iOS 5 is you'll get file protection complete until first user authentication. So once the user unlocks the device the first time, you can access your store file normally.
+
+Some things to keep in mind when working with data protection and persistent stores. If you opt into file protection complete, the strongest data protection class, then when the device is locked, your background process, if you have a background task running, it won't be able to access the store. It won't be able to read, write, or open. If you use file protection complete unless open, then a background task won't be able to open up your store file, but it will be able to work with a store file that's already open.
+
+And even with file protection complete until first user authentication, normally when you first boot up a device, your application won't be launched until the user authenticates. So it makes sense for most applications. However, if you're taking advantage of core location region monitoring, it could actually trigger access to your application before the user has unlocked the device.
+
+So now let's take a look at a new feature in data models, ordered relationships. So while I'm talking about ordered relationships, I want to distinguish between sorting versus ordering. And this is just in the context of ordered relationships. When I talk about sorting, I'm talking about sorting by a value, a property of the data that you're working with. It's a derived way to organize your data. So if I've got a table of items, I can sort them by name, or I can change my view to sort them by price.
+
+That's what I mean when I'm talking about sorting in this context. Ordering, I'm talking about arbitrary ordering, where you've got a list of items, and you want to provide flexible control for the positioning of those items. The ordering shouldn't be tied to any intrinsic value of the data. It's simply how you are choosing to put them. So if I want eggs to show up before cheese in my shopping list, that's my choice.
+
+Ordered relationships are basically just like the regular too many relationships, except now you can assign the positions to the objects that appear in the relationship. And when you're actually fetching the value of an ordered relationship, you'll get back a new class, NSOrderedSet, which keeps track of the position of the objects in the relationship.
+
+And an ordered set is a new class, as I said, and it's more like an array than a set. It's an ordered collection first. But technically, it's a subclass of neither. So if you have APIs that are expecting a set or an API that expects an array, you need to convert the contents of the ordered set and put it into an array or set to pass it to those APIs.
+
+Another important thing to keep in mind when working with ordered sets is that there's a performance impact from doing both the ordering and the unicking work that the ordered set does. So how can you turn a regular relationship into an ordered relationship? Well, you use Xcode for the data modeling tool. And in the relationship inspector, Set the arrangement to ordered, and that's it. You've opted into ordered relationships now. Thank you.
+
+I'm pretty excited about them too. So in terms of working with ordered relationships and code, if you're creating custom classes for your entities, you can generate the accessors using Xcode 4 and put those in your class, or you can choose to use the generic mutator for ordered relationships, which is mutable ordered set value for key. At this time, we don't have support for automatic KVC accessors, so you can't just call insert events at indexes on a NSManage object unless you've created a custom class and implemented that method.
+
+In terms of observing changes on relationships, it works like it does with non-ordered relationships, but the kind of notifications you get are different. You get a different set of change kinds. These are the ordered collection key value observing changes that you get. Insertion, removal, key value change replacement.
+
+Another thing that gets kind of hairy is if you've got a situation where you've got a context that has one state of the ordered relationship and a store that has another state of the ordered relationship and the coordinator has yet one other state, when you merge all those together, it can get hairy.
+
+So that... We try to preserve the relative ordering, but there really is no single right answer for what the ultimate ordering should be. And the performance is significantly slower than non-ordered relationships, because we're merging both the existence of objects in the relationship as well as the positions of those objects.
+
+Migration works just great with ordered relationships. You can migrate a non-ordered relationship to ordered and back. If you use lightweight migration, we're going to give you an arbitrary ordering when you convert a non-ordered to an ordered relationship. So you can use a post-processing step after your migration to impose an initial ordering if that ordering is important to you.
+
+And just to kind of sum up the ordered relationship story, these are really designed to give you an easy way to implement an ordered collection in your data model. If performance is your chief concern, however, you're going to be able to tune performance a lot better with a non-ordered relationship and then using a property and sort descriptors to order those results when you fetch. So now I want to introduce UI Managed Document.
+
+UI Managed Document is based on the Documents on iOS architecture. This is a new integrated document architecture based around UI document that gives you auto-saving, iCloud integration, and asynchronous I/O support. And I strongly encourage you, if you're interested in documents, to check out the session tomorrow in Presidio at 3:15, Storing Documents in iCloud Using iOS 5.
+
+So let's turn our attention to UI Managed Document. It's UI document based, but it adds all the Core Data features on top of that for managing your data. You can scale the large data sets, you get undo/redo support built in, all the graph management, searching and sorting, as well as some great conflict resolution solutions.
+
+In terms of working with managed documents, the UIManagedDocument class is a concrete subclass of UIDocument. So you can just go and instantiate one in your application, configure some store options or a model configuration, and then it will work with whatever data model it finds in your app bundle. And that's just the default behavior out of the box if you don't want to create a custom subclass.
+
+I mentioned that UIDocument gives you a synchronous I/O. And why is that? UI Document wants to keep your document saved all the time so that whenever the user hits the home button or your process needs to be suspended, the data is persistent on disk. But you don't want your user being interrupted while they're doing their work, while they're interacting with your application.
+
+So UI Document gives you a great model for performing a synchronous I.O. to keep the main thread free to interact with your user. And the way that works is the caller initiates an open or a read or a save, and then the save takes a snapshot of the state synchronously. But it doesn't write it out to disk.
+
+What it does is when you call that open read or save, you pass in a completion handler block, and then UI Document hands that snapshot of state to a background queue that it owns, and it performs the I.O. asynchronously. When that work is complete, it then calls your completion handler block back on the main thread again.
+
+So how does that work with UI Managed Document? Well, let's take a look at how an asynchronous load works. Well, to be perfectly honest, it's a Core Data application, so at load time, we're really not doing all that much work. We simply add the store when you open it.
+
+We generally don't do any reading of the data until you request specific data. That's the whole idea of working with just the data you're using. But one of the benefits of this is because we are adding the store in the background queue, if you have to do a migration, that migration occurs in the background and won't freeze up your main thread or your user interface. And we can take a look at how this works, nice graphical format. You call open on the main queue on the document. And then it calls its load method, which calls add persistence store on a background queue.
+
+If a migration occurs, a migration occurs. But when that work is done, we then pass the completion block back on the main queue so you can let your user know the document's ready for viewing or simply present it to them. On the writing side, the way asynchronous writes work with UIManagedDocument is this is where we get the value of those nested contexts. The document works with a main context that runs on the main queue.
+
+And so when you request to save on the document, on the managed document, that child context takes a snapshot and then saves the changes to the parent which is running on a background queue. The parent context will save those changes to disk on a background queue and not hold up your UI thread. And we'll take a look at how this is actually working. You call save on the main queue, and then the UIManagedDocument calls save on the document's context.
+
+Then on the background queue, we call write, and the parent context then saves, writes the changes to disk in the background. Finally, when that work is done, the completion block executes on the main queue, and you can let your user know that the document is saved if that's something you want to do.
+
+UI Managed Document also adds support for unmodeled data. And the idea here is, as we always are saying in Core Data, large files should live outside of the database whenever possible, something like movies or large pictures. And we wanted to give you a way to handle additional content in UI Managed Document.
+
+So when UI Managed Document saves its data to disk, it's actually saving inside a file package. It's not just a single file. It's a folder that can contain many files. And so we've added some optional API that you can choose to override in a subclass to add your own additional content into that file package whenever the document is asked to save.
+
+And the API for supporting that looks like this. When you want to read additional content -- I'm sorry. When the document is asked to read from a file, we will call read additional content from URL on your subclass. And when the document is asked to save, we will call additional content for URL on your subclass. And that method is called synchronously. And the idea is you package up a snapshot of what you want to write out, and then we'll call write additional content on the background queue and you can write out that data to disk taking as long as it needs.
+
+So the summary is we've built UI Managed Document on top of the UI Document architecture. It's a powerful architecture that's well supported in iOS. You get to take advantage of the power of Core Data. And you also get support for adding any unmodeled content to your document. Additionally, UI Managed Document gives you the best of the document support for iCloud and Core Data support for iCloud. And now I'd like to introduce Nick Gillett to talk to you about iCloud.
+
+So I'm Nick Gillett. I'm a software engineer on the Core Data team. And I'm going to start off today by talking to you about iCloud. So I'm sure many of you by now have heard about iCloud and its persistent storage features for data that it pushes up into the cloud. But at Core Data, we thought that there were some features that we could provide to you that would be useful as well.
+
+With iOS 5 and Mac OS X Lion using Core Data, you can sync data between your devices and your computers using Core Data. We wanted this integration to be as easy as possible. So today, I'll show you the new API that we're introducing that you'll pick up to integrate with it. And finally, we thought that we could do the hard work of merging conflicts when they occur into your data store automatically.
+
+So what do you get? We're going to work on top of all your existing stores. And we do per record conflict resolution. Also, because we have knowledge of your application's object graph, we can ensure that only the deltas are synced across the wire, reducing your user's overall bandwidth requirements. will import these changes asynchronously into your data store so that your user doesn't notice a thing. And when conflicts do happen, we'll use a three-way merge to make sure that the correct values are propagated through to the final result.
+
+How does that work? Well, imagine that you're editing a record in your store. The user is perhaps using an application that stores address book content. And they make a change to the first name of the person. Later, on the same device, they change the last name. In the meantime, perhaps they got interrupted by a phone call, and someone at their house used their computer to change the same record and update the email address. We'll take a look at all of these changes when we pick them up out of the cloud and merge them into a single record, picking up the relevant changes from each. Thank you.
+
+What this hopefully means for you is that there's a lot less code that you have to write to integrate with iCloud. You'll use a couple of options when adding your persistent store to the coordinator. And you'll have to respond to a notification that we imported data from the cloud into your store.
+
+For our part, we'll take responsibility for handling all the integration, including integrating with NS File Coordinator, File Presenter, and NS Metadata Query to know that changes are available in the cloud. We'll also monitor your stores and export the changes for you automatically. And when they're available in the cloud, we'll import them for you.
+
+And how does this work? This is a typical user scenario. Maybe there's a mobile device, and they have a home computer as well. When a change is made or a document is created on the device, calling NSManageObjectContextSave will push that document or object into the cloud. The running application on the Mac will notice that a new change is available from one of the peer devices and automatically import it to the persistent store.
+
+When changes are made on the Mac, they'll also be automatically exported into the cloud when NSManageObjectContextSave is called. And we'll import those into the device when the application is running. There's some new API that we're introducing today. You can use two new persistent store options to configure your iCloud settings. There are NSPersistentStoreUbiquitousContentName key and NSPersistentStoreUbiquitousContentURL key . There's also a new notification that we'll post called NS Persistent Store Did Import Ubiquitous Content Changes Notification.
+
+I had a lot of fun trying to fit that on a slide. Don't worry if you didn't get to write it down. We'll get back to it later. The NS Persistence Store Ubiquitous Content Name Key is a helper for us. Some applications talk to multiple persistence stores, and we found it difficult to keep track of them across all of your devices running multiple applications.
+
+So we need you to give us some help and provide us with a file system friendly string, so no slashes, exclamation points, or @ symbols please, that we can use to identify a given persistence store on any device running any application on any platform. It has to be the same everywhere.
+
+NS Persistent Store Ubiquitous Content URL Key, however, is optional. You don't have to provide it. We will generate one for you. This key is designed so that we know where on the file system you would like us to stick the metadata that we keep about your stores. It's an opaque package, so you shouldn't attempt to modify it or inspect it or generally do anything with it.
+
+Just leave it to us. And there are some scenarios where you're going to want to provide this on your own. If you are sharing data between applications running on Mac OS X and iOS, for example, you will want to provide your own, because it is highly unlikely that your Ubiquiti container ID will be the same as your bundle identifier.
+
+If you want to know how we're going to generate this default for you, this is the code that we use. We take your bundle ID from the running application, and we call NSFileManager URL for Ubiquiti container ID. This is the standard method that's used to fetch out the container URL for a given application. The reason why this has to be different if you're sharing data is because applications running on Mac OS X will often have a different bundle identifier than they will on iOS.
+
+Finally, the notification. NS Persistent Store did import Ubiquitous Content Changes notification. It's posted once for each persistent store coordinator whose persistent store has been modified by the import. If for some reason your application uses multiple persistent store coordinators to talk to the same persistent store, you will receive one notification for each. And the user info dictionary is very similar to Manage Object Context did save user info dictionary, except that it contains a collection of Manage Object IDs instead of Manage Objects.
+
+This is because we're doing imports asynchronously, and we cannot guarantee that your notification will be posted on the same thread as the objects were modified. When you respond to an import, you can treat it like a save notification. You should refresh objects in your local context. And if you've changed any objects in your context, you should merge them using an appropriate merge policy.
+
+If you're using a document syncing paradigm, there are a couple considerations you should make. The first is that atomic stores can be synced wholesale. That is, you can sync their entire file. But you won't get conflict resolution, and the last writer will win. SQLite should not be synced as a wholesale file. You can also use the UIDocument conflict resolution APIs if you're creating a subclass of UIDocument to use with your store as a way of attempting to do conflict resolution on your own.
+
+A few tips and tricks. You should, of course, respond to the import notification. This is our only way of notifying you that changes have been made to the store underneath your application. When I say use an appropriate merge policy, I mean that NSMergeByPropertyStoreTrumpMergePolicy and NSMergeByPropertyObjectTrumpMergePolicy are two alternatives to the default NSErrorMergePolicy that provide some useful behavior. And be sure to anticipate bandwidth considerations.
+
+If your saves normally generate large deltas, that is, that there's a large amount of data that's being generated from one save to the next, consider that that data will have to be pushed over the wire to the cloud and then downloaded by all of your devices and computers.
+
+Your users might not think that that's such a good idea. You should also use .nosync. This tells the iCloud integration that you don't want to sync certain pieces of data across. And it's a good way to make sure that things that don't need to be synced, like the persistent store file itself, aren't pushed up into the cloud.
+
+While we're on the subject of persistent storage, I'd like to introduce incremental stores. For years, developers have wondered why we only support these four types of persistence stores when there are so many other persistence technologies and database technologies out there. And I'm happy to tell you that today, using NSIncremental Store, you can write your own.
+
+With an incremental store, you can talk to your data in whatever language you want. And you get all the great features of Core Data, like only loading the data you need when you actually need it. We also support faulting so that you don't have to load completed objects into memory.
+
+It's OK. Keep it coming. And you can flush unused data when you're done with it. So how does this work? Well, the idea is that you'll create a persistent store coordinator. And calling addPersistentStoreOfType, you'll try to load your incremental store. We'll call loadMetadata on it to determine if the metadata is compatible with the managed object model that you're attempting to use to open it. If it is, eventually your application will create a managed object context. And a fetch request will be sent down to your store to get some data. We'll call a new API method called executeRequestWithContextError on your store with an instance of NSFetchRequest. And you'll return some objects.
+
+These objects will be pushed up into the context for you. And when value for key is invoked, we'll call another method, new values for object with ID with context error, to get the values for that property. If a relationship is called for, then we'll call new values for relationship for object with ID with context. This is important because it's often more expensive to load values for relationship than it is for a normal attribute.
+
+Finally, when an object tries to save or the user tries to save changes from their context, we'll call obtain permanent IDs for objects error. And we'll expect that you'll give us back a complete set of permanent managed object IDs that we can work with throughout the lifecycle of those objects. Finally, Walkout will call execute request with context error again with an instance of NSSaveChangesRequest.
+
+Occasionally, we'll also need to communicate with your data in a format that we can understand. And this is where NSIncrementalStoreNode comes in. We'll initialize it with a knit with object ID with values version. And after that, it's an opaque container to you. You can get the object ID for the incremental store node in question and values from it using value for property description. When we talk to your incremental store, we'll use an instance of NSPersistentStoreRequest and its two concrete subclasses, NSSaveChangesRequest and NSFetchRequest. But you'll have to do the switching in your execute request with context error method on your own.
+
+There will be flags on a fetch request that will affect both the performance and the result set that you pass back to us. You should obey those if you can, but if you can't, you must degrade gracefully. You cannot fail because certain flags are set. We will provide you with all the object ID mapping APIs you need to create object IDs and use them. And you can use get managed objects from context using object with ID.
+
+But we will not provide you our SQL generator. We recommend that you use canned queries instead to keep your implementations as simple as possible to translate a fixed set of NS predicates into a fetch request or into the request that you actually make back from your store. There's also a JSON provider in Foundation if your persistence model uses that.
+
+Finally, we recommend that you design your store to fulfill a specific use case, that is, design it to a specific application schema. and that you try to balance your I/O requirements and your memory requirements. We don't provide you any kind of caching APIs, but we do heavily recommend it. This is also the best way to talk to web services. If you're using something like a REST API or even a SOAP API, this is the best way to get your data into Core Data.
+
+Now I'd like to give you a tour of our changes to the developer tools. As you know, Xcode 4 changes a lot of things about how you work with your applications. Most notably, there's a new UI. But at Core Data, we're also introducing new optimized managed object models that load faster and require less memory. We're also introducing readable diffable models that you can use with your favorite diff tool.
+
+and faster scalar accessors for primitive property types. I know, readable models, it's hard to beat that one. We have a new UI. In the upper left, you'll find your entities. And if you're using a table view, you'll see a list of attributes, relationships, and fetch properties. You'll also see your fetch requests on the left-hand side. In the bottom left, you can switch between a tree style and an outline style for the viewer.
+
+You can also add fetch requests. And at the bottom right, you can switch between our classic diagram layout and the table layout, as well as add attributes. On the upper right-hand side, using the Core Data Inspector, looks kind of like a database tab, you'll be able to see the inspector for either the entity you've selected, the fetch request, the attribute, the property, or the relationship that you've chosen to highlight.
+
+This is our classic diagram view, which hasn't changed very much. The optimized model format. It's much faster than before. And it's an automatic transition with Xcode 4. It also lives in parallel with regular models, so there's no switching necessary. Our user-readable models are also an automatic upgrade in Xcode 4. As far as you know, it should be transparent. They're based on XML, and they should work with your favorite diff tools.
+
+In order to get a readable model, you need to use a minimum supported version, 4.1 or higher, for Xcode. But if that's set, you should be upgraded automatically to the XML models. Our scalar accessors avoid the overhead of traditional value object construction for primitive types. And they're a checkbox during creation.
+
+We're also integrated with Arc now to make the memory management a lot easier for you. And there's no need to implement or call, retain, or release when using an Arc-compiled application. It's an opt-in per project, but if you have files that require specific retain and release memory management, you can do that on a file-by-file basis. You should definitely see this session or watch it on iTunes.
+
+We're also introducing a new feature called External Binary Data. We've noticed that you really like using Core Data to store your images. And that's fine. But it puts some interesting load characteristics on the SQLite store. So now, by checking this box, we'll put the file outside the SQLite store for you.
+
+We're also introducing compound indexes in SQLite, which means that by filling out this table, you can index on as many properties as you'd like. Finally, what did we talk about today? Well, at Core Data, we have some amazing new features for you in iOS 5 and Mac OS X Lion.
+
+We're integrated with iCloud, giving you the easiest way to get your applications up and running on top of the service. And we've introduced several new documents types for you. There's also new data protection APIs to help keep your data safe, and an incremental store to allow you to talk to any data persistence API you wish. As well, ordered relationships to help you keep the data in the order that your user wants, not that your sort descriptor wants.
+
+Finally, you should get back to us on the forums or file bug reports and enhancement requests at bugreport.apple.com. Thank you. For more information, please contact Michael Jurowicz, our Developer Tools Evangelist, or check us out on the web at developer.apple.com. And there's also some related sessions that we think are important. But feel free to check those out here or on iTunes. Thank you.

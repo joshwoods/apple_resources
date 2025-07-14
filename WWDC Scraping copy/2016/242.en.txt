@@ -1,0 +1,225 @@
+---
+Title:  What's New in Core Data
+Year:   2016
+Web:    https://nonstrict.eu/wwdcindex/wwdc2016/242/
+
+[!] This transcript has potential transcription errors.
+---
+
+So hi, everybody.
+
+[ Applause ]
+
+I'm Melissa, I'm one of the core data engineers and this literally the first year that no one has told me to break a leg before I go out on stage, because frankly I did that a month ago and this my first day without a cast [laughter]. So if I'm limping around you'll know what happened.
+
+[ Applause ]
+
+So one of the best parts of working on core data is actually being able to get up on stage here every year and tell you guys like what new and interesting stuff we've been doing and boy, this year we have a lot of it, and it's really useful and we, we hope you're going to love it.
+
+So I'm going to talk about a new feature, query generations, some changes in the core data concurrency world. I'm going to talk about some new stuff we've done in the area of core data stack configuration and some new APIs we've added. And we're going to talk a bit about what we've done to integrate more neatly and cleanly with Swift and some of the improvements we've made in the area of Xcode integration. And that's a lot so, on with the first, query generations.
+
+Query generations is a new feature we've added but before I sort of get into talking about query generations I need to talk about faults a little bit. Core data uses faults a lot, as some of you may know. Manage objects can be faults, their relationships can be faults, and if you're using batch fetching, then the array you get back from NSManagedObjectContext execute fetch request, is going to be a very specialized fault. So that being said, what is a fault? Well, up here on the screen I've got a picture of an object graph, I've got a country, the United States.
+
+State, California, couple of counties, Santa Clara and San Francisco. And some cities in Santa Clara, San Jose and Cupertino. And some of this is a piece of like a tourist guide a guidebook, something you can go in and navigate through to find points of interest in a city you're planning on going and visiting.
+
+But just based on what we know about the United States, this isn't a full object graph, this is actually a piece of an object graph, sub graph. Because we know that the United States has other states, and those states have other counties, and those counties have other cities. And you know, beyond that we know that the United States is only one of many countries.
+
+And even in a guidebook I'm only interested in sort of looking at one set of data at a time. If I'm planning a trip to San Jose, I don't really care about Oregon or Washington, or anything like that. I don't even really care about San Francisco. I need to be able to get to those object, to those destinations if I'm interested and change my mind later about what I'm interested in browsing. But for the immediate short term, while I'm looking and planning my trip to Santa Clara County, I don't care.
+
+And that not caring is represented by, in memory a fault, it's an object that knows how to go off and retrieve data later, at some point if I decide I want to use it. So say I find out my friend is getting married and her wedding's in Seattle and I want to go, you know plan a trip to Seattle. So at this point I'm going to navigate back up to the U.S. and come down, I want to look at Washington and core data will automatically retrieve the information for Washington even though it wasn't in memory when I first loaded the sub graph.
+
+And you know, I can navigate down from that and so on. And that's what a fault is, it's that future or promise, or lazy loading, these are all different names for the same kind of thing, that core data does to help minimize the amount of data you have in memory at any given point.
+
+Why do we use faults? Well performance, performance, performance, and also performance. The best most performing application is one that doesn't do any work you don't need. You don't load objects over the iobus, that you don't need. You don't spend any time [inaudible] on objects that you don't need.
+
+You don't want to have those objects sitting around pushing up your heaps high water mark if your user's never going to look at them. But there is kind of one issue with faults, and it's sort of this. Here we have that object graph again, and in this case, we've got a lot of faults.
+
+And I'm navigating down my tree and I go to Santa Clara and I want to fire the Cupertino fault. But in the meantime, an external process has been importing data from the web and for whatever reason it's deleted Cupertino. Well, what happens? I have a fault that's supposed to go off and retrieve information about Cupertino but there's no information there anymore. I said, I talked a lot about not loading data you don't need, but in this case, you find yourself wondering, well did I actually need that data after all? Oops.
+
+In core data right now, you handle this by using the shouldDeleteInaccessibleFaults property on NSManagedObjectContext. If you set that then when the context notices that you're trying to fire a fault for a deleted object, it will mark the fault as being deleted and populate all of its properties with nils. This is mostly what you're going to want but sometimes it can be inconvenient because your UI doesn't know how to deal with you know, a nil identifier.
+
+The other alternative is to prefetch everything, use relationship keypads for prefetching to load all of the objects you think your user might want. That moves you into an escalating battle with your user trying to figure out exactly, predict what they're going to want, that can be tricky, users are unpredictable, we all know that.
+
+The other alternative, there is a third one, there's always a third one, write lots of code, starting with using existing object with ID on the manage object context to make sure that the object is in the database before you try the fault. Write lots of try catch, exceptional handlers around all your fault firing and frankly that's not really fun code to write, you'd really rather be writing interesting features for your users to use, because that's why they come to your application, because it does neat stuff. But let's step back for a second and think about your user interacting with your application.
+
+The user view and the UI often doesn't care about seeing the absolute latest, freshest, snappiest data. How do we know this? Let's think about gas pumps for a second. Most of you are familiar with them, you've put gas in a car at some point. Gas pumps have a display that tells you how many gallons or how many liters you've actually put in your car. And that display has a thousandths field, and I'd like a show of hands for everybody who's capable of reading that field, in real time, as they put gas in their car.
+
+That's about what I expected, none of you can process it, the human brain wants data sort of batched up neatly in intervals that it can understand. So the user doesn't really need latest, freshest data, they just need it to be, you know, reasonably, quickly updated. And a user who's saving data, also doesn't care, this is why core data has merge policies, they want to make a bunch of edits and they want to have those edits saved and mingled with whatever's in the database and have the right thing happen. You pick the merge policy you want because you know your users better than we do.
+
+So what if we could take this insight and build on it? What if we could provide a way to give your UI a stable view of data in the database? What if we could give you a way to handle changes, update changes deterministically? And what if we could do all of this so that you would never see this again?
+
+[ Applause ]
+
+And now I can talk about query generations. Query generations are a way of giving your manage object context a basically a read transaction on data in the database. All reads into that manage object context are going to see the same view of data until you choose to advance it, and you'll never see could not fulfill a fault again.
+
+And the important part is we do this efficiently, that's always been the tricky bit. How do they work? Well, I've got a database, it has an object in it, id 1, name fred. And because these are slides, I'm going to cut those down because I need all the real estate I can get for this built.
+
+In a traditional database that's what you've got, you have one file, it has one view of data in the world. Using query generations though, that becomes the first generation of data in your database. And processes come along, this can be your application, it can be an importer, it can be an extension on a watch, something modifies the database.
+
+A new generation is created. And, more data is created, new objects. And at this point, the user launches your application, creates manage object context and you load data. And that context now knows what generation in the database it loaded data from. So as other processes or contexts or whatever come along and modify the database some more, more generations are created, that context still knows its generation.
+
+Second context comes up, loads some data, makes some edits, and saves and in saving it creates a new generation and tracks that it's now representing generation, in this case 6, in the database. And at this point if we fire a fault, in context 1, even though the object underlining that fault may have been deleted in generation 6, it's still visible to the context because it's still in the database under the label generation 3.
+
+And at this point the user can go make some edits in context 1, delete some objects, change some objects, insert new objects. And when they save that context core data will use the merge policy to merge all of those changes with whatever's in the database and create a new generation 7. In the same way that context 1.
+
+[ Applause ]
+
+In the same way that context 1 had visibility onto generation 3 when it was pinned to generation 3. Context 2 can do whatever it would like with its objects, turn them back into faults, refire those faults, and it will still see the data as it existed in generation 6 in the database.
+
+So basically it's full read transactionality at the manage object context level. We've talked a lot about how context have, are essentially right transactions and now we've made them read transactions as well. So allows you to immediately isolate your work on a context by context level, and minimize stuff like preventive prefetching which means, you know, everybody wins.
+
+Basics. An individual context can choose what behavior it wants, it can decide that it wants the current behavior that you're used to in iOS 9 and macOS 11. We call unpinned, see top of tree when you load data. You can also specify that a context should pin to whatever generation is current in the database when data is first loaded into that context.
+
+Or you can specify that you want it to pin to a specific generation if you have another context pinned to that generation. Nested contacts are going to inherit their parents' generation, they're implicitly unpinned but they'll see data as viewed through the, the generation of their parent, plus whatever pending changes their parent has sitting around unsaved.
+
+Updates are kind of important, we've all acknowledged that, the user doesn't want to see updates, eventually they don't want to see, you know 10 year-old data. Generations are updated when you explicitly tell a context to update by setting a new generation token. They're updated on save, they're updated if you call mergeChanges, will update to top of tree at that point since you've told the context that, you know it should be looking at a new set of changes in the database, and it's updated as a result of calling reset.
+
+Thing to note though is that, registered objects aren't refreshed when you update the generation, you may not want that, and it's easy for us to let you do it, it's a lot harder to let you undo it if we choose to do it for you. If you want to refresh the data you'll have to call a fetch or refreshAllObjects, but it gives you control over when that data actually gets updated.
+
+If you want to use query generations you'll need to be using and SQL store and it needs to be in wall mode. Although if you try and use query generations and you haven't met those two requirements it will sort of fail gracefully and just revert to the unpinned behavior. How did we do it?
+
+Well, there's an now opaque token that you can use to track a query generation. This will tell the context, you know when and what store it loaded data from. The query generation token has a method current, you can use to retrieve a token to indicate that a context should pin when it loads data.
+
+ManagedObjectContext, we have a few new methods, there's a property, query generation token that will tell you what query generation a context is using. It'll be nil if the context is unpinned. And you can set a query generation from a token, either the current token from class property or, the result of calling queryGenerationToken on another manage object context.
+
+A generation won't include stores that were added to the store coordinator after the generation was created. If you load data into a manage object context, add a store to the coordinator and then do a fetch, you will not see results from that new store. But it does not prevent you from removing stores from the coordinator, although you're going to see an error if you try and load data into a context when you've removed all of the stores that it was trying to load data from.
+
+And now I'm going to talk about concurrency because, well we always talk about concurrency. This is the current state of affairs in core data, and it's manage object context is an actor. You use perform and performAndWait to interact with it, do schedule blocks for execution on the managed object context queue.
+
+There is a third model, which, or another model, which is to use the confinementConcurrencyType which allows you to message the context directly but that's deprecated because it turns out that that's really hard to get right in any threading situation. The persistent store coordinator is also an actor and has the same API perform and performAndWait. And the coordinator will serialize request coming in from individual managed object context along with whatever request you've directly scheduled using the perform and performAndWait APIs on the coordinate.
+
+And at this point I'd like to make an important announcement, we have added, for those of you who are programming in ObjC and using manual retain release, and auto release pool around perform, block and wait. This means that you're now going to be responsible for extending the lifespan of any objects created in the blocks you've scheduled if you want to use those objects outside the block.
+
+It's easy to remember to do that for the results of, for example an execute fetch. It's a little bit less immediately obvious that you also need to do this for any NSErrors that may be being returned. This doesn't only affect people using manual retain release and we have a link time check so you won't see this behavior until you recompile for iOS X or macOS 12.
+
+But let's talk about concurrency as it exists in the world today. Or, as it exists in the world until yesterday. Context 1 tries to do something that requires going to the persistent store, so it messages the coordinator. Which, because its sterilizing requests, takes a lock. And at this point context 2, which may be your UIContext wants to do something and tries to message the coordinator. But because the coordinator is locked, context 2 has to wait, as the request from context 1 is passed down to persistent store and whatever work is necessary to evaluate, evaluates.
+
+And it's only when that work finishes and the thread of execution returns that context 2 can take a lock on the coordinator and have its work dispatched down to the store. And this means that context 2 is basically going to be blocked on whatever work it is that context 1 is doing. And eventually it will return but in the meantime your IU might have, you know been a little bit slow.
+
+New stuff, the SQL store now has a connection pool and is capable of handling multiple concurrent requests. Specifically it can now handle multiple readers and a single writer, size of the connection pool varies from platform to platform. We've adopted it and we'll show you how to change it in a couple slides. So how does this work now? Well context 1 dispatches to the coordinator, and well no lock is taken. Context 2, which may still be your UIContext also dispatches the coordinator and both of those messages are sent down to the persistent store at the same time.
+
+Persistent store then does whatever work it needs to figure out what messages it needs to SQLite and those are sent down to SQLite. And it's only at that point that a lock is taken, and this is the standard SQLite file block. SQLite does whatever it needs to do, begin opens transaction, right it's a bunch of SQL, closes the transaction, ends at that point returns. So you can see at this point that we've really, really, really decreased the scope of the critical section there.
+
+And why do you care? This is going to make your UI a lot more responsive, you can fault and fetch in, for example, a main UI while background work is happening on a separate context. And the immediate fallout from this is it really simplifies application architecture, a fairly standard pattern, has been that people will have an importer context that's loading data for example, from the web. And another, a main UIContext is vending data to the main UI. And they end up having these on separate stacks because the UI needs to be responsive and they need the critical section locking to be as small as possible.
+
+And the only way to get that before when you had to lock the entire stack, was to have two separate stacks. And that introduced an issue with doing hand offs between, okay there's a manage object context did save notification but it's coming from an entirely separate persistent store coordinator and I need to migrate that over.
+
+That's no longer an issue there, you can now attach both context to the same persistent store coordinator, they'll execute in parallel and you can just do standard merging, and as a huge bonus this means they're sharing the row cache which is really going to decrease your memory footprint. It's going to divide it by 2, since well, we've only got one row cache nowadays.
+
+It's on by default, it's for SQL stores only, and it only works if all coordinated stores on a persistent store coordinator are SQL stores. You can configure the size of the connection pool using the NSPersistentStore ConnectionPoolMax SizeKey, that allows you to specify the maximum size the connection pool. If you want serial request handling, the old behavior, you can set it to 1. We do reserve the right to say you tried to set it to one million and that's kind of silly so we're going to use a more reasonable number.
+
+It should be transparent to most of you right off the bat, your UIs will possibly get a little more responsive. The big thing we noticed internally once we turned this on, was a whole bunch of people said, hey, wow I can rip out a couple hundred, couple thousand lines of code. And you should do it because man is that satisfying [laughter]. A few of you.
+
+[ Applause ]
+
+A few of you may notice, some minor timing issues. If you had a context, context 1 that had a perform block and wait and context 2 that also had a perform block and wait, originally context 2 would not start executing its block until context 1's block had returned, that's no longer true.
+
+So for the like .1% of you who are in that situation, your timing's going to change and you may need to decrease the bandwidth connection pool, the rearchitect. The rest of you, you'll just get to build new and interesting and simpler code. And at this point I'm going to drag my co-worker, Scott up on stage and he's going to talk about a bunch of other stuff.
+
+[ Applause ]
+
+Thanks Melissa. Good morning, let's talk about setting up core data, starting with adding a persistent store. To add a persistent store to a coordinator, you need four pieces of data and, to do most operations you need at least two. New this year, core data has introduced a new type called NSPersistentStoreDescription that encapsulates all of the data needed to describe a store and also includes convenience API for common options like whether the store should be opened read only, the timeout that the coordinator should use, automatic migration and mapping options which are both enabled by default now. And a new option, for adding stores asynchronously, this new type works with a new method on the persistent store coordinator that takes a trail enclosure with parameters for the store description and an optional NSError that is non-nil if the operation failed.
+
+If you're adding a store asynchronously you can extend the conditional in a call back for things like posting a notification or pushing your application's UI after the store has been successfully added. This way your app's model setup can happen off the main thread which is especially useful when your application launches since a migration may cause a delay. Remember, if iOS notices that your app hasn't been responsive for a while after launch, then it will kill the app. This can prevent a migration from ever finishing but, it's not a problem anymore if you're adding a store asynchronously.
+
+So that's persistent store descriptions but, there's a lot more involved in setting up core data stack. To represent a core data stack you need at least three objects, plus the boiler plate to associate them with each other. New this year, core data has yet another type that encapsulates those objects and most of the boiler plate called NSPersistentContainer, not only does it [laughter].
+
+[ Applause ]
+
+I realized a lot of you have written this type yourselves maybe but [laughter] this one not only encapsulates modeling configuration it also has a name, a list of store descriptions, and a method to load store descriptions from that list that haven't already been added to the coordinator. This means that the project boiler plated needed to setup core data goes from an entire page of code to just a couple of lines.
+
+[ Applause ]
+
+So there's a lot of code missing here now, let's take a look at how it all works. The container guarantees that its properties are always valid so the getters for things like the coordinator and the model, will always return new objects that are safe to use. The container's initializer finds a model based on the name that you pass into the initializer, there's also another initializer that takes an explicit model argument.
+
+By default, new containers have a single store description in the list, it's an SQLite with default options and a file name based on the name of the container. And it's stored in a directory that's defined by a class method on the container, and a persistent container, by default will return you a directory based on the platform that you're on.
+
+So it will use the application support directory on macOS, your container document structure on iOS and launchOS, and your containers caches directory on tvOS. If you want to set your own directory then you can subclass in this persistent container and override the direct, sorry the defaulted directory URL class method.
+
+We think container's really helpful for setting up core data but they also provide convenience for common operations. Containers have a main queue context property called view context that you can use to drive your UI. There's also a factory method that vends background contexts that are ready to use but most of the time, you'll probably want to use the container's method for performing background tasks which is called performBackgroundTask.
+
+So instead of having to setup a new background context and wire up and then a queue a block just to do something in the background you can just pass a block to the container. Using performBackgroundTask can have a benefit to the on code concision using it gives core data the ability to reduce the number of contexts that are created to do your work, and also can work with connection pooling to ensure that your app stays responsive, even under heavy load. Speaking of common context work flows, the NSManagedObjectContext has a new property this year called automatically merges changes from parent. It's a Boolean and when you set it to true the context will automatically merge, save the change the data of its parent. This works for [laughter].
+
+[ Applause ]
+
+This is really handy, it works for child context when the parent saves its changes, and it also works for top level context when a sibling saves up to the store. It works especially well with generation tokens which Melissa talked about earlier. So your UIs can be maintenance free if you pin your UI context to the latest generation and then enable automatic merging, your faults will be safe and your object bindings and fetch results controllers will keep themselves up to date [laughter].
+
+Alright. Let's talk about generics. Core data has adopted generics this year and they work great in both ObjC and Swift. There is a new protocol called NSFetchRequestResult, and it is adopted by all of the types that you'd ever expect to see back from the fetch request like NSManagedObject or all the entity subclasses. Object IDs, NSDictionary and NSNumber.
+
+NSFetchRequest is now parameterized based on the type of the results which is restricted by protocol conformance and in Swift, the fetch method on NSManagedObjectContext plums the type of fetch request all the way out to your results. [Background noise] Finally, a fetch results controller who adopt the parameterization of the fetch request used to create it.
+
+Speaking of NSFetchResultsController, if you're using UICollection view, sorry there we go, UICollection view, it's really easy to adopt the new data source prefetching feature if you're using core data. All you need is an asynchronous fetch request, to get the request off the main thread and you want to make sure that you're not returning objects as faults. For more information about data source prefetching, check out Steve and Peter's talk from yesterday, what's new in UICollection view. If you're a Mac developer I also have good news for you. The fetch results controller is now available on macOS.
+
+[ Applause ]
+
+Okay, so let's talk about some common operations in core data, starting with getting an entity description. Oops this, there we go. For this you need the entity's name as a string and a managed object context. Creating a fetch request also requires a string constant as well as a type cast if you want to take advantage of the new generics.
+
+And finally, there is creating a new managed object which has all three things, a string constant, a context parameter, and a type cast. These operations are all getting easier this year through improvements we've made to manage object subclasses. The entity description is now a class method on the subclass.
+
+[ Applause ]
+
+Don't worry this gets better [laughter]. The class also has a factory method for creating new fetch requests that are fully typed.
+
+[ Applause ]
+
+And finally, you can create a new manage object, object using just the subclass's initializer directly.
+
+[ Applause ]
+
+There's one more thing that's worth talking about which is performing a fetch request. I mentioned earlier that the context fetch method is parameterized in Swift but ObjC doesn't support method level generics, so we've also added actor like semantics to fetch requests. So you can just call its execute method from inside a block submitted to a context and it will return properly typed results.
+
+[ Applause ]
+
+All this new API for model subclasses should make a lot of things much easier but I'm guessing that you're not really looking forward to regenerating all of your subclasses, but don't worry because, this should be the last year you have to do anything with them. Because Xcode 8 can now generate that code for you automatically.
+
+[ Applause ]
+
+You can configure code generation per entity and Xcode will write the generated code to your project's derived data so it doesn't pollute your source tree with code you didn't write. You don't want to edit these files since the code is automatically regenerated when you change your model but if you want to do things like add your own instance variables or something to the subclass, then you can also tell Xcode to only generate a category or extension and then you can own the class itself.
+
+In Swift all you need to do to use this feature is import the module that your entities belong to which is often the same module as your code, but in ObjC you'll need to know a bit more about how this works. The most important file in, to know about in ObjC is the core data model header file.
+
+Each model has its own header file and you need to import it to get access to all of that model's generated classes. If we zoom in for a look at the other generated files for entities configured to generate classes, Xcode creates two headers that you probably already recognize from generating classes yourself. One declares the class interface and the other declares the managed properties.
+
+This is mostly important to know for ObjC because if you're generating a category, then Xcode will not generate a class interface, and the model's header will import the category directly. Categories can't be declared without a class interface so the generated code expects to find a header in your project that's named after the class. This is a file that you own, and if it doesn't exist in your project then your target will fail to build.
+
+So let's take a quick break from slides and have a look at what all this new stuff means for you. I have Xcode 8 open here and we're going to create a new Xcode project. And use iOSes master detail application. We've updated the templates this year to use the new UI.
+
+So if we, save this somewhere and go to the app delegate, then we can see that, we're using a persistent container here and we're wiring up the master view controller with the container's view context. If we go to the master view controller, we can see where it creates a new object that we're already using subclass initializers that are generated by core data. And we're not using KVC anymore we can set properties directly on the manage object and if we command click we get taken to the generated file.
+
+If we come back and we look at how the fetch results controller is set up, there we are. We can see that raising the fetch request factory method on the event subclass and there's no extra explicit typing here when we create the fetch results controller but its type, which is really tiny, but if we zoom in here, is passed through from the fetch request. This means that elsewhere, in the sub, prepare for segue, there we go.
+
+When we get an object from the fetch results controller it comes back with the right type. So that's all great we have no type cast anymore. And, but I don't want this app to show timestamps in the master view controller like it does by default. So let's add a title attribute to our event entity here.
+
+And we want it to be a string type. Alright so we've rebuilt, saved our model, and if we go back here and go to configure cell, and we can delete this code here. And take advantage of Xcode's auto completion to get a new property that we just set up in our model.
+
+[ Applause ]
+
+And again if we command click on it, all of the code has been updated.
+
+[ Applause ]
+
+One of the best hidden benefits of this is if you're using manually generated subclasses or even KVC, if you change the name of an attribute, you can wind up with some really weird bugs because your project compiles but when it comes to actually making the calls you get a run time error, because the key path doesn't exist anymore. Automatically subclass generation takes care of all of this.
+
+So let's automatic subclass generation as well as some working examples of core data's new API. Last, let's talk about what's new in SQLite. The SQLite library that comes with the operating system has some new tricks that you won't find anywhere else. The first of which is multi-threading assertions.
+
+SQLite on Apple platforms does not have thread safe connections and multi-threading bugs can be hard to diagnose, sometimes because they usually manifest as a crash report with a single thread deep inside SQLite. To make these issues easier to identify and reproduce the system SQLite supports new environment variable that enables multi-threading assertions when they fire you'll see two threads in SQLite, and they're both using the same connection.
+
+SQLite has always supported user defined logging functions through a configuration that you can set using SQLite3 config but that function needs to be called before the library is initialized which may have already happened. SQLite configurability is great but we're running a modeling system that has built-in logging facilities so there's now another environment variable that chimes SQLite logging to the system log.
+
+Finally, I want to talk about file operations. All databases are represented by a combination of files and file operations cannot be atomic when they're in multiple files. The result of this is that all file operations are inherently unsafe. Unix file APIs to NSFileManager, everything. This is really important and I want to share a couple of concrete examples of how things can go wrong.
+
+Let's say I notice two database files in the directory and, my code wants to do some clean up so it deletes them but in between deleting the database and the journal something connects to the database file. That database doesn't have access to the journal, so it can't make sense of the database, so it starts reporting errors immediately which affects your app. Unless you can guarantee that nothing is currently or it will ever try to connect to a database, it's not safe to delete its files.
+
+Let's say I have a database in wall mode and something is using it, and the database finally gets moved aside for some reason. When it gets open in its new location that connection creates a new journal and lock file, now you have two connections that are using different journals and locks, it's not long before they wind up corrupting the database.
+
+These examples may seem contrived or rare, but there are over a billion devices out there with potential for problems with every possible operation on every possible file, something will happen to someone using your app and they'll be very upset when they wind up losing their data. Hard links are especially bad, don't use hard links with database files.
+
+So, new this year the SQLite library that comes with the operating system takes advantage of dispatch sources and database connections will report errors after an illegal operation affects their files. On its own the system solve data corruption problems in most cases the damages has already been done. So to help you identify and debug these issues we've added another environment variable that causes connections to assert as soon as they detect an illegal operation has affected their files. If you're curious for more ways that your database can get corrupted, SQLite has an instructional manual on their website called how to corrupt a SQLite database file [laughter].
+
+Luckily these problems are avoidable. If you're using SQLite directly, you want to make sure that there's only one piece of code that owns that database and that code needs to go into the exclusive file access so files can't be changed when they're open. If you're using core data, and you should, there's API in the persistent store coordinator that is always safe to use with SQLite databases, whether they're open or not. There's replacePersistentStore which replaces one database with the contents of another. And there's also destroyPersistentStore which safely deletes everything in the database and leaves an empty database behind.
+
+Alright, that's it for what's new in core data this year. To recap, we have a new feature called query generations which gives you a stable view of your data at a snapshot in time. We use support connection pooling and a persistent store coordinator now which allows multiple readers at the same time as a single writer, allowing you to keep snappy interfaces at the same time that you're doing a lot of data work.
+
+Setting up core data is a lot easier and then using it is also a lot easier with new API, that works especially well in Swift. This is all supported by great new integration with Xcode and we also have new features in SQLite that should make debugging common problems much easier. For more information, please check out the developer website, this was session 242. If you want to know more, there's what's new in Swift as well as what's new in Cocoa. Thanks for coming.
+
+[ Applause ]

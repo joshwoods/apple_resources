@@ -1,0 +1,3819 @@
+WEBVTT
+
+00:00:11.060 --> 00:00:12.000
+Good morning, everyone.
+
+00:00:12.000 --> 00:00:14.200
+My name is Ben Trumbull,
+and I'm the engineering
+
+00:00:14.200 --> 00:00:16.900
+manager for Core Data,
+and I'm here to begin the
+
+00:00:16.900 --> 00:00:19.830
+Core Data Best Practices session.
+
+00:00:21.640 --> 00:00:23.830
+and today we're going to talk
+about a number of topics.
+
+00:00:23.880 --> 00:00:26.610
+We're going to talk about concurrency,
+nested context,
+
+00:00:26.680 --> 00:00:28.520
+and then I'm going to bring
+Melissa Turner on stage to
+
+00:00:28.620 --> 00:00:33.140
+talk to you about performance,
+schema design, and search optimization.
+
+00:00:33.970 --> 00:00:36.490
+So as part of some of these topics,
+we're going to talk about using
+
+00:00:36.490 --> 00:00:40.740
+Core Data with multiple threads,
+sharing unsafe changes between contexts,
+
+00:00:40.850 --> 00:00:44.390
+debugging performance with Instruments,
+tuning your model,
+
+00:00:44.390 --> 00:00:47.640
+and improving your predicate usage.
+
+00:00:47.780 --> 00:00:50.080
+So first up, concurrency.
+
+00:00:51.990 --> 00:00:55.040
+So when using Core Data or
+really any modeling objects,
+
+00:00:55.050 --> 00:00:57.830
+there's some challenges
+you're going to face.
+
+00:00:57.950 --> 00:00:59.560
+First is obviously thread safety.
+
+00:00:59.680 --> 00:01:07.890
+But then we're going to look at some
+issues with transactionality when
+
+00:01:07.890 --> 00:01:07.890
+you have a bunch of changes together.
+
+00:01:07.890 --> 00:01:07.890
+And of course, you're going to need to
+balance that with performance.
+
+00:01:09.760 --> 00:01:13.560
+So in the past, a lot of people have
+done something like this.
+
+00:01:13.560 --> 00:01:16.860
+They have a bunch of different
+contexts together and they
+
+00:01:16.930 --> 00:01:21.200
+use perform selector to route,
+say, a merge notification or some other
+
+00:01:21.200 --> 00:01:25.440
+method onto the main thread or a
+specific thread to get to a context.
+
+00:01:27.060 --> 00:01:28.950
+This makes us a little sad, though.
+
+00:01:28.950 --> 00:01:32.880
+So in Lion and iOS 5,
+we introduced some new methods and some
+
+00:01:32.880 --> 00:01:35.820
+new concurrency types for managed object.
+
+00:01:35.890 --> 00:01:39.370
+And instead of having to trampoline
+through perform selector,
+
+00:01:39.370 --> 00:01:42.990
+you can use perform block
+and perform block and wait.
+
+00:01:44.080 --> 00:01:46.000
+It's going to look a little
+bit something like this.
+
+00:01:46.000 --> 00:01:48.440
+When you create a managed object context,
+you'll specify what type of
+
+00:01:48.440 --> 00:01:49.920
+concurrency you want it to use.
+
+00:01:50.030 --> 00:01:55.510
+It will manage that itself and then
+use perform block to route it tasks.
+
+00:01:58.000 --> 00:02:01.490
+So there are three concurrency
+options you can use in Core Data.
+
+00:02:01.570 --> 00:02:04.480
+The first one is you can tell managed
+object contexts that you want it
+
+00:02:04.480 --> 00:02:06.260
+to be bounded to the main thread.
+
+00:02:06.320 --> 00:02:11.210
+And this is great for interacting with
+view controllers and other aspects of
+
+00:02:11.210 --> 00:02:15.190
+the system that are bound to the main
+thread or don't really know very much
+
+00:02:15.190 --> 00:02:18.180
+about Core Data and its concurrency.
+
+00:02:18.880 --> 00:02:21.920
+And then for a lot of your
+background tasks in your own work,
+
+00:02:21.920 --> 00:02:24.230
+you can use private queue concurrency.
+
+00:02:25.760 --> 00:02:28.240
+And finally,
+there's the confinement concurrency type,
+
+00:02:28.380 --> 00:02:32.120
+which is basically what people
+have been using in the past before
+
+00:02:32.120 --> 00:02:34.270
+we introduced these new options.
+
+00:02:38.070 --> 00:02:41.810
+So for the confinement concurrency type,
+you're basically required to have a
+
+00:02:41.810 --> 00:02:45.240
+separate context for every thread,
+and managed object context
+
+00:02:45.240 --> 00:02:48.070
+can only be used on the thread
+or queue that created them.
+
+00:02:48.160 --> 00:02:50.790
+And this is the default legacy option.
+
+00:02:54.060 --> 00:02:57.420
+So with the confinement type,
+everything is going to be
+
+00:02:57.420 --> 00:03:00.610
+serialized against your work throw.
+
+00:03:00.630 --> 00:03:04.570
+And you can use either a serialized
+dispatch queue or an S operation queue
+
+00:03:04.570 --> 00:03:09.500
+with a maximum concurrency manually set
+to one in addition to a specific thread.
+
+00:03:09.500 --> 00:03:11.800
+So here I just want to point
+out that Core Data isn't
+
+00:03:11.800 --> 00:03:13.380
+using any thread local state.
+
+00:03:13.380 --> 00:03:16.500
+And we're really interested in
+having a single control flow.
+
+00:03:16.500 --> 00:03:19.480
+We're not really as focused on
+whether or not dispatch queues work
+
+00:03:19.550 --> 00:03:24.390
+with multiple threads or how that's
+happening underneath the covers.
+
+00:03:26.650 --> 00:03:29.370
+So thread confinement is
+pretty straightforward.
+
+00:03:29.390 --> 00:03:30.060
+It's safe.
+
+00:03:30.100 --> 00:03:31.500
+It's efficient.
+
+00:03:31.500 --> 00:03:34.590
+The transactions are obviously all scoped
+to the managed object context since
+
+00:03:34.860 --> 00:03:36.820
+nothing else gets to interfere with it.
+
+00:03:36.820 --> 00:03:39.840
+But it does put a burden on you
+to manage all of these issues.
+
+00:03:43.130 --> 00:03:46.730
+So in particular, tracking which context
+goes with which thread,
+
+00:03:46.990 --> 00:03:50.540
+potentially keeping extra threads
+around for background tasks,
+
+00:03:50.660 --> 00:03:53.830
+and then all of the special
+behaviors that Core Data uses to
+
+00:03:53.850 --> 00:03:57.910
+integrate with view controllers,
+Cocoa binding, and other things,
+
+00:03:57.910 --> 00:04:01.040
+these main thread behaviors,
+undo management,
+
+00:04:01.090 --> 00:04:05.540
+we're going to have to infer based on
+whether or not you created the managed
+
+00:04:05.540 --> 00:04:07.940
+object context on the main thread.
+
+00:04:07.940 --> 00:04:11.980
+And those things are driven -- those we
+call user events typically are driven
+
+00:04:11.980 --> 00:04:14.990
+by the run loop on the application.
+
+00:04:17.590 --> 00:04:22.300
+So in contrast to confinement,
+the private queue concurrency type,
+
+00:04:22.300 --> 00:04:25.340
+NSManagedObject maintains its
+own private serialized queue,
+
+00:04:25.450 --> 00:04:27.740
+and you can only use it on this queue.
+
+00:04:27.910 --> 00:04:32.810
+And you do that by setting up blocks
+as tasks and queuing them using perform
+
+00:04:32.890 --> 00:04:35.440
+block and perform block and wait.
+
+00:04:35.550 --> 00:04:38.410
+Now, within those blocks,
+you can use the managed
+
+00:04:38.460 --> 00:04:40.410
+object context API normally.
+
+00:04:42.190 --> 00:04:44.570
+And I just want to really
+emphasize that in this case,
+
+00:04:44.570 --> 00:04:47.640
+the queue is private,
+and you really shouldn't yank it
+
+00:04:47.640 --> 00:04:49.930
+out and interact with it directly.
+
+00:04:50.060 --> 00:04:53.130
+If you want to,
+you can dispatch work to your
+
+00:04:53.130 --> 00:04:57.390
+own queues with dispatch sync
+at the end of those blocks.
+
+00:05:00.400 --> 00:05:02.730
+There are a number of advantages to this.
+
+00:05:02.760 --> 00:05:05.940
+It lets the managed object
+context maintain which queue
+
+00:05:05.940 --> 00:05:09.360
+it's using and handle whether
+or not it's in the right state,
+
+00:05:09.360 --> 00:05:10.800
+the right thread.
+
+00:05:10.930 --> 00:05:14.290
+And other threads can easily interact
+with that managed object context
+
+00:05:14.290 --> 00:05:15.920
+by just calling perform block.
+
+00:05:16.150 --> 00:05:19.360
+Unlike the concurrency -- the
+confinement concurrency type,
+
+00:05:19.360 --> 00:05:23.060
+those other threads really can't message
+that managed object context at all.
+
+00:05:23.150 --> 00:05:25.460
+And these can be created from any thread.
+
+00:05:25.460 --> 00:05:29.950
+And the queues are going to be much more
+efficient than keeping extra threads
+
+00:05:30.310 --> 00:05:34.850
+lying around in the background to do
+other tasks like background fetching.
+
+00:05:36.650 --> 00:05:40.120
+And the third type is the
+main queue concurrency type.
+
+00:05:40.120 --> 00:05:43.190
+This is going to behave very similarly
+to the private queue concurrency type,
+
+00:05:43.360 --> 00:05:45.750
+only the queue is obviously
+always the main thread.
+
+00:05:45.820 --> 00:05:49.640
+And non-main threads can just call
+perform block on that as well.
+
+00:05:49.710 --> 00:05:52.360
+And it will integrate all of those
+behaviors that I talked about,
+
+00:05:52.360 --> 00:05:57.710
+undo management and other application
+lifecycle events with the main run loop.
+
+00:05:59.920 --> 00:06:03.270
+So what that means is when you
+create a managed object context with
+
+00:06:03.270 --> 00:06:07.430
+the main queue concurrency type,
+your view controllers and other
+
+00:06:07.490 --> 00:06:10.090
+things can just message it directly.
+
+00:06:10.370 --> 00:06:13.590
+They don't have to know about all
+these different perform block APIs.
+
+00:06:13.690 --> 00:06:18.800
+And it's very easy for other tasks
+that you have in the background to
+
+00:06:18.800 --> 00:06:24.630
+just enqueue perform block on it and
+have those then update view state.
+
+00:06:27.500 --> 00:06:32.080
+So just sort of a diagram of what
+I mean going on here is a background
+
+00:06:32.080 --> 00:06:37.230
+thread can enqueue a block directly,
+but the view controllers can just
+
+00:06:37.230 --> 00:06:39.400
+start using managed object context API.
+
+00:06:39.400 --> 00:06:41.460
+So in this way, Cocoa Bindings,
+for instance,
+
+00:06:41.460 --> 00:06:44.800
+doesn't know about concurrency
+types or perform block,
+
+00:06:44.800 --> 00:06:48.400
+but it can just work with the managed
+object context the way it always has,
+
+00:06:48.400 --> 00:06:53.610
+and you can have background threads or
+other queues enqueue messages to happen
+
+00:06:53.610 --> 00:06:56.640
+on the main thread context that way.
+
+00:06:58.110 --> 00:07:01.220
+So I mentioned that we have
+these notions of user events,
+
+00:07:01.220 --> 00:07:04.750
+and for the main thread,
+that's going to be tightly integrated
+
+00:07:04.780 --> 00:07:06.610
+with the applications run loop.
+
+00:07:06.940 --> 00:07:09.690
+But for context running
+off the main thread,
+
+00:07:09.690 --> 00:07:12.590
+either in a private queue
+or in your own thread,
+
+00:07:12.760 --> 00:07:16.800
+what I really mean here is Core Data is
+going to defer a bunch of tasks
+
+00:07:16.810 --> 00:07:18.470
+and then coalesce work later on.
+
+00:07:18.500 --> 00:07:22.500
+So this is the coalescing
+changes for notifications,
+
+00:07:22.500 --> 00:07:26.520
+delete propagation,
+setting up the undo groupings,
+
+00:07:26.520 --> 00:07:27.960
+stuff like that.
+
+00:07:28.080 --> 00:07:30.740
+And for the most part,
+on background threads,
+
+00:07:30.740 --> 00:07:35.310
+we consider this to be the time in
+between calls to process pending changes.
+
+00:07:37.720 --> 00:07:40.930
+So a couple of useful points for
+all the concurrency types is that
+
+00:07:41.040 --> 00:07:44.880
+managed objects are always owned by
+their managed object context and that
+
+00:07:44.890 --> 00:07:48.600
+object IDs are a great way to pass
+references around between contexts
+
+00:07:48.630 --> 00:07:52.160
+because they're going to be safe,
+immutable value objects.
+
+00:07:52.160 --> 00:07:55.420
+And something else that's a nice
+point is that retain and release
+
+00:07:55.420 --> 00:07:59.860
+are going to be thread safe on
+all Core Data objects everywhere,
+
+00:07:59.960 --> 00:08:02.880
+all the time, without exception.
+
+00:08:02.880 --> 00:08:06.280
+They should be thread
+safe on all Cocoa objects,
+
+00:08:06.420 --> 00:08:09.150
+but your mileage may vary on that one.
+
+00:08:09.260 --> 00:08:12.260
+But that means you can actually
+retain a managed object
+
+00:08:12.260 --> 00:08:15.390
+independently of its requirement
+on the managed object context.
+
+00:08:15.470 --> 00:08:16.990
+You just can't necessarily
+use it directly.
+
+00:08:19.710 --> 00:08:24.590
+So some good times for you to pass around
+updates to other contexts or to update
+
+00:08:24.670 --> 00:08:29.770
+the views are going to be with these
+NS notifications that Core Data provides,
+
+00:08:30.070 --> 00:08:34.380
+with the objectsDidChange notification
+and the objectsDidSave notification.
+
+00:08:36.890 --> 00:08:42.090
+And you can refresh other managed-object
+contexts pretty easily after they
+
+00:08:42.160 --> 00:08:45.560
+save with the merge changes from
+context-did-save notification.
+
+00:08:45.690 --> 00:08:48.750
+And here, I'd just like to call out that
+you're responsible for the thread
+
+00:08:48.770 --> 00:08:52.500
+safety of the managed-object
+context receiving this message,
+
+00:08:52.670 --> 00:08:55.300
+but you don't have to worry
+about the notification data
+
+00:08:55.300 --> 00:08:56.460
+that's being generated here.
+
+00:08:56.460 --> 00:09:00.260
+Core data will manage the thread safety
+of the contents of that notification.
+
+00:09:00.430 --> 00:09:04.870
+So you just have to maintain the
+rules that we've outlined in the past
+
+00:09:05.200 --> 00:09:07.900
+on the receiver of the merge method.
+
+00:09:09.600 --> 00:09:12.740
+And when you're inside some of
+these notifications as an observer,
+
+00:09:12.740 --> 00:09:17.130
+you can find some useful methods of
+taking a look at the state of what's
+
+00:09:17.130 --> 00:09:19.340
+changed in the managed objects.
+
+00:09:19.340 --> 00:09:23.490
+Something that we added last release
+was change values for current event,
+
+00:09:23.580 --> 00:09:26.680
+which will give you the values
+that changed since the previous
+
+00:09:26.730 --> 00:09:28.540
+call to process pending changes.
+
+00:09:28.650 --> 00:09:31.490
+And then some older methods,
+change values and
+
+00:09:31.550 --> 00:09:34.760
+committed values for keys,
+will go back to the last
+
+00:09:34.760 --> 00:09:36.690
+time the object was saved.
+
+00:09:39.470 --> 00:09:43.250
+So now I'm going to go into a little
+more depth about these perform
+
+00:09:43.250 --> 00:09:47.650
+block and perform block and wait
+methods that I mentioned earlier.
+
+00:09:48.130 --> 00:09:52.360
+And our challenge here is to find a
+way to pass work to other threads,
+
+00:09:52.360 --> 00:09:56.240
+these managed object contexts running
+on their own queues or the main queue,
+
+00:09:56.370 --> 00:10:01.330
+and to sort of demarcate the
+actual group of changes you
+
+00:10:01.330 --> 00:10:05.670
+want to be coalesced together,
+whether it's for an undo grouping or
+
+00:10:05.670 --> 00:10:11.150
+validation or potentially to save,
+as well as a convenient way to integrate
+
+00:10:11.150 --> 00:10:14.140
+with all the other APIs on the platform.
+
+00:10:14.410 --> 00:10:17.110
+And that's part of the
+reason why we chose blocks.
+
+00:10:17.410 --> 00:10:21.520
+So perform block is an asynchronous
+request to enqueue this.
+
+00:10:21.520 --> 00:10:24.020
+We consider its own
+self-encapsulated user event,
+
+00:10:24.020 --> 00:10:26.180
+and it also includes
+an auto-release pool.
+
+00:10:28.120 --> 00:10:30.080
+I really want to call out
+that in all of these methods,
+
+00:10:30.100 --> 00:10:33.640
+it is very illegal to throw an
+exception outside of the block.
+
+00:10:33.640 --> 00:10:37.690
+So if you do have exceptions,
+please catch them and resolve
+
+00:10:37.690 --> 00:10:37.690
+them inside the block.
+
+00:10:39.110 --> 00:10:43.540
+And there's no support for re-entrancy
+here in this perform block method.
+
+00:10:43.540 --> 00:10:45.950
+And by that,
+what I mean is when you call perform
+
+00:10:45.950 --> 00:10:49.990
+block on a managed object context,
+and within that perform block call,
+
+00:10:50.170 --> 00:10:52.890
+you call perform block again,
+you're basically just sort of
+
+00:10:52.930 --> 00:10:56.220
+getting the same effect as if you
+had iteratively called perform block.
+
+00:10:56.220 --> 00:10:59.580
+So this is an asynchronous call,
+and all it's doing is queuing
+
+00:10:59.580 --> 00:11:02.160
+up attacks to be happened later.
+
+00:11:03.990 --> 00:11:07.140
+So in contrast,
+we also have perform block and wait.
+
+00:11:07.140 --> 00:11:08.690
+This is synchronous.
+
+00:11:08.800 --> 00:11:09.660
+It's very lightweight.
+
+00:11:09.660 --> 00:11:11.550
+We don't consider it to
+be any kind of event,
+
+00:11:11.670 --> 00:11:14.240
+so there won't be any change
+notifications or undo groupings
+
+00:11:14.240 --> 00:11:15.790
+coalesced at this point in time.
+
+00:11:16.010 --> 00:11:17.990
+It doesn't even include a release pool.
+
+00:11:18.110 --> 00:11:21.560
+But what it does do is it
+will support some re-entrancy.
+
+00:11:22.320 --> 00:11:26.010
+So if you call perform block and wait
+from within another perform block,
+
+00:11:26.010 --> 00:11:28.090
+you will basically get them nested.
+
+00:11:28.100 --> 00:11:32.000
+They'll be executed immediately
+inline as opposed to enqueued later.
+
+00:11:32.110 --> 00:11:35.970
+So this is very convenient as long as
+you're just working with one managed
+
+00:11:36.080 --> 00:11:38.000
+object context for these blocks.
+
+00:11:40.220 --> 00:11:43.540
+So these APIs are very
+fast and lightweight.
+
+00:11:43.540 --> 00:11:46.460
+The perform block and weight
+API is on the same order
+
+00:11:46.460 --> 00:11:49.130
+magnitude as value for key,
+for instance.
+
+00:11:49.270 --> 00:11:52.000
+And the changes there from
+Core Data's perspective are
+
+00:11:52.000 --> 00:11:53.720
+going to be scoped by the block.
+
+00:11:53.890 --> 00:12:01.150
+So however large or small you make
+the block is going to be sort of
+
+00:12:01.150 --> 00:12:01.150
+one self-encapsulated change set.
+
+00:12:02.900 --> 00:13:19.000
+[Transcript missing]
+
+00:13:20.270 --> 00:13:25.890
+So a simple example for how you
+might use some of these APIs.
+
+00:13:26.180 --> 00:13:29.350
+Here we have a context and it's
+synchronously calling perform
+
+00:13:29.440 --> 00:13:33.210
+block and wait to execute a fetch
+request that's been captured by this
+
+00:13:33.210 --> 00:13:35.300
+block from some code further up.
+
+00:13:35.430 --> 00:13:38.970
+And if we don't have an error,
+then we just ask the array of
+
+00:13:38.980 --> 00:13:44.790
+managed objects to give us back its
+object IDs and we return those out
+
+00:13:44.830 --> 00:13:47.690
+of the block with a block variable.
+
+00:13:49.240 --> 00:13:52.260
+So as I mentioned,
+the queue is often going to be very
+
+00:13:52.260 --> 00:13:55.940
+private to the managed object context,
+and we don't want you
+
+00:13:55.980 --> 00:13:57.800
+changing anything about it.
+
+00:13:58.130 --> 00:14:00.600
+So if you need to,
+and you're using your own queues,
+
+00:14:00.690 --> 00:14:04.560
+as I would expect, you can just simply,
+at the end of the work block that
+
+00:14:04.560 --> 00:14:09.260
+you passed to managed object context,
+enqueue another block back onto your
+
+00:14:09.300 --> 00:14:15.330
+own queue as the callback to let it know
+that it's done and process any results.
+
+00:14:18.680 --> 00:14:22.230
+There are a number of other ways you
+can coordinate with either your own
+
+00:14:22.230 --> 00:14:24.360
+queues or other queues on the system.
+
+00:14:24.360 --> 00:14:27.820
+Dispatch semaphores, for example,
+are one way of doing that.
+
+00:14:27.820 --> 00:14:30.460
+You can create a semaphore
+and then at the end of the
+
+00:14:30.460 --> 00:14:32.200
+block signal the semaphore.
+
+00:14:32.200 --> 00:14:36.800
+And then in this particular code snippet,
+the context is asynchronously performing
+
+00:14:36.880 --> 00:14:41.110
+this block and the code that is calling
+perform here is actually waiting
+
+00:14:41.410 --> 00:14:44.510
+until that is done on the semaphore.
+
+00:14:47.740 --> 00:14:50.890
+And then something else that I'd
+sort of like to give a little
+
+00:14:50.940 --> 00:14:52.800
+shout out are dispatch groups.
+
+00:14:52.800 --> 00:14:55.060
+If you haven't used them,
+they have some very
+
+00:14:55.300 --> 00:14:56.500
+interesting behaviors.
+
+00:14:56.500 --> 00:15:00.900
+And you can use them to organize
+some pretty complex dependencies
+
+00:15:00.900 --> 00:15:04.660
+between a variety of queues
+and blocks between them.
+
+00:15:04.660 --> 00:15:07.990
+So when you use dispatch group enter,
+it's a little bit like
+
+00:15:08.000 --> 00:15:11.620
+incrementing a retain count on
+when the queue will be done.
+
+00:15:11.670 --> 00:15:14.640
+And then the worker blocks can
+call leave to decrement it.
+
+00:15:14.640 --> 00:15:17.790
+And then when it ends up
+getting back down to zero,
+
+00:15:17.790 --> 00:15:22.450
+conceptually, dispatch group wait will
+return or dispatch group notify
+
+00:15:22.450 --> 00:15:26.480
+will enqueue a block that you
+passed it onto your own queue.
+
+00:15:26.590 --> 00:15:30.160
+So what this lets you do is
+basically you don't actually
+
+00:15:30.160 --> 00:15:34.680
+have to know in advance how many
+waiters you want to float around.
+
+00:15:34.750 --> 00:15:39.280
+You can just keep calling dispatch group
+enter as you create more work or as you
+
+00:15:39.280 --> 00:15:44.400
+decide to build in new dependencies and
+then have them call dispatch group leave.
+
+00:15:45.160 --> 00:15:48.350
+So this is a very simple example.
+
+00:15:48.560 --> 00:15:52.090
+It's very similar to
+the semaphore example.
+
+00:15:52.150 --> 00:15:55.430
+This becomes more interesting when
+you have more queues involved.
+
+00:15:57.690 --> 00:16:00.660
+So now I'd like to move on
+from concurrency to talk about
+
+00:16:00.660 --> 00:16:02.910
+nested managed object contexts.
+
+00:16:03.200 --> 00:16:05.590
+And in particular,
+the reasons why you'd be interested
+
+00:16:05.590 --> 00:16:08.860
+in nested managed object contexts are
+going to be passing unsaved changes
+
+00:16:08.860 --> 00:16:12.770
+around between contexts and implementing
+something like an asynchronous save.
+
+00:16:12.900 --> 00:16:15.970
+So in the past,
+working with managed object contexts,
+
+00:16:15.970 --> 00:16:20.680
+you can push and pull changes that have
+been saved between contexts and use,
+
+00:16:20.730 --> 00:16:23.010
+like, the merge notification to do that.
+
+00:16:23.250 --> 00:16:27.410
+But passing unsaved changes between
+contexts or having them really work with
+
+00:16:27.420 --> 00:16:29.750
+unsaved changes can be very difficult.
+
+00:16:29.880 --> 00:16:33.260
+And similarly,
+it's difficult to sort of break up
+
+00:16:33.260 --> 00:16:36.180
+the save operation to be asynchronous.
+
+00:16:37.500 --> 00:16:40.860
+So here, for a nested context,
+the parent contexts are going to sort
+
+00:16:40.860 --> 00:16:44.960
+of act like the persistence store from
+the perspective of the child context.
+
+00:16:45.030 --> 00:16:49.120
+And the child context is going to
+see the state of its objects as
+
+00:16:49.120 --> 00:16:51.450
+they currently exist in the parent.
+
+00:16:51.650 --> 00:16:54.420
+Children will then inherit
+unsaved changes from their parent
+
+00:16:54.420 --> 00:16:57.560
+whenever they fault things in
+or they execute a fetch request.
+
+00:16:57.620 --> 00:16:59.550
+And they'll marshal
+their saves in memory.
+
+00:16:59.560 --> 00:17:03.560
+So instead of saving back to disk,
+the children will just turn around
+
+00:17:03.560 --> 00:17:06.090
+and save to their parent context.
+
+00:17:09.260 --> 00:17:12.200
+So it looks a little
+bit something like this.
+
+00:17:12.200 --> 00:17:13.960
+And the child doesn't really
+know that it's not actually
+
+00:17:13.960 --> 00:17:15.180
+talking to the persistent store.
+
+00:17:15.260 --> 00:17:17.270
+It's just talking to a parent context.
+
+00:17:17.480 --> 00:17:20.220
+And the behaviors are going
+to be very analogous in terms
+
+00:17:20.220 --> 00:17:25.260
+of the ways both saving works,
+fetching works, and faulting.
+
+00:17:30.760 --> 00:17:34.710
+So in this way,
+peers that all inherit from the
+
+00:17:34.710 --> 00:17:40.140
+same parent context can push
+and pull changes between them.
+
+00:17:40.140 --> 00:17:43.760
+And you can implement an asynchronous
+save by setting up the parent context
+
+00:17:43.760 --> 00:17:48.700
+to have a private queue and have the
+child context typically on the main
+
+00:17:48.700 --> 00:17:54.400
+thread save into the parent context and
+then tell the parent context to save.
+
+00:17:54.400 --> 00:17:57.490
+And one of the ways you might
+leverage that is something
+
+00:17:57.490 --> 00:17:59.100
+like a detail inspector.
+
+00:17:59.100 --> 00:18:05.060
+The detail inspector will inherit the
+view state as it is in your main context.
+
+00:18:06.820 --> 00:18:10.090
+So for sharing on saved changes,
+when you save the child context,
+
+00:18:10.150 --> 00:18:14.480
+they'll just push up one level,
+and then you can pull those changes
+
+00:18:14.480 --> 00:18:18.800
+back down using a fetch or the
+merge notification between child
+
+00:18:18.850 --> 00:18:21.690
+contexts or calling refresh object.
+
+00:18:21.800 --> 00:18:27.620
+It's the same way you would with
+not nested managed object contexts.
+
+00:18:30.860 --> 00:18:35.230
+For an asynchronous save,
+when you save the child, like I said,
+
+00:18:35.230 --> 00:18:41.100
+the parent context gets those changes and
+holds on to them until it's told to save.
+
+00:18:41.100 --> 00:18:44.810
+And the changes won't be written
+to disk until the root most
+
+00:18:44.810 --> 00:18:46.790
+parent context calls save.
+
+00:18:48.680 --> 00:18:52.510
+So that would look something like
+this here where a parent context has
+
+00:18:52.510 --> 00:18:55.470
+a private queue concurrency type,
+so it will execute
+
+00:18:55.530 --> 00:18:59.340
+requests asynchronously,
+and the child context gets set up.
+
+00:18:59.360 --> 00:19:02.640
+It just creates a reference
+to its parent context.
+
+00:19:02.640 --> 00:19:07.210
+So when the child saves,
+it pushes its changes up to the parent,
+
+00:19:07.210 --> 00:19:11.640
+and then here it enqueues an
+asynchronous block to tell the parent
+
+00:19:11.640 --> 00:19:13.870
+that you want the parent to save.
+
+00:19:17.920 --> 00:19:20.590
+For inheriting changes
+in the Detail Inspector,
+
+00:19:20.590 --> 00:19:24.040
+you just create a child context
+for the Detail Inspector.
+
+00:19:24.040 --> 00:19:26.380
+And if you decide to commit the
+changes within the Inspector,
+
+00:19:26.520 --> 00:19:30.450
+they'll get pushed back into the parent,
+which is probably going to be
+
+00:19:30.450 --> 00:19:34.280
+something like the main queue
+context for your view state.
+
+00:19:34.360 --> 00:19:38.060
+And any fetching you do in the
+child context for the Inspector is
+
+00:19:38.140 --> 00:19:43.030
+just going to incorporate the
+current unsaved state in the parent.
+
+00:19:43.120 --> 00:19:46.280
+And you don't even necessarily
+have to do anything special.
+
+00:19:46.280 --> 00:19:47.840
+If you decide to cancel
+out of the Inspector,
+
+00:19:47.840 --> 00:19:50.690
+you can just throw
+away the child context.
+
+00:19:52.390 --> 00:19:54.890
+So some important things to
+remember is that saving with
+
+00:19:54.890 --> 00:19:58.640
+nested context is only going to
+push the changes up a single level,
+
+00:19:58.780 --> 00:20:01.940
+but fetching is going to
+go to the database and pull
+
+00:20:01.940 --> 00:20:03.850
+data through all the levels.
+
+00:20:04.040 --> 00:20:08.290
+Keep in mind, though, that in general,
+core data isn't going to change
+
+00:20:08.490 --> 00:20:12.340
+any objects that you already
+have out from underneath you,
+
+00:20:12.340 --> 00:20:14.610
+so if you fetch an object
+that you already have,
+
+00:20:14.610 --> 00:20:16.360
+you will see its previous state.
+
+00:20:16.360 --> 00:20:19.110
+So say it's been dirtied,
+we're not going to
+
+00:20:19.270 --> 00:20:21.040
+blow away your changes.
+
+00:20:21.040 --> 00:20:25.560
+We're simply going to keep in the fetch
+results the reference to that object,
+
+00:20:25.560 --> 00:20:29.320
+and you can call refresh object if
+you want to get new values for it.
+
+00:20:29.320 --> 00:20:34.020
+Object with ID on a child context
+will pull from the fewest numbers of
+
+00:20:34.240 --> 00:20:37.560
+levels necessary to get that data,
+so it might go to the database
+
+00:20:37.590 --> 00:20:40.360
+or it might only go up a
+single level to the parent.
+
+00:20:40.360 --> 00:20:47.270
+And all parent contexts must adopt one
+of the two queue types for concurrency,
+
+00:20:47.270 --> 00:20:51.250
+so they can either be a main
+queue concurrency type or a
+
+00:20:51.260 --> 00:20:54.090
+private queue concurrency type,
+but we don't support them with the
+
+00:20:54.090 --> 00:20:55.890
+legacy confinement concurrency type.
+
+00:20:59.580 --> 00:21:02.940
+And child contexts depend
+pretty heavily on their parents.
+
+00:21:02.940 --> 00:21:07.520
+So the parent context really
+should not do blocking operations
+
+00:21:07.530 --> 00:21:09.500
+down on their children.
+
+00:21:09.500 --> 00:21:11.680
+And by this,
+the children are going to call
+
+00:21:11.680 --> 00:21:14.730
+perform block and wait to do
+a lot of operations for you.
+
+00:21:14.740 --> 00:21:17.950
+So like, for instance,
+execute fetch request on a child
+
+00:21:17.950 --> 00:21:21.830
+context internally is going to turn
+around and ask its parent context
+
+00:21:21.920 --> 00:21:25.950
+to do part of the fetch and then
+pull down those changes into itself.
+
+00:21:25.980 --> 00:21:30.080
+So what this means is there's sort
+of naturally a dependency there.
+
+00:21:30.080 --> 00:21:32.930
+And if the parent context turn
+around and call perform block
+
+00:21:32.930 --> 00:21:36.620
+and wait on their children,
+you'll basically end up deadlocking,
+
+00:21:36.640 --> 00:21:40.190
+right, because you'll have all these
+different queues trying to
+
+00:21:40.210 --> 00:21:42.480
+synchronously wait on each other.
+
+00:21:42.480 --> 00:21:45.230
+So in general,
+you should imagine that requests
+
+00:21:45.230 --> 00:21:49.290
+are going to flow up this hierarchy
+of managed object contexts finally
+
+00:21:49.290 --> 00:21:50.980
+to the database at the root.
+
+00:21:50.980 --> 00:21:55.960
+And results are going to flow back down.
+
+00:21:55.960 --> 00:21:57.610
+And now I'm going to bring
+Melissa Turner on stage to
+
+00:21:57.620 --> 00:22:00.490
+talk to you about performance.
+
+00:22:05.200 --> 00:22:11.300
+[Transcript missing]
+
+00:22:13.210 --> 00:22:14.960
+How do you know when you've
+got a performance problem?
+
+00:22:14.960 --> 00:22:18.000
+How do you figure out what to do when
+you've got a performance problem?
+
+00:22:18.000 --> 00:22:19.980
+Lots of questions.
+
+00:22:21.250 --> 00:22:23.950
+The first stage when you're
+starting to sit down in front
+
+00:22:23.950 --> 00:22:26.520
+of your application and say,
+"Okay, is this thing ready to
+
+00:22:26.520 --> 00:22:28.830
+release to my customers?
+
+00:22:28.840 --> 00:22:29.930
+Is it performant enough?
+
+00:22:30.030 --> 00:22:31.100
+Are they going to be annoyed with me?
+
+00:22:31.100 --> 00:22:33.340
+Are they going to file bad
+reports on the Apple Store?
+
+00:22:33.340 --> 00:22:35.780
+Are they going to give me five
+stars?" Start asking yourself
+
+00:22:35.890 --> 00:22:37.100
+questions about the application.
+
+00:22:37.100 --> 00:22:40.100
+What environment does it run in,
+and have I designed it to be
+
+00:22:40.100 --> 00:22:42.070
+compatible with that environment?
+
+00:22:42.130 --> 00:22:44.520
+What should it be doing,
+and are the shoulds
+
+00:22:44.570 --> 00:22:46.090
+and the dos compatible?
+
+00:22:46.100 --> 00:22:48.700
+What kind of things do you need
+to know about the environment?
+
+00:22:48.850 --> 00:22:50.670
+Well, actually very little nowadays.
+
+00:22:50.720 --> 00:22:53.040
+As long as you're using the
+Apple Supply frameworks,
+
+00:22:53.140 --> 00:22:58.100
+things like, you know, lib dispatch,
+then we will take care of making sure
+
+00:22:58.100 --> 00:23:04.100
+that you're doing things properly from,
+say, the confinement standpoint.
+
+00:23:04.100 --> 00:23:08.100
+But you will need to do things like
+design for your network environment.
+
+00:23:08.100 --> 00:23:12.660
+If you have an application that goes out,
+use the NS incremental store
+
+00:23:12.660 --> 00:23:15.810
+APIs to build a store that
+talks to a web service.
+
+00:23:15.900 --> 00:23:18.750
+You probably want to make sure
+that whenever your user triggers
+
+00:23:18.750 --> 00:23:21.610
+an action that will require
+going out to that web service,
+
+00:23:21.660 --> 00:23:24.040
+it doesn't block the main
+UI of the application.
+
+00:23:24.040 --> 00:23:26.190
+You'll need to think
+about stuff like that.
+
+00:23:26.240 --> 00:23:27.760
+That is a performance issue.
+
+00:23:28.960 --> 00:23:31.980
+You'll need to think about what
+is sufficient performance versus
+
+00:23:31.980 --> 00:23:33.560
+what is optimal performance.
+
+00:23:33.560 --> 00:23:36.940
+Sufficient is your application
+gets up and gets the job done.
+
+00:23:36.940 --> 00:23:41.710
+Optimal is it really wows your user
+and allows you to spend more time
+
+00:23:41.980 --> 00:23:45.990
+doing interesting things in your
+application because you're not wasting
+
+00:23:45.990 --> 00:23:47.960
+cycles doing things inefficiently.
+
+00:23:47.960 --> 00:23:50.800
+And one crucial, crucial,
+crucial point to remember is if
+
+00:23:50.820 --> 00:23:54.460
+you're building an application
+that supports multiple platforms,
+
+00:23:54.460 --> 00:23:56.560
+test on the minimal configuration.
+
+00:23:56.560 --> 00:23:58.720
+This cannot be emphasized enough
+because if it works really well
+
+00:23:58.720 --> 00:24:01.130
+on your minimal configuration,
+it's going to blow people
+
+00:24:01.190 --> 00:24:02.860
+away on all other platforms.
+
+00:24:05.310 --> 00:24:07.430
+What should your application be doing?
+
+00:24:07.550 --> 00:24:08.150
+You should know this.
+
+00:24:08.280 --> 00:24:09.440
+You've written it.
+
+00:24:09.440 --> 00:24:12.860
+You know things like, well,
+it opens documents.
+
+00:24:12.940 --> 00:24:15.200
+If you open a document,
+there's very little way to get around it.
+
+00:24:15.200 --> 00:24:21.260
+You need to do file system access
+and load at least some of the data
+
+00:24:21.260 --> 00:24:21.260
+so you can show it to the user.
+
+00:24:21.260 --> 00:24:21.260
+That's what they're expecting.
+
+00:24:22.650 --> 00:24:26.680
+The user instigates network access,
+it's the same thing.
+
+00:24:26.680 --> 00:24:30.050
+You should know when the user
+is accessing the network and how
+
+00:24:30.050 --> 00:24:33.620
+they're accessing the network so you
+don't do things like accidentally,
+
+00:24:33.620 --> 00:24:36.870
+you know, go out and fetch the
+same piece of data three,
+
+00:24:36.870 --> 00:24:38.840
+four or five times.
+
+00:24:38.840 --> 00:24:42.060
+And you need to know what
+kind of random processing your
+
+00:24:42.060 --> 00:24:43.850
+user is likely to kick off.
+
+00:24:43.850 --> 00:24:48.030
+Calculate me some transform on an image,
+scale it, apply a filter,
+
+00:24:48.030 --> 00:24:50.020
+do something interesting like that.
+
+00:24:50.160 --> 00:24:53.370
+These are the things you know your
+application can do and you should
+
+00:24:53.380 --> 00:24:55.240
+expect to see those in your performance.
+
+00:24:56.420 --> 00:24:59.470
+And then there's what
+the application does do,
+
+00:24:59.470 --> 00:25:01.980
+stuff that it does automatically.
+
+00:25:01.980 --> 00:25:05.430
+Do you have a dataset that you need to
+go out and check periodically to see if
+
+00:25:05.430 --> 00:25:07.230
+there's new data on your Web service.
+
+00:25:07.230 --> 00:25:08.970
+That kind of thing happens automatically.
+
+00:25:09.070 --> 00:25:11.440
+You should build that
+into your calculations.
+
+00:25:11.440 --> 00:25:15.110
+Try not to do it when the users
+kicked off that image transform.
+
+00:25:15.110 --> 00:25:17.080
+Does it post notifications?
+
+00:25:17.080 --> 00:25:21.100
+Try and do that in some unobtrusive way,
+using our APIs that will make
+
+00:25:21.100 --> 00:25:22.640
+it all happen nice and smoothly.
+
+00:25:22.640 --> 00:25:24.560
+And you know,
+if for some reason you want to
+
+00:25:24.650 --> 00:25:29.280
+calculate 2,438th digit of pi,
+try and do it at 3:00 in the morning
+
+00:25:29.280 --> 00:25:33.220
+on a Friday when they're not likely
+to be using their application.
+
+00:25:34.490 --> 00:25:36.950
+How do you figure out what your
+application does once you know
+
+00:25:37.280 --> 00:25:38.300
+what you think it should be doing?
+
+00:25:38.300 --> 00:25:39.620
+Well, measure it.
+
+00:25:39.870 --> 00:25:41.390
+Measure, measure, measure, measure.
+
+00:25:41.460 --> 00:25:42.890
+This is where everything starts.
+
+00:25:43.070 --> 00:25:46.200
+Figure out where your application
+is actually spending time so you
+
+00:25:46.400 --> 00:25:49.380
+don't end up spending two weeks
+optimizing what turns out to be
+
+00:25:49.380 --> 00:25:51.500
+1% of your application's workload.
+
+00:25:51.500 --> 00:25:54.620
+It's much better to spend
+two weeks optimizing 50% of
+
+00:25:54.630 --> 00:25:56.520
+your application's workload.
+
+00:25:57.160 --> 00:25:59.410
+Start with the time
+profiler in instruments.
+
+00:25:59.490 --> 00:26:02.490
+This will tell you exactly where
+your application is spending all
+
+00:26:02.620 --> 00:26:04.070
+of its time method by method.
+
+00:26:04.080 --> 00:26:07.400
+There's also the
+Core Data template in instruments.
+
+00:26:07.400 --> 00:26:10.180
+This will tell you when Core Data is
+touching the file system.
+
+00:26:10.180 --> 00:26:14.220
+We have a template that contains
+instruments for fetching,
+
+00:26:14.310 --> 00:26:17.500
+for saving,
+for firing relationship faults,
+
+00:26:17.610 --> 00:26:20.550
+and for when we have to go to the
+database because the data that we're
+
+00:26:20.550 --> 00:26:22.180
+looking for is not in the cache.
+
+00:26:24.220 --> 00:26:28.060
+And there's also com.appled.cordata
+SQL debug default,
+
+00:26:28.210 --> 00:26:31.100
+and if you pass this to your
+application when you launch it or
+
+00:26:31.100 --> 00:26:34.530
+have it in your defaults right,
+it will cause Cordata to print
+
+00:26:34.590 --> 00:26:37.700
+out all of the SQL that's
+being sent to the database.
+
+00:26:37.700 --> 00:26:40.950
+You can have a look at that,
+see what you're sending to the database,
+
+00:26:40.980 --> 00:26:44.590
+look at the SQL that's being generated,
+figure out if this is really the SQL that
+
+00:26:44.590 --> 00:26:47.350
+should be generated in that case,
+if you're doing too much work,
+
+00:26:47.470 --> 00:26:51.090
+doing too little work,
+doing too many trips to the database,
+
+00:26:51.340 --> 00:26:55.580
+this kind of thing,
+this default will tell you that.
+
+00:26:58.210 --> 00:27:00.780
+And many of you have
+probably heard this before,
+
+00:27:00.780 --> 00:27:02.680
+because it's a very common
+phrase in the real world.
+
+00:27:02.680 --> 00:27:04.740
+If you're building
+anything with your hands,
+
+00:27:04.890 --> 00:27:06.760
+measure twice, cut once.
+
+00:27:06.860 --> 00:27:09.560
+You cannot uncut a piece of lumber.
+
+00:27:09.710 --> 00:27:12.170
+And that's less important in
+the virtual world because,
+
+00:27:12.170 --> 00:27:13.390
+well, we have SCM systems.
+
+00:27:13.660 --> 00:27:16.580
+It's always possible to
+revert to yesterday's build.
+
+00:27:16.680 --> 00:27:19.790
+But the thing is,
+you can't get back the time you have
+
+00:27:19.790 --> 00:27:22.180
+invested going down that false path.
+
+00:27:22.320 --> 00:27:25.370
+So, you know,
+make sure you're actually fixing the
+
+00:27:25.370 --> 00:27:27.790
+right thing before you go off and fix it.
+
+00:27:28.430 --> 00:27:31.710
+So for the rest of this presentation,
+I'm going to do a series of demos,
+
+00:27:31.730 --> 00:27:34.400
+or I will be having my lovely
+assistant do a series of demos
+
+00:27:34.850 --> 00:27:36.560
+that are based around a table view.
+
+00:27:36.560 --> 00:27:39.840
+This is primarily because table
+views are easy to visualize.
+
+00:27:39.880 --> 00:27:41.640
+If I say there's too
+much data being loaded,
+
+00:27:41.640 --> 00:27:43.440
+you can sort of get a
+grasp of what that says.
+
+00:27:43.440 --> 00:27:45.600
+If I say there's too little
+data or the wrong data,
+
+00:27:45.600 --> 00:27:48.370
+it's badly formed,
+you can get an idea of what that means.
+
+00:27:48.540 --> 00:27:51.890
+But the lessons are generally applicable
+to anything that's going to be loading
+
+00:27:51.890 --> 00:27:54.200
+and processing data from a store.
+
+00:27:54.200 --> 00:27:58.200
+And just as a disclaimer,
+the demos were specifically chosen
+
+00:27:58.200 --> 00:28:01.240
+so that they have performance
+issues that are visible on stage.
+
+00:28:01.240 --> 00:28:03.710
+Any performance issues you
+have in your apps will probably
+
+00:28:03.710 --> 00:28:08.390
+be a little bit more subtle,
+but they'll have the same basic patterns.
+
+00:28:10.260 --> 00:28:13.100
+In the beginning, there is a table view.
+
+00:28:13.100 --> 00:28:16.100
+And you know, your customers are not
+going to pay you for this.
+
+00:28:16.300 --> 00:28:19.500
+Because, you know,
+that's not terribly interesting.
+
+00:28:20.160 --> 00:28:21.100
+You need something.
+
+00:28:21.100 --> 00:28:23.300
+And in my case, I went on vacation.
+
+00:28:23.370 --> 00:28:25.960
+Those of you who are familiar
+with this picture will probably
+
+00:28:25.960 --> 00:28:31.290
+realize I was in Rome and that
+this is a picture of the Colosseum,
+
+00:28:31.290 --> 00:28:31.290
+and it's an architecture picture.
+
+00:28:31.540 --> 00:28:35.740
+These are all pieces of information
+that I want to build into an application
+
+00:28:35.740 --> 00:28:38.880
+that displays my holiday photos.
+
+00:28:39.780 --> 00:28:44.200
+So my first pass is going to be to take
+all of those pieces of information that
+
+00:28:44.200 --> 00:28:49.240
+I've got and combine those into an object
+that I can use to back my table view.
+
+00:28:49.390 --> 00:28:50.940
+Call it a photo object.
+
+00:28:50.940 --> 00:28:51.970
+It's got a label.
+
+00:28:51.970 --> 00:28:53.400
+This was taken in Rome.
+
+00:28:53.450 --> 00:29:00.670
+It's got a blob that is the photo bytes,
+some tags, architecture and coliseum,
+
+00:29:00.670 --> 00:29:04.350
+and a timestamp when the photo was taken.
+
+00:29:04.380 --> 00:29:08.090
+And at this point,
+I'm going to bring Shane up on stage,
+
+00:29:08.090 --> 00:29:11.380
+and he's going to see how well
+that worked in a first pass.
+
+00:29:11.380 --> 00:29:14.230
+Shane Hossel, Core Data Engineer Hello,
+my name is Shane Hossel,
+
+00:29:14.240 --> 00:29:17.480
+and I am a QA engineer
+with the Core Data team.
+
+00:29:17.670 --> 00:29:18.600
+All right.
+
+00:29:18.610 --> 00:29:21.500
+So here we have the first
+demo that Melissa mentioned.
+
+00:29:21.500 --> 00:29:23.800
+This is version one of
+the photos application.
+
+00:29:24.050 --> 00:29:26.760
+And as you can see,
+this is simply mapped over
+
+00:29:26.840 --> 00:29:28.440
+a simple photo entity.
+
+00:29:28.440 --> 00:29:30.630
+It's a single entity application.
+
+00:29:30.780 --> 00:29:37.690
+And when we click on the record,
+we get to see the photo.
+
+00:29:37.690 --> 00:29:37.690
+So this works as promised.
+
+00:29:38.890 --> 00:29:40.300
+Now what we're going to do is
+we're going to hook this up to
+
+00:29:40.310 --> 00:29:43.400
+Instruments and get some measurements.
+
+00:29:43.410 --> 00:29:46.650
+Now for those of you who
+haven't used Instruments before,
+
+00:29:46.650 --> 00:29:51.530
+I'd like to show you what you
+see when you first launch it.
+
+00:29:52.610 --> 00:29:58.010
+What you'll notice here is you get a
+-- what you'll notice here is you get a
+
+00:29:58.010 --> 00:30:00.490
+sheet with all your instrument templates.
+
+00:30:00.770 --> 00:30:04.160
+In our case,
+we're going to use the iOS simulator.
+
+00:30:04.230 --> 00:30:06.580
+Off to the left,
+you have some groups which allow
+
+00:30:06.710 --> 00:30:12.640
+you to target a specific platform,
+either OS X, iOS, or the simulator.
+
+00:30:12.680 --> 00:30:15.190
+Now, you want to keep in mind when
+you're using the simulator
+
+00:30:15.190 --> 00:30:18.020
+what Melissa mentioned earlier
+about your environment.
+
+00:30:18.150 --> 00:30:22.180
+This is actually a simulated application,
+so while it looks like iOS,
+
+00:30:22.280 --> 00:30:23.950
+it's running on our development hardware.
+
+00:30:24.070 --> 00:30:28.180
+So we don't have the same constraints
+that we would have if we were
+
+00:30:28.240 --> 00:30:32.430
+using a device such as memory,
+processor, and disk space.
+
+00:30:34.470 --> 00:30:37.800
+You select the Core Data template,
+you'll get the instruments
+
+00:30:37.800 --> 00:30:42.090
+Melissa mentioned earlier,
+Core Data fetches for our fetch activity,
+
+00:30:42.210 --> 00:30:45.930
+the Core Data cache misses,
+which gives us the file system
+
+00:30:46.060 --> 00:30:49.500
+access during Core Data faulting
+and the Core Data saves.
+
+00:30:49.620 --> 00:30:53.020
+And of course, we want to add the time
+profiler here as well.
+
+00:30:55.210 --> 00:30:57.500
+Now, normally what you do here is
+hook up your target application,
+
+00:30:57.500 --> 00:31:01.110
+but I already have that set up,
+so let me go right to that.
+
+00:31:02.610 --> 00:31:05.660
+So let's run this in Instruments
+and see if we can get any
+
+00:31:05.660 --> 00:31:08.510
+interesting measurements.
+
+00:31:11.370 --> 00:31:13.700
+And as you can see here on
+the left when we launch,
+
+00:31:13.700 --> 00:31:17.000
+you'll start to see live
+measurements occurring.
+
+00:31:17.000 --> 00:31:19.290
+It's taking a little bit here.
+
+00:31:22.890 --> 00:31:24.280
+All right,
+we had to wait for a few seconds,
+
+00:31:24.420 --> 00:31:26.640
+but we still have our photos as promised.
+
+00:31:26.690 --> 00:31:29.680
+And I'll do some scrolling real quick,
+because I always like to make sure
+
+00:31:29.680 --> 00:31:32.460
+everything scrolls nice and smooth.
+
+00:31:32.550 --> 00:31:33.640
+Good.
+
+00:31:33.750 --> 00:31:36.620
+So let's look at our Instruments
+measurements real quick
+
+00:31:36.680 --> 00:31:38.920
+and see what we have here.
+
+00:31:39.180 --> 00:31:43.850
+We notice that there is actually some
+delay when we launch this application.
+
+00:31:43.960 --> 00:31:48.720
+And that's evident in the time
+profiler as we can see the duration
+
+00:31:48.720 --> 00:31:51.770
+of activity that occurred on launch.
+
+00:31:52.060 --> 00:31:54.470
+Coincidentally,
+our Core Data fetches shows us that
+
+00:31:54.540 --> 00:31:58.200
+there's some duration going on and some
+fetch activity that's taking place.
+
+00:31:58.280 --> 00:32:02.440
+If we click on that,
+we can see that the fetch count is 184.
+
+00:32:02.440 --> 00:32:06.140
+We're actually loading all
+these objects in at launch.
+
+00:32:06.280 --> 00:32:07.130
+This isn't good.
+
+00:32:07.210 --> 00:32:09.580
+If we had thousands and
+thousands of photos,
+
+00:32:09.580 --> 00:32:13.200
+our users would have to
+wait for this to load.
+
+00:32:13.230 --> 00:32:16.310
+So I'm going to file this up as a bug
+and send it over to Melissa and see
+
+00:32:16.310 --> 00:32:18.150
+if she can do something to fix this.
+
+00:32:19.160 --> 00:32:22.880
+So when you want to optimize
+your application's performance,
+
+00:32:22.880 --> 00:32:27.200
+the first place you're probably
+going to end up is at NSFetchRequest.
+
+00:32:27.450 --> 00:32:30.910
+This is really ground zero for
+your optimization because this is
+
+00:32:31.270 --> 00:32:35.200
+where you tell your application
+what data it should be loading.
+
+00:32:35.210 --> 00:32:38.710
+There's all kinds of flags,
+little things you can say,
+
+00:32:38.920 --> 00:32:40.200
+specify the data.
+
+00:32:40.200 --> 00:32:42.200
+A few of the interesting
+ones are batching.
+
+00:32:42.200 --> 00:32:43.200
+What's batching?
+
+00:32:43.200 --> 00:32:48.180
+Well, you specify that you want to
+return batches of objects.
+
+00:32:48.200 --> 00:32:50.610
+This is primarily good for
+underlying something like a
+
+00:32:50.610 --> 00:32:52.200
+table view where you can scroll.
+
+00:32:52.200 --> 00:32:55.730
+And Core Data will return
+basically information about all
+
+00:32:55.730 --> 00:32:59.200
+of the objects that need to be
+displayed when the user wants them.
+
+00:32:59.200 --> 00:33:01.870
+But it won't actually
+fetch them in because,
+
+00:33:01.870 --> 00:33:04.010
+well, the user may never get there.
+
+00:33:04.270 --> 00:33:07.600
+So once the user scrolls
+along in their scroll view,
+
+00:33:07.600 --> 00:33:09.620
+Core Data will go out and fetch.
+
+00:33:10.540 --> 00:33:12.560
+The data the user is
+interested in seeing.
+
+00:33:12.750 --> 00:33:16.000
+This can be a lot more efficient
+than doing an upfront fetch because,
+
+00:33:16.000 --> 00:33:20.980
+well, you don't fetch 20,000 photos,
+especially if the user only
+
+00:33:21.060 --> 00:33:22.750
+wants to see the first page.
+
+00:33:23.610 --> 00:33:25.830
+If you're not using a table
+view but you're using a
+
+00:33:25.830 --> 00:33:28.650
+more page-based application,
+something like, I don't know,
+
+00:33:28.650 --> 00:33:31.240
+Google search results,
+you probably want to think about
+
+00:33:31.570 --> 00:33:33.300
+using fetch limits and offsets.
+
+00:33:33.300 --> 00:33:36.440
+This allows you to page data
+in and do batching yourself.
+
+00:33:36.580 --> 00:33:38.640
+It's a little bit more time
+efficient because you'll only
+
+00:33:38.800 --> 00:33:40.130
+load a specific number of objects.
+
+00:33:40.340 --> 00:33:42.500
+It's a little bit more complicated.
+
+00:33:42.570 --> 00:33:45.300
+This is the dance of performance.
+
+00:33:45.410 --> 00:33:48.040
+And you're always going to run
+across this in every application
+
+00:33:48.040 --> 00:33:50.500
+that you write that you try to
+do performance optimization.
+
+00:33:50.500 --> 00:33:52.460
+Every application is
+going to be different.
+
+00:33:52.540 --> 00:33:54.500
+Every application has
+a different data set.
+
+00:33:54.720 --> 00:33:56.500
+Every application has a different UI.
+
+00:33:56.500 --> 00:34:00.440
+And you're going to need to make
+different tradeoffs between memory use,
+
+00:34:00.440 --> 00:34:02.480
+CPU use, code complexity.
+
+00:34:02.480 --> 00:34:04.500
+There's no right answer here.
+
+00:34:04.500 --> 00:34:08.420
+But here's some of the things you can do.
+
+00:34:08.610 --> 00:34:10.460
+Some of your options.
+
+00:34:10.460 --> 00:34:13.590
+You can use predicates to filter
+down the number of objects that
+
+00:34:13.600 --> 00:34:15.100
+are ever going to be returned.
+
+00:34:15.180 --> 00:34:18.980
+Don't need to return a thousand photos
+if your user only wants to see the ones
+
+00:34:18.980 --> 00:34:21.420
+that were taken in Rome on February 2nd.
+
+00:34:22.110 --> 00:34:23.760
+We support aggregate operators.
+
+00:34:23.760 --> 00:34:27.050
+How many photos are there in the library?
+
+00:34:27.120 --> 00:34:28.600
+What's the earliest photo taken?
+
+00:34:28.640 --> 00:34:30.000
+What was the latest photo taken?
+
+00:34:30.000 --> 00:34:32.640
+Or, you know,
+jumping from photos to something else,
+
+00:34:32.640 --> 00:34:36.840
+what's the average salary of all
+employees working for a given manager?
+
+00:34:36.840 --> 00:34:40.460
+We also support the grouping,
+which is SQL's group by operator,
+
+00:34:40.460 --> 00:34:43.200
+if you're familiar with how that works.
+
+00:34:43.200 --> 00:34:47.440
+You can go find documentation of
+how to use that in NSFetchRequest.h.
+
+00:34:47.510 --> 00:34:48.880
+There's other things as well.
+
+00:34:49.030 --> 00:34:52.310
+You can specify return types,
+dictionary fetching if you want to,
+
+00:34:52.450 --> 00:34:55.680
+that allow you to very precisely
+target the information that's being
+
+00:34:55.680 --> 00:34:59.380
+brought into your application so
+that you really only need exactly the
+
+00:34:59.380 --> 00:35:02.830
+information that your user wants to see.
+
+00:35:06.670 --> 00:35:10.590
+But you know,
+fetch requests will only get you so far.
+
+00:35:10.760 --> 00:35:13.510
+From there, you really need to go,
+
+00:35:13.820 --> 00:35:16.330
+Look at your schema and
+figure out what it is.
+
+00:35:16.540 --> 00:35:19.300
+Your application concept
+is going to drive your UI.
+
+00:35:19.310 --> 00:35:21.630
+I want to build a photos application.
+
+00:35:21.690 --> 00:35:23.590
+Well, that tells me certain things.
+
+00:35:23.730 --> 00:35:25.700
+I've got photos at some level.
+
+00:35:25.700 --> 00:35:29.200
+I've got these large binary objects
+that I'm going to have to put on screen.
+
+00:35:29.200 --> 00:35:31.020
+I've got information about those photos.
+
+00:35:31.130 --> 00:35:34.170
+I want probably a list or
+some way of selecting them.
+
+00:35:34.290 --> 00:35:36.490
+In our case,
+we have a table view that allows users
+
+00:35:36.490 --> 00:35:39.600
+to scroll through a large collection
+of photos and figure out which one
+
+00:35:39.600 --> 00:35:41.300
+they're actually interested in.
+
+00:35:41.350 --> 00:35:45.110
+So the application concept drives the UI.
+
+00:35:45.320 --> 00:35:48.300
+The UI, in turn, drives the schema.
+
+00:35:48.340 --> 00:35:51.920
+There's no point in having the
+labels for my photo if I never
+
+00:35:52.330 --> 00:35:54.660
+actually display them to the user.
+
+00:35:54.660 --> 00:35:58.620
+There's no point in having tags if
+I never display them to the user.
+
+00:35:59.480 --> 00:36:01.150
+But there is no one true schema.
+
+00:36:01.190 --> 00:36:05.770
+I mean, you'll go out and research and
+read a little bit about database,
+
+00:36:05.840 --> 00:36:07.840
+building correct databases,
+and you'll read things
+
+00:36:08.270 --> 00:36:12.540
+like first normal form,
+second normal form, fifth normal form.
+
+00:36:12.610 --> 00:36:15.490
+And this tends to give the impression
+that there is like a perfect schema.
+
+00:36:15.580 --> 00:36:16.670
+And really there isn't.
+
+00:36:16.760 --> 00:36:18.950
+The perfect schema is the
+perfect schema for your app.
+
+00:36:19.130 --> 00:36:24.230
+Combine your entities and relationships
+in ways that make logical sense.
+
+00:36:24.320 --> 00:36:29.410
+Put -- relate entities that are on
+logical transitions as your storyboard
+
+00:36:29.410 --> 00:36:31.280
+flows through your application.
+
+00:36:31.440 --> 00:36:33.400
+And, you know,
+don't try and follow ten joins
+
+00:36:33.400 --> 00:36:34.950
+to get from page one to page two.
+
+00:36:35.130 --> 00:36:36.280
+Just make that one join.
+
+00:36:36.520 --> 00:36:37.540
+That makes more sense.
+
+00:36:37.600 --> 00:36:38.680
+That's faster.
+
+00:36:38.770 --> 00:36:40.800
+And faster is important.
+
+00:36:42.720 --> 00:36:43.440
+Normalization.
+
+00:36:43.440 --> 00:36:44.560
+I talked about normal forms.
+
+00:36:44.610 --> 00:36:46.040
+This is where normalization comes in.
+
+00:36:46.040 --> 00:36:48.740
+This is all about
+reducing data duplication.
+
+00:36:48.870 --> 00:36:53.730
+There's a lot of reasons for doing this,
+all of which help with your performance.
+
+00:36:53.940 --> 00:36:55.940
+This reduces the
+possibility of data skew.
+
+00:36:56.040 --> 00:36:59.020
+If you store the same piece of
+information in 10 different locations,
+
+00:36:59.180 --> 00:37:01.900
+then if you decide you want to
+change that piece of information,
+
+00:37:01.990 --> 00:37:03.900
+well, you have to go change it
+in 10 different places.
+
+00:37:04.050 --> 00:37:06.050
+It's easy to forget one.
+
+00:37:06.840 --> 00:37:09.030
+You'll minimize the
+amount of storage space.
+
+00:37:09.110 --> 00:37:10.570
+If something is stored
+in ten different places,
+
+00:37:10.660 --> 00:37:12.300
+well,
+it's stored in ten different places.
+
+00:37:12.300 --> 00:37:16.140
+It's going to take ten times the amount
+of space storing it in one place would.
+
+00:37:16.280 --> 00:37:17.240
+Minimize memory usage.
+
+00:37:17.310 --> 00:37:18.980
+That's the flip side of storage space.
+
+00:37:19.190 --> 00:37:21.690
+Well,
+we all want to make our applications
+
+00:37:21.720 --> 00:37:26.200
+have a smaller memory footprint,
+especially on an iOS device.
+
+00:37:26.360 --> 00:37:29.660
+And it'll make your searching
+faster because as you search
+
+00:37:29.730 --> 00:37:33.750
+in something like SQLite,
+well, all of the data for a given
+
+00:37:34.000 --> 00:37:36.200
+record is contiguous in memory.
+
+00:37:36.320 --> 00:37:38.960
+As you go through looking
+at each individual record,
+
+00:37:38.960 --> 00:37:42.200
+database -- well,
+somebody has to load that and look at it.
+
+00:37:42.200 --> 00:37:45.830
+The more stuff you have in that record,
+the more memory we have to
+
+00:37:45.830 --> 00:37:47.470
+load and the slower that is.
+
+00:37:47.710 --> 00:37:51.700
+Over time, that can build up if you're
+managing a large data set.
+
+00:37:53.380 --> 00:37:54.450
+So how does normalization work?
+
+00:37:54.670 --> 00:37:57.420
+Well, you start with something like this.
+
+00:37:57.420 --> 00:38:01.870
+This is what we have in the database
+for that schema we saw earlier.
+
+00:38:02.220 --> 00:38:04.580
+And the first thing we see
+is we got this column here,
+
+00:38:04.580 --> 00:38:09.010
+and it's got two signifiers of problems.
+
+00:38:09.520 --> 00:38:12.660
+There's multiple values in that field,
+which is never a good sign.
+
+00:38:12.810 --> 00:38:17.400
+Two, you see the same values being
+repeated in multiple rows.
+
+00:38:17.630 --> 00:38:19.050
+Well, that's also a bad sign.
+
+00:38:19.270 --> 00:38:23.090
+If I move to Europe, move to England,
+and decide that in order to
+
+00:38:23.090 --> 00:38:25.560
+communicate with my new friends,
+I want to change all of the
+
+00:38:25.560 --> 00:38:28.290
+vacation tags to holiday tags,
+I'm going to have to find every
+
+00:38:28.290 --> 00:38:29.740
+single vacation tag and change it.
+
+00:38:29.810 --> 00:38:35.350
+It's much better to move that off into
+its own single table and unique them.
+
+00:38:35.350 --> 00:38:39.040
+Make sure that family only appears once,
+vacation is there once,
+
+00:38:39.130 --> 00:38:39.380
+work is there once, and so on.
+
+00:38:39.400 --> 00:38:41.330
+Work is there at once.
+
+00:38:42.030 --> 00:38:44.220
+and at this point you're probably
+expecting me to talk about tables
+
+00:38:44.300 --> 00:38:47.000
+and keys and foreign keys and primary
+keys and blah blah blah blah blah.
+
+00:38:47.080 --> 00:38:49.000
+Core Data does all of that for you.
+
+00:38:49.000 --> 00:38:51.640
+You create the relationships,
+set them on the objects,
+
+00:38:51.840 --> 00:38:54.640
+Core Data deals with all
+of your key management.
+
+00:38:54.720 --> 00:38:56.970
+That's the last I'll say about keys.
+
+00:38:57.810 --> 00:39:00.600
+Okay, so now we've eliminated some
+of the data in our table.
+
+00:39:00.600 --> 00:39:02.500
+We see more duplicate data there.
+
+00:39:02.560 --> 00:39:04.200
+But is that really duplicate data?
+
+00:39:04.330 --> 00:39:05.940
+Not really,
+because when you think about it,
+
+00:39:05.940 --> 00:39:09.700
+the timestamp is an important piece
+of information about a given photo,
+
+00:39:09.700 --> 00:39:13.480
+and changing a timestamp on one
+photo does not mean you want to
+
+00:39:13.670 --> 00:39:15.700
+change it on every other photo.
+
+00:39:15.880 --> 00:39:18.170
+So we're going to leave those ones alone.
+
+00:39:19.930 --> 00:39:21.450
+Data Contiguity.
+
+00:39:21.450 --> 00:39:25.750
+Photos are big, arbitrarily big,
+arbitrarily small, have no idea.
+
+00:39:25.750 --> 00:39:28.860
+It's not hugely efficient if you know
+you're going to be searching on the
+
+00:39:28.860 --> 00:39:33.680
+photo element to store that photo
+object on the same table as the meta
+
+00:39:33.680 --> 00:39:35.850
+information underlying the table view.
+
+00:39:35.970 --> 00:39:39.970
+So we're going to split that off
+onto its own separate table as well.
+
+00:39:40.570 --> 00:39:41.860
+At this point,
+I'm going to talk a little bit
+
+00:39:41.860 --> 00:39:45.840
+about external data references,
+which is about going one step further.
+
+00:39:45.960 --> 00:39:49.630
+In normalization,
+we move the data object off of the source
+
+00:39:49.630 --> 00:39:51.940
+table and onto a destination table.
+
+00:39:52.080 --> 00:39:56.060
+In Lion and iOS 5,
+we went one step further and allowed
+
+00:39:56.060 --> 00:39:59.710
+you to move it out of the database
+file entirely by using what's called
+
+00:39:59.710 --> 00:40:02.060
+an internal external data reference.
+
+00:40:02.190 --> 00:40:04.580
+Like normalized objects,
+these are best stored
+
+00:40:04.760 --> 00:40:05.980
+on dedicated objects.
+
+00:40:06.140 --> 00:40:09.090
+And because we can't read your mind
+and tell when you've created an
+
+00:40:09.090 --> 00:40:11.710
+object that you're done with it,
+in order to free up
+
+00:40:11.710 --> 00:40:13.700
+the underlying memory,
+you're going to need
+
+00:40:13.700 --> 00:40:17.360
+to refresh the object,
+tell Core Data you're done with it,
+
+00:40:17.360 --> 00:40:21.200
+so we can release the
+memory that's being used.
+
+00:40:21.710 --> 00:40:24.600
+So we had this schema originally,
+and we decided that really didn't work.
+
+00:40:24.760 --> 00:40:27.200
+There was a huge performance
+hit when we loaded,
+
+00:40:27.200 --> 00:40:29.740
+and sadness happened.
+
+00:40:29.870 --> 00:40:32.530
+So we redesigned it,
+and we're going to try this.
+
+00:40:32.680 --> 00:40:34.490
+Shane, how'd that work?
+
+00:40:34.600 --> 00:40:36.130
+Hello again.
+
+00:40:36.210 --> 00:40:39.710
+I have the fresh version of
+our Photos application here.
+
+00:40:41.970 --> 00:40:44.550
+I already got it loaded
+up in Instruments,
+
+00:40:44.630 --> 00:40:46.500
+so let's take some measurements.
+
+00:40:46.500 --> 00:40:53.220
+Pay particular attention to
+the Core Data fetches when we
+
+00:40:53.220 --> 00:40:53.220
+launch to see if we actually
+
+00:40:53.310 --> 00:40:56.200
+got a performance gain
+and fixed this bottleneck.
+
+00:40:56.280 --> 00:40:57.200
+Oh, that was fast.
+
+00:40:57.200 --> 00:40:58.900
+That's actually quite nice.
+
+00:40:58.970 --> 00:41:01.400
+Let's make sure the application
+still works when we click on a photo.
+
+00:41:01.400 --> 00:41:03.000
+Indeed, it does.
+
+00:41:03.120 --> 00:41:07.400
+You might notice over here on
+the Core Data cache misses,
+
+00:41:07.400 --> 00:41:11.310
+when I click on a photo,
+we get some activity going on there.
+
+00:41:13.340 --> 00:41:15.440
+Right there.
+
+00:41:15.440 --> 00:41:17.180
+I have zooming enabled now.
+
+00:41:17.210 --> 00:41:19.120
+I'm going to do some scrolling
+really quick to make sure this
+
+00:41:19.120 --> 00:41:21.830
+scrolls as we expect it to.
+
+00:41:22.140 --> 00:41:26.000
+You might notice some Core Data fetches
+going on while I'm scrolling as well,
+
+00:41:26.100 --> 00:41:27.880
+right through here.
+
+00:41:29.520 --> 00:41:31.340
+All right,
+let's look at this instrumentation and
+
+00:41:31.340 --> 00:41:34.840
+see what the measurements are telling us.
+
+00:41:34.920 --> 00:41:39.470
+Of course, we have the fetch count here,
+which is showing us it's still 184,
+
+00:41:39.480 --> 00:41:41.440
+but the duration's a lot better.
+
+00:41:41.550 --> 00:41:46.190
+So we're still loading all the photos in,
+but we're only loading in the photos
+
+00:41:46.430 --> 00:41:48.530
+-- we're not loading the photos,
+we're still loading all the objects in,
+
+00:41:48.720 --> 00:41:50.760
+but the photos are now a relation.
+
+00:41:50.760 --> 00:41:52.690
+So we're not loading those in,
+we're delaying the load
+
+00:41:52.700 --> 00:41:55.900
+of those when we click,
+and we can actually fire a cache miss,
+
+00:41:56.030 --> 00:41:57.900
+and we can see that activity here.
+
+00:41:57.940 --> 00:41:59.350
+Sorry, let me scroll in here.
+
+00:41:59.410 --> 00:42:00.400
+Let me zoom in.
+
+00:42:00.400 --> 00:42:02.810
+You might have noticed also,
+when I was scrolling,
+
+00:42:02.810 --> 00:42:05.620
+we had some other fetch
+activity going on.
+
+00:42:05.700 --> 00:42:08.680
+This is us loading that in as
+needed on demand as Core Data is
+
+00:42:08.680 --> 00:42:10.260
+fulfilling its promise.
+
+00:42:10.380 --> 00:42:14.030
+So with that, now that we've fixed that
+performance bottleneck,
+
+00:42:14.100 --> 00:42:15.260
+it's time to add some features.
+
+00:42:15.260 --> 00:42:17.100
+Of course,
+as soon as the application gets fast,
+
+00:42:17.180 --> 00:42:18.330
+we can add some new features.
+
+00:42:18.490 --> 00:42:24.300
+So I'm going to put in a feature
+request for probably a search bar,
+
+00:42:24.380 --> 00:42:25.900
+and we'll see what Melissa can do for us.
+
+00:42:25.900 --> 00:42:27.460
+So we'll see what Melissa can
+do for us on that.
+
+00:42:27.530 --> 00:42:28.840
+Melissa?
+
+00:42:28.840 --> 00:42:29.460
+Okay.
+
+00:42:29.550 --> 00:42:31.590
+Thank you.
+
+00:42:32.680 --> 00:42:37.200
+So when we start talking about searching,
+this is a good time to start
+
+00:42:37.200 --> 00:42:40.270
+talking about denormalization.
+
+00:42:40.940 --> 00:42:46.460
+Because one of the main things you're
+going to denormalize is information
+
+00:42:46.460 --> 00:42:48.180
+about the data in your database.
+
+00:42:48.180 --> 00:42:50.820
+And why do you want to do this?
+
+00:42:50.820 --> 00:42:53.880
+Well,
+there's two types of denormalization.
+
+00:42:54.530 --> 00:42:58.680
+One is attempting to minimize the
+number of joins you have to do
+
+00:42:58.680 --> 00:43:03.070
+by putting meta information about
+relationships onto the source table.
+
+00:43:03.350 --> 00:43:05.490
+Things like whether or not
+there is an object on the
+
+00:43:05.490 --> 00:43:08.210
+other end of a relationship,
+whether how many objects are at
+
+00:43:08.280 --> 00:43:12.000
+the other end of a relationship,
+or aggregate information like, you know,
+
+00:43:12.060 --> 00:43:15.150
+what's the average salary
+for people who are directly
+
+00:43:15.150 --> 00:43:17.100
+reporting to a given manager.
+
+00:43:17.240 --> 00:43:20.000
+You also want to minimize
+repeated transforms.
+
+00:43:20.070 --> 00:43:21.000
+And what does that mean?
+
+00:43:21.000 --> 00:43:22.960
+Well,
+remember I said earlier that you want to
+
+00:43:22.960 --> 00:43:25.800
+eliminate duplicate data where you can,
+and that skew is bad,
+
+00:43:25.800 --> 00:43:29.100
+and having same or similar
+bits in multiple places can
+
+00:43:29.220 --> 00:43:31.340
+make it more painful to update.
+
+00:43:31.390 --> 00:43:35.050
+There's a caveat to this,
+and that's if there is some CPU-heavy
+
+00:43:35.050 --> 00:43:39.660
+process that has to be done repeatedly,
+say, for example, you're searching,
+
+00:43:39.690 --> 00:43:43.240
+you want to not have to do that
+every time your user searches.
+
+00:43:43.570 --> 00:43:48.610
+You want to instead put your data into
+some form that's more easily searchable,
+
+00:43:48.610 --> 00:43:49.950
+it's canonical.
+
+00:43:50.550 --> 00:43:51.500
+What do I mean by that?
+
+00:43:51.500 --> 00:43:53.920
+Well, I want to build my application.
+
+00:43:53.990 --> 00:43:56.630
+Shane has filed a bug and said, well,
+you know, searching.
+
+00:43:56.700 --> 00:43:58.500
+I have like 184 pictures.
+
+00:43:58.500 --> 00:44:00.460
+It's hard to find the
+one I'm interested in.
+
+00:44:00.500 --> 00:44:03.410
+I want to be able to search by tag.
+
+00:44:03.410 --> 00:44:05.290
+Okay.
+
+00:44:05.380 --> 00:44:08.490
+That's nice.
+
+00:44:08.680 --> 00:44:10.970
+I want to know how many tags
+are on a given photo first.
+
+00:44:12.050 --> 00:44:14.270
+I'm going to do that.
+
+00:44:14.550 --> 00:44:17.630
+I also want -- because, well,
+Shane thought searching
+
+00:44:17.630 --> 00:44:20.350
+was neat and I thought,
+you know, we're graphical creatures,
+
+00:44:20.440 --> 00:44:24.000
+we like searching for things visually,
+I want to add a thumbnail to the
+
+00:44:24.000 --> 00:44:27.980
+master view so you can get a sense of
+which picture it is you're looking at
+
+00:44:27.980 --> 00:44:30.300
+as you scroll through the table view.
+
+00:44:30.300 --> 00:44:31.660
+And that's transform.
+
+00:44:31.660 --> 00:44:35.980
+I don't want to have to calculate the
+thumbnail images from the main image
+
+00:44:36.050 --> 00:44:38.970
+data every single time the user scrolls.
+
+00:44:39.000 --> 00:44:40.020
+It's going to be something they do a lot.
+
+00:44:40.020 --> 00:44:42.680
+They're going to be scrolling
+through this scroll view regularly.
+
+00:44:42.680 --> 00:44:46.780
+I don't want to have to calculate that
+thumbnail every single time they scroll.
+
+00:44:46.890 --> 00:44:49.650
+So I'm going to precalculate that
+and put that in the database.
+
+00:44:49.690 --> 00:44:52.590
+And here's where that there is no
+one true schema thing comes in.
+
+00:44:52.590 --> 00:44:54.780
+I can put this in a couple
+of different places.
+
+00:44:54.840 --> 00:44:56.830
+I can put this on the
+data object because,
+
+00:44:56.830 --> 00:44:58.760
+well, I mean, it's a piece of data.
+
+00:44:59.090 --> 00:45:00.970
+It's photo information.
+
+00:45:00.970 --> 00:45:03.320
+But, you know, I can also put it -- I can
+
+00:45:05.300 --> 00:45:11.920
+To minimize relationship fault firing,
+I can also put it on the photo object,
+
+00:45:11.960 --> 00:45:14.000
+which is what I'm going to do.
+
+00:45:14.460 --> 00:45:16.700
+And now that search
+optimization I talked about,
+
+00:45:16.880 --> 00:45:19.570
+there's a few ways,
+a few things you need to think about
+
+00:45:19.720 --> 00:45:23.800
+and consider when you're starting to
+build search into your application.
+
+00:45:23.810 --> 00:45:28.800
+The first is, well,
+what is searching for your user?
+
+00:45:28.930 --> 00:45:31.300
+There's two ways to
+actually implement it.
+
+00:45:31.300 --> 00:45:35.460
+The first way is to put everything
+in the view and let the user filter
+
+00:45:35.460 --> 00:45:38.280
+out stuff they're not interested in.
+
+00:45:38.340 --> 00:45:42.090
+The second way is to put nothing
+in the view and let the user filter
+
+00:45:42.250 --> 00:45:44.300
+in stuff they're interested in.
+
+00:45:44.300 --> 00:45:45.280
+Why are these different?
+
+00:45:45.370 --> 00:45:46.300
+Why do you care?
+
+00:45:46.300 --> 00:45:48.800
+Well,
+we saw what kind of a performance hit
+
+00:45:48.800 --> 00:45:53.290
+we had in the first version of our
+application when we loaded 184 objects.
+
+00:45:53.300 --> 00:45:57.250
+It can be expensive to load everything
+and put it into the search view simply
+
+00:45:57.250 --> 00:45:59.300
+so your user can filter things out.
+
+00:45:59.300 --> 00:46:01.430
+So, you know,
+if you know your user's going to be
+
+00:46:01.430 --> 00:46:06.520
+working with really large data sets,
+help them filter in.
+
+00:46:07.300 --> 00:46:11.100
+There's also the option of,
+do you want to do searches you type,
+
+00:46:11.100 --> 00:46:14.020
+do a new search with every
+keystroke the user gives you,
+
+00:46:14.020 --> 00:46:15.780
+and pull up incremental data sets?
+
+00:46:16.040 --> 00:46:19.920
+Or do you want to let them
+enter an entire search term
+
+00:46:19.920 --> 00:46:22.650
+and then return those results?
+
+00:46:22.780 --> 00:46:25.740
+At that point,
+it comes down to your environment.
+
+00:46:25.740 --> 00:46:28.300
+If you're using an SQLite
+database on the local disk,
+
+00:46:28.490 --> 00:46:30.980
+searches you type is going
+to be relatively fast.
+
+00:46:31.060 --> 00:46:35.300
+If you have an NS incremental
+store talking to a web service,
+
+00:46:35.580 --> 00:46:40.300
+And your user's running on an edge phone,
+well, you've got one of two choices.
+
+00:46:40.570 --> 00:46:43.710
+Either do search on completion
+or make sure that if you're
+
+00:46:43.710 --> 00:46:46.470
+doing searches you type,
+that that search does not
+
+00:46:46.590 --> 00:46:53.800
+block the user interface,
+because they're going to want to continue
+
+00:46:53.800 --> 00:46:54.120
+typing while you're waiting for the first
+batch of search results to come back.
+
+00:46:55.650 --> 00:46:57.600
+I mentioned canonicalizing strings.
+
+00:46:57.600 --> 00:46:59.620
+Well, what does that mean?
+
+00:46:59.800 --> 00:47:05.390
+This is where I got off track earlier.
+
+00:47:06.380 --> 00:47:09.900
+Your strings into a very
+simple pre-processed form.
+
+00:47:09.990 --> 00:47:13.340
+In the same way that I don't want
+to have to calculate the thumbnail
+
+00:47:13.620 --> 00:47:16.600
+in order to display it every
+single time the user scrolls,
+
+00:47:16.630 --> 00:47:21.260
+I don't want to have to do all of
+the case and diacritic stripping
+
+00:47:21.260 --> 00:47:25.590
+that's necessary in order to get
+an intuitive to the user search.
+
+00:47:25.950 --> 00:47:27.060
+They want to type in family.
+
+00:47:27.060 --> 00:47:31.050
+They don't care what case
+the tag was in originally.
+
+00:47:31.420 --> 00:47:32.400
+They just want to type family.
+
+00:47:32.400 --> 00:47:34.710
+They want to type vacation.
+
+00:47:35.930 --> 00:47:39.420
+Along these lines,
+normalize because case and diacritic
+
+00:47:39.490 --> 00:47:41.560
+insensitivity is important.
+
+00:47:41.560 --> 00:47:45.590
+But it also lets you use begins
+with instead of contains.
+
+00:47:45.810 --> 00:47:50.200
+Most importantly, it allows you to avoid
+wildcards in a lot of cases.
+
+00:47:50.270 --> 00:47:52.100
+Regex is not your user's friend.
+
+00:47:52.270 --> 00:47:56.840
+For example,
+if you have -- you want to do type as you
+
+00:47:56.840 --> 00:48:02.690
+go searching in standard search field,
+you might think as your first pass, oh,
+
+00:48:02.770 --> 00:48:05.380
+I want my labels -- I want everything
+that's going to label case and
+
+00:48:05.380 --> 00:48:08.100
+diacritically like starting with red.
+
+00:48:08.100 --> 00:48:08.960
+No, really.
+
+00:48:09.080 --> 00:48:11.760
+You actually want a
+normalized search string.
+
+00:48:11.760 --> 00:48:15.100
+You want to do search with
+begins with normalized red.
+
+00:48:15.100 --> 00:48:17.100
+This is much, much faster.
+
+00:48:17.100 --> 00:48:20.240
+We can turn this into something
+in SQLite that will be at least
+
+00:48:20.240 --> 00:48:21.980
+an order of magnitude faster.
+
+00:48:22.750 --> 00:48:25.520
+then the original search.
+
+00:48:28.180 --> 00:48:29.990
+Well, you say, well,
+I actually want matching
+
+00:48:30.260 --> 00:48:30.960
+at the beginning and end.
+
+00:48:31.090 --> 00:48:34.170
+Find me things that are substrings.
+
+00:48:35.800 --> 00:48:36.850
+We can do substrings too.
+
+00:48:36.980 --> 00:48:40.340
+That is again faster than matches.
+
+00:48:40.440 --> 00:48:43.190
+Okay, okay, you really,
+really want matches.
+
+00:48:43.420 --> 00:48:44.640
+I give.
+
+00:48:44.760 --> 00:48:47.890
+Doesn't mean you can't still normalize
+it and fire up the regex engine to
+
+00:48:48.000 --> 00:48:50.260
+look at the pre-normalized strings.
+
+00:48:50.370 --> 00:48:53.300
+This is still going to be faster because
+I'm not going to have to do additional
+
+00:48:53.300 --> 00:48:59.120
+passes across that string to denormalize
+and strip case and diacritic information.
+
+00:48:59.460 --> 00:49:02.520
+Try and do those last, though, please.
+
+00:49:02.520 --> 00:49:03.020
+Why?
+
+00:49:03.020 --> 00:49:05.740
+Because, well,
+SQLite doesn't have a query optimizer.
+
+00:49:05.740 --> 00:49:08.100
+This is part of knowing your environment.
+
+00:49:08.820 --> 00:49:10.880
+There isn't a query optimizer,
+which means you're going to have to
+
+00:49:10.880 --> 00:49:13.930
+manually optimize your predicates.
+
+00:49:14.020 --> 00:49:16.180
+Think about, you know--
+
+00:49:16.610 --> 00:49:19.950
+Eliminating largest group-- building
+your predicates such that they will
+
+00:49:19.950 --> 00:49:21.700
+eliminate the largest group first.
+
+00:49:21.800 --> 00:49:25.620
+You're now also have to trade off
+group size and comparison speed.
+
+00:49:25.740 --> 00:49:29.340
+And as I said,
+put the matches operator last.
+
+00:49:29.530 --> 00:49:32.200
+For example,
+if you're looking for a search
+
+00:49:32.280 --> 00:49:36.460
+string containing something
+plus a time-to-time comparison,
+
+00:49:36.790 --> 00:49:39.090
+Your computer is really,
+really good at doing math.
+
+00:49:39.190 --> 00:49:41.660
+Put the timestamps first.
+
+00:49:41.760 --> 00:49:44.500
+That'll minimize the group
+that you actually need to
+
+00:49:44.770 --> 00:49:48.210
+do the substring work on.
+
+00:49:49.690 --> 00:49:54.270
+If you've got tag search strings, well,
+that's really better done
+
+00:49:54.460 --> 00:49:55.740
+as an uncorrelated fetch.
+
+00:49:55.740 --> 00:49:58.500
+And we've got syntax that
+allows you to specify,
+
+00:49:58.540 --> 00:50:00.900
+do an uncorrelated fetch
+on a separate table,
+
+00:50:00.900 --> 00:50:03.410
+and then do the relationship join.
+
+00:50:03.440 --> 00:50:05.740
+There's lots of really neat
+stuff in the predicates.
+
+00:50:05.740 --> 00:50:07.190
+Go have a look at the BNF.
+
+00:50:07.260 --> 00:50:08.920
+It's really fascinating.
+
+00:50:09.370 --> 00:50:10.290
+How does it work?
+
+00:50:10.310 --> 00:50:14.860
+Well, if I want to search for all
+photos taken in Rome in February,
+
+00:50:15.040 --> 00:50:17.290
+well, I've got two ways I can
+start looking at that.
+
+00:50:17.300 --> 00:50:21.300
+I can look for photos that were in
+Rome or photos that were in February.
+
+00:50:21.430 --> 00:50:23.910
+As I said,
+computers are really good at math,
+
+00:50:23.910 --> 00:50:26.770
+so February is the first
+column I'm going to look at.
+
+00:50:27.340 --> 00:50:31.530
+And that's going to dump
+two rows right off the bat.
+
+00:50:31.690 --> 00:50:36.140
+And now it's much faster when
+I go through and do my string
+
+00:50:36.520 --> 00:50:37.390
+operations on the labels.
+
+00:50:39.300 --> 00:50:44.540
+So after all of that, we had a model,
+we did some search optimization,
+
+00:50:44.570 --> 00:50:47.840
+normalized our data in the database,
+and now our model looks
+
+00:50:47.970 --> 00:50:48.880
+a lot more like this.
+
+00:50:48.880 --> 00:50:53.000
+And I'm going to bring Shane up
+once more to have a final look and
+
+00:50:53.020 --> 00:50:55.710
+see what we've managed to make.
+
+00:51:00.560 --> 00:51:05.000
+Instead of using Instruments,
+we're going to use the
+
+00:51:05.000 --> 00:51:08.660
+Core Data SQL debug string,
+or default,
+
+00:51:08.700 --> 00:51:10.900
+that Melissa had mentioned earlier.
+
+00:51:10.980 --> 00:51:14.950
+And I'm simply going to set
+that up as an argument passed on
+
+00:51:14.950 --> 00:51:17.450
+launch to our demo application.
+
+00:51:22.200 --> 00:51:25.540
+And here's version three of our demo,
+hot off the presses.
+
+00:51:25.540 --> 00:51:26.900
+We've got some nice thumbnails.
+
+00:51:26.900 --> 00:51:30.440
+And of course, I get to see the photo
+when I click on it.
+
+00:51:30.440 --> 00:51:31.680
+That's important.
+
+00:51:31.680 --> 00:51:32.680
+Functionality still works.
+
+00:51:32.680 --> 00:51:35.890
+And you might notice here,
+we're already getting some--
+
+00:51:36.430 --> 00:51:40.300
+Information logged to our
+console in particular,
+
+00:51:40.460 --> 00:51:42.270
+we have a SQL statement.
+
+00:51:42.320 --> 00:51:46.410
+So this is really nice because this
+gives us a window into what's going on.
+
+00:51:46.560 --> 00:51:49.260
+There's some other annotations
+that occur here as well.
+
+00:51:49.260 --> 00:51:53.660
+The connection fetch time as well
+as the total fetch execution time.
+
+00:51:53.780 --> 00:51:57.840
+So I'm going to use the total fetch
+execution time to look at the difference
+
+00:51:57.840 --> 00:52:00.380
+between some of our search predicates.
+
+00:52:04.630 --> 00:52:08.710
+We're running right now with
+a Matches search predicate,
+
+00:52:08.710 --> 00:52:11.090
+and I'm going to do a search for
+
+00:52:13.430 --> 00:52:14.460
+Dog real quick.
+
+00:52:14.460 --> 00:52:17.530
+We already have this set up,
+so we have a nice cute
+
+00:52:17.530 --> 00:52:18.540
+dog we can show you.
+
+00:52:23.230 --> 00:52:27.540
+And I'm searching for the first character
+of this that I started the search on.
+
+00:52:27.540 --> 00:52:28.500
+Let me zoom in for you guys here.
+
+00:52:28.500 --> 00:52:30.650
+I have zooming enabled now.
+
+00:52:32.400 --> 00:52:36.710
+And in particular, we can see we do have
+our select statement,
+
+00:52:36.710 --> 00:52:41.000
+and we are doing a matches on this.
+
+00:52:45.180 --> 00:52:46.990
+And in particular,
+I'm going to look at the
+
+00:52:46.990 --> 00:52:52.920
+total fetch execution time,
+which is .0385 seconds.
+
+00:52:52.920 --> 00:52:57.370
+So as Melissa mentioned earlier,
+we can probably use a
+
+00:52:57.480 --> 00:52:59.810
+faster search predicate.
+
+00:53:02.000 --> 00:53:03.900
+So we're going to do the begins with.
+
+00:53:03.900 --> 00:53:08.670
+Oh,
+and this is no longer case insensitive.
+
+00:53:13.600 --> 00:53:17.400
+Run this and we'll do
+the same search for dog.
+
+00:53:17.500 --> 00:53:23.890
+Let me zoom in for you again.
+
+00:53:24.760 --> 00:53:26.460
+And the moment of truth here.
+
+00:53:26.650 --> 00:53:30.100
+Proof is in the pudding,
+if I can get that scroll correctly.
+
+00:53:31.090 --> 00:53:37.340
+Our total fetch execution
+time is now .0023 seconds.
+
+00:53:37.470 --> 00:53:41.720
+So I'm sure our users are
+going to appreciate this.
+
+00:53:41.830 --> 00:53:42.130
+Looks good.
+
+00:53:42.140 --> 00:53:43.920
+Thank you, Melissa.
+
+00:53:45.040 --> 00:53:48.880
+I'll bring Melissa back up on stage
+now to talk about the rest of this.
+
+00:53:51.100 --> 00:53:55.240
+So, you know,
+knocking an order of magnitude off a
+
+00:53:55.240 --> 00:54:00.620
+search doesn't look that impressive
+when you've got 184 objects in the
+
+00:54:00.740 --> 00:54:04.110
+database and the search is returning in,
+you know,
+
+00:54:04.500 --> 00:54:27.000
+[Transcript missing]
+
+00:54:27.730 --> 00:54:31.360
+And, you know,
+on the minimal configuration you expect
+
+00:54:31.360 --> 00:54:34.730
+your users to be using to make sure that
+the performance there is acceptable,
+
+00:54:35.000 --> 00:54:38.150
+use some of the tricks
+we showed you to make
+
+00:54:38.350 --> 00:54:42.240
+To squeak every last
+second out of the app,
+
+00:54:42.320 --> 00:54:44.160
+so you can add new and
+interesting features that make
+
+00:54:44.240 --> 00:54:45.360
+your app a lot more interesting.
+
+00:54:45.710 --> 00:54:48.950
+The difference between a
+three-star app and a five-star app.
+
+00:54:49.570 --> 00:54:51.780
+And I've talked a lot about
+specifically targeting the
+
+00:54:51.780 --> 00:54:54.380
+information you're interested in,
+only loading the information
+
+00:54:54.390 --> 00:54:55.430
+you're interested in.
+
+00:54:55.530 --> 00:55:00.070
+Equally important is getting rid of the
+stuff you're no longer interested in.
+
+00:55:00.070 --> 00:55:02.960
+Use auto release pools judiciously.
+
+00:55:03.170 --> 00:55:05.950
+Use -- that will purge
+batches of objects.
+
+00:55:05.950 --> 00:55:08.730
+Use manage object context,
+refresh object,
+
+00:55:08.730 --> 00:55:12.310
+merge changes to turn objects back
+into faults when you're done with them.
+
+00:55:12.410 --> 00:55:15.160
+That allows Core Data to free
+the underlying attribute and
+
+00:55:15.160 --> 00:55:16.820
+relationship information.
+
+00:55:16.820 --> 00:55:19.320
+If you're done with a
+whole bunch of objects,
+
+00:55:19.350 --> 00:55:21.840
+you had a detail view inspector,
+the kind of thing
+
+00:55:21.840 --> 00:55:24.620
+Ben talked about earlier,
+up on your application,
+
+00:55:24.620 --> 00:55:27.260
+you're now done with it,
+call reset on the context,
+
+00:55:27.260 --> 00:55:32.020
+and that will free all of the
+resources on all of the objects
+
+00:55:32.020 --> 00:55:33.780
+that were in that context.
+
+00:55:34.210 --> 00:55:35.940
+So this is what we went over today.
+
+00:55:35.980 --> 00:55:38.200
+Ben talked about concurrency,
+nested contexts.
+
+00:55:38.200 --> 00:55:41.420
+I talked about performance,
+schema design, and search optimization.
+
+00:55:41.470 --> 00:55:48.300
+And now I want to talk for something
+we would love you to do for us.
+
+00:55:48.940 --> 00:55:50.550
+Bugs.
+
+00:55:50.660 --> 00:55:53.400
+We don't know about
+bugs unless you tell us.
+
+00:55:53.400 --> 00:55:55.210
+I mean, we are not psychic.
+
+00:55:55.210 --> 00:55:57.740
+We don't see your user crash reports.
+
+00:55:57.740 --> 00:56:00.400
+We don't see the e-mails
+people send to you.
+
+00:56:00.400 --> 00:56:03.760
+If you don't tell us there's
+a problem with our code,
+
+00:56:03.770 --> 00:56:04.910
+we can't fix it.
+
+00:56:04.910 --> 00:56:06.350
+So please file bugs.
+
+00:56:06.350 --> 00:56:11.210
+Bugs will be fixed faster if
+you give us steps to reproduce.
+
+00:56:11.210 --> 00:56:13.020
+Or a sample project.
+
+00:56:13.120 --> 00:56:16.830
+Best case is I tried to do
+-- I started my application,
+
+00:56:16.900 --> 00:56:18.850
+I did this, this, and this.
+
+00:56:18.920 --> 00:56:20.640
+I expected it to do this.
+
+00:56:20.640 --> 00:56:22.440
+It actually did this.
+
+00:56:22.440 --> 00:56:27.120
+That gives us a very clear case
+of how you're seeing the problem,
+
+00:56:27.120 --> 00:56:29.420
+what problem you're seeing,
+what you're expecting,
+
+00:56:29.580 --> 00:56:32.430
+and this gives us all the information
+we need to try and figure out
+
+00:56:32.430 --> 00:56:36.510
+whether that's actually a bug or
+we need to improve our documentation.
+
+00:56:36.570 --> 00:56:38.850
+Bugreport.apple.com.
+
+00:56:38.910 --> 00:56:39.580
+Use it.
+
+00:56:39.580 --> 00:56:40.830
+Frequently.
+
+00:56:40.830 --> 00:56:40.830
+Often.
+
+00:56:40.930 --> 00:56:44.260
+I suppose that's the same meaning.
+
+00:56:44.350 --> 00:56:45.880
+Also use it for feature requests.
+
+00:56:46.060 --> 00:56:47.460
+If there's something that
+you think Core Data should
+
+00:56:47.460 --> 00:56:51.180
+be doing that it doesn't do,
+bugreport.apple.com.
+
+00:56:51.420 --> 00:56:52.410
+Enhancement requests.
+
+00:56:52.520 --> 00:56:55.030
+If you run across a performance issue,
+we love when you submit
+
+00:56:55.030 --> 00:56:57.040
+performance issues,
+especially if you give
+
+00:56:57.110 --> 00:56:58.350
+us instruments choices.
+
+00:56:58.450 --> 00:57:01.230
+Hi, I did this in my application,
+and Core Data was really
+
+00:57:01.230 --> 00:57:02.380
+slow and it looked like this.
+
+00:57:02.550 --> 00:57:04.620
+Can you make it faster?
+
+00:57:04.680 --> 00:57:06.060
+Also documentation requests.
+
+00:57:06.060 --> 00:57:08.750
+If there's something that's missing,
+something you think is confusing,
+
+00:57:08.850 --> 00:57:10.360
+bugreport.apple.com.
+
+00:57:10.600 --> 00:57:12.640
+Makes the crocodile smile.
+
+00:57:14.420 --> 00:57:17.700
+If you need information,
+there's always Mike Jurowicz.
+
+00:57:18.070 --> 00:57:19.560
+He's our technology evangelist.
+
+00:57:19.680 --> 00:57:23.920
+There's also Cocoa.apple.com--
+cocofeedback@apple.com.
+
+00:57:23.920 --> 00:57:27.120
+There's lots of documentation
+at developer.apple.com.
+
+00:57:27.120 --> 00:57:28.620
+And there's always the Apple forums.
+
+00:57:28.670 --> 00:57:32.020
+We hang out there when we're
+not being crushed by workloads.
+
+00:57:32.180 --> 00:57:37.070
+We've got a Core Data session this
+afternoon using iCloud with Core Data.

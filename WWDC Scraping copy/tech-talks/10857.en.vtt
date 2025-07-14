@@ -1,0 +1,1280 @@
+WEBVTT
+
+00:00:02.180 --> 00:00:05.480
+Hi, I'm Patrick from the
+OS Performance team at Apple.
+
+00:00:05.540 --> 00:00:08.180
+Today,
+we're going to dive into demystifying and
+
+00:00:08.180 --> 00:00:11.180
+eliminating render hitches in your apps.
+
+00:00:12.090 --> 00:00:14.460
+iOS uses the render loop
+to display your views,
+
+00:00:14.700 --> 00:00:17.940
+and hitch is any time the
+render loop does not complete
+
+00:00:17.940 --> 00:00:20.190
+a frame in time for display.
+
+00:00:20.600 --> 00:00:22.670
+For an overview of the
+entire render loop,
+
+00:00:22.800 --> 00:00:25.390
+check out my talk,
+"Explore UI Animation Hitches
+
+00:00:25.500 --> 00:00:28.950
+and the Render Loop." Here,
+we'll focus on render hitches,
+
+00:00:28.950 --> 00:00:32.250
+which are hitches caused by
+slowness in the render prepare
+
+00:00:32.250 --> 00:00:34.180
+and render execute phases.
+
+00:00:34.530 --> 00:00:37.860
+First, we'll look at what are
+these two render phases.
+
+00:00:37.860 --> 00:00:42.540
+Then, see how to catch and triage render
+hitches in our app using Instruments
+
+00:00:42.540 --> 00:00:44.540
+and the Xcode View Debugger.
+
+00:00:44.680 --> 00:00:47.010
+Lastly,
+we'll look at some recommendations to
+
+00:00:47.010 --> 00:00:52.470
+optimize our layer tree and stop hitches
+from interrupting our user experience.
+
+00:00:52.570 --> 00:00:55.320
+Let's start by defining
+the render phases.
+
+00:00:55.680 --> 00:00:59.040
+During the commit phase,
+apps modify their UI and submit
+
+00:00:59.040 --> 00:01:01.920
+updated UI layer trees for processing.
+
+00:01:02.070 --> 00:01:05.040
+We call these submissions commits,
+and the render server is
+
+00:01:05.040 --> 00:01:08.900
+responsible for rendering commits
+for all foreground processes.
+
+00:01:09.170 --> 00:01:12.720
+If the work in the render server
+takes longer than one frame duration,
+
+00:01:12.810 --> 00:01:14.560
+it can hitch.
+
+00:01:14.630 --> 00:01:17.500
+Although the work happens
+outside the app's process,
+
+00:01:17.620 --> 00:01:20.260
+the rendering work is
+done on your app's behalf,
+
+00:01:20.320 --> 00:01:25.420
+so you are responsible for how long it
+takes to render your app's layer tree.
+
+00:01:25.690 --> 00:01:30.970
+The render server has two phases,
+render prepare and render execute.
+
+00:01:31.050 --> 00:01:33.780
+The render prepare phase is
+where our layer tree is compiled
+
+00:01:33.780 --> 00:01:38.160
+down into a pipeline of simple
+operations for the GPU to execute.
+
+00:01:38.280 --> 00:01:40.670
+Animations,
+which take place over a couple of frames,
+
+00:01:40.760 --> 00:01:42.650
+are also handled here.
+
+00:01:42.760 --> 00:01:46.650
+During the render execute phase,
+the GPU draws the app's layers into
+
+00:01:46.750 --> 00:01:49.190
+a final image ready to be displayed.
+
+00:01:49.310 --> 00:01:53.110
+Either of these phases could
+delay the frame's delivery time.
+
+00:01:54.250 --> 00:01:58.370
+To help understand these concepts,
+let's walk through an example render.
+
+00:01:58.520 --> 00:02:00.820
+We will walk through the
+rendering of this frame.
+
+00:02:00.960 --> 00:02:04.850
+Notice that the shadow is around
+both the circle and the bar.
+
+00:02:04.940 --> 00:02:06.820
+This will become important later.
+
+00:02:06.970 --> 00:02:09.060
+We start with the layer tree
+that the app submitted to the
+
+00:02:09.060 --> 00:02:10.980
+render server on the left.
+
+00:02:11.090 --> 00:02:14.240
+The render server will step layer
+by layer to compile a pipeline of
+
+00:02:14.310 --> 00:02:19.590
+drawing commands that allows the
+GPU to draw the UI from back to front.
+
+00:02:20.730 --> 00:02:24.220
+Starting at the root node,
+the render server walks from sibling
+
+00:02:24.630 --> 00:02:31.030
+to sibling and parent to child until
+it has every layer in the hierarchy.
+
+00:02:32.520 --> 00:02:35.630
+Finally, it has the entire pipeline
+that the GPU can execute
+
+00:02:35.630 --> 00:02:38.600
+during the next execute phase.
+
+00:02:38.850 --> 00:02:42.120
+The GPU's job is to take this
+pipeline and draw each step into
+
+00:02:42.340 --> 00:02:44.540
+the final texture in the center.
+
+00:02:44.680 --> 00:02:49.290
+It's this texture that will be displayed
+on screen during the display phase.
+
+00:02:49.440 --> 00:02:52.460
+Starting with the first blue layer,
+it draws the color in
+
+00:02:52.460 --> 00:02:53.860
+the specified bounds.
+
+00:02:53.990 --> 00:02:59.170
+Next, the darker blue is drawn into its
+bounds and we move on to the next layer.
+
+00:02:59.860 --> 00:03:02.360
+But now, the GPU must draw the shadow.
+
+00:03:02.370 --> 00:03:05.560
+The shadow shape is defined
+by the next two layers.
+
+00:03:05.560 --> 00:03:09.030
+So the GPU does not know what
+shape to draw the shadow with.
+
+00:03:09.280 --> 00:03:12.740
+If we drew the circle and bar first,
+though, then the shadow would
+
+00:03:12.810 --> 00:03:15.940
+occlude them with black,
+and it would look incorrect.
+
+00:03:16.010 --> 00:03:18.950
+That means the GPU has hit a roadblock,
+and to continue,
+
+00:03:18.970 --> 00:03:22.910
+it must switch to a different texture
+to figure out the shadow's shape.
+
+00:03:23.000 --> 00:03:26.700
+We call this offscreen rendering,
+because we are drawing somewhere
+
+00:03:26.950 --> 00:03:28.550
+other than the final texture.
+
+00:03:28.660 --> 00:03:32.460
+From here,
+it can draw the circle and the bar.
+
+00:03:32.510 --> 00:03:37.100
+And now it has the shadow shape
+isolated in the offscreen texture.
+
+00:03:37.170 --> 00:03:39.580
+It has all it needs to
+make the shadow shape,
+
+00:03:39.580 --> 00:03:43.060
+by first making the layers black,
+and then blurring it.
+
+00:03:43.530 --> 00:03:46.900
+It can then copy that offscreen
+texture into the final texture,
+
+00:03:47.060 --> 00:03:49.920
+and the shadow layer has been completed.
+
+00:03:50.870 --> 00:03:54.180
+The next step is to draw the circle
+and then the rectangle again.
+
+00:03:54.230 --> 00:04:00.220
+It will finish by copying the image
+of the text that the app drew on top.
+
+00:04:00.670 --> 00:04:05.150
+We have now completed both render phases,
+and the frame is ready to be displayed.
+
+00:04:05.290 --> 00:04:08.100
+But we did have to do a special
+trick to render the shadow,
+
+00:04:08.100 --> 00:04:10.480
+which caused our
+rendering to take longer.
+
+00:04:10.600 --> 00:04:13.070
+This is called an offscreen pass.
+
+00:04:14.230 --> 00:04:17.320
+An offscreen pass is any time
+the GPU must render a layer by
+
+00:04:17.320 --> 00:04:21.100
+first rendering it somewhere
+else and then copying it over.
+
+00:04:21.250 --> 00:04:23.540
+With the shadow,
+it had to draw the layers to
+
+00:04:23.540 --> 00:04:25.280
+figure out the final shape.
+
+00:04:25.400 --> 00:04:32.590
+Offscreen passes can add up and
+cause the rendering to hitch,
+
+00:04:32.590 --> 00:04:32.590
+so it's important to monitor and
+try to avoid them in your app.
+
+00:04:33.130 --> 00:04:36.620
+There are four main types of offscreen
+passes that can be optimized:
+
+00:04:36.670 --> 00:04:41.660
+Shadows, Masks, Rounded Rectangles,
+and Visual Effects.
+
+00:04:41.690 --> 00:04:45.200
+We saw an example of a shadow
+offscreen in the example render.
+
+00:04:45.220 --> 00:04:48.350
+In this case, the renderer does not have
+enough information to draw
+
+00:04:48.350 --> 00:04:52.870
+the shadow without drawing the
+layer it is attached to first.
+
+00:04:53.210 --> 00:04:57.710
+The second type of offscreen is when a
+layer or tree of layers requires masking.
+
+00:04:57.880 --> 00:05:00.890
+The renderer needs to
+render the masked subtree,
+
+00:05:01.000 --> 00:05:05.900
+but it also needs to avoid overwriting
+the pixels outside the masked shape.
+
+00:05:06.010 --> 00:05:10.070
+So it will render the entire
+subtree offscreen before copying
+
+00:05:10.070 --> 00:05:14.800
+only the pixels within the masked
+shape back to the final texture.
+
+00:05:14.910 --> 00:05:18.390
+This offscreen can lead to
+rendering many pixels that the
+
+00:05:18.390 --> 00:05:20.290
+user is never going to see.
+
+00:05:20.900 --> 00:05:23.290
+The third type is related to masking.
+
+00:05:23.390 --> 00:05:27.230
+Rounding the corners of layers can
+sometimes require an offscreen.
+
+00:05:27.290 --> 00:05:31.190
+If not given enough information,
+the renderer may have to draw the
+
+00:05:31.190 --> 00:05:36.400
+entire view offscreen and then copy the
+pixels inside the rounded shape back.
+
+00:05:38.180 --> 00:05:40.540
+The fourth type is from
+visual effect views.
+
+00:05:40.740 --> 00:05:45.600
+UIKit provides two visual effect types,
+vibrancy and blurring.
+
+00:05:45.690 --> 00:05:48.870
+To apply these effects,
+the renderer must copy what's beneath
+
+00:05:48.870 --> 00:05:52.600
+the visual effect view to another
+texture with an offscreen pass.
+
+00:05:52.680 --> 00:05:57.600
+Then it applies the visual effect
+types to the result and copies it back.
+
+00:05:57.770 --> 00:06:00.820
+You will see this in UI navigation bars,
+UI tab bars,
+
+00:06:00.890 --> 00:06:05.740
+and many other standard controls,
+as it's very common across iOS, tvOS,
+
+00:06:05.790 --> 00:06:07.020
+and macOS.
+
+00:06:07.390 --> 00:06:09.840
+So these four offscreen types
+can slow down the rendering
+
+00:06:09.970 --> 00:06:12.290
+and cause render hitches.
+
+00:06:12.900 --> 00:06:15.730
+Now that we've described the
+details of the render phase
+
+00:06:15.950 --> 00:06:19.460
+and seen how a high number of
+offscreen passes can cause them,
+
+00:06:19.580 --> 00:06:24.120
+let's move to our second topic:
+finding hitches with Instruments.
+
+00:06:25.570 --> 00:06:28.180
+In Instruments 12,
+we released a new instrument template
+
+00:06:28.330 --> 00:06:31.000
+to profile hitches in your apps.
+
+00:06:31.710 --> 00:06:34.970
+Some users have complained about
+hitches in the Meal Planner app,
+
+00:06:34.970 --> 00:06:36.540
+and I'd like to investigate.
+
+00:06:36.540 --> 00:06:39.530
+So I begin in Instrument and
+start scrolling in the app.
+
+00:06:41.490 --> 00:06:45.670
+And here is the trace of the Meal Planner
+app using the animation hitches template.
+
+00:06:45.780 --> 00:06:49.350
+I'm curious to dive into some of
+the hitches I saw while scrolling.
+
+00:06:49.710 --> 00:06:54.130
+Let's zoom in and expand the
+hitches track to find hitch 16.
+
+00:06:54.630 --> 00:06:59.640
+Each track corresponds to a stage of
+the render loop we talked about earlier.
+
+00:06:59.660 --> 00:07:02.040
+Along the top is the
+most important track.
+
+00:07:02.040 --> 00:07:03.420
+It shows hitch intervals.
+
+00:07:03.440 --> 00:07:07.590
+This is the amount of time since
+the frame should have been ready.
+
+00:07:07.940 --> 00:07:11.380
+The User Events track shows
+the user events associated
+
+00:07:11.380 --> 00:07:12.980
+with the hitching frame.
+
+00:07:14.270 --> 00:07:17.130
+The Commits track shows all
+commit phases sent to the
+
+00:07:17.130 --> 00:07:19.270
+render server during that frame.
+
+00:07:19.320 --> 00:07:22.580
+Make sure to watch Find and
+Fix Hitches in the Commit Phase for
+
+00:07:22.580 --> 00:07:24.780
+more on these tracks specifically.
+
+00:07:25.370 --> 00:07:27.920
+And here's what we've been
+focused on in this video:
+
+00:07:28.110 --> 00:07:33.070
+the renders and GPU tracks show the
+work performed by the render server.
+
+00:07:33.740 --> 00:07:37.010
+The frame lifetimes track shows the
+entire duration that it took to compose
+
+00:07:37.010 --> 00:07:40.130
+the frame from event to display.
+
+00:07:40.160 --> 00:07:42.930
+And finally,
+the built-in display track shows
+
+00:07:42.940 --> 00:07:46.090
+all the frames that appeared
+on display along with the
+
+00:07:46.090 --> 00:07:48.350
+VSYNCs that happened along the way.
+
+00:07:48.940 --> 00:07:52.210
+You can compare the frame lifetime with
+the beginning of the hitch duration to
+
+00:07:52.230 --> 00:07:57.120
+visualize the expected interval that the
+frame should have been done composing.
+
+00:07:57.250 --> 00:08:00.940
+In this hitch, we were two frames over,
+and from following the VSYNCs,
+
+00:08:00.990 --> 00:08:05.430
+we can see that both the commit and
+the render phases went over time.
+
+00:08:05.600 --> 00:08:08.870
+This interval is called
+the acceptable latency,
+
+00:08:08.910 --> 00:08:12.210
+and all time after that
+is the hitch duration.
+
+00:08:14.100 --> 00:08:16.590
+Below the tracks,
+we see the detailed metrics
+
+00:08:16.680 --> 00:08:19.480
+for the hitches when the
+hitches track is selected.
+
+00:08:19.590 --> 00:08:21.600
+We are looking at hitch 16.
+
+00:08:21.700 --> 00:08:24.870
+We can see the hitch time
+and the acceptable latency.
+
+00:08:25.020 --> 00:08:28.010
+This is how long we had
+to complete the frame.
+
+00:08:29.050 --> 00:08:32.000
+The buffer count is the number
+of buffers used by the render
+
+00:08:32.000 --> 00:08:34.500
+server at the time of the hitch.
+
+00:08:34.600 --> 00:08:37.870
+The default value is 2,
+but it can be 3 when a rendering
+
+00:08:37.870 --> 00:08:41.690
+frame has been delayed and the
+render server is trying to catch up.
+
+00:08:41.780 --> 00:08:44.430
+In double buffered mode,
+we have 2 frames,
+
+00:08:44.430 --> 00:08:48.270
+or 33.34 milliseconds on an iPhone,
+which is what we see
+
+00:08:48.270 --> 00:08:49.760
+in the latency column.
+
+00:08:49.810 --> 00:08:52.800
+Always remember to follow the
+hitch duration track above,
+
+00:08:52.940 --> 00:08:55.600
+which will always highlight
+the area of interest,
+
+00:08:55.600 --> 00:08:57.280
+no matter the buffer count.
+
+00:08:57.820 --> 00:08:59.360
+Lastly, there's the hitch type.
+
+00:08:59.420 --> 00:09:02.920
+The hitch type surfaces the types of
+hitches and helps give you context
+
+00:09:02.920 --> 00:09:05.290
+on what to dive into in your app.
+
+00:09:05.510 --> 00:09:09.610
+Here, we see we had both expensive
+commits and expensive GPU time,
+
+00:09:09.800 --> 00:09:12.040
+which is what we saw in the tracks above.
+
+00:09:12.210 --> 00:09:14.730
+Expanding out,
+we can focus on the render and
+
+00:09:14.730 --> 00:09:19.250
+GPU tracks and select them to see
+an analyzer with more information
+
+00:09:19.250 --> 00:09:21.500
+on the prepare and execute phases.
+
+00:09:21.860 --> 00:09:26.310
+A crucial column is the render count,
+where we can see the number of offscreen
+
+00:09:26.310 --> 00:09:28.300
+passes that the GPU had to make.
+
+00:09:28.360 --> 00:09:31.900
+Because we know we had a render hitch,
+we need to look at these offscreens
+
+00:09:32.000 --> 00:09:35.330
+and understand what is causing
+them and how we could fix them.
+
+00:09:35.430 --> 00:09:38.830
+The best way to look at our layer
+tree is using Xcode View Debugger.
+
+00:09:38.920 --> 00:09:41.760
+So for that, let's go to a demo.
+
+00:09:43.100 --> 00:09:46.260
+Here we are in the View Debugger
+with our Meal Planner app paused.
+
+00:09:46.360 --> 00:09:51.060
+On the left, we see our view controllers,
+windows, constraints, and views.
+
+00:09:51.280 --> 00:09:54.780
+But starting with Xcode 11.2,
+we can also show layers.
+
+00:09:54.890 --> 00:09:59.730
+If we click on Editor,
+let's click on the new Show Layers item.
+
+00:10:01.800 --> 00:10:02.980
+Cool!
+
+00:10:03.110 --> 00:10:06.460
+Now on the left in the navigator,
+we can click on any view and see
+
+00:10:06.540 --> 00:10:09.150
+its layer and all of its sublayers.
+
+00:10:10.690 --> 00:10:12.780
+When we select a layer,
+we are presented this
+
+00:10:12.780 --> 00:10:15.310
+brand new layer inspector,
+which surfaces useful
+
+00:10:15.430 --> 00:10:17.390
+properties of our layer.
+
+00:10:17.470 --> 00:10:21.040
+So we can see here that we have
+our tag view's backing layer,
+
+00:10:21.040 --> 00:10:23.940
+and we can see the background color,
+opacity,
+
+00:10:24.010 --> 00:10:28.360
+whether we have enabled mask to bounds,
+and lots of other properties.
+
+00:10:28.430 --> 00:10:31.410
+Importantly,
+we can see the offscreen count.
+
+00:10:31.510 --> 00:10:34.900
+This is the number of offscreens
+it took to render this layer.
+
+00:10:34.960 --> 00:10:37.900
+Below that are what we
+call offscreen flags.
+
+00:10:37.960 --> 00:10:40.800
+These describe the
+reason for the offscreen.
+
+00:10:40.940 --> 00:10:44.470
+Now, a given flag like offscreen mask,
+for example, can trigger multiple
+
+00:10:44.610 --> 00:10:46.070
+numbers of offscreens.
+
+00:10:46.090 --> 00:10:48.250
+For example, here we have two.
+
+00:10:48.660 --> 00:10:51.720
+But if we were to dig through
+each layer in our entire app
+
+00:10:51.780 --> 00:10:55.780
+to check its offscreen count,
+we still would not have enough insight
+
+00:10:55.780 --> 00:10:58.500
+to reduce any of these offscreen passes.
+
+00:10:58.630 --> 00:11:01.710
+To help identify and suggest
+performance optimizations in
+
+00:11:01.720 --> 00:11:05.190
+your view and layer hierarchy,
+we added a new runtime issue
+
+00:11:05.390 --> 00:11:09.930
+type in Xcode 12 we call
+optimization opportunities.
+
+00:11:10.420 --> 00:11:12.940
+These are enabled by default,
+but you can find the option
+
+00:11:12.940 --> 00:11:17.340
+in the editor menu under
+Show Optimization Opportunities.
+
+00:11:17.470 --> 00:11:20.740
+These optimization opportunities
+are an incredible resource developed
+
+00:11:20.890 --> 00:11:25.000
+and written by Apple's performance
+teams after years of optimizing
+
+00:11:25.000 --> 00:11:27.510
+apps' rendering performance.
+
+00:11:27.720 --> 00:11:31.600
+These are meant to suggest simple yet
+valuable changes that will not affect
+
+00:11:31.740 --> 00:11:33.600
+the overall look of your layers.
+
+00:11:33.680 --> 00:11:36.540
+In our navigator,
+we can see the purple runtime
+
+00:11:36.550 --> 00:11:38.990
+issue indicator on some layers.
+
+00:11:41.330 --> 00:11:43.030
+Here we have our star layer.
+
+00:11:43.110 --> 00:11:45.190
+We see in the inspector that
+it takes five off screens.
+
+00:11:45.280 --> 00:11:51.470
+Highlighting over the indicator reveals
+the cause is because of dynamic shadows.
+
+00:11:51.590 --> 00:11:55.590
+Let's go to the runtime issue
+navigator to see more details.
+
+00:11:57.650 --> 00:12:00.060
+It's here that we can read
+the message for the issue.
+
+00:12:00.120 --> 00:12:02.670
+It says that the layer
+is using dynamic shadows,
+
+00:12:02.820 --> 00:12:04.480
+which are expensive to render.
+
+00:12:04.540 --> 00:12:08.790
+If possible, try setting shadow path,
+or pre-rendering the shadow into an
+
+00:12:09.010 --> 00:12:11.290
+image and putting it under the layer.
+
+00:12:11.720 --> 00:12:14.400
+We discussed this type of
+offscreen in the slides.
+
+00:12:14.640 --> 00:12:17.500
+The renderer does not have
+enough information and needs
+
+00:12:17.500 --> 00:12:21.290
+to draw the layer offscreen to
+figure out the shadow's shape.
+
+00:12:21.400 --> 00:12:24.390
+By using the shadow path
+property on the CA layer,
+
+00:12:24.500 --> 00:12:28.610
+we can actually give the renderer
+the exact steps to use and
+
+00:12:28.610 --> 00:12:31.540
+eliminate all five offscreens.
+
+00:12:31.730 --> 00:12:34.770
+These really add up in our app,
+so let's take a look at the
+
+00:12:34.770 --> 00:12:36.550
+code and make this change.
+
+00:12:37.950 --> 00:12:40.900
+Here we are with our star layer,
+where we set the shadow.
+
+00:12:40.920 --> 00:12:43.640
+The optimization text told
+us to set the shadow path,
+
+00:12:43.670 --> 00:12:45.840
+which accepts any CG path.
+
+00:12:45.860 --> 00:12:49.470
+Let's reuse the star path
+that we already created.
+
+00:12:50.220 --> 00:12:52.630
+Just like that,
+we've eliminated 5 offscreen
+
+00:12:52.630 --> 00:12:54.600
+passes per collection view cell.
+
+00:12:54.800 --> 00:12:56.690
+That's a big fix.
+
+00:12:57.800 --> 00:13:00.990
+Now, back on our debug navigator,
+we still see some other
+
+00:13:00.990 --> 00:13:02.820
+runtime issue indicators.
+
+00:13:02.980 --> 00:13:06.590
+On our tag view,
+we see a runtime issue on the layer.
+
+00:13:06.690 --> 00:13:11.600
+In the navigator, we see two offscreens
+caused by an offscreen mask.
+
+00:13:11.720 --> 00:13:15.050
+This layer is composed of an
+image view and a label view.
+
+00:13:15.170 --> 00:13:18.590
+We were worried about things
+escaping the red background,
+
+00:13:18.590 --> 00:13:20.210
+so we added a mask layer.
+
+00:13:20.450 --> 00:13:24.190
+In the runtime tooltip,
+we see that the cause is simple
+
+00:13:24.320 --> 00:13:26.470
+background color masking.
+
+00:13:27.360 --> 00:13:30.500
+In the Issue Navigator,
+we see the Opportunity text.
+
+00:13:30.600 --> 00:13:33.560
+It says that this layer is
+using a simple layer with a
+
+00:13:33.560 --> 00:13:35.900
+background color set as a mask.
+
+00:13:35.970 --> 00:13:38.420
+Instead,
+use a container layer of the same
+
+00:13:38.420 --> 00:13:43.840
+frame and corner radius as the mask,
+but with mask to bounds set to Yes.
+
+00:13:43.920 --> 00:13:48.440
+The offscreen is caused by the renderer
+needing to render our mask layer first,
+
+00:13:48.500 --> 00:13:51.860
+and the suggestion is to
+eliminate this layer altogether.
+
+00:13:51.930 --> 00:13:54.050
+Let's check it out in code.
+
+00:13:56.070 --> 00:13:58.000
+Here, we have our tag view.
+
+00:13:58.290 --> 00:14:03.140
+We create a mask layer and give it a
+black background color and corner radius.
+
+00:14:03.180 --> 00:14:06.440
+This mask layer is simple,
+and any simple layer
+
+00:14:06.440 --> 00:14:08.000
+should never be a mask.
+
+00:14:08.010 --> 00:14:10.520
+Instead,
+we should just define this requested
+
+00:14:10.520 --> 00:14:15.210
+mask shape on the actual layer so the
+renderer can optimize the drawing.
+
+00:14:15.300 --> 00:14:17.670
+We can instead set the
+corner radius to 10,
+
+00:14:17.740 --> 00:14:21.520
+like we wanted, and then set mask to
+bounds equal to true.
+
+00:14:21.550 --> 00:14:24.220
+Then delete the mask altogether.
+
+00:14:25.500 --> 00:14:28.010
+But that only eliminates one offscreen.
+
+00:14:28.180 --> 00:14:30.800
+Because we have sublayers,
+Mask to Bounds will need to do
+
+00:14:30.800 --> 00:14:33.940
+an offscreen pass to make sure
+the views are clipped correctly.
+
+00:14:34.090 --> 00:14:36.850
+But in our view,
+we've ensured that sublayers cannot
+
+00:14:36.850 --> 00:14:38.950
+exceed the bounds of our tag view.
+
+00:14:39.030 --> 00:14:42.650
+So in fact,
+we actually do not need masking at all.
+
+00:14:42.820 --> 00:14:45.440
+Let's delete that Mask to Bounds call.
+
+00:14:45.500 --> 00:14:47.900
+And now we've eliminated both offscreens.
+
+00:14:47.930 --> 00:14:49.020
+Awesome.
+
+00:14:49.090 --> 00:14:52.130
+So far, with three lines of code,
+we've saved seven offscreens
+
+00:14:52.280 --> 00:14:53.900
+per collection view cell.
+
+00:14:53.960 --> 00:14:56.060
+This is a tremendous improvement.
+
+00:14:56.110 --> 00:14:58.300
+But we have one more issue to explore.
+
+00:14:58.330 --> 00:15:00.530
+Let's head back to the Navigator.
+
+00:15:03.310 --> 00:15:04.980
+Let's select our image view.
+
+00:15:04.990 --> 00:15:08.400
+We see that it has rounded corners,
+and when we highlight the runtime issue,
+
+00:15:08.440 --> 00:15:12.290
+we see it says "Simple
+Shape Masking." Once again,
+
+00:15:12.340 --> 00:15:15.450
+we will go to the Runtime
+Navigator to learn more.
+
+00:15:16.380 --> 00:15:19.400
+It says that the layer is
+masked by a CA shape layer,
+
+00:15:19.770 --> 00:15:23.440
+with a path that's a rect,
+a rounded rect, or an ellipse.
+
+00:15:23.520 --> 00:15:28.060
+Instead, use an appropriately transformed
+container layer with corner
+
+00:15:28.060 --> 00:15:30.050
+radius and mask to bound set.
+
+00:15:30.410 --> 00:15:35.170
+The offscreen is caused by the renderer
+needing to mask to another layer again,
+
+00:15:35.330 --> 00:15:37.670
+but this time it's not a simple layer.
+
+00:15:37.770 --> 00:15:41.240
+Let's look at the code to
+understand what's happening.
+
+00:15:42.350 --> 00:15:45.020
+Here in the code,
+we see we have our image view.
+
+00:15:45.160 --> 00:15:50.120
+First, we create a CA shape layer and
+use a UI-BazirPath API to create a
+
+00:15:50.520 --> 00:15:53.120
+path and then use that as the mask.
+
+00:15:53.210 --> 00:15:55.900
+What's happening here is that
+we are using a shape layer,
+
+00:15:55.900 --> 00:16:00.220
+which can be a valid type of mask,
+but Xcode is able to detect that
+
+00:16:00.220 --> 00:16:04.570
+rather than a complex shape,
+we are just creating a rounded rectangle.
+
+00:16:04.770 --> 00:16:07.340
+The reason we wrote this code is
+because we are trying to create a
+
+00:16:07.340 --> 00:16:11.440
+special type of rounded rectangle,
+sometimes called a squircle.
+
+00:16:11.870 --> 00:16:15.230
+These type of rounded rectangles
+are very popular in iOS,
+
+00:16:15.310 --> 00:16:18.060
+but this is not the best
+way to get that effect.
+
+00:16:18.140 --> 00:16:21.350
+Starting in iOS 13,
+we can use the corner curve
+
+00:16:21.350 --> 00:16:25.720
+property to make the corner radius
+effect into a squirkeled shape.
+
+00:16:25.760 --> 00:16:33.300
+Now we can eliminate the shape layer
+altogether and just set corner radius
+
+00:16:33.300 --> 00:16:33.300
+and corner curve to continuous.
+
+00:16:35.130 --> 00:16:37.460
+Just like that,
+we've eliminated two more offscreens
+
+00:16:37.810 --> 00:16:40.380
+by just using the provided API.
+
+00:16:40.490 --> 00:16:43.240
+So we were able to really
+optimize our offscreen count and
+
+00:16:43.240 --> 00:16:45.520
+bring it from 36 down to zero.
+
+00:16:45.650 --> 00:16:47.730
+That's amazing.
+
+00:16:49.610 --> 00:16:52.190
+Back in the View Debugger,
+we see some other runtime issues
+
+00:16:52.310 --> 00:16:53.760
+that are not render related.
+
+00:16:53.770 --> 00:16:56.520
+Nonetheless, we'd like to show them
+to our coworker Charles,
+
+00:16:56.530 --> 00:16:58.740
+so he can try and optimize them.
+
+00:16:58.790 --> 00:17:00.940
+Before,
+this would require Charles having the
+
+00:17:00.940 --> 00:17:05.960
+same device as us and attaching to his
+app and pausing it in the View Debugger.
+
+00:17:06.010 --> 00:17:09.600
+But now, we are able to save the state
+of our View Debugger so that
+
+00:17:09.600 --> 00:17:13.000
+we can send it in an email,
+share it with coworkers,
+
+00:17:13.020 --> 00:17:15.160
+or even attach it to feedback reports.
+
+00:17:15.170 --> 00:17:20.510
+To do this,
+we can select File Export View Hierarchy.
+
+00:17:21.470 --> 00:17:25.310
+Clicking Save and voila,
+we now have a sendable file
+
+00:17:25.390 --> 00:17:31.040
+encapsulating all of our views,
+layers, constraints, and runtime issues.
+
+00:17:31.080 --> 00:17:34.240
+This makes it much easier
+to collaborate remotely,
+
+00:17:34.240 --> 00:17:39.310
+and will really help as you try tracking
+down all your unnecessary offscreens.
+
+00:17:39.810 --> 00:17:42.760
+Now that we've seen how the
+Xcode View Debugger can highlight
+
+00:17:42.760 --> 00:17:47.310
+offscreen issues in our app,
+let's recap some recommendations.
+
+00:17:47.680 --> 00:17:52.660
+The most important thing to do in every
+app is to always use the provided APIs.
+
+00:17:52.850 --> 00:17:56.100
+When setting a shadow,
+make sure to set a shadow path to save
+
+00:17:56.100 --> 00:17:58.280
+a large number of offscreen passes.
+
+00:17:58.530 --> 00:18:01.130
+When rounding a rectangle,
+use the corner radius and
+
+00:18:01.250 --> 00:18:03.220
+corner curve properties.
+
+00:18:03.250 --> 00:18:08.060
+Avoid using masks or corner contents
+to form rounded rectangle shapes.
+
+00:18:08.100 --> 00:18:11.000
+These cause unnecessary offscreens.
+
+00:18:11.070 --> 00:18:13.640
+For most layers,
+creating a UI bezier path by
+
+00:18:13.640 --> 00:18:16.730
+rounding the layer's bounds to
+its corner radius is all that's
+
+00:18:16.730 --> 00:18:19.270
+needed to set a good shadow path.
+
+00:18:20.040 --> 00:18:23.440
+The second step is to optimize
+masking across your app.
+
+00:18:23.600 --> 00:18:26.580
+Use Mask to Bounds to
+mask to a rectangle,
+
+00:18:26.580 --> 00:18:29.000
+rounded rectangle, or ellipse.
+
+00:18:29.110 --> 00:18:32.070
+It's much more performant
+than custom mask layers.
+
+00:18:32.180 --> 00:18:34.990
+Overall,
+make sure masking is actually required.
+
+00:18:35.090 --> 00:18:38.000
+If content in the subtree
+will not exceed the bounds,
+
+00:18:38.040 --> 00:18:40.500
+then disable Mask to Bounds altogether.
+
+00:18:41.690 --> 00:18:43.200
+These are only recommendations.
+
+00:18:43.250 --> 00:18:46.720
+It's important to profile your app using
+Instruments and use the optimization
+
+00:18:46.720 --> 00:18:51.000
+opportunities to inspect your layer
+tree for simple yet crucial tips to
+
+00:18:51.000 --> 00:18:53.770
+lowering your overall offscreen count.
+
+00:18:53.840 --> 00:18:56.560
+Lastly,
+remember that you can save the state
+
+00:18:56.560 --> 00:19:00.760
+of the view hierarchy to share with
+your team or even attach to feedbacks
+
+00:19:00.780 --> 00:19:02.780
+in the Feedback Reporter app.
+
+00:19:02.860 --> 00:19:05.580
+Overall,
+these tools and the recommendations
+
+00:19:05.580 --> 00:19:07.860
+will help you avoid render hitches.
+
+00:19:07.990 --> 00:19:10.970
+For commit hitches,
+make sure to check out Find and
+
+00:19:10.970 --> 00:19:13.130
+Fix Hitches in the Commit phase.
+
+00:19:13.240 --> 00:19:15.450
+Together,
+these talks will help you reduce
+
+00:19:15.500 --> 00:19:20.290
+your app's hitch time ratio and
+keep your users scrolling smooth.
+
+00:19:20.410 --> 00:19:22.100
+Thanks for watching.

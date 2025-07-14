@@ -1,0 +1,3446 @@
+WEBVTT
+
+00:00:14.400 --> 00:00:15.440
+Good afternoon.
+
+00:00:15.440 --> 00:00:18.640
+Welcome to the afternoon session.
+
+00:00:18.710 --> 00:00:24.740
+This is actually my
+second WWDC presentation.
+
+00:00:24.740 --> 00:00:28.800
+So,
+relatively new to Apple in that respect,
+
+00:00:28.890 --> 00:00:34.970
+and one of the growing group of Unix
+professionals that we're finding
+
+00:00:34.970 --> 00:00:39.570
+in the CoreOS group at Apple,
+which is very good to see.
+
+00:00:39.570 --> 00:00:39.570
+A very strong Unix
+background in the group.
+
+00:00:40.090 --> 00:00:44.810
+So today, we're going to be talking
+about kernel programming,
+
+00:00:44.860 --> 00:00:49.480
+writing kernel extensions for Mac OS X,
+and in particular,
+
+00:00:49.610 --> 00:00:52.920
+what we've done in Tiger and how
+that's going to be affecting you.
+
+00:00:54.230 --> 00:00:59.570
+So we've made some major changes
+to the kernel in Tiger for
+
+00:00:59.640 --> 00:01:01.700
+a number of good reasons.
+
+00:01:01.700 --> 00:01:04.540
+And to be perfectly honest,
+most KEKs are going to be
+
+00:01:04.540 --> 00:01:06.380
+unaffected by these changes.
+
+00:01:06.510 --> 00:01:10.260
+But there are a small number
+that will be affected.
+
+00:01:10.260 --> 00:01:12.820
+And what we'll be doing,
+talking today about,
+
+00:01:12.880 --> 00:01:16.730
+is how these changes affect those KEXs.
+
+00:01:16.910 --> 00:01:20.970
+There will be source changes
+needed to be made to these KEKs,
+
+00:01:20.970 --> 00:01:23.880
+and we'll cover what they
+are and what you need to do.
+
+00:01:26.610 --> 00:01:31.240
+So what you'll learn today is why these
+changes to the kernel are necessary,
+
+00:01:31.290 --> 00:01:39.870
+which KEXs are affected,
+what changes are needed,
+
+00:01:39.870 --> 00:01:39.870
+techniques you'll need to apply so
+that your KEXs will work correctly,
+
+00:01:40.190 --> 00:01:44.430
+How kernel interfaces are managed,
+the lifecycle of a kernel interface,
+
+00:01:44.430 --> 00:01:47.030
+and generally why what
+we've done is a good thing.
+
+00:01:51.460 --> 00:01:54.850
+So just so that you know what
+we're talking about today,
+
+00:01:54.850 --> 00:01:58.310
+this is what I would consider
+to be basically the Core OS,
+
+00:01:58.450 --> 00:02:05.200
+the core of the operating system,
+the Unix part of OS X.
+
+00:02:05.200 --> 00:02:09.470
+And what we're talking about today
+is pretty much the BSD file system
+
+00:02:09.470 --> 00:02:13.470
+networking area and the changes
+that we've made in this space.
+
+00:02:23.200 --> 00:02:28.460
+So let me discuss a bit about the
+problem that we've been facing.
+
+00:02:28.800 --> 00:02:33.700
+So here we are,
+back at the kernel and the core system,
+
+00:02:33.700 --> 00:02:36.150
+and we have your KEXT.
+
+00:02:36.980 --> 00:02:38.500
+So you load your KEXT into the kernel.
+
+00:02:38.500 --> 00:02:44.190
+This particular one is a networking KEXT,
+but it's true of others.
+
+00:02:44.190 --> 00:02:44.190
+And there are
+
+00:02:46.870 --> 00:02:49.620
+Parts of the KEXT that have
+got functional references,
+
+00:02:49.620 --> 00:02:51.360
+and these references are fine.
+
+00:02:51.360 --> 00:02:53.100
+We can tell what they are.
+
+00:02:53.100 --> 00:02:55.880
+These are unresolved
+symbols in your KEXT,
+
+00:02:55.940 --> 00:02:58.020
+and we can understand those.
+
+00:02:58.080 --> 00:03:00.690
+But some of them are really
+unsustainable from our perspective.
+
+00:03:00.770 --> 00:03:06.940
+They're reaching into parts of
+the system that we really consider
+
+00:03:06.940 --> 00:03:10.600
+to be an implementation detail,
+as opposed to what we would consider
+
+00:03:10.600 --> 00:03:10.600
+to be a supportable interface.
+
+00:03:11.550 --> 00:03:14.440
+In addition,
+there are a whole set of what I would
+
+00:03:14.440 --> 00:03:15.800
+call detectable data references.
+
+00:03:15.800 --> 00:03:19.420
+These are things where you've
+referenced certain data structures,
+
+00:03:19.420 --> 00:03:24.560
+and the symbols for those are
+therefore unresolved in your text,
+
+00:03:24.610 --> 00:03:27.980
+and we can see that
+you're touching those.
+
+00:03:28.030 --> 00:03:32.020
+But some of these are also what we
+would consider to be unsustainable.
+
+00:03:32.070 --> 00:03:36.140
+They're pointing into data structures
+that we really consider to be private or
+
+00:03:36.240 --> 00:03:40.060
+an internal part of the implementation,
+as opposed to anything that you should
+
+00:03:40.100 --> 00:03:41.720
+be using as a programming interface.
+
+00:03:43.920 --> 00:03:48.680
+But worse still is that there's a
+whole set of indirect data references.
+
+00:03:48.680 --> 00:03:50.380
+This is where you've gone
+into a data structure,
+
+00:03:50.380 --> 00:03:52.620
+and inside that data structure
+there's a pointer to something,
+
+00:03:52.640 --> 00:03:54.750
+you've followed that pointer,
+you've picked another
+
+00:03:54.760 --> 00:03:56.550
+pointer out of there,
+and you've potentially
+
+00:03:56.560 --> 00:03:57.680
+gone all over the kernel.
+
+00:03:57.680 --> 00:04:04.150
+And we have no clue as to what
+it is that you're referencing.
+
+00:04:04.150 --> 00:04:06.830
+And clearly some of those are
+very unsupportable as well.
+
+00:04:06.830 --> 00:04:06.830
+Simon Patience, Dean Reece
+
+00:04:10.940 --> 00:04:15.620
+But the problem is that we consider
+binary compatibility to be paramount,
+
+00:04:15.620 --> 00:04:19.410
+and yet we have no visibility in
+what was actually being depended on.
+
+00:04:19.910 --> 00:04:24.470
+So what has happened is that kernel
+development was grinding to a halt.
+
+00:04:24.580 --> 00:04:27.390
+There was lots of big features
+that we wanted to implement that we
+
+00:04:27.390 --> 00:04:31.400
+just couldn't do because we would
+almost certainly break somebody.
+
+00:04:31.430 --> 00:04:33.950
+Part of the problem was that we
+didn't actually know who it was
+
+00:04:33.950 --> 00:04:35.470
+that we were going to break either.
+
+00:04:35.570 --> 00:04:38.800
+So we had to make changes very,
+very cautiously.
+
+00:04:39.570 --> 00:04:44.550
+The bigger problems was that new
+hardware support was extremely hard.
+
+00:04:45.020 --> 00:04:47.160
+And in fact,
+one particular example of this
+
+00:04:47.190 --> 00:04:51.280
+was when we introduced the G5,
+we had to obsolete the interface
+
+00:04:51.410 --> 00:04:55.340
+for called PMAP Extract,
+which was really not a
+
+00:04:55.490 --> 00:04:59.560
+programming interface that
+we would want it to export.
+
+00:04:59.560 --> 00:05:00.940
+We actually had a perfectly good one.
+
+00:05:00.940 --> 00:05:05.310
+We were using IOMemory descriptors,
+but not everybody used it.
+
+00:05:05.790 --> 00:05:09.550
+So new hardware support was
+becoming more difficult,
+
+00:05:09.550 --> 00:05:11.860
+and we certainly saw that this
+was going to become increasingly
+
+00:05:11.860 --> 00:05:14.780
+more difficult as time went by.
+
+00:05:15.180 --> 00:05:17.880
+We were limited in the number of
+new features we could implement
+
+00:05:17.980 --> 00:05:21.420
+because of the disruption that that
+would have potentially to data or to
+
+00:05:21.490 --> 00:05:26.500
+implementations where we'd have to
+change interfaces inside the kernel.
+
+00:05:28.600 --> 00:05:31.400
+It even got to the point where
+performance optimizations couldn't
+
+00:05:31.400 --> 00:05:34.720
+be done because we would have to
+move things around and therefore
+
+00:05:34.730 --> 00:05:36.340
+potentially break things.
+
+00:05:36.450 --> 00:05:41.500
+Some bugs were not being fixed because we
+couldn't add fields to data structures.
+
+00:05:41.570 --> 00:05:44.400
+In general, the code paths in the
+kernel were being warped,
+
+00:05:44.400 --> 00:05:47.550
+and despite all this,
+we'd still find that developers
+
+00:05:47.580 --> 00:05:49.290
+would occasionally break.
+
+00:05:53.970 --> 00:05:57.620
+So, we decided that we had
+to bite the bullet,
+
+00:05:57.660 --> 00:06:00.420
+and Tiger is the release
+to make progress.
+
+00:06:00.470 --> 00:06:06.120
+We needed to desperately,
+or add desperately needed functionality,
+
+00:06:06.630 --> 00:06:09.800
+What we wanted to do also was
+to extend the I/O Kit experience
+
+00:06:09.930 --> 00:06:13.640
+where you had stable interfaces,
+and extend that experience
+
+00:06:13.640 --> 00:06:17.200
+out to the rest of the kernel,
+so that KEX could be given much
+
+00:06:17.200 --> 00:06:21.500
+stronger guarantees of binary
+compatibility from release to release.
+
+00:06:21.500 --> 00:06:25.000
+As I mentioned before,
+I/O Kit KEX are unaffected,
+
+00:06:25.030 --> 00:06:29.280
+and that's by far and away the
+majority of kernel extensions.
+
+00:06:30.430 --> 00:06:34.660
+But we will be breaking binary
+compatibility for a very few keks.
+
+00:06:34.720 --> 00:06:37.540
+And these keks are really the
+ones that are dependent on the
+
+00:06:37.650 --> 00:06:42.140
+com.apple.kernel.bsd sets of symbols.
+
+00:06:42.290 --> 00:06:45.270
+And we'll talk about that more later.
+
+00:06:49.770 --> 00:06:53.280
+So as I said,
+we needed to add new functionality,
+
+00:06:53.420 --> 00:06:56.510
+and so we have a new
+heart for Tiger's Kernel.
+
+00:06:57.380 --> 00:07:01.730
+SMP support is clearly a big thing.
+
+00:07:02.260 --> 00:07:05.920
+If you notice that all
+our G5s are now SMP,
+
+00:07:05.920 --> 00:07:07.950
+are all dual processors.
+
+00:07:08.450 --> 00:07:13.290
+The previous funnel architecture
+was just not serving them well.
+
+00:07:13.750 --> 00:07:17.310
+So we had to radically change that.
+
+00:07:17.380 --> 00:07:22.040
+64-bit application support is
+another new feature in Tiger.
+
+00:07:22.090 --> 00:07:25.160
+If you have a 64-bit processor,
+64-bit applications seem to
+
+00:07:25.160 --> 00:07:26.510
+make an awful lot of sense.
+
+00:07:28.400 --> 00:07:29.890
+File System Access Control List.
+
+00:07:29.890 --> 00:07:33.810
+This is a feature that people in
+the enterprise space have been
+
+00:07:33.890 --> 00:07:35.970
+pushing for for quite a while.
+
+00:07:37.330 --> 00:07:41.600
+And now we've had the opportunity
+to perform certain optimizations.
+
+00:07:41.990 --> 00:07:45.430
+One of the most,
+biggest examples of this that I can,
+
+00:07:45.510 --> 00:07:50.750
+that came up recently was that there's a
+certain amount of data attached to every
+
+00:07:50.750 --> 00:07:53.490
+VNode for read and write operations.
+
+00:07:53.490 --> 00:07:58.190
+Now, not all VNodes have,
+are read to and written to, for example,
+
+00:07:58.310 --> 00:07:59.700
+directory VNodes.
+
+00:07:59.700 --> 00:08:03.380
+And even if they are,
+do have IO associated with them,
+
+00:08:03.380 --> 00:08:06.110
+it's normally of one type or the other.
+
+00:08:07.200 --> 00:08:10.880
+This, this lump of data that's attached
+to the VNode was actually bigger
+
+00:08:10.880 --> 00:08:14.680
+for write than it was for read,
+but it was present on all VNodes,
+
+00:08:14.680 --> 00:08:17.320
+and read operations are far
+more frequent in the system.
+
+00:08:17.340 --> 00:08:19.980
+And so we've been able to actually
+change the data structure,
+
+00:08:20.010 --> 00:08:25.320
+remove those, those extra pieces,
+extra fields,
+
+00:08:25.340 --> 00:08:28.680
+and only attach them when the VNode
+is in that appropriate operation.
+
+00:08:28.690 --> 00:08:33.400
+And doing this actually saved us
+a megabyte of wired memory space.
+
+00:08:33.460 --> 00:08:36.910
+So this is non-trivial stuff that we're,
+we're dealing with.
+
+00:08:37.990 --> 00:08:40.000
+And finally, as I said,
+there were bugs that we could fix.
+
+00:08:40.000 --> 00:08:43.970
+The fact that we can now add a field
+to a data structure without potentially
+
+00:08:43.970 --> 00:08:47.470
+breaking something has actually allowed
+us to go in and fix some bugs that we've
+
+00:08:47.470 --> 00:08:49.480
+had hanging around for a little while.
+
+00:08:54.200 --> 00:08:56.100
+So improved SMP support, at last.
+
+00:08:56.320 --> 00:09:00.080
+People have been asking
+this for a long time,
+
+00:09:00.080 --> 00:09:03.130
+especially in the server space,
+where they've noticed
+
+00:09:03.130 --> 00:09:07.140
+that the funnels are,
+servers tend to operate in one mode,
+
+00:09:07.180 --> 00:09:10.300
+so they'll be doing sort of a
+lot of networking operations,
+
+00:09:10.300 --> 00:09:13.320
+or a lot of file system operations,
+and so therefore they
+
+00:09:13.320 --> 00:09:16.600
+can't take advantage of the
+split funnel quite so much.
+
+00:09:17.340 --> 00:09:19.580
+And so they've been hitting
+this contention on the funnel,
+
+00:09:19.580 --> 00:09:25.340
+so finally we're getting to break
+it out and remove it from our code,
+
+00:09:25.410 --> 00:09:28.120
+insert finer-grain locking.
+
+00:09:28.120 --> 00:09:32.160
+I use the word finer on purpose here,
+we're not going down and
+
+00:09:32.160 --> 00:09:36.590
+locking every last little thing,
+we're trying to put the granularity at
+
+00:09:36.620 --> 00:09:40.110
+the right level for efficient operation.
+
+00:09:40.410 --> 00:09:45.380
+We've also taken the opportunity
+to restructure a bunch of code.
+
+00:09:45.430 --> 00:09:48.160
+As I mentioned earlier on,
+code was sort of kind of getting
+
+00:09:48.160 --> 00:09:51.370
+warped around because we had to
+tread carefully not to break binary
+
+00:09:51.370 --> 00:09:53.310
+compatibility in the first place.
+
+00:09:53.390 --> 00:09:56.650
+And now we've been able to streamline
+the algorithms much more successfully,
+
+00:09:56.650 --> 00:09:59.300
+which has actually led to
+some performance improvements.
+
+00:09:59.360 --> 00:10:04.740
+And we can reorganize the data
+to associate the data with the
+
+00:10:04.740 --> 00:10:04.740
+locks that are protecting them.
+
+00:10:08.250 --> 00:10:10.500
+So in Panther, this is really what
+the system looked like.
+
+00:10:10.610 --> 00:10:16.140
+We had, as you went in through the user
+space system call entry point,
+
+00:10:16.230 --> 00:10:18.700
+we took the big kernel lock.
+
+00:10:18.700 --> 00:10:23.900
+And as you passed down through generic
+system call handling and perhaps the
+
+00:10:23.920 --> 00:10:28.150
+file system descriptor handling code,
+down through, say,
+
+00:10:28.220 --> 00:10:32.660
+file structures and into the file system,
+you were holding this
+
+00:10:32.760 --> 00:10:35.070
+one lock at the time,
+and the kernel was
+
+00:10:35.070 --> 00:10:35.070
+fundamentally single-threaded.
+
+00:10:35.800 --> 00:10:39.090
+And you'd go right the
+way down to the I/O layer,
+
+00:10:39.090 --> 00:10:42.350
+and once you got into I/O Kit,
+then that lock was dropped and
+
+00:10:42.360 --> 00:10:46.130
+you were back into a much more
+parallel environment again.
+
+00:10:46.610 --> 00:10:49.690
+If you were doing networking calls,
+then you'd still take the same
+
+00:10:49.690 --> 00:10:53.000
+lock as you came into the kernel,
+and then you'd go down through
+
+00:10:53.090 --> 00:10:55.960
+those layers again into the
+networking side of things,
+
+00:10:55.990 --> 00:11:00.700
+where we'd drop the kernel funnel
+and take the networking funnel,
+
+00:11:00.700 --> 00:11:06.110
+and then the entirety of the networking
+stack would then be single-threaded
+
+00:11:06.110 --> 00:11:10.750
+from networking's perspective
+down to the device layer again.
+
+00:11:10.770 --> 00:11:14.240
+So there was a very, very coarse level of
+synchronization within the kernel.
+
+00:11:15.670 --> 00:11:20.000
+This has all sorts of
+interesting problems,
+
+00:11:20.010 --> 00:11:24.810
+apart from the obvious
+parallelism problems,
+
+00:11:24.910 --> 00:11:30.620
+but it's amazing how lazy you
+can get when you believe that
+
+00:11:30.620 --> 00:11:35.330
+nobody else can mess around
+with you while you're executing,
+
+00:11:35.330 --> 00:11:35.330
+and you can start accessing random data
+structures without any real discipline.
+
+00:11:36.880 --> 00:11:41.040
+So what we now have is much finer
+grain locking in the kernel,
+
+00:11:41.040 --> 00:11:45.180
+with locking at most levels of the
+system being independent from each other.
+
+00:11:47.370 --> 00:11:53.120
+The locks are either at the subsystem
+level or at the object level.
+
+00:11:53.120 --> 00:11:58.920
+So here's subsystem level locks
+where basically there's a single
+
+00:11:59.100 --> 00:12:01.840
+lock to be able to allocate M-Buffs,
+for example.
+
+00:12:01.900 --> 00:12:07.730
+And then there are other locks which are
+held actually on the individual objects.
+
+00:12:07.920 --> 00:12:11.810
+So we're actually intelligently looking
+at the granularity of locking that
+
+00:12:11.810 --> 00:12:14.920
+needs to be held at all layers of
+the system so that we don't introduce
+
+00:12:15.420 --> 00:12:19.900
+arbitrarily fine-grained locking which
+would increase performance overheads,
+
+00:12:19.900 --> 00:12:22.720
+or have too coarse a grain level
+which means you wouldn't get the
+
+00:12:22.720 --> 00:12:24.300
+parallelism that you would like.
+
+00:12:24.400 --> 00:12:28.470
+So we believe that we actually
+have a reasonable level of locking
+
+00:12:28.690 --> 00:12:31.280
+granularity throughout the system.
+
+00:12:32.840 --> 00:12:36.230
+Our general philosophy is that we
+start coarse and then move finer
+
+00:12:36.230 --> 00:12:39.990
+grain as we've determined that
+there are performance issues.
+
+00:12:44.960 --> 00:12:47.600
+Another big feature, 64-bit support.
+
+00:12:47.610 --> 00:12:50.650
+In Panther,
+the support was somewhat limited.
+
+00:12:50.650 --> 00:12:54.650
+We gave you
+
+00:12:55.470 --> 00:13:11.050
+We also gave you access to
+64-bit instructions and 64-bit
+
+00:13:11.050 --> 00:13:13.480
+registers for performance reasons.
+
+00:13:13.480 --> 00:13:19.340
+However, the usage for those tended to
+be in assembler leaf functions,
+
+00:13:19.340 --> 00:13:22.970
+so it wasn't universally applicable.
+
+00:13:22.980 --> 00:13:25.740
+However,
+it allowed certain very important
+
+00:13:25.740 --> 00:13:30.980
+mathematical operations to be optimized
+to take full advantage of the processor.
+
+00:13:30.980 --> 00:13:36.740
+This addresses a couple of the
+dimensions of 64-bit support in terms
+
+00:13:36.740 --> 00:13:42.170
+of large physical configurations and
+some performance benefits that you can
+
+00:13:42.170 --> 00:13:45.180
+get from using a 64-bit architecture.
+
+00:13:47.790 --> 00:13:51.390
+In Panther,
+we've decided we want to be able to
+
+00:13:51.390 --> 00:13:55.980
+leverage the full power of the G5,
+and so we're supporting 64-bit
+
+00:13:56.000 --> 00:13:58.050
+non-GUI Unix applications.
+
+00:13:58.050 --> 00:14:01.890
+So that basically means we're
+providing a 64-bit lib system,
+
+00:14:01.890 --> 00:14:02.890
+and that's it.
+
+00:14:02.960 --> 00:14:08.820
+The reason we're doing this is because
+we're aiming at applications which tend
+
+00:14:09.340 --> 00:14:11.520
+to have a naturally large data set.
+
+00:14:11.600 --> 00:14:16.120
+So these are compute-intensive
+applications in general.
+
+00:14:17.240 --> 00:14:20.010
+And these tend to come
+from the Unix world.
+
+00:14:23.540 --> 00:14:29.060
+what we've had to do in the kernel is add
+support for multiple ABI's so we have to
+
+00:14:29.080 --> 00:14:33.410
+be aware of the fact that system calls
+can come through either from a 32-bit
+
+00:14:33.480 --> 00:14:37.600
+application or a 64-bit application
+which means that they have different
+
+00:14:37.600 --> 00:14:42.080
+address bases and therefore different
+sized pointers and the structures within
+
+00:14:42.120 --> 00:14:46.260
+the kernel or the structures that they
+passed to the kernel I should say could
+
+00:14:46.260 --> 00:14:49.840
+be different formats and so we had
+to be able to deal with that a lot
+
+00:14:49.900 --> 00:14:53.580
+of that's been at the system call entry
+time but there's other places in the
+
+00:14:53.610 --> 00:14:57.730
+kernel that do that we had to make
+changes to support a large address
+
+00:14:57.730 --> 00:15:01.380
+space breaking the four gigabyte barrier
+
+00:15:02.440 --> 00:15:04.920
+But of course,
+if you have a non-GUI application,
+
+00:15:05.000 --> 00:15:07.960
+you probably want to have a
+GUI application to represent
+
+00:15:07.960 --> 00:15:09.530
+the results of your app.
+
+00:15:09.740 --> 00:15:13.430
+And so we've had to do 32- to
+64-bit ABI interoperability.
+
+00:15:13.460 --> 00:15:19.420
+So we have done various different shared
+memory IPC kinds of communication paths
+
+00:15:19.500 --> 00:15:24.120
+between the apps with different ABIs.
+
+00:15:26.910 --> 00:15:29.890
+File System Access Control Lists.
+
+00:15:29.890 --> 00:15:34.200
+Fundamentally,
+the changes that we've had to do is to
+
+00:15:34.270 --> 00:15:41.120
+centralize the credential checking for
+authorization to access to operations.
+
+00:15:41.190 --> 00:15:47.150
+Basically,
+eliminating the UID/GID comparisons
+
+00:15:47.150 --> 00:15:47.150
+that you've seen sprinkled
+throughout the system.
+
+00:15:47.810 --> 00:15:51.090
+We have new kernel interfaces
+for these checks that are,
+
+00:15:51.090 --> 00:15:55.510
+I hesitate to say capability-based
+because it's not a capability system,
+
+00:15:55.570 --> 00:15:59.010
+but effectively,
+given an object and your credentials,
+
+00:15:59.010 --> 00:16:02.910
+this is the operation that you'd
+like to apply to this object.
+
+00:16:03.000 --> 00:16:08.240
+Do I have permission to do so,
+or do I have the authorization to do so?
+
+00:16:08.910 --> 00:16:12.440
+And we've also enabled native file
+system support for ACLs through
+
+00:16:12.440 --> 00:16:15.400
+change in the VNode interfaces.
+
+00:16:15.970 --> 00:16:17.370
+So...
+
+00:16:17.710 --> 00:16:21.080
+Given the changes to the
+kernel that we've made,
+
+00:16:21.250 --> 00:16:25.530
+what are the changes that you
+will have to do for kernel
+
+00:16:25.530 --> 00:16:28.220
+programming for your kegs?
+
+00:16:32.690 --> 00:16:34.030
+So we discussed this last year.
+
+00:16:34.130 --> 00:16:39.570
+We've added a whole set of formal
+kernel programming interfaces in Tiger.
+
+00:16:40.600 --> 00:16:49.840
+I/O Kit already had its own
+set of formal interfaces,
+
+00:16:49.840 --> 00:16:49.840
+so I/O Kit KECs are
+basically unaffected by this.
+
+00:16:50.120 --> 00:16:59.720
+The KEX types that we're supporting in
+the BSD side of things are file systems,
+
+00:16:59.720 --> 00:17:04.460
+network extensions, and filters.
+
+00:17:04.460 --> 00:17:05.870
+There's probably a few more details,
+but that's fundamentally
+
+00:17:05.870 --> 00:17:05.870
+the set of KEX that we're
+supporting through these KPIs.
+
+00:17:06.840 --> 00:17:18.790
+One of the big things is that there's
+no more open and indiscriminate access
+
+00:17:18.790 --> 00:17:18.790
+to all of kernel code and data being
+supported by these formal interfaces.
+
+00:17:20.500 --> 00:17:26.180
+Now we understand that there are some
+KEKs for various reasons might want to
+
+00:17:26.330 --> 00:17:28.400
+get access to the whole of the kernel.
+
+00:17:28.400 --> 00:17:32.400
+We would advise that not
+to be in product code,
+
+00:17:32.480 --> 00:17:36.400
+simply because these KEKs,
+if they do get kernel access,
+
+00:17:36.400 --> 00:17:40.580
+or access to the whole of kernel symbols,
+will be tied to exactly
+
+00:17:40.740 --> 00:17:42.390
+one kernel version.
+
+00:17:42.390 --> 00:17:47.400
+So whenever we update the kernel,
+those KEKs will not load.
+
+00:17:48.160 --> 00:17:58.330
+However, if you use the KPIs,
+you're guaranteed release to
+
+00:17:58.330 --> 00:17:58.330
+release binary compatibility,
+and of course, source compatibility.
+
+00:18:08.800 --> 00:18:09.860
+So what do the KPIs do?
+
+00:18:09.860 --> 00:18:13.310
+They basically encapsulate all
+the kernel objects that want to
+
+00:18:13.310 --> 00:18:17.210
+be accessed by Kernel Extensions.
+
+00:18:17.820 --> 00:18:22.610
+We've made all the data structures
+opaque so that you don't have to go and
+
+00:18:22.610 --> 00:18:26.300
+access the data structures directly,
+which means that these data
+
+00:18:26.380 --> 00:18:30.460
+structures are now invisible to you,
+and we can change their organization.
+
+00:18:30.460 --> 00:18:34.750
+We can add fields and do whatever.
+
+00:18:34.910 --> 00:18:41.340
+However, you can still get access to the
+information contained in these
+
+00:18:42.540 --> 00:18:42.540
+data structures by using accesses.
+
+00:18:43.580 --> 00:18:48.610
+Perhaps more importantly is that the
+locking that we've implemented for
+
+00:18:49.020 --> 00:18:54.630
+synchronization for these various objects
+is completely hidden behind the KPIs.
+
+00:18:55.490 --> 00:19:00.200
+All the objects are reference counted,
+so when you access an
+
+00:19:00.290 --> 00:19:04.570
+object in the kernel,
+you have to formally look it up,
+
+00:19:04.790 --> 00:19:08.380
+basically,
+do the operations that you wish to,
+
+00:19:08.380 --> 00:19:10.310
+and then release it.
+
+00:19:10.840 --> 00:19:15.700
+Not doing this will cause leakage in
+reference accounting that will cause
+
+00:19:15.700 --> 00:19:19.330
+problems and bugs in the system later on.
+
+00:19:21.210 --> 00:19:24.060
+So, basically what I'm saying is
+that the semantic model for
+
+00:19:24.060 --> 00:19:27.200
+a lot of the objects within,
+or the data structures in the kernel
+
+00:19:27.200 --> 00:19:31.100
+has changed because of this reference
+counting and because of locking.
+
+00:19:31.100 --> 00:19:33.760
+So, don't be fooled into thinking
+that you can just take,
+
+00:19:33.830 --> 00:19:37.290
+you know, the Veno pointer that you used
+to have and do all the operations
+
+00:19:37.290 --> 00:19:41.670
+that you used to and just sort of
+recast the pointers that you were
+
+00:19:41.670 --> 00:19:45.090
+getting back from the lookups,
+because this won't work.
+
+00:19:47.090 --> 00:19:51.710
+We've also gone through and changed
+names of various interfaces,
+
+00:19:51.820 --> 00:19:54.660
+data structures within the kernel.
+
+00:19:54.750 --> 00:19:55.700
+And we've done this intentionally.
+
+00:19:55.700 --> 00:19:57.830
+It's not just to annoy people.
+
+00:19:58.030 --> 00:20:03.970
+It's basically to give you a
+strong signal that the semantics
+
+00:20:04.070 --> 00:20:09.650
+of that object has changed,
+and you have to re-look at that
+
+00:20:09.650 --> 00:20:10.990
+code and change your code to reflect
+the semantics of those objects.
+
+00:20:13.110 --> 00:20:18.240
+As I was mentioning before,
+you can actually use all of the kernel.
+
+00:20:18.390 --> 00:20:23.510
+And if you don't use those KPIs,
+and you decide to go off and get
+
+00:20:23.520 --> 00:20:27.800
+a hold of a data structure that
+is encapsulated within the KPI,
+
+00:20:27.800 --> 00:20:28.660
+you can do that.
+
+00:20:29.070 --> 00:20:31.270
+However,
+you must understand and correctly
+
+00:20:31.270 --> 00:20:35.710
+honor all of kernel locking and the
+changes that we make to that over time.
+
+00:20:35.710 --> 00:20:38.120
+So this is really not a great idea.
+
+00:20:39.290 --> 00:20:42.880
+However, using the KPIs,
+the kernel implementation of
+
+00:20:42.880 --> 00:20:45.670
+those objects does not affect you.
+
+00:20:45.680 --> 00:20:48.140
+And so therefore,
+whatever we do will still
+
+00:20:48.140 --> 00:20:50.250
+remain compatible for you.
+
+00:21:00.880 --> 00:21:05.060
+So the other thing that is going to
+affect you is that we've removed the
+
+00:21:05.060 --> 00:21:07.390
+funnel significantly from our code.
+
+00:21:07.440 --> 00:21:10.780
+The funnel in the seed
+is certainly still there.
+
+00:21:10.780 --> 00:21:13.790
+There's large parts of the system
+that are still protected by it,
+
+00:21:13.890 --> 00:21:17.200
+but that's being removed as we progress.
+
+00:21:17.200 --> 00:21:22.620
+So you should be aware of the
+fact that what you're seeing is
+
+00:21:22.620 --> 00:21:22.620
+development work in mid-cycle.
+
+00:21:23.690 --> 00:21:28.970
+But the goal is to remove the funnel
+from Apple code before we ship Tiger.
+
+00:21:29.210 --> 00:21:32.430
+What this means is that the kernel
+is no longer single-threaded,
+
+00:21:32.430 --> 00:21:36.120
+and as it passes through
+kernel extension code,
+
+00:21:36.150 --> 00:21:39.460
+there could be multiple threads
+passing through this now.
+
+00:21:40.100 --> 00:21:42.540
+So,
+your KEKs need to protect their own data.
+
+00:21:42.540 --> 00:21:44.830
+If you have data inside it,
+you have to be aware of the fact
+
+00:21:44.880 --> 00:21:47.000
+that there could be multiple
+threads trying to access this,
+
+00:21:47.000 --> 00:21:48.980
+and so therefore,
+if you need any atomicity,
+
+00:21:49.140 --> 00:21:50.800
+you're going to have to do this.
+
+00:21:50.970 --> 00:21:55.380
+And to do that, we have a rich set of
+synchronization primitives:
+
+00:21:55.410 --> 00:22:00.520
+spin locks, mutexes, reader/writer locks,
+and some atomic
+
+00:22:00.530 --> 00:22:03.460
+operations for you to use.
+
+00:22:03.510 --> 00:22:07.660
+By and large, we think that the mutex is
+actually going to be the one that
+
+00:22:07.660 --> 00:22:09.370
+you're going to be using most.
+
+00:22:11.170 --> 00:22:15.060
+We also recognize that it
+might be difficult for some
+
+00:22:15.370 --> 00:22:18.190
+KEKs to become multi-threaded.
+
+00:22:18.240 --> 00:22:22.880
+Multi-threading is supporting SMP,
+and locking is actually
+
+00:22:22.880 --> 00:22:27.700
+not a trivial exercise,
+as we found out.
+
+00:22:28.120 --> 00:22:32.530
+So, there may be times where you
+actually want to be able to load and
+
+00:22:32.530 --> 00:22:34.500
+still be protected by the funnel.
+
+00:22:34.500 --> 00:22:38.080
+And so we do have single-threaded
+funnel executions supported.
+
+00:22:38.120 --> 00:22:43.970
+For example,
+as you pass through the VNode layer
+
+00:22:43.970 --> 00:22:50.010
+and going into the file system,
+we will take a funnel operation that will
+
+00:22:50.010 --> 00:22:50.010
+allow your code to be single-threaded.
+
+00:22:54.550 --> 00:22:58.020
+So because we've added all
+these lovely synchronization
+
+00:22:58.020 --> 00:23:01.530
+primitives for you to use,
+it would be rather unfair not
+
+00:23:01.530 --> 00:23:05.350
+to help you debug them because
+locking is a tricky business.
+
+00:23:05.790 --> 00:23:11.840
+So we've added a whole bunch of
+things to help you debug your code in
+
+00:23:11.840 --> 00:23:14.070
+the face of deadlocks and so forth.
+
+00:23:14.160 --> 00:23:18.420
+So we have a bunch of things
+for lock debugging for mutexes.
+
+00:23:18.490 --> 00:23:25.160
+As I said, we expect that mostly you'll
+be using mutexes in your code.
+
+00:23:25.240 --> 00:23:28.400
+So for mutex locks,
+you can get the current
+
+00:23:28.620 --> 00:23:32.180
+owner for the mutex,
+and if you've got a read/write lock,
+
+00:23:32.180 --> 00:23:36.240
+if it's held exclusive,
+you'll get the owner for that.
+
+00:23:36.320 --> 00:23:40.460
+The PC of the last time
+that the lock was held,
+
+00:23:40.460 --> 00:23:43.710
+so you know where in your
+code that lock was taken,
+
+00:23:43.850 --> 00:23:48.200
+and who it was that took it,
+as in the thread.
+
+00:23:48.580 --> 00:23:53.940
+Also, there's an option where you can
+actually get the backtrace of
+
+00:23:54.010 --> 00:23:56.920
+that last lock for eight frames.
+
+00:23:57.040 --> 00:24:00.880
+This will indicate the path that you
+got down there because frequently,
+
+00:24:01.150 --> 00:24:03.720
+you know, you've taken the lock in some
+sort of generic function.
+
+00:24:03.720 --> 00:24:06.110
+You have no idea who it
+was that's called it,
+
+00:24:06.110 --> 00:24:09.160
+and it was called in one
+of 40 different places.
+
+00:24:09.360 --> 00:24:15.340
+So we give you the backtrace option
+to find out exactly the path that
+
+00:24:15.340 --> 00:24:17.910
+you took to get to that lock.
+
+00:24:18.980 --> 00:24:25.290
+We also have some runtime checks to help
+prevent you from getting into trouble.
+
+00:24:25.420 --> 00:24:30.090
+We assert that you actually own
+the lock when you unlock it.
+
+00:24:30.790 --> 00:24:34.080
+We don't allow one thread over
+here to go off and lock something,
+
+00:24:34.080 --> 00:24:38.140
+and then effectively hand the object
+off and be unlocked by somebody else.
+
+00:24:38.360 --> 00:24:43.660
+That's generally considered
+to be very bad style,
+
+00:24:43.720 --> 00:24:48.830
+and leads to a lot of almost
+undebuggable situations.
+
+00:24:49.010 --> 00:24:54.180
+And so we just assert that you
+have to own the lock to unlock it.
+
+00:24:55.760 --> 00:24:58.310
+If you've taken the lock exclusive,
+we detect that you've
+
+00:24:58.370 --> 00:24:59.700
+just taken it again.
+
+00:24:59.700 --> 00:25:01.540
+That's almost certainly not
+what you really meant to do,
+
+00:25:01.540 --> 00:25:05.200
+because that implies that there's two
+code paths that want to use this lock
+
+00:25:05.230 --> 00:25:09.990
+in an exclusive mode at the same time,
+even if it's the same thread.
+
+00:25:10.000 --> 00:25:12.400
+And so we detect that.
+
+00:25:13.400 --> 00:25:19.940
+We make sure that in the interfaces that
+require synchronization locks that you've
+
+00:25:19.940 --> 00:25:26.160
+actually passed the right lock type in,
+and you're not getting
+
+00:25:26.160 --> 00:25:26.160
+confused and giving a simple
+lock where a mutex is needed.
+
+00:25:27.530 --> 00:25:33.060
+And this one is again a
+stylistic thing in some respects.
+
+00:25:33.610 --> 00:25:36.650
+That we, if you take a lock and
+you need to go to sleep,
+
+00:25:36.650 --> 00:25:40.010
+we assert that you actually
+don't hold any resources that
+
+00:25:40.020 --> 00:25:42.160
+prevent you from going to sleep.
+
+00:25:42.260 --> 00:25:44.320
+In particular, that means another lock,
+basically.
+
+00:25:44.320 --> 00:25:48.160
+If you're going to sleep for
+long times in the system,
+
+00:25:48.160 --> 00:25:51.940
+then you shouldn't be
+holding kernel resources.
+
+00:25:51.940 --> 00:25:53.910
+If you're waiting for I.O.
+
+00:25:53.910 --> 00:25:57.800
+or something of that nature,
+if it's a non-bounded sleep,
+
+00:25:57.800 --> 00:25:59.950
+then you shouldn't be holding
+kernel resources because
+
+00:26:00.050 --> 00:26:01.140
+that will lead to deadlock.
+
+00:26:03.500 --> 00:26:06.640
+We also have some log
+statistics being kept.
+
+00:26:24.260 --> 00:26:25.200
+My light's gone off here.
+
+00:26:25.200 --> 00:26:27.440
+Is it working?
+
+00:26:27.480 --> 00:26:29.380
+Okay.
+
+00:26:29.650 --> 00:26:31.170
+Sorry about that.
+
+00:26:31.410 --> 00:26:33.420
+So lock statistics, sorry about that.
+
+00:26:33.550 --> 00:26:36.280
+So how long the lock has been held for?
+
+00:26:36.420 --> 00:26:40.340
+Average and maximum lengths of time.
+
+00:26:40.470 --> 00:26:43.100
+Clearly you don't want to hold
+locks for very large periods of
+
+00:26:43.100 --> 00:26:46.180
+time because that will increase
+the likelihood of contention.
+
+00:26:46.180 --> 00:26:50.170
+We also count how many times
+the lock was contended.
+
+00:26:50.510 --> 00:26:55.630
+When you take mutexes,
+we hang around and look if the lock
+
+00:26:55.630 --> 00:27:03.070
+holder is still active on another CPU.
+
+00:27:03.900 --> 00:27:06.240
+If the lock is held by
+somebody on another CPU,
+
+00:27:06.240 --> 00:27:08.460
+then we don't immediately go to sleep.
+
+00:27:08.580 --> 00:27:11.000
+We sort of wait for a bit just to
+see if they're going to be holding
+
+00:27:11.000 --> 00:27:18.180
+the lock for a short period of time,
+and then you'll immediately jump
+
+00:27:18.180 --> 00:27:22.600
+in as soon as they release it.
+
+00:27:22.600 --> 00:27:23.190
+So we differentiate between contention
+and actually sleeping on the lock.
+
+00:27:23.690 --> 00:27:26.040
+If the lock is held by
+somebody on another CPU,
+
+00:27:26.040 --> 00:27:28.300
+then we don't immediately go to sleep.
+
+00:27:28.340 --> 00:27:30.060
+We sort of wait for a bit just to
+see if they're going to be holding
+
+00:27:30.060 --> 00:27:30.060
+the lock for a short period of time,
+and then you'll immediately jump
+
+00:27:30.060 --> 00:27:30.060
+in as soon as they release it.
+
+00:27:30.060 --> 00:27:30.060
+So we differentiate between contention
+and actually sleeping on the lock.
+
+00:27:34.140 --> 00:27:39.850
+So for 64-bits, in the kernel,
+
+00:27:40.070 --> 00:27:42.230
+We thought about how best
+to address this issue,
+
+00:27:42.300 --> 00:27:45.780
+the fact that you've got two different
+kinds of address spaces out there.
+
+00:27:45.980 --> 00:27:50.780
+So we decided that we would represent
+user addresses in the kernel as 64-bits,
+
+00:27:50.780 --> 00:27:55.360
+regardless of whether it's a
+64-bit process or a 32-bit process.
+
+00:27:55.500 --> 00:28:01.180
+So the kernel data type for
+a user address is 64-bits.
+
+00:28:02.240 --> 00:28:05.760
+Whenever you actually access
+the user address space,
+
+00:28:05.780 --> 00:28:10.110
+the accesses needed that you use
+to access it have been changed.
+
+00:28:10.170 --> 00:28:12.360
+Their signature has
+changed because of this.
+
+00:28:12.470 --> 00:28:14.760
+So if you use things like
+copy in and copy out,
+
+00:28:14.830 --> 00:28:19.860
+or UI or move,
+then those interfaces have also changed.
+
+00:28:21.230 --> 00:28:24.660
+Whenever you actually access
+the user address space,
+
+00:28:24.660 --> 00:28:29.040
+the accesses needed that you use
+to access it have been changed.
+
+00:28:29.040 --> 00:28:31.300
+Their signature has
+changed because of this.
+
+00:28:31.300 --> 00:28:33.720
+So if you use things like
+copy in and copy out,
+
+00:28:33.720 --> 00:28:34.980
+or UI or move,
+then those interfaces have also changed.
+
+00:28:41.540 --> 00:28:43.740
+So for file system ACLs,
+as I mentioned earlier on,
+
+00:28:43.740 --> 00:28:48.760
+we have a new authorization model with,
+and have eliminated all the
+
+00:28:48.770 --> 00:28:53.120
+UID/GID comparisons in the kernel,
+and have used this new
+
+00:28:53.120 --> 00:28:58.400
+centralized credential manager,
+sorry, centralized authorization
+
+00:28:58.590 --> 00:29:00.690
+service called KAUF.
+
+00:29:01.020 --> 00:29:04.200
+In addition, we have new credential
+management interfaces.
+
+00:29:04.200 --> 00:29:07.830
+You can't cons up your own credentials
+and hand them off to the system because
+
+00:29:07.850 --> 00:29:13.500
+these things are now reference counted,
+so you have to create them and
+
+00:29:13.500 --> 00:29:13.500
+manipulate them through KPIs.
+
+00:29:14.280 --> 00:29:19.610
+We have, as I mentioned,
+this sort of authorization model,
+
+00:29:19.680 --> 00:29:22.740
+which is a capability checking interface.
+
+00:29:22.740 --> 00:29:28.400
+Am I capable of performing
+this operation on this object?
+
+00:29:29.160 --> 00:29:30.570
+And this is actually extendable.
+
+00:29:30.730 --> 00:29:33.910
+We have pluggable authorization
+policies that you can insert
+
+00:29:33.910 --> 00:29:37.140
+into what are called scopes,
+which gives you the ability to
+
+00:29:37.590 --> 00:29:41.980
+contribute to the decision-making as
+to whether somebody can perform this
+
+00:29:41.980 --> 00:29:44.260
+operation on this set of objects.
+
+00:29:44.920 --> 00:29:49.400
+This was covered in the
+Fastest in ACL talk yesterday,
+
+00:29:49.400 --> 00:29:51.420
+and I hope people caught it.
+
+00:29:51.530 --> 00:29:55.100
+But failing that, if you would like to
+catch that on your DVDs,
+
+00:29:55.100 --> 00:29:57.890
+it will be explained
+in a lot more detail.
+
+00:30:01.100 --> 00:30:04.990
+So we also have added native
+support for file system ACLs.
+
+00:30:05.110 --> 00:30:08.230
+And if your file system
+does support ACLs,
+
+00:30:08.460 --> 00:30:14.630
+then there are new VN Ops to be able to
+plug into to be able to export those.
+
+00:30:15.110 --> 00:30:18.660
+For file systems that
+don't support native ACLs,
+
+00:30:18.780 --> 00:30:23.980
+if they do support extended attributes,
+we have new VNOps4 to support
+
+00:30:23.980 --> 00:30:26.320
+extended attributes natively.
+
+00:30:26.710 --> 00:30:32.210
+And if you have those,
+then we actually store the ACLs
+
+00:30:32.210 --> 00:30:32.210
+in the extended attributes.
+
+00:30:33.050 --> 00:30:36.000
+If your file system
+doesn't support either,
+
+00:30:36.000 --> 00:30:39.960
+then we store extended
+attributes in Apple double files,
+
+00:30:39.960 --> 00:30:43.210
+the .underbar files,
+and then ACLs are then stored in
+
+00:30:43.210 --> 00:30:44.710
+the extended attributes in that way.
+
+00:30:44.720 --> 00:30:49.230
+So even if you don't have
+any of these features,
+
+00:30:49.320 --> 00:30:53.830
+we'll still expose them to
+the user by smoke and mirrors,
+
+00:30:53.930 --> 00:30:54.280
+basically.
+
+00:30:54.280 --> 00:30:59.010
+But this gives you the opportunity
+of taking existing file systems
+
+00:30:59.010 --> 00:31:02.520
+from other Unix systems that already
+have these advanced features,
+
+00:31:03.000 --> 00:31:06.440
+and now being able to support
+them natively within OS X.
+
+00:31:13.080 --> 00:31:15.830
+So at this point,
+I'd like to welcome Dean Reece,
+
+00:31:15.910 --> 00:31:21.980
+who's the manager of the I/O Kit team,
+to talk about how access to kernel
+
+00:31:21.980 --> 00:31:25.920
+interfaces is managed within the system.
+
+00:31:32.980 --> 00:31:37.130
+Good afternoon.
+
+00:31:37.160 --> 00:31:42.740
+Okay, so first I'd like to talk a little
+bit about some extras that you're
+
+00:31:42.740 --> 00:31:45.710
+getting with your -- I guess
+it's available on the website,
+
+00:31:45.840 --> 00:31:49.700
+the Apple Developer Connection
+website content for this page,
+
+00:31:49.700 --> 00:31:51.770
+for this session.
+
+00:31:51.780 --> 00:31:56.070
+We've got several interesting
+new tidbits for you to help with
+
+00:31:56.380 --> 00:32:00.210
+your kex development for Tiger.
+
+00:32:00.340 --> 00:32:03.250
+In no particular order,
+we've got a plugin for
+
+00:32:03.250 --> 00:32:04.550
+FireWire debugging.
+
+00:32:04.910 --> 00:32:07.850
+Basically, this allows you to do the
+two-machine GDB debugging
+
+00:32:08.340 --> 00:32:10.370
+through a FireWire connection.
+
+00:32:10.610 --> 00:32:12.730
+Functionally,
+it's similar to the Ethernet
+
+00:32:12.950 --> 00:32:14.550
+debugging that you can already do.
+
+00:32:14.650 --> 00:32:18.640
+It's got a few advantages,
+one being that it's available much
+
+00:32:18.640 --> 00:32:21.070
+earlier during boot and sleep/wake.
+
+00:32:21.190 --> 00:32:24.450
+So if you're trying to
+debug a sleep/wake problem,
+
+00:32:24.450 --> 00:32:26.400
+you have earlier access.
+
+00:32:26.700 --> 00:32:30.270
+Also, we've got a new command
+called kexsim for GDB.
+
+00:32:30.510 --> 00:32:34.940
+If you're connected to another machine,
+and you have Kernel Extensions loaded,
+
+00:32:34.940 --> 00:32:40.140
+and you like to generate
+symbols for those,
+
+00:32:40.140 --> 00:32:45.760
+rather than having to
+generate them manually,
+
+00:32:45.760 --> 00:32:47.590
+you can run kexsim and point
+it at a folder on your local
+
+00:32:47.590 --> 00:32:47.590
+machine that has all the binaries.
+
+00:32:49.780 --> 00:32:54.500
+Yeah, we definitely appreciate
+having this internally as well.
+
+00:32:54.500 --> 00:32:57.430
+So basically,
+it will generate symbols for all loaded
+
+00:32:57.470 --> 00:32:59.810
+kernel extensions in a single command.
+
+00:33:01.430 --> 00:33:04.820
+We've also got a Perl script,
+a little utility called Kextract.
+
+00:33:05.030 --> 00:33:08.290
+Now, this is something,
+it's a bit of an experiment,
+
+00:33:08.290 --> 00:33:12.860
+but as Simon said earlier,
+we have a situation where we have
+
+00:33:12.860 --> 00:33:15.540
+a lot of KEXT developers out here
+doing really cool development,
+
+00:33:15.540 --> 00:33:18.770
+but we don't have a good understanding
+of what all you depend on,
+
+00:33:18.840 --> 00:33:21.120
+what specific APIs you're using and why.
+
+00:33:21.580 --> 00:33:24.660
+So this is sort of the beginnings
+of a feedback mechanism.
+
+00:33:24.660 --> 00:33:29.060
+And what Kextract does is you run
+it against your kernel extension,
+
+00:33:29.060 --> 00:33:31.450
+and it basically extracts
+a whole lot of information.
+
+00:33:31.460 --> 00:33:34.910
+Basically, it's looking at the P list,
+and it's looking at the
+
+00:33:34.910 --> 00:33:36.880
+undefined symbols in your binary.
+
+00:33:36.880 --> 00:33:42.120
+And it formats that into a little
+text file that you can send
+
+00:33:42.120 --> 00:33:45.930
+to Apple by way of Radar Web,
+or Bug Web.
+
+00:33:45.940 --> 00:33:50.780
+And we're going to keep these in a
+database that will allow us to search.
+
+00:33:51.400 --> 00:33:53.570
+Anytime we want to make a change,
+or if we're just curious
+
+00:33:53.570 --> 00:33:55.460
+who's using an API,
+we'll be able to find any
+
+00:33:55.590 --> 00:33:57.160
+kernel extension using it.
+
+00:33:57.280 --> 00:34:00.820
+We'll be able to trace it back to
+the developer who submitted it.
+
+00:34:00.900 --> 00:34:03.040
+This is purely voluntary.
+
+00:34:03.040 --> 00:34:06.580
+We're going to be using this, again,
+it's a bit of an experiment.
+
+00:34:06.580 --> 00:34:07.970
+It's not a certification program.
+
+00:34:07.970 --> 00:34:09.190
+There's no guarantees made.
+
+00:34:09.200 --> 00:34:12.400
+But this will be a good way for you to
+let us know what it is you're using,
+
+00:34:12.400 --> 00:34:15.110
+and it'll be a good way for us
+to find out and possibly contact
+
+00:34:15.160 --> 00:34:16.740
+you about upcoming changes.
+
+00:34:16.740 --> 00:34:19.500
+So I think this could be very useful.
+
+00:34:22.770 --> 00:34:28.080
+So we've also got a new kernel
+available on the website.
+
+00:34:28.080 --> 00:34:30.380
+This is probably the single
+largest piece of the download.
+
+00:34:30.380 --> 00:34:35.960
+But the kernel that actually shipped on
+the TigerSeed still has a few KPI bugs
+
+00:34:36.120 --> 00:34:39.110
+in it that we wanted to get fixed so
+that you could play around with it.
+
+00:34:39.220 --> 00:34:43.880
+But it was a little late in the TigerSeed
+development cycle for us to be putting
+
+00:34:43.880 --> 00:34:47.540
+kernel changes in for something that
+wasn't critical path for the release.
+
+00:34:47.540 --> 00:34:51.240
+So if you're going to be doing
+KPI development or kex development,
+
+00:34:51.400 --> 00:34:53.960
+you're going to be using the new KPIs,
+you should install this kernel.
+
+00:34:53.960 --> 00:34:57.850
+You should only install this
+kernel on top of the WWDC seed.
+
+00:34:57.880 --> 00:35:01.980
+And there's a readme in there that has
+instructions for how to install it.
+
+00:35:03.660 --> 00:35:07.090
+We've also got some documentation
+and examples in the image.
+
+00:35:07.310 --> 00:35:10.320
+The examples are works in progress.
+
+00:35:10.350 --> 00:35:14.890
+The two file systems that we have
+there are WebDAVFS and MSDOSFS.
+
+00:35:15.060 --> 00:35:19.770
+These are the source code for the actual
+binaries that shipped on the tiger seed,
+
+00:35:19.850 --> 00:35:24.160
+so you're looking at the same thing
+that we actually send in to get built.
+
+00:35:24.230 --> 00:35:26.500
+And as I said, they're works in progress.
+
+00:35:26.640 --> 00:35:30.000
+These are not in their final form,
+but they do work using the KPIs and
+
+00:35:30.000 --> 00:35:35.260
+it'll give you something to look at,
+sort of a starting point.
+
+00:35:35.330 --> 00:35:39.650
+We've also got a couple other
+examples that are not shipping code.
+
+00:35:39.720 --> 00:35:44.130
+They're just specific,
+tight examples of one or two KPIs,
+
+00:35:44.180 --> 00:35:50.630
+one for filters and one for a socket
+filter and one for an IP filter.
+
+00:35:50.870 --> 00:35:54.490
+The documentation that's on
+the site is a collection of
+
+00:35:54.510 --> 00:35:59.230
+HeaderDoc and some RTF files,
+sort of porting guides, to help you, one,
+
+00:35:59.230 --> 00:36:02.800
+go through and actually examine
+the KPIs and their intent and
+
+00:36:02.800 --> 00:36:04.670
+their parameters and so on.
+
+00:36:04.680 --> 00:36:07.300
+And the porting guide is a
+little bit more of a tutorial,
+
+00:36:07.300 --> 00:36:09.690
+basically trying to walk
+you through the process.
+
+00:36:09.930 --> 00:36:15.500
+And it was actually written as an
+experience that we went through
+
+00:36:15.500 --> 00:36:18.950
+doing -- porting our own file
+systems and such to the KPIs.
+
+00:36:20.300 --> 00:36:27.810
+Obviously,
+as this whole KPI process moves forward,
+
+00:36:27.810 --> 00:36:27.810
+we'll make more information available,
+but this should be enough
+
+00:36:27.810 --> 00:36:27.810
+to get you started.
+
+00:36:29.210 --> 00:36:32.200
+Okay, to talk about Kernel
+Extensions a little bit.
+
+00:36:32.230 --> 00:36:35.570
+We're making use of something
+called Interface KEXTs.
+
+00:36:35.790 --> 00:36:38.380
+Now, fundamentally,
+they look and feel like
+
+00:36:38.480 --> 00:36:40.940
+any other Kernel Extension,
+but there are a few
+
+00:36:41.020 --> 00:36:42.400
+special things about them.
+
+00:36:42.450 --> 00:36:44.740
+We actually introduced
+this concept in Panther,
+
+00:36:44.740 --> 00:36:47.360
+and you might remember me
+talking about them last year,
+
+00:36:47.360 --> 00:36:49.460
+but we didn't really use them until now.
+
+00:36:50.280 --> 00:36:54.560
+The best way to think of them is they're
+a library mechanism for the KPIs.
+
+00:36:54.560 --> 00:36:57.360
+The KPIs, as you know it,
+are built into the kernel,
+
+00:36:57.360 --> 00:37:01.340
+so they don't really need a KEXT,
+but we're using the KEXT mechanism
+
+00:37:01.340 --> 00:37:04.300
+as a way of managing and
+versioning the interfaces.
+
+00:37:04.300 --> 00:37:06.760
+So they really only contain linkage.
+
+00:37:06.760 --> 00:37:10.250
+They don't contain any
+implementation whatsoever.
+
+00:37:10.280 --> 00:37:15.040
+I'll actually show you some diagrams in a
+bit that show you how the linkage works,
+
+00:37:15.040 --> 00:37:17.920
+but fundamentally,
+it's just a big symbol table
+
+00:37:17.920 --> 00:37:19.640
+wrapped in a KEXT bundle.
+
+00:37:22.920 --> 00:37:26.020
+So what will happen is in the past,
+your kernel extensions
+
+00:37:26.020 --> 00:37:27.710
+linked against the kernel.
+
+00:37:27.710 --> 00:37:31.270
+And for Tiger and going forward,
+they're going to link against
+
+00:37:31.270 --> 00:37:33.300
+these interface keks instead.
+
+00:37:33.390 --> 00:37:37.370
+And that will have the advantage of,
+of course, allowing us to have multiple
+
+00:37:37.370 --> 00:37:42.590
+versions of the same API set or same
+KPI set coexisting on the system.
+
+00:37:42.690 --> 00:37:47.970
+And of course, the keks mechanism already
+has versioning built into it,
+
+00:37:47.970 --> 00:37:50.560
+so that will allow you to express
+the version that you need,
+
+00:37:50.580 --> 00:37:53.290
+and will automatically
+link up to the right thing.
+
+00:37:53.410 --> 00:37:56.850
+So it really gives us a mechanism to
+control when we introduce a new KPI set,
+
+00:37:57.020 --> 00:38:00.200
+how it evolves over its lifecycle,
+and then when it comes time in
+
+00:38:00.200 --> 00:38:03.790
+the distant future to obsolete it,
+it gives us a way to do that.
+
+00:38:03.850 --> 00:38:07.340
+I like to think of it as sort of a
+conveyor belt of interfaces that,
+
+00:38:07.340 --> 00:38:09.840
+you know,
+we can set to be several years long.
+
+00:38:10.070 --> 00:38:13.790
+But we'll introduce an interface
+and keep it around as long as it
+
+00:38:13.790 --> 00:38:15.590
+makes sense and is supportable.
+
+00:38:18.700 --> 00:38:24.280
+All right,
+so in our previous operating systems,
+
+00:38:24.280 --> 00:38:30.230
+any time you linked against
+any of these five OS Bundle
+
+00:38:30.230 --> 00:38:38.540
+libraries or CFBundle identifiers,
+you were getting the whole kernel.
+
+00:38:38.540 --> 00:38:39.070
+Now what we had done is we
+subdivided the kernel into four
+
+00:38:39.070 --> 00:38:39.070
+basic areas because we knew that
+
+00:38:39.260 --> 00:38:42.180
+We knew that there were these logical
+divisions within the code base itself
+
+00:38:42.260 --> 00:38:45.580
+and the way people were using them,
+but we didn't really create
+
+00:38:45.580 --> 00:38:50.200
+a linkage difference because,
+hey, you were linking against the kernel.
+
+00:38:51.310 --> 00:38:53.690
+So to talk about what each
+of them are a little bit,
+
+00:38:53.700 --> 00:38:56.510
+I think it's fairly obvious if
+you look at the header structure
+
+00:38:57.060 --> 00:39:03.100
+which one of these an API or
+KPI is actually being supported by.
+
+00:39:03.140 --> 00:39:06.960
+Obviously, anything that is part of
+the I/O Kit header sub-tree
+
+00:39:06.960 --> 00:39:10.410
+is part of I/O Kit itself,
+and so com apple kernel I/O Kit is
+
+00:39:10.410 --> 00:39:12.220
+the appropriate one there.
+
+00:39:12.250 --> 00:39:17.940
+BSD and Mach similarly have their own
+name spaces and their own header spaces.
+
+00:39:17.960 --> 00:39:22.570
+Libkern is something we created
+as a common library for all of the
+
+00:39:22.610 --> 00:39:26.760
+things that the three other main
+areas of the kernel needed to share.
+
+00:39:26.800 --> 00:39:32.190
+Some of the primitives, libc type stuff,
+some memory moving, copying,
+
+00:39:32.190 --> 00:39:36.510
+stuff like that, atomic operations.
+
+00:39:37.290 --> 00:39:40.850
+Some of the things that you
+might think of as BSD-ish,
+
+00:39:41.040 --> 00:39:44.000
+like, you know,
+B copy is not part of BSD.
+
+00:39:44.000 --> 00:39:49.900
+That's actually part of libkern.
+
+00:39:50.040 --> 00:39:53.830
+And we'll be providing more guidance
+on exactly which one is where
+
+00:39:53.830 --> 00:39:53.830
+coming up in information very soon.
+
+00:39:56.150 --> 00:40:01.000
+Okay, so anyway, for all versions of the
+kernel prior to 8.0,
+
+00:40:01.050 --> 00:40:04.540
+when you link against any of these,
+you're getting the whole kernel.
+
+00:40:05.730 --> 00:40:08.160
+So this is the diagram.
+
+00:40:08.160 --> 00:40:12.860
+I actually have several animations
+coming up around this to kind of
+
+00:40:12.860 --> 00:40:14.710
+show you how this design is evolving.
+
+00:40:14.890 --> 00:40:17.280
+But fundamentally,
+we have the kernel with these
+
+00:40:17.280 --> 00:40:20.590
+four partitions inside of it,
+logically being treated
+
+00:40:20.590 --> 00:40:21.780
+as a single thing.
+
+00:40:22.000 --> 00:40:25.940
+And the kernel extension that you
+see here in orange is basically a
+
+00:40:25.970 --> 00:40:30.830
+pure I/O Kit text in that it only
+depends on I/O Kit and libkern.
+
+00:40:31.020 --> 00:40:34.390
+The libkern is allowed
+because it's common to all.
+
+00:40:36.580 --> 00:40:43.120
+Now the problem comes in because you're
+linking against the whole kernel.
+
+00:40:43.120 --> 00:40:47.480
+If you access a symbol that's
+considered part of BSD,
+
+00:40:47.480 --> 00:40:51.460
+let's say, copy in,
+or maybe you're using the devfs
+
+00:40:51.460 --> 00:40:54.800
+to create a device node to
+communicate with the utility.
+
+00:40:54.800 --> 00:40:57.600
+Those things are not part
+of libkern or I/O Kit,
+
+00:40:57.600 --> 00:41:01.120
+and as a result,
+you have an undeclared dependency there.
+
+00:41:01.120 --> 00:41:03.950
+We can't detect the -- we can't
+detect it by looking at your plist
+
+00:41:04.050 --> 00:41:07.360
+because you haven't declared it,
+but you're getting it because you're
+
+00:41:07.360 --> 00:41:09.710
+linking against the whole kernel.
+
+00:41:10.090 --> 00:41:14.040
+So what we've done for Tiger is
+to basically take this entire
+
+00:41:14.150 --> 00:41:18.390
+collection of interfaces,
+symbols, and group it together
+
+00:41:18.390 --> 00:41:20.500
+into one interface text.
+
+00:41:20.500 --> 00:41:22.540
+We call it the compatibility text.
+
+00:41:22.770 --> 00:41:23.440
+Okay.
+
+00:41:23.440 --> 00:41:28.130
+And all existing kernel extensions that
+link against existing versions of the
+
+00:41:28.130 --> 00:41:30.730
+kernel will link against this in Tiger.
+
+00:41:32.730 --> 00:41:36.510
+But what we've done is taken the
+implementation out of it and moved
+
+00:41:36.600 --> 00:41:38.550
+it off into a separate place.
+
+00:41:38.870 --> 00:41:41.340
+So the kernel continues
+to be the implementation,
+
+00:41:41.340 --> 00:41:43.850
+as it always has been,
+but when you link against
+
+00:41:43.900 --> 00:41:47.720
+any of those four areas,
+you're getting this compatibility text.
+
+00:41:47.780 --> 00:41:51.790
+And of course,
+all of its symbols are being
+
+00:41:51.790 --> 00:41:51.790
+resolved by the kernel.
+
+00:41:52.180 --> 00:41:54.920
+Now the new KPIs,
+the things Simon has talked
+
+00:41:54.920 --> 00:41:58.010
+about and other sessions
+WWDC will be talking about,
+
+00:41:58.010 --> 00:42:00.930
+they're introducing new
+interfaces in the kernel.
+
+00:42:00.950 --> 00:42:06.300
+Those in the final version of Tiger will
+not be in the compatibility text.
+
+00:42:07.070 --> 00:42:12.010
+They will be in new interface libraries,
+interface keks.
+
+00:42:12.510 --> 00:42:14.010
+So again, we have the same four.
+
+00:42:14.130 --> 00:42:17.480
+We've changed the name to represent
+the fact that these are sustainable
+
+00:42:17.480 --> 00:42:19.460
+kernel programming interfaces.
+
+00:42:19.580 --> 00:42:21.580
+So com.apple.kernel.kpi.
+
+00:42:21.580 --> 00:42:26.220
+You're not linking
+against the whole kernel,
+
+00:42:26.220 --> 00:42:26.220
+you're linking against
+a single interface.
+
+00:42:26.570 --> 00:42:30.400
+Okay, so in this case,
+if you wanted to have a driver
+
+00:42:30.530 --> 00:42:34.470
+load against all of those,
+you could, but you would have to list
+
+00:42:34.470 --> 00:42:36.500
+BSD as an explicit reference.
+
+00:42:36.540 --> 00:42:40.190
+Otherwise, your text would not load
+because of undefined symbols.
+
+00:42:40.420 --> 00:42:42.660
+Now, another thing I need to point
+out is we really kind of have
+
+00:42:42.680 --> 00:42:46.650
+old world and new world here,
+and the two coexist on the system fine,
+
+00:42:46.730 --> 00:42:48.690
+but there's no crossover allowed.
+
+00:42:48.820 --> 00:42:51.900
+In other words,
+you can't write a new style text that
+
+00:42:51.990 --> 00:42:55.580
+then goes and tries to pick up one or two
+old symbols that have been deprecated.
+
+00:42:55.680 --> 00:42:57.680
+You either need to run
+against the old symbols,
+
+00:42:57.790 --> 00:43:00.390
+or you need to run against the new sets.
+
+00:43:02.840 --> 00:43:06.640
+The other aspect of this is,
+as Simon had mentioned earlier,
+
+00:43:06.640 --> 00:43:09.700
+we have a lot of symbols
+that were exported that we
+
+00:43:09.730 --> 00:43:13.070
+believe people may be using,
+we don't know for sure,
+
+00:43:13.210 --> 00:43:16.510
+but they're implementation innards,
+they're things that we don't believe
+
+00:43:16.530 --> 00:43:18.050
+Kernel Extension should be getting at.
+
+00:43:18.230 --> 00:43:23.700
+And in a lot of cases,
+they cannot continue to exist.
+
+00:43:23.750 --> 00:43:27.010
+Changes to the
+architecture of the kernel,
+
+00:43:27.010 --> 00:43:27.010
+semantic changes, make it impossible.
+
+00:43:27.230 --> 00:43:31.580
+And so what's happened is with Tiger,
+a certain number of interfaces,
+
+00:43:31.580 --> 00:43:35.170
+symbols that have been there
+in the past are no longer there
+
+00:43:35.360 --> 00:43:37.180
+in the compatibility text.
+
+00:43:37.180 --> 00:43:39.520
+That will break some drivers right there.
+
+00:43:39.580 --> 00:43:42.480
+The failure mode that you'll
+see if you encounter this is an
+
+00:43:42.480 --> 00:43:45.840
+undefined symbol when you try
+to load your kernel extension.
+
+00:43:45.940 --> 00:43:49.920
+And the only way to remedy this
+is to fix your code so that it
+
+00:43:49.920 --> 00:43:54.230
+doesn't need that interface,
+or to port over to the new KPIs,
+
+00:43:54.350 --> 00:43:55.890
+which obviously we would prefer.
+
+00:43:56.300 --> 00:43:59.380
+And as the system evolves,
+we have made a commitment to
+
+00:43:59.580 --> 00:44:05.010
+continue supporting the KPIs,
+but you can expect as we vary further
+
+00:44:05.320 --> 00:44:10.650
+and further from the older kernel,
+we're going to have more and more
+
+00:44:10.650 --> 00:44:14.500
+breakage of interfaces that were
+never sustainable in the first place.
+
+00:44:14.500 --> 00:44:18.670
+So you're going to see those
+symbols starting to slowly erode.
+
+00:44:18.700 --> 00:44:21.100
+But again,
+we're not doing this because we want
+
+00:44:21.100 --> 00:44:23.170
+to force people onto new interfaces.
+
+00:44:23.400 --> 00:44:26.820
+We're only taking them out because we
+have to for performance enhancements,
+
+00:44:26.820 --> 00:44:28.090
+for new features, and so on.
+
+00:44:28.100 --> 00:44:31.700
+So we obviously want to provide you
+a way to move your product forward,
+
+00:44:31.700 --> 00:44:33.170
+and that would be the KPIs.
+
+00:44:38.080 --> 00:44:42.280
+Okay, so to sum up, as I had said,
+we'll only remove the
+
+00:44:42.400 --> 00:44:44.540
+symbols that we need to.
+
+00:44:44.540 --> 00:44:46.770
+The whole point of a
+compatibility interface,
+
+00:44:46.770 --> 00:44:48.630
+KEXT, is to be compatible, right?
+
+00:44:48.760 --> 00:44:51.650
+So if you have a KEXT that
+you've shipped previously,
+
+00:44:51.650 --> 00:44:54.740
+we would like to see it be
+able to load against that.
+
+00:44:54.780 --> 00:44:58.640
+The reality is if your
+KEXT has dependency on BSD,
+
+00:44:58.640 --> 00:45:00.320
+it probably won't.
+
+00:45:00.400 --> 00:45:02.630
+If you're doing anything
+interesting with BSD,
+
+00:45:02.630 --> 00:45:05.460
+you're probably hitting on a
+symbol that's no longer there,
+
+00:45:05.460 --> 00:45:07.900
+and we'll need to move
+forward to the KPIs.
+
+00:45:08.000 --> 00:45:11.320
+If you're writing an I/O Kit KEXT,
+there's a very good chance
+
+00:45:11.320 --> 00:45:13.950
+that you won't break,
+because you're probably not using
+
+00:45:13.950 --> 00:45:15.120
+the BSD innards in that case.
+
+00:45:15.300 --> 00:45:18.790
+But again, until we know exactly
+what symbols you're using,
+
+00:45:18.790 --> 00:45:20.620
+it's very hard for us to tell.
+
+00:45:21.630 --> 00:45:24.660
+Okay, so to help the users get
+through this transition,
+
+00:45:24.660 --> 00:45:29.390
+what we've realized is we don't really
+have a good mechanism to talk to users
+
+00:45:29.410 --> 00:45:31.360
+about specific kernel extensions.
+
+00:45:31.360 --> 00:45:34.950
+Giving them a path name is probably
+not a very good user experience.
+
+00:45:35.000 --> 00:45:38.410
+So what we've done is we've defined
+two new properties that we'd ask you
+
+00:45:38.480 --> 00:45:43.240
+to add into your kernel extensions
+that are OS bundle product name,
+
+00:45:43.240 --> 00:45:48.370
+and basically it should be anything that
+you would use to identify your product.
+
+00:45:48.480 --> 00:45:50.690
+If somebody calls your
+support line and says,
+
+00:45:50.780 --> 00:45:53.680
+hey, I've got your product,
+what do you need to know to identify it?
+
+00:45:53.740 --> 00:45:58.470
+We also realized that there are
+cases where you have a whole
+
+00:45:58.510 --> 00:46:02.190
+suite of kecks working together,
+and from the customer's perspective,
+
+00:46:02.270 --> 00:46:03.160
+it's a single product.
+
+00:46:03.240 --> 00:46:06.190
+Well, if we have problems with
+two or three of those,
+
+00:46:06.220 --> 00:46:09.710
+we really don't want to put three
+panels up to the user and say,
+
+00:46:09.710 --> 00:46:11.230
+you know,
+this one and this one and this one.
+
+00:46:11.240 --> 00:46:14.880
+What we're going to do is
+examine these properties,
+
+00:46:14.880 --> 00:46:17.480
+and if this property is
+identical in multiple kecks,
+
+00:46:17.480 --> 00:46:20.700
+we'll treat it as a single product,
+and we will only talk to the user,
+
+00:46:20.780 --> 00:46:24.340
+with it being a singular thing.
+
+00:46:24.340 --> 00:46:29.050
+Obviously,
+we're not going to scare the user.
+
+00:46:29.060 --> 00:46:31.260
+We're not going to put panels
+up unless the product cannot
+
+00:46:31.390 --> 00:46:34.480
+be loaded for whatever reason,
+but we'd like to be able to talk to
+
+00:46:34.480 --> 00:46:36.380
+them in a way that's a little cleaner.
+
+00:46:38.130 --> 00:46:43.220
+We also realize that you might have
+a fixed kernel extension available,
+
+00:46:43.380 --> 00:46:51.650
+and we'd like to make it easy
+for the user to get at it.
+
+00:46:51.650 --> 00:46:54.630
+So if you can add the
+OS Bundle product URL,
+
+00:46:54.630 --> 00:46:54.630
+which again is an optional property, then
+
+00:46:54.790 --> 00:46:56.950
+If we wind up presenting
+a UI to the user,
+
+00:46:56.950 --> 00:47:00.010
+we might consider including
+this as a shortcut so that the
+
+00:47:00.290 --> 00:47:03.910
+user can go right to a downloads
+page or a product support page.
+
+00:47:04.020 --> 00:47:06.010
+To be honest,
+we don't know yet exactly how we're
+
+00:47:06.060 --> 00:47:07.460
+going to use these properties.
+
+00:47:07.540 --> 00:47:10.760
+We know that these are there to be
+presented to the user in dialogues.
+
+00:47:10.960 --> 00:47:13.780
+We'll probably have
+Apple System Profiler display them,
+
+00:47:13.910 --> 00:47:17.060
+but we wanted to get this
+message out for WWDC.
+
+00:47:17.060 --> 00:47:19.970
+We don't have the use nailed down yet.
+
+00:47:20.130 --> 00:47:23.450
+But put it in, and the next time you
+ship a kernel extension,
+
+00:47:23.460 --> 00:47:25.730
+make sure you've got these in there.
+
+00:47:32.000 --> 00:49:20.000
+[Transcript missing]
+
+00:49:22.930 --> 00:49:26.100
+On an unrelated note,
+I'd like to talk a little
+
+00:49:26.100 --> 00:49:28.700
+bit about I/O Kit and 64-bit.
+
+00:49:28.700 --> 00:49:31.200
+As the I/O Kit manager,
+I wanted to make this
+
+00:49:31.360 --> 00:49:32.580
+information available.
+
+00:49:32.580 --> 00:49:36.500
+We don't have a full I/O Kit session
+because the core of I/O Kit has
+
+00:49:36.710 --> 00:49:39.240
+remained largely the same with Tiger.
+
+00:49:39.240 --> 00:49:44.940
+Most of our energies have
+been focused elsewhere with
+
+00:49:44.940 --> 00:49:44.940
+the MP work and other things.
+
+00:49:45.290 --> 00:49:50.560
+But the kernel virtual address
+space remains 32-bit in Tiger.
+
+00:49:50.710 --> 00:49:56.040
+So for I/O Kit kernel extensions,
+pointers are still 32 bits.
+
+00:49:56.060 --> 00:49:59.300
+Now, drivers can get to greater
+than four gigabytes of memory,
+
+00:49:59.350 --> 00:50:04.360
+just like they did in Panther updates
+that supported the G5.
+
+00:50:04.400 --> 00:50:07.170
+And you do that by calling
+I/O Memory Descriptor.
+
+00:50:07.180 --> 00:50:09.540
+And it has various accessors.
+
+00:50:09.660 --> 00:50:11.190
+Of course, you need to call Prepare.
+
+00:50:11.310 --> 00:50:14.990
+And what that does is that creates a
+mapping between the physical memory,
+
+00:50:14.990 --> 00:50:19.990
+which may be a large address,
+and what we call a bus virtual address.
+
+00:50:20.090 --> 00:50:25.130
+Basically, it's a 32-bit address that can
+be passed around to your device.
+
+00:50:25.330 --> 00:50:28.260
+You can also, for PIO mode,
+you can get directly to
+
+00:50:28.350 --> 00:50:31.470
+read bytes and write bytes,
+and that actually reads
+
+00:50:31.470 --> 00:50:32.930
+physical memory directly.
+
+00:50:33.200 --> 00:50:38.090
+So that's how you get the
+physical 64-bit address space.
+
+00:50:38.830 --> 00:50:43.170
+Now for applications talking to I/O Kit,
+they can go through any of the
+
+00:50:43.170 --> 00:50:48.150
+POSIX APIs that have been made available
+as part of the 64-bit app support.
+
+00:50:48.610 --> 00:50:51.700
+So, you know, standard open/close,
+read/write I/O control.
+
+00:50:51.700 --> 00:50:58.420
+So that'll work fine for
+networking interfaces,
+
+00:50:58.420 --> 00:51:02.690
+for the storage interfaces,
+and serial as well.
+
+00:51:02.690 --> 00:51:02.690
+All of those use POSIX.
+
+00:51:04.150 --> 00:51:08.380
+What it will not support, though,
+is direct driver access
+
+00:51:08.440 --> 00:51:10.300
+through user clients.
+
+00:51:10.300 --> 00:51:14.220
+And the reason here is that the
+I/O Kit user client model and libkern
+
+00:51:14.220 --> 00:51:18.240
+and everything else about ferrying
+data directly between an app and
+
+00:51:18.240 --> 00:51:22.230
+an I/O Kit driver is all based on CF,
+and CF is not being made available
+
+00:51:22.240 --> 00:51:24.590
+for 64-bit applications at this time.
+
+00:51:24.720 --> 00:51:26.820
+So stay tuned.
+
+00:51:26.860 --> 00:51:29.090
+We might be able to
+do this in the future,
+
+00:51:29.090 --> 00:51:33.280
+but for now,
+we're focusing more on the 64-bit apps
+
+00:51:33.340 --> 00:51:36.660
+that are working on large data sets,
+and generally they're not also
+
+00:51:37.000 --> 00:51:40.130
+scanning the bus for USB devices.
+
+00:51:41.510 --> 00:51:44.310
+All right, with that,
+I'd like to hand the podium back over to
+
+00:51:44.310 --> 00:51:46.410
+Simon to continue with the presentation.
+
+00:51:46.490 --> 00:51:47.160
+Thank you.
+
+00:51:54.890 --> 00:51:55.790
+Thank you very much, Dean.
+
+00:51:55.790 --> 00:52:05.290
+So I'd like to briefly touch on now is
+the lifecycle of a kernel interface.
+
+00:52:06.550 --> 00:52:09.640
+So, what are the objectives
+behind having KPIs?
+
+00:52:09.720 --> 00:52:12.900
+Well,
+we want a set of well-defined interfaces.
+
+00:52:12.900 --> 00:52:16.320
+And for that, for Apple,
+what that means is that we can focus
+
+00:52:16.320 --> 00:52:22.140
+on making sure that we guarantee binary
+compatibility from release to release.
+
+00:52:22.560 --> 00:52:25.580
+So, for developers,
+what that means is that you now
+
+00:52:25.580 --> 00:52:29.100
+have a stable environment from
+release to release that you
+
+00:52:29.100 --> 00:52:31.600
+can program your solutions to.
+
+00:52:33.760 --> 00:52:40.920
+We want to have a well-understood path
+for change between Apple and developers.
+
+00:52:41.090 --> 00:52:45.190
+This allows Apple to plan for
+kernel evolution so that we
+
+00:52:45.190 --> 00:52:52.360
+know that we can change things,
+we can make plans to add new features,
+
+00:52:52.360 --> 00:52:54.600
+and we'll know how we can phase this in.
+
+00:52:54.870 --> 00:53:00.140
+And it also sends a signal to developers
+that they know when to start to
+
+00:53:00.140 --> 00:53:03.030
+migrate from one interface to another.
+
+00:53:03.520 --> 00:53:06.700
+And we'd like this to be predictable.
+
+00:53:06.770 --> 00:53:11.500
+We are not going to change
+KPIs arbitrarily or gratuitously
+
+00:53:11.750 --> 00:53:14.420
+just because we happen to think
+that the third argument should go
+
+00:53:14.420 --> 00:53:16.400
+somewhere else or whatever it is.
+
+00:53:16.400 --> 00:53:19.410
+The only reason to change a kernel
+programming interface is because
+
+00:53:19.410 --> 00:53:22.190
+something is forcing our hand,
+because there's new hardware
+
+00:53:22.510 --> 00:53:25.480
+that is being shipped,
+or the technology changes
+
+00:53:25.480 --> 00:53:26.760
+in hardware all the time.
+
+00:53:26.760 --> 00:53:31.170
+There may be new, who knows, processors.
+
+00:53:31.200 --> 00:53:43.000
+[Transcript missing]
+
+00:53:43.830 --> 00:53:47.610
+So we wanted a lifecycle that really
+didn't give you any surprises,
+
+00:53:47.610 --> 00:53:56.370
+and so we've based the model on
+the API lifecycle for applications.
+
+00:53:57.340 --> 00:54:02.960
+So we basically have four
+modes within the lifecycle.
+
+00:54:02.980 --> 00:54:06.890
+Start off being supported,
+which means that the interface
+
+00:54:06.920 --> 00:54:10.410
+is fully source and binary
+compatible from release to release.
+
+00:54:10.460 --> 00:54:15.820
+This is going to be the state when
+Tiger ships of probably every single
+
+00:54:15.820 --> 00:54:19.840
+interface that we have in the KPI set.
+
+00:54:19.880 --> 00:54:24.780
+If we find that when we're
+looking forward in our
+
+00:54:25.630 --> 00:54:28.060
+Our development,
+we tend to be in engineering,
+
+00:54:28.060 --> 00:54:31.760
+we are looking a couple of years out.
+
+00:54:31.760 --> 00:54:36.120
+And we see that there's going to
+be problems in a given interface.
+
+00:54:36.810 --> 00:54:43.990
+For hardware reasons or whatever,
+then we will mark an
+
+00:54:43.990 --> 00:54:43.990
+interface as being deprecated.
+
+00:54:44.830 --> 00:54:47.520
+What this means is that
+when you build your KEXT,
+
+00:54:47.710 --> 00:54:50.520
+the compiler will start to
+generate warnings on its use,
+
+00:54:50.520 --> 00:54:54.700
+just letting you know that you're
+using an interface that we think
+
+00:54:54.810 --> 00:54:56.780
+we're going to be removing.
+
+00:54:56.780 --> 00:55:03.490
+The interface is still supported
+in terms of it will still work,
+
+00:55:03.550 --> 00:55:07.880
+but we're just basically giving
+you a positive heads-up saying,
+
+00:55:07.880 --> 00:55:09.660
+you know, this interface is at risk.
+
+00:55:10.420 --> 00:55:13.970
+And what we're reserving the right
+to do is to remove the interface
+
+00:55:13.970 --> 00:55:15.940
+in the following major release.
+
+00:55:18.570 --> 00:55:21.590
+After that, we're looking at
+obsoleting the interface,
+
+00:55:21.590 --> 00:55:26.070
+at which point you will no longer be able
+to build your KEXT using that interface.
+
+00:55:26.160 --> 00:55:29.250
+We'll effectively remove the
+definitions from the header files,
+
+00:55:29.250 --> 00:55:31.860
+and there'll be nothing
+for you to compile against.
+
+00:55:31.950 --> 00:55:38.720
+But the binary compatibility
+is still assured.
+
+00:55:38.720 --> 00:55:38.720
+You'll still be able to take
+your KEXT and use it on a system.
+
+00:55:39.350 --> 00:55:41.680
+And then finally,
+when we've got to the point where we've
+
+00:55:41.680 --> 00:55:45.240
+had to implement the given feature,
+and we've had to change the kernel,
+
+00:55:45.240 --> 00:55:49.710
+the interface will become unsupported,
+which means that the implementation
+
+00:55:49.710 --> 00:55:52.300
+behind that interface is
+no longer in the kernel,
+
+00:55:52.300 --> 00:55:55.190
+and therefore the KECs
+can no longer load.
+
+00:56:01.530 --> 00:56:03.590
+So what do we need you to do?
+
+00:56:03.670 --> 00:56:09.740
+Well, initially we'd like you,
+or immediately,
+
+00:56:09.840 --> 00:56:15.330
+we'd like you to adopt the OS Bundle
+product name and the OS Bundle
+
+00:56:15.330 --> 00:56:18.740
+product URL to identify your KEXT.
+
+00:56:19.450 --> 00:56:24.900
+If we talk to the user,
+the correlation between a KEXT,
+
+00:56:25.070 --> 00:56:27.960
+"The name as we see it,
+which is a path name or
+
+00:56:27.960 --> 00:56:31.830
+something of that nature,
+and the actual user perceived
+
+00:56:31.840 --> 00:56:35.880
+functionality that it provides
+is really not evident.
+
+00:56:35.880 --> 00:56:41.610
+And so this is a way in which the user
+can get a sensible interaction between
+
+00:56:41.610 --> 00:56:46.010
+the system and your product actually,
+so that they can be
+
+00:56:46.130 --> 00:56:48.800
+identified more reasonably."
+
+00:56:49.390 --> 00:56:51.600
+We'd like you to download
+the session extra material.
+
+00:56:51.600 --> 00:56:55.340
+It's on connect.apple.com
+under session 103,
+
+00:56:55.340 --> 00:56:57.300
+which is this session.
+
+00:56:57.400 --> 00:57:00.080
+And look at all the stuff
+that we put in there for you,
+
+00:57:00.230 --> 00:57:03.890
+all the additional documentation.
+
+00:57:04.440 --> 00:57:07.700
+But more specifically, in the short term,
+we would like you to run
+
+00:57:07.770 --> 00:57:13.850
+Kextract on your KEXT,
+and to send the report that Kextract
+
+00:57:13.960 --> 00:57:18.000
+generates for you to Apple via RadarWeb.
+
+00:57:18.050 --> 00:57:22.680
+This will allow us to be able to see,
+before we even get to Tiger,
+
+00:57:22.920 --> 00:57:25.940
+what problems we may be creating,
+and whether we can actually
+
+00:57:26.150 --> 00:57:28.830
+alleviate some problems for people.
+
+00:57:28.910 --> 00:57:31.490
+So I do very strongly
+urge you to do that.
+
+00:57:31.570 --> 00:57:34.180
+I think it will benefit both of us.
+
+00:57:37.500 --> 00:57:41.190
+Another very important thing to do is,
+once you've downloaded
+
+00:57:41.420 --> 00:57:44.400
+the extra material,
+is to review the interfaces.
+
+00:57:44.400 --> 00:57:46.970
+There is full HeaderDoc for all the KPIs.
+
+00:57:47.000 --> 00:57:51.800
+And you should bear in mind
+when you look at these,
+
+00:57:51.800 --> 00:57:54.240
+is that these seed
+interfaces are evolving.
+
+00:57:54.240 --> 00:57:58.970
+We're porting our own kernel
+extensions as we speak.
+
+00:57:59.070 --> 00:58:00.580
+We've done some, we haven't done all.
+
+00:58:01.340 --> 00:58:05.120
+So as we continue porting,
+we'll be spotting some limitations
+
+00:58:05.120 --> 00:58:09.260
+or some things that are missing or
+awkwardness in some of the interfaces.
+
+00:58:09.260 --> 00:58:13.200
+And so we will be changing things,
+hopefully not radically,
+
+00:58:13.330 --> 00:58:15.370
+but just fine-tuning as we go.
+
+00:58:17.080 --> 00:58:19.140
+So please review those interfaces.
+
+00:58:19.320 --> 00:58:22.550
+Have a look at the examples
+that we have in those extras,
+
+00:58:22.550 --> 00:58:26.070
+both the file system ones
+and the networking ones,
+
+00:58:26.140 --> 00:58:30.360
+depending on what your text is doing,
+and see what changes we've had to make.
+
+00:58:30.440 --> 00:58:33.880
+I apologize for some of the others.
+
+00:58:33.930 --> 00:58:37.440
+We have fixed bugs in there,
+so there'll be some extraneous changes,
+
+00:58:37.440 --> 00:58:41.580
+not strictly related to KPIs,
+but it should be pretty obvious what
+
+00:58:42.110 --> 00:58:46.980
+changes are there for the purpose of
+using the well-defined interfaces.
+
+00:58:47.000 --> 00:58:48.050
+faces versus not.
+
+00:58:50.440 --> 00:58:54.440
+And finally, well not finally,
+then I'd like to encourage
+
+00:58:54.490 --> 00:58:58.300
+you to actually try to port
+your text using the KPIs.
+
+00:58:58.300 --> 00:59:03.520
+It's very important that we understand
+your experience with these interfaces,
+
+00:59:03.520 --> 00:59:07.390
+because we want to be able to
+ensure that it will be able to
+
+00:59:07.500 --> 00:59:09.290
+fully support your functionality.
+
+00:59:09.300 --> 00:59:12.300
+And finally,
+we would like you to give feedback.
+
+00:59:12.300 --> 00:59:17.240
+There's the kpi-feedback@apple.com
+
+00:59:17.460 --> 00:59:24.400
+male alias which we are all sitting
+and watching and we would like to know
+
+00:59:24.450 --> 00:59:28.830
+your experience is both good and bad
+in other words if you found that moving
+
+00:59:28.960 --> 00:59:33.340
+your KEXT over was simple then we'd
+really like to understand which sets
+
+00:59:33.340 --> 00:59:36.970
+of KEXT were not having problems and
+if you find that there are some things
+
+00:59:36.970 --> 00:59:40.690
+missing or there's some awkwardness
+we would be very interested in that too
+
+00:59:40.690 --> 00:59:45.580
+because we will do our best to make this
+experience as easy as we can for you.
+
+00:59:49.250 --> 00:59:53.640
+So, more information,
+the contact at Apple is Jason Yeo.
+
+00:59:53.670 --> 00:59:55.910
+He's the Mac OS Technology Manager.
+
+00:59:56.100 --> 00:59:57.980
+There's his email.
+
+00:59:58.330 --> 01:00:03.100
+Please let him know of questions
+that you may have or any feedback.
+
+01:00:03.100 --> 01:00:09.040
+Importantly for us in engineering,
+the KPI feedback mail list.
+
+01:00:09.100 --> 01:00:16.420
+I encourage you to let us know your
+experiences with using the KPIs.
+
+01:00:18.450 --> 01:00:25.710
+There's some additional documentation
+you can find on the DVD referring
+
+01:00:25.710 --> 01:00:29.590
+to the network kernel extensions,
+API references.
+
+01:00:29.640 --> 01:00:36.310
+There's some 64-bit transition guides,
+a kernel programming document,
+
+01:00:36.900 --> 01:00:41.400
+There's some additional
+documentation for Kernel Extension.
+
+01:00:41.400 --> 01:00:46.800
+This is on the ADC home website,
+going down through Darwin,
+
+01:00:46.800 --> 01:00:50.790
+some descriptions of libkern,
+and there's another document
+
+01:00:51.000 --> 01:00:52.800
+on network kernel extensions.

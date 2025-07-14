@@ -1,0 +1,2058 @@
+WEBVTT
+
+00:00:15.990 --> 00:00:23.250
+>> Good afternoon, my name is Kevin Van Vechten, I'm
+the manager of the GCD team, and later I'll be joined
+
+00:00:23.250 --> 00:00:26.539
+by Dave Zarzycki who's the technical lead for GCD.
+
+00:00:26.539 --> 00:00:32.269
+And today we're going to talk about migrating
+your applications to Grand Central Dispatch.
+
+00:00:33.859 --> 00:00:40.210
+So to start out, we'll do a quick technology overview, kind
+of very briefly recap some of the things that we covered
+
+00:00:40.210 --> 00:00:43.590
+in this morning's session and yesterday
+in case you missed it.
+
+00:00:43.590 --> 00:00:46.810
+But we're not going to go into very much
+of that, so hopefully you'll have a chance
+
+00:00:46.810 --> 00:00:49.630
+to catch those on video if you haven't seen them.
+
+00:00:49.630 --> 00:00:54.980
+And then we're going to do a discussion of what
+it takes to take a single-threaded application
+
+00:00:54.979 --> 00:01:03.479
+which many of you may have, and adopt GCD, potentially
+get some concurrency, some asynchronous behavior leading
+
+00:01:03.479 --> 00:01:07.519
+to a more responsive user interface at all times.
+
+00:01:07.519 --> 00:01:15.000
+And then the rest of the talk will be devoted to
+converting multi-threaded applications, whether that's Cocoa
+
+00:01:15.000 --> 00:01:21.849
+or POSIX layer, you're probably using a lot of pthread
+in POSIX API, and so we'll deal with those individually
+
+00:01:21.849 --> 00:01:26.549
+and talk about how they map into the GCD API.
+
+00:01:26.549 --> 00:01:33.149
+So for our technology overview, I just want
+to reiterate that GCD is part of libSystem
+
+00:01:33.150 --> 00:01:35.830
+and it's available to all applications on Mac OS X.
+
+00:01:35.829 --> 00:01:40.079
+It doesn't matter if you're targeting the
+POSIX layer or your Carbon application
+
+00:01:40.079 --> 00:01:45.519
+or a Cocoa application, everything
+can take advantage of GCD.
+
+00:01:45.519 --> 00:01:49.439
+As part of libSystem, there's no special
+link instructions that you need to do,
+
+00:01:49.439 --> 00:01:58.469
+all you need to do is include the header file, and
+that is dispatch/dispatch.h. So here is our technology,
+
+00:01:58.469 --> 00:02:05.189
+the API footprint isn't very large, we
+categorize it into a few high level areas.
+
+00:02:05.189 --> 00:02:12.189
+GCD has simply polymorphic objects that respond
+to retain and release as our memory model.
+
+00:02:12.189 --> 00:02:18.079
+And the primary interface with GCD
+is that of queues, and queues run,
+
+00:02:18.080 --> 00:02:21.320
+queues of blocks, it's
+an asynchronous scheduling engine.
+
+00:02:21.319 --> 00:02:28.069
+You can take a block of code, you can submit it to a
+queue, and the system will run it for you asynchronously.
+
+00:02:28.069 --> 00:02:31.590
+And so we've covered all these APIs in our earlier sessions.
+
+00:02:31.590 --> 00:02:36.219
+Again, please check out the video if you haven't seen it.
+
+00:02:36.219 --> 00:02:41.810
+So queues are lightweight list of blocks for
+asynchronous execution and a very important characteristic
+
+00:02:41.810 --> 00:02:45.909
+of the queues is that all of the
+Enqueue and Dequeue is FIFO.
+
+00:02:45.909 --> 00:02:50.840
+Some queues execute blocks concurrently,
+they still Dequeue in FIFO order,
+
+00:02:50.840 --> 00:02:55.039
+but they don't wait for the previous block
+to finish before starting the next one,
+
+00:02:55.039 --> 00:02:57.379
+and you can get concurrency on a single queue.
+
+00:02:57.379 --> 00:03:02.689
+Other queues, the ones that your
+applications create, are serial and FIFO.
+
+00:03:02.689 --> 00:03:07.210
+So they're going to wait for a previous block
+to finish before starting the next block.
+
+00:03:07.210 --> 00:03:11.830
+However, two queues running at the same
+time might be concurrent with respect
+
+00:03:11.830 --> 00:03:15.250
+to each other even though individually
+they're running blocks serially.
+
+00:03:15.250 --> 00:03:20.389
+And here's a little animation just to recap.
+
+00:03:20.389 --> 00:03:27.059
+You might have a thread, it might create a
+block, submit that block to a dispatch queue,
+
+00:03:27.060 --> 00:03:33.580
+the system will bring an automatic thread online, begin
+processing the block, and when the block finishes,
+
+00:03:33.580 --> 00:03:35.810
+everything will go back to a steady state.
+
+00:03:35.810 --> 00:03:41.449
+And it takes a very little amount of
+code to do that, that whole diagram
+
+00:03:41.449 --> 00:03:45.879
+and animation you just saw is the
+instantiation of this code.
+
+00:03:45.879 --> 00:03:51.139
+Dispatch async, a target queue to the where the
+block should be submitted, and then the block of code
+
+00:03:51.139 --> 00:03:55.079
+to run whatever you want to put in that block.
+
+00:03:55.080 --> 00:04:01.219
+So we can take this and very easily
+bridge single-threaded applications
+
+00:04:01.219 --> 00:04:05.400
+into a potentially asynchronous or concurrent world.
+
+00:04:05.400 --> 00:04:11.230
+And the key to this is to identify
+independent subtasks in your application.
+
+00:04:11.229 --> 00:04:18.149
+A lot of times when we think of concurrency, we think of
+taking some array operation and really trying to break
+
+00:04:18.149 --> 00:04:22.799
+up the math into small chunks or
+a lot of parallel computation.
+
+00:04:22.800 --> 00:04:27.060
+But actually GCD is more about task level concurrency.
+
+00:04:27.060 --> 00:04:31.420
+And it turns out that in a lot of
+applications, especially UI applications,
+
+00:04:31.420 --> 00:04:35.129
+there are a lot of different operations
+that might be going on at the same time.
+
+00:04:35.129 --> 00:04:41.310
+Potentially every menu item that the user selects
+might kick off some sort of asynchronous operation.
+
+00:04:41.310 --> 00:04:45.500
+And yes, at times those different operations
+are going to need to coordinate with each other
+
+00:04:45.500 --> 00:04:49.209
+when they're saving changes back into
+the document or something like that.
+
+00:04:49.209 --> 00:04:52.439
+But there are a lot of independent tasks, and each one
+
+00:04:52.439 --> 00:04:57.540
+of those independent tasks is an opportunity
+for concurrency in a lot of cases.
+
+00:04:57.540 --> 00:05:03.160
+And even if you're not going to get that much concurrency
+depending on what your document structure is like,
+
+00:05:03.160 --> 00:05:07.590
+at least if you use dispatch to get
+those operations off of the main thread,
+
+00:05:07.589 --> 00:05:09.750
+you'll be able to avoid the spinning beach ball cursor,
+
+00:05:09.750 --> 00:05:15.629
+you'll be able to maintain a very responsive user inner
+space because the main thread is free to process new events
+
+00:05:15.629 --> 00:05:22.600
+from the user, and all of the real heavy lifting is
+being done in the background by an asynchronous block.
+
+00:05:22.600 --> 00:05:28.700
+And the syntax of blocks is really powerful, you can take
+your existing code and with very little modification,
+
+00:05:28.699 --> 00:05:34.110
+you can wrap that code in a block, and it still has access
+to all your variables, you don't really have to refactor
+
+00:05:34.110 --> 00:05:38.680
+into a complete callback design in the traditional C sense.
+
+00:05:38.680 --> 00:05:47.340
+And we've provided an API dispatch group async which
+let's you fire off multiple blocks to any number of queues
+
+00:05:47.339 --> 00:05:50.859
+that you want, and then wait for them to all finish.
+
+00:05:50.860 --> 00:05:56.650
+And if you're coming from a single-threaded
+application, this is really convenient because a lot
+
+00:05:56.649 --> 00:06:00.529
+of times a single-threaded application is going
+to make the assumption that it has the results
+
+00:06:00.529 --> 00:06:05.699
+from all the previous operations
+ready to proceed in the next step.
+
+00:06:05.699 --> 00:06:14.099
+And so using a dispatch group and then waiting on the group
+allows you to effectively fan out your serial application,
+
+00:06:14.100 --> 00:06:18.090
+your single-threaded application to
+multiple threads for a brief period of time,
+
+00:06:18.089 --> 00:06:22.899
+get a little bit of a performance boost, and
+then when those concurrent operations finish,
+
+00:06:22.899 --> 00:06:28.409
+you can collect all the results and continue
+with the serial single-threaded approach.
+
+00:06:28.410 --> 00:06:32.220
+So here's an example of this in practice.
+
+00:06:32.220 --> 00:06:37.560
+We might have three relatively independent tasks.
+
+00:06:37.560 --> 00:06:43.709
+If you got a chance to see the state of the union
+talk on Monday with the Seeker [phonetic] application,
+
+00:06:43.709 --> 00:06:49.959
+they actually took an approach fairly similar to this, they
+had a lot objects they were modeling in the solar system
+
+00:06:49.959 --> 00:06:57.029
+and rendering, and it was very easy to just group them
+into a few different groups, use the dispatch group API
+
+00:06:57.029 --> 00:07:02.299
+to treat each of those groups independently,
+and then wait for the results to complete.
+
+00:07:02.300 --> 00:07:09.240
+And you saw what a dramatic speed boost they were able
+to get from a relatively small amount of code change.
+
+00:07:09.240 --> 00:07:14.949
+So we can take this code here where we're
+executing three tasks; foo, bar, baz,
+
+00:07:14.949 --> 00:07:18.319
+and using the results of all three of the tasks.
+
+00:07:18.319 --> 00:07:23.959
+And we can look at them and say okay, well serially
+it's going to take a certain amount of time,
+
+00:07:23.959 --> 00:07:31.500
+but if we have two cores available, we might be able to
+take less time and execute some of these concurrently.
+
+00:07:31.500 --> 00:07:35.990
+And if we had four cores available,
+we could take even less time.
+
+00:07:35.990 --> 00:07:41.689
+And that can be done with a relatively small amount of code.
+
+00:07:41.689 --> 00:07:47.769
+So this code sample is using the dispatch global
+concurrent queue, we're getting a reference to that
+
+00:07:47.769 --> 00:07:52.969
+at the top, and we're also creating a group.
+
+00:07:52.970 --> 00:07:56.410
+And we're defining our result variables
+with the under under block keyword.
+
+00:07:56.410 --> 00:08:03.880
+And if you've seen the talks on blocks, you know that
+allows a block to modify the contents of a variable.
+
+00:08:03.879 --> 00:08:06.819
+So each of these blocks that we run
+can just assign their result back
+
+00:08:06.819 --> 00:08:10.829
+into this local variable in the current stack frame.
+
+00:08:10.829 --> 00:08:13.439
+And then we use dispatch group async.
+
+00:08:13.439 --> 00:08:19.509
+Notice I'm only using it for the
+first two operations, bar and baz.
+
+00:08:19.509 --> 00:08:25.319
+Foo we're going to keep on the current thread, there's
+really no point spawning off three threads only to keep one
+
+00:08:25.319 --> 00:08:28.490
+of them idle waiting for the other three to finish.
+
+00:08:28.490 --> 00:08:34.769
+So we can actually use the current thread for part
+of the operation and farm off the rest of the work.
+
+00:08:34.769 --> 00:08:42.340
+And in fact, if you happen to know with certainty that
+one of the operations is consistently going to take longer
+
+00:08:42.340 --> 00:08:47.629
+than the other operations, it usually makes sense
+to keep the longer operation on the current thread
+
+00:08:47.629 --> 00:08:50.580
+and then the other threads can come on
+and complete the shorter operations.
+
+00:08:50.580 --> 00:08:55.259
+And you know those results will be ready
+when the primary thread is finished.
+
+00:08:55.259 --> 00:08:59.080
+If there's no real certainty that one
+operation is longer than the others,
+
+00:08:59.080 --> 00:09:03.830
+then it really doesn't matter too
+much, you can just pick one.
+
+00:09:03.830 --> 00:09:10.590
+But here we've executed bar and baz asynchronously,
+we used the current thread to execute foo,
+
+00:09:10.590 --> 00:09:14.530
+and then we do a group wait to wait for the results.
+
+00:09:14.529 --> 00:09:16.990
+And then we release the group because
+we're done with it at this point,
+
+00:09:16.990 --> 00:09:20.789
+and we're free to use the three parts of our computation.
+
+00:09:20.789 --> 00:09:28.169
+And so what we've done is we've taken the elapsed
+time for this operation, and instead of being the sum
+
+00:09:28.169 --> 00:09:37.459
+of the three parts, it's now just the length of the longest
+of the three parts, which can be a pretty dramatic boost,
+
+00:09:37.460 --> 00:09:40.080
+especially if you have a lot of
+operations that you're doing.
+
+00:09:40.080 --> 00:09:48.410
+And so for a single-threaded application, really with
+no additional functions defined by your application,
+
+00:09:48.409 --> 00:09:54.490
+no additional data structure is defined by your
+application, no additional allocations by your application,
+
+00:09:54.490 --> 00:09:57.590
+all of this is managed by the GCD API and the use of blocks.
+
+00:09:57.590 --> 00:10:05.530
+You can just wrap some of your API with the use of dispatch
+groups and you get an optimal amount of concurrency.
+
+00:10:05.529 --> 00:10:10.240
+So from a single-threaded application to a
+multi-threaded application, you don't need to worry
+
+00:10:10.240 --> 00:10:14.669
+about how many processors are available,
+just break it up into logical subtasks
+
+00:10:14.669 --> 00:10:19.379
+and as many processors are available
+to the work, we'll start working on it.
+
+00:10:19.379 --> 00:10:25.309
+But it'll scale gracefully from a two-core
+system to a 16 virtual core system.
+
+00:10:25.309 --> 00:10:34.189
+And dispatch is very low overhead, we think you'll
+be very pleased with the performance of these API
+
+00:10:34.190 --> 00:10:37.670
+and with the intelligence of the resource management.
+
+00:10:37.669 --> 00:10:42.389
+And this means that there are more CPU cycles
+executing your code and less time spent
+
+00:10:42.389 --> 00:10:45.879
+in the system figuring out how to do concurrency.
+
+00:10:45.879 --> 00:10:53.139
+And they're just a lot of opportunities for easy speed
+gains or again, even if the speed gain is relatively neutral
+
+00:10:53.139 --> 00:10:58.399
+because you might have serial activity just getting
+that code off of the main thread can be a big benefit
+
+00:10:58.399 --> 00:11:01.259
+to your users by maintaining that responsive user interface.
+
+00:11:01.259 --> 00:11:07.759
+So now let's talk a little bit
+about multi-threaded applications.
+
+00:11:07.759 --> 00:11:13.230
+There are a lot of patterns that map to GCD.
+
+00:11:13.230 --> 00:11:20.060
+And you will see as we go into this more detail, that there
+are a lot of existing patterns that are very different
+
+00:11:20.059 --> 00:11:24.899
+from each other that happened to map
+into the same GCD patterns over and over.
+
+00:11:24.899 --> 00:11:30.309
+What we want to point out is that it's
+easy to adopt GCD on a case by case basis.
+
+00:11:30.309 --> 00:11:35.500
+You don't need to go rewrite your whole application,
+you can really pick and choose little pieces
+
+00:11:35.500 --> 00:11:41.720
+of your application and evaluate GCD in that specific area.
+
+00:11:41.720 --> 00:11:47.470
+And we encourage you to really focus on the return
+on investment for converting to GCD both in terms
+
+00:11:47.470 --> 00:11:53.649
+of the productivity to you as a programmer because a
+lot of times it's very syntactically concise to use GCD.
+
+00:11:53.649 --> 00:12:01.009
+It works about the same but it's a lot less
+code, and that might be a great thing by itself.
+
+00:12:01.009 --> 00:12:07.049
+But actually GCD is very computationally efficient,
+and so we think in a lot of cases you'll also find
+
+00:12:07.049 --> 00:12:11.759
+out not only is it more concise and less code,
+but it's going to perform quite a bit better too,
+
+00:12:11.759 --> 00:12:15.799
+especially when going from single-threaded
+to multi-threaded.
+
+00:12:15.799 --> 00:12:20.709
+With the existing multi-threaded app it
+might be more of a lateral transition.
+
+00:12:20.710 --> 00:12:28.440
+So to start off with multi-threading, we wanted
+to do a little high level summary of GCD and Cocoa
+
+00:12:28.440 --> 00:12:33.010
+and how they work well together, and
+some of the existing Cocoa patterns
+
+00:12:33.009 --> 00:12:38.909
+that you might be used to, and how that translates to GCD.
+
+00:12:38.909 --> 00:12:47.189
+So again, with Cocoa and all the event processing
+and UI drawing happening on the main thread,
+
+00:12:47.190 --> 00:12:53.060
+running code in the background by itself is a
+big win even without additional concurrency.
+
+00:12:53.059 --> 00:12:57.699
+But you probably need to run a lot of
+code on the main thread too precisely
+
+00:12:57.700 --> 00:13:01.690
+to do these UI updates and to synchronize your view updates.
+
+00:13:01.690 --> 00:13:07.030
+And dispatch makes it really easy to take code off
+the main thread, put it on a background thread,
+
+00:13:07.029 --> 00:13:11.250
+get the result from that, bring it back to the main thread.
+
+00:13:11.250 --> 00:13:20.159
+Not only is it possible to use GCD with
+Cocoa, it's actually got some conveniences.
+
+00:13:20.159 --> 00:13:26.850
+For example, all GCD queues implicitly provide an
+NSAutoRelease pool, so you don't get those messages
+
+00:13:26.850 --> 00:13:33.820
+that you're running on a thread and you've created an
+auto release object and you don't have a pool available.
+
+00:13:33.820 --> 00:13:35.350
+I'm sure you've seen those in the syslog.
+
+00:13:35.350 --> 00:13:37.399
+We take care of that for you.
+
+00:13:37.399 --> 00:13:42.559
+however, because the threads are frequently
+reused, there's no real strict guarantee
+
+00:13:42.559 --> 00:13:45.889
+about how frequently the auto release pool is drained.
+
+00:13:45.889 --> 00:13:49.189
+So as always, if you're going to
+be doing a lot of allocations,
+
+00:13:49.190 --> 00:13:56.510
+it does make sense to manage your own auto release pools
+within a queue, but it's not going to leak objects,
+
+00:13:56.509 --> 00:13:59.399
+there is a pool provided for you by default.
+
+00:13:59.399 --> 00:14:05.669
+And GCD also coordinates with the garbage
+collector, it's perfectly fine to use GCD
+
+00:14:05.669 --> 00:14:09.169
+in any garbage collected applications,
+but we'd like to point
+
+00:14:09.169 --> 00:14:14.199
+out that the dispatch objects themselves
+strictly follow the retain/release model.
+
+00:14:14.200 --> 00:14:19.330
+You must use dispatch/retain and
+dispatch/release on those, they are not collectible.
+
+00:14:19.330 --> 00:14:28.450
+So they interoperate with garbage collection
+quite well, but not automatically collectible.
+
+00:14:28.450 --> 00:14:35.540
+So the dispatch main queue is a special queue that's also
+fairly important when you're dealing with Cocoa applications
+
+00:14:35.539 --> 00:14:41.699
+because it's the GCD interface to getting
+code running on the main run loop.
+
+00:14:41.700 --> 00:14:48.110
+And it cooperates with the main run loop, all the code
+will run on the main thread, it's going to run serialized
+
+00:14:48.110 --> 00:14:50.669
+as you would expect from the main run loop.
+
+00:14:50.669 --> 00:14:56.860
+And it's going to be running NEGCD blocks
+in the common modes of the main run loop.
+
+00:14:56.860 --> 00:15:09.409
+Now because all serial queues are FIFO and non re-entrant,
+that also means that the main queue is non re-entrant.
+
+00:15:09.409 --> 00:15:15.549
+And what that means is if you're running the main run
+loop and then you recursively rerun the main run loop
+
+00:15:15.549 --> 00:15:24.539
+in a sub mode, that won't continue to drain
+blocks from GCD if you're already in a GCD block.
+
+00:15:24.539 --> 00:15:32.029
+In other words, if you're in a block and
+recursively rerunning the CFRunLoop or the NSRunLoop,
+
+00:15:32.029 --> 00:15:36.610
+we're not going to pool anymore GCD blocks off
+because the current GCD block hasn't finished yet.
+
+00:15:36.610 --> 00:15:40.740
+So it really only goes that one
+layer deep, it's not recursive.
+
+00:15:40.740 --> 00:15:48.680
+So here's several patterns that you're probably
+pretty familiar with, with multi-threaded programming
+
+00:15:48.679 --> 00:15:52.329
+in Cocoa, a whole variety of perform selectors.
+
+00:15:52.330 --> 00:16:01.670
+performSelector:onThread:withObject:waitUntilDone,
+performSelectorOnMainThread, performSelectorInBackground,
+
+00:16:01.669 --> 00:16:06.439
+or just generally performSelector:afterDelay.
+
+00:16:06.440 --> 00:16:09.770
+And GCD has great equivalence for each of these.
+
+00:16:09.769 --> 00:16:14.199
+In the first case, when you're talking
+performing a selector on an arbitrary thread,
+
+00:16:14.200 --> 00:16:19.680
+well our model is not to use threads specifically,
+it's to use queues and to allow the system
+
+00:16:19.679 --> 00:16:23.359
+to automatically create threads on your behalf.
+
+00:16:23.360 --> 00:16:29.720
+But it looks pretty similar, you can use
+dispatch async to perform a block on a queue,
+
+00:16:29.720 --> 00:16:34.040
+and that block can call whatever selector you wish.
+
+00:16:34.039 --> 00:16:37.309
+But what's nice about it is it
+can call any number of selectors,
+
+00:16:37.309 --> 00:16:39.949
+and those selectors can take any number of arguments.
+
+00:16:39.950 --> 00:16:46.530
+So in the past where you likely had to define your own
+selector to work in combination with perform selector,
+
+00:16:46.529 --> 00:16:52.909
+and you probably had to take multiple arguments and put them
+all into an NS dictionary, and then in your selector grab
+
+00:16:52.909 --> 00:16:59.009
+that NS dictionary, extract all the keys, a lot of boiler
+plate type stuff, now you can do that all in the block
+
+00:16:59.009 --> 00:17:06.029
+because the block captures all of the local variables,
+you can call any sequence of selectors you want.
+
+00:17:06.029 --> 00:17:10.970
+And dispatch asyn means enqueue
+the block and continue moving,
+
+00:17:10.970 --> 00:17:14.299
+so that's the equivalent of wait until done with a no value.
+
+00:17:14.299 --> 00:17:21.789
+And we also provide an equivalent of wait until done
+with a yes value, and that is to call dispatch sync.
+
+00:17:21.789 --> 00:17:27.639
+Very similar API, just one letter different.
+
+00:17:27.640 --> 00:17:34.170
+When you want to target the main thread specifically,
+very familiar pattern, it's the same dispatch async
+
+00:17:34.170 --> 00:17:38.920
+or dispatch sync depending on whether
+you want to wait for the result,
+
+00:17:38.920 --> 00:17:43.900
+but all you need to do is specify the
+dispatch main queue instead of your own queue,
+
+00:17:43.900 --> 00:17:46.840
+and that's highlighted in this
+slide by DispatchGetMainQueue.
+
+00:17:46.839 --> 00:17:48.490
+That returns a reference to the main queue.
+
+00:17:48.490 --> 00:17:57.299
+When you want to perform a selector in the
+background, really in GCD that's the same
+
+00:17:57.299 --> 00:18:00.619
+as submitting a block to one of the global queues.
+
+00:18:00.619 --> 00:18:05.589
+And the global queues will execute blocks
+concurrently, they don't wait for completion,
+
+00:18:05.589 --> 00:18:09.740
+you're just kind of adding another block
+to the mix to be run in the background.
+
+00:18:09.740 --> 00:18:13.700
+And that's exactly what this sample code does.
+
+00:18:13.700 --> 00:18:18.330
+And again, it just gives you all the flexibility
+of blocks and none of the inconvenience of kind
+
+00:18:18.329 --> 00:18:21.399
+of conforming to the perform selector protocol.
+
+00:18:21.400 --> 00:18:27.330
+And finally, we have performSelector:afterDelay.
+
+00:18:27.329 --> 00:18:37.000
+And as we talked about this morning, we have the concept of
+time in GCD which allows you to specify arbitrary timeouts.
+
+00:18:37.000 --> 00:18:43.789
+And in this case we're specifying a
+timeout that is 50 microseconds from now.
+
+00:18:43.789 --> 00:18:49.750
+And we can use a dispatch after API, it'll perform
+a block after that period of time has lapsed,
+
+00:18:49.750 --> 00:18:52.589
+it'll get submitted to the queue at that point.
+
+00:18:52.589 --> 00:18:55.699
+So very similar to performSelector:afterDelay.
+
+00:18:55.700 --> 00:19:05.410
+So to recap, we think this is a very convenient approach
+because it allows you to call any selector you want
+
+00:19:05.410 --> 00:19:12.340
+or call multiple selectors with no need to
+pack arguments, no need to unpack arguments.
+
+00:19:12.339 --> 00:19:17.569
+And queues provide a very simple and
+consistent model for concurrency.
+
+00:19:17.569 --> 00:19:23.829
+There's no need to think about how to send data to
+another thread, how to get that thread to notice
+
+00:19:23.829 --> 00:19:29.619
+that you've sent data to it, that's all taken care of
+for you by the active submitting a block to a queue.
+
+00:19:29.619 --> 00:19:39.779
+And so now to talk about in more detail migrating to GCD
+from POSIX applications, I'd like to welcome Dave on stage.
+
+00:19:39.779 --> 00:19:42.049
+[ Applause ]
+
+00:19:42.049 --> 00:19:42.669
+>> Thanks, Kevin.
+
+00:19:42.670 --> 00:19:48.740
+I hope you all are beginning after our sessions
+to see how easy blocks and queues can be.
+
+00:19:48.740 --> 00:19:52.660
+So let's talk about how blocks, queues, and POSIX get along.
+
+00:19:52.660 --> 00:19:55.490
+And let's talk about the GCD advantages.
+
+00:19:55.490 --> 00:20:01.349
+So GCD, as we've illustrated throughout the week
+and talked about a lot, is a lot more efficient.
+
+00:20:01.349 --> 00:20:07.480
+We're trying to make a lot more CPU cycles available
+to your code to use all those cores across the system.
+
+00:20:07.480 --> 00:20:13.170
+We're also trying to make it easier to
+get your code running on those cores.
+
+00:20:13.170 --> 00:20:19.800
+So we're also providing better metaphors, blocks are easier
+to use, you don't need to worry about marshalling all
+
+00:20:19.799 --> 00:20:27.119
+of this data into some kind of context data structure in the
+heap, and then freeing it and unpacking it from the struct.
+
+00:20:27.119 --> 00:20:31.369
+Blocks allow automatic capture, you can
+delegate to the libraries of the block copy
+
+00:20:31.369 --> 00:20:35.409
+and block release, and it's just a lot easier to use.
+
+00:20:35.410 --> 00:20:42.810
+We'd also like to point out that a very classic computer
+science metaphor of producer and consumer is a queue.
+
+00:20:42.809 --> 00:20:47.470
+And that's what GCD is, it's all about queues and blocks.
+
+00:20:47.470 --> 00:20:54.610
+And lastly, but I think really importantly, as much
+as you could take a textbook, learn about threads,
+
+00:20:54.609 --> 00:20:58.889
+learn about thread pools, go to the effort
+of applying all of the recipes you read
+
+00:20:58.890 --> 00:21:02.390
+in the book about how to create a thread pool.
+
+00:21:02.390 --> 00:21:05.440
+There's still one step the book doesn't describe.
+
+00:21:05.440 --> 00:21:09.720
+There's a lot of different teams, a
+lot of different companies all trying
+
+00:21:09.720 --> 00:21:12.960
+to work together on an average computer a customer has.
+
+00:21:12.960 --> 00:21:19.420
+And there's no way that everybody can coordinate
+and share one thread pool without an OS solution.
+
+00:21:19.420 --> 00:21:24.960
+And we're providing that to provide a nice
+holistic shared high performance system.
+
+00:21:24.960 --> 00:21:32.039
+So on the topic of compatibility, we'd like
+to point out that even if you adopt GCD,
+
+00:21:32.039 --> 00:21:36.000
+you don't need to run out and drop your existing code.
+
+00:21:36.000 --> 00:21:42.230
+Mutexes, condition variables, threads, they get
+along just fine in the process along with GCD.
+
+00:21:42.230 --> 00:21:50.120
+So you could even send a block out, block a
+mutex, use a condition variable, all just works.
+
+00:21:50.119 --> 00:21:55.259
+We'd also like to point out that GCD threads are
+actually wrapping POSIX threads, it is a thread pool.
+
+00:21:55.259 --> 00:22:03.799
+And what that means is don't cancel,
+exit, kill, join, detach a GCD thread.
+
+00:22:03.799 --> 00:22:05.470
+You didn't create it, don't destroy.
+
+00:22:05.470 --> 00:22:08.740
+It's pretty simple.
+
+00:22:08.740 --> 00:22:13.880
+GCD also reuses threads, and this is
+how we get a nice boost in performance.
+
+00:22:13.880 --> 00:22:18.640
+And what that means for you as a programmer
+is that you need to not mutate thread state
+
+00:22:18.640 --> 00:22:22.930
+without saving and restoring the previous state.
+
+00:22:22.930 --> 00:22:28.930
+So if you want to for example, change the current work and
+directory of a thread, you probably ought to change it back
+
+00:22:28.930 --> 00:22:33.000
+or else all the subsequent reads to
+the thread will be terribly confused.
+
+00:22:33.000 --> 00:22:38.759
+In practice this isn't much of a problem
+for any code, but something to keep in mind.
+
+00:22:38.759 --> 00:22:48.829
+And finally the result of pthread_self can change between
+block execution but not during the execution of a block.
+
+00:22:48.829 --> 00:22:56.629
+So in order of complexity, what I'm going to talk about in
+terms of migrating from POSIX to GCD, is once functions,
+
+00:22:56.630 --> 00:23:06.230
+threads, forking and joining threads, mutexes, condition
+variables, and then is a subset of condition variables.
+
+00:23:06.230 --> 00:23:09.130
+We'll talk about producing consumer
+threads and what that looks like.
+
+00:23:09.130 --> 00:23:12.670
+We'll talk about thread pools briefly.
+
+00:23:12.670 --> 00:23:17.180
+And then finally we'll talk about how many of
+you have probably dealt with external events,
+
+00:23:17.180 --> 00:23:24.080
+perhaps with a thread that's waiting on
+select or kqueue or something like that.
+
+00:23:24.079 --> 00:23:26.470
+So let's jump in.
+
+00:23:26.470 --> 00:23:27.940
+Once functions.
+
+00:23:27.940 --> 00:23:37.370
+It's a real simple topic, it ensures that multiple threads
+do two things; they can execute a function on the fly
+
+00:23:37.369 --> 00:23:43.869
+but only once, and then any other thread that zooms in
+will see one of three states, it's either going to see
+
+00:23:43.869 --> 00:23:48.519
+that the function hasn't run and needs
+to run, it is running, or it's complete.
+
+00:23:48.519 --> 00:23:52.359
+So one of the threads will win the
+race, start running the function.
+
+00:23:52.359 --> 00:23:56.939
+The other threads, if they happen to trip across
+the same path, will wait for it to complete,
+
+00:23:56.940 --> 00:24:03.450
+and then after that point every thread will see that
+the function is completed and no longer needs to be run.
+
+00:24:03.450 --> 00:24:05.580
+So why do you do this?
+
+00:24:05.579 --> 00:24:10.429
+It's all about lazy initialization of global variables.
+
+00:24:10.430 --> 00:24:16.660
+It might be because the resource is expensive
+or otherwise can't be allocated at compile time.
+
+00:24:16.660 --> 00:24:27.700
+In pthreads, you're going to have some kind of global, in
+this case, my context, you'll have a pthread once variable,
+
+00:24:27.700 --> 00:24:32.200
+that should be declared static, I apologize.
+
+00:24:32.200 --> 00:24:39.519
+There's an init routine you'll have to declare
+somewhere in your file, it will do the initialization,
+
+00:24:39.519 --> 00:24:42.430
+it's this case it's a malloc and
+some kind of library init routine.
+
+00:24:42.430 --> 00:24:49.450
+And then somewhere later in your code, perhaps in
+different places, there is a call to pthread once,
+
+00:24:49.450 --> 00:24:54.120
+can that takes the address of our
+predicate, the pthread once variable,
+
+00:24:54.119 --> 00:24:58.899
+and the routine which was probably
+declared far away in the file somewhere.
+
+00:24:58.900 --> 00:25:03.380
+And then you can do something with that data
+after we know that it's been lazily initialized.
+
+00:25:03.380 --> 00:25:10.610
+So what I'd like to point out here, and it's not so obvious
+in a simple slide, is that these different variables
+
+00:25:10.609 --> 00:25:21.589
+and context could probably be spread far apart in your file,
+and it makes it harder to see at a glance what's going on.
+
+00:25:23.119 --> 00:25:32.349
+However, with dispatch, we can do something similar, we
+can declare our struct and our predicate a dispatch once t.
+
+00:25:32.349 --> 00:25:36.549
+But in one simple spot we can put all the code
+
+00:25:36.549 --> 00:25:40.460
+in initialization logic that's
+probably nearest its actual usage.
+
+00:25:40.460 --> 00:25:46.430
+So we could take dispatch once, take the address
+of the once variable, and pass it a block.
+
+00:25:46.430 --> 00:25:52.090
+And then we know after dispatch once returns
+we can do something with the initialized data.
+
+00:25:52.089 --> 00:25:55.209
+So that's dispatch once.
+
+00:25:55.210 --> 00:26:01.019
+It's really convenient and it's efficient,
+it's actually more efficient than pthread once.
+
+00:26:02.339 --> 00:26:07.490
+Threads. Well what do pthreads do?
+
+00:26:07.490 --> 00:26:10.150
+They execute a function concurrently.
+
+00:26:10.150 --> 00:26:11.509
+And why do people do that?
+
+00:26:11.509 --> 00:26:18.069
+Well they want to avoid blocking the current
+thread, they don't want that spinning beach ball,
+
+00:26:18.069 --> 00:26:21.579
+or they want to achieve some computational concurrency.
+
+00:26:21.579 --> 00:26:29.039
+In pthreads, probably the simplest form
+of a pthread creation is pthreadCreate,
+
+00:26:29.039 --> 00:26:37.029
+you need to get the pthread handle
+back, and you need to pass in the null
+
+00:26:37.029 --> 00:26:40.250
+as an optional parameter, so we'll pass null.
+
+00:26:40.250 --> 00:26:47.400
+Work func is defined somewhere else, implemented
+somewhere else, a context, then check to see if it failed.
+
+00:26:47.400 --> 00:26:53.480
+And then finally we have to take that handle and say
+no, no, no, never mind, we really just don't even care,
+
+00:26:53.480 --> 00:26:57.829
+we want to detach, and then we're done with that handle.
+
+00:26:57.829 --> 00:27:01.750
+On GCD, it's a lot simpler and a lot faster.
+
+00:27:01.750 --> 00:27:06.509
+You get the global concurrent cue and you dispatch async.
+
+00:27:06.509 --> 00:27:12.049
+No return value to worry about, it will
+just be put into the queue and run later.
+
+00:27:12.049 --> 00:27:16.559
+And this is async F by the way, you can also
+use async if you wanted to submit a block.
+
+00:27:16.559 --> 00:27:19.849
+But as a simple straightforward
+transform, this is the simplest.
+
+00:27:19.849 --> 00:27:26.869
+So that's a simple mapping of threads to
+dispatch async, it's really convenient,
+
+00:27:26.869 --> 00:27:32.969
+less things to worry about like errors or handles
+that need to be immediately cleaned up after.
+
+00:27:32.970 --> 00:27:41.490
+It's also insanely more efficient, you can get
+thread recycling, you can get better CPU scheduling
+
+00:27:41.490 --> 00:27:45.079
+because we can defer those blocks
+until a CPU becomes available.
+
+00:27:45.079 --> 00:27:49.429
+Whereas pthreads more aggressively
+create threads and over commits.
+
+00:27:49.430 --> 00:28:00.900
+So a twist on threads is the fork/join model,
+and it's about doing background operations
+
+00:28:00.900 --> 00:28:05.370
+and keeping the local thread busy and
+then coming back together at some point.
+
+00:28:05.369 --> 00:28:09.079
+So what does that look like?
+
+00:28:09.079 --> 00:28:11.909
+It's a pthread create as before, we need to get that handle.
+
+00:28:11.910 --> 00:28:17.370
+Passing null, there's no interesting
+attributes for trying to set up on a thread.
+
+00:28:17.369 --> 00:28:23.859
+Passing a background function, named background
+in this case, and we'll pass into context.
+
+00:28:23.859 --> 00:28:26.699
+We'll check for failure and deal with that too.
+
+00:28:26.700 --> 00:28:30.920
+We'll also run the foreground function
+with the same context,
+
+00:28:30.920 --> 00:28:34.710
+and we can now have two things running at the same time.
+
+00:28:34.710 --> 00:28:40.940
+After the foreground function completes we'll
+join, thus disposing of the pthread filing.
+
+00:28:40.940 --> 00:28:44.779
+Check that it didn't fail, and then finally
+we can do something with the results
+
+00:28:44.779 --> 00:28:46.700
+of the foreground and background function.
+
+00:28:46.700 --> 00:28:56.200
+In GCD it's something similar, but
+actually in fact far more powerful.
+
+00:28:56.200 --> 00:29:01.330
+We can get the global concurrent queue,
+we're not creating, we're just getting it.
+
+00:29:01.329 --> 00:29:03.069
+We can create a group.
+
+00:29:03.069 --> 00:29:12.129
+We can then dispatch async into that dispatch group
+async into that group, and run our background method.
+
+00:29:12.130 --> 00:29:15.180
+We can then run our foreground method.
+
+00:29:15.180 --> 00:29:21.240
+Then we can wait on the group, and this case, wait
+forever, this is a dispatch time concept we talked
+
+00:29:21.240 --> 00:29:26.690
+about in both the first and second presentations this week.
+
+00:29:26.690 --> 00:29:31.430
+Then release the group, and finally
+do something with R1 and R2.
+
+00:29:31.430 --> 00:29:37.009
+Now the unique thing here that gets really
+powerful is the group wait can wait on a lot
+
+00:29:37.009 --> 00:29:40.960
+of group asyncs, it can wait on them all.
+
+00:29:40.960 --> 00:29:45.600
+So rather than with the pthread model
+where you'd have to join, join, join, join,
+
+00:29:45.599 --> 00:29:48.949
+join for a lot of times, you can just wait once.
+
+00:29:48.950 --> 00:29:54.590
+And because of that, you could actually hand off the group
+to other subsystems which add other members to the group
+
+00:29:54.589 --> 00:29:56.899
+that the original creator doesn't know about.
+
+00:29:56.900 --> 00:30:00.140
+But the original waiter can still wait on them all.
+
+00:30:00.140 --> 00:30:02.770
+So it's a lot more powerful.
+
+00:30:02.769 --> 00:30:08.650
+And we'd actually also like to add a
+new twist that pthreads can't even do,
+
+00:30:08.650 --> 00:30:13.009
+or at least not nearly as easily or conveniently.
+
+00:30:13.009 --> 00:30:17.890
+Instead of waiting on the set of blocks
+that are running within the group,
+
+00:30:17.890 --> 00:30:22.020
+your code can instead call DispatchGroupNotify.
+
+00:30:22.019 --> 00:30:30.819
+DispatchGroupNotify will take the group, wait for
+it to empty out, and then run a block on a queue.
+
+00:30:30.819 --> 00:30:38.250
+And with that, you can then build very powerful designs
+that were much more complicated to express before.
+
+00:30:38.250 --> 00:30:45.710
+In these new designs you can fan out a bunch of work across
+different queues and then set up a little notification
+
+00:30:45.710 --> 00:30:51.549
+to know when it empties, reconcile the results,
+merge them together, and then fan back out again.
+
+00:30:51.549 --> 00:30:56.119
+So you're going from one set completion,
+everything is know and well stayed.
+
+00:30:56.119 --> 00:31:04.859
+Do a bunch of work, regroup, fan out, regroup,
+and it's a great way of maintaining your code.
+
+00:31:04.859 --> 00:31:15.629
+So it's a really convenient alternative,
+especially with the block syntax.
+
+00:31:15.630 --> 00:31:16.970
+It's really efficient.
+
+00:31:16.970 --> 00:31:21.940
+It's also a lot more expressive as I was
+describing, you can join in multiple operations,
+
+00:31:21.940 --> 00:31:29.380
+you can also do the notification, and we
+believe you'll find that a lot easier to use.
+
+00:31:29.380 --> 00:31:35.040
+Mutexes. Real basic concept, but
+something GCD really win out on.
+
+00:31:35.039 --> 00:31:40.659
+Mutexes are from the perspective outside
+of a queue, you can think of it that way.
+
+00:31:40.660 --> 00:31:45.040
+They're all about enforcing mutual
+exclusion to a critical section.
+
+00:31:45.039 --> 00:31:50.710
+From inside of the critical section, it's all about
+serialization, it's just a question of perspective.
+
+00:31:50.710 --> 00:31:55.309
+And the reason we all do that is to ensure data integrity.
+
+00:31:55.309 --> 00:32:00.730
+Computers at the end of the day are just reading
+a word of data and writing a word of data.
+
+00:32:00.730 --> 00:32:08.690
+So if you need to do something more complicated than
+just a read and a write, you need a mutex or a queue
+
+00:32:08.690 --> 00:32:12.809
+to protect the collection of reads and writes from memory.
+
+00:32:12.809 --> 00:32:22.589
+So in pthreads, well everything might fail, so we
+need to check that acquiring the mutex didn't fail.
+
+00:32:22.589 --> 00:32:29.799
+We then can do our critical section, in
+this case we're trying to mutate a string.
+
+00:32:29.799 --> 00:32:36.819
+And if our reallocation fails, what we
+can do is kind of set our critical section
+
+00:32:36.819 --> 00:32:42.089
+to a known state and then unlock the mutex and return.
+
+00:32:42.089 --> 00:32:48.639
+It's worth point out here that we could have
+forgotten to unlock the mutex and returned prematurely,
+
+00:32:48.640 --> 00:32:54.080
+and that is an interesting problem
+that mutex users need to be aware of.
+
+00:32:54.079 --> 00:33:02.529
+Finally, if the reallocation succeeded, we can
+concatenate our string, and finally unlock the mutex
+
+00:33:02.529 --> 00:33:06.079
+and verify that the unlock actually worked.
+
+00:33:06.079 --> 00:33:11.939
+With GCD it's a lot simpler, you can just call DispatchSync.
+
+00:33:11.940 --> 00:33:18.570
+Only one thing at a time can happen on a serial
+queue, so this is a form of mutual exclusion.
+
+00:33:18.569 --> 00:33:25.169
+We can enter our critical section, do the same logic as we
+were doing before, and thankfully, thankfully, thankfully,
+
+00:33:25.170 --> 00:33:32.980
+thankfully because it's a block we can just return
+and dispatch sync will ensure that the critical data
+
+00:33:32.980 --> 00:33:37.039
+within the serial queue itself does
+not enter an inconsistent state.
+
+00:33:37.039 --> 00:33:40.599
+There's no way you can screw that part up.
+
+00:33:40.599 --> 00:33:42.000
+Thanks.
+
+00:33:42.000 --> 00:33:44.529
+[ Laughter ]
+
+00:33:44.529 --> 00:33:50.309
+>> And then finally, if our reallocation succeeds,
+you can concatenate the string and move on.
+
+00:33:50.309 --> 00:33:58.490
+Now something that isn't even possible with pthreads.
+
+00:33:58.490 --> 00:34:02.539
+What if you don't need to wait for
+the results of that critical section?
+
+00:34:02.539 --> 00:34:05.369
+What if there are no side effects
+your local thread cares about?
+
+00:34:05.369 --> 00:34:06.639
+Well guess what?
+
+00:34:06.640 --> 00:34:14.039
+Add one character, make it a dispatch async, and now
+that critical section can be run in the background,
+
+00:34:14.039 --> 00:34:19.250
+increased concurrency, and your local
+thread could move on and do better things.
+
+00:34:19.250 --> 00:34:28.510
+So this is a nice powerful addition that GCD
+provides that mutexes makes no affordances for.
+
+00:34:28.510 --> 00:34:36.610
+So dispatch queues, serial queues, being used as an
+alternative to a mutex, they're really convenient,
+
+00:34:36.610 --> 00:34:39.860
+they're also very efficient, they're safe.
+
+00:34:39.860 --> 00:34:46.710
+You can not return without GCD reconciling the
+state of the queue and making it usable again.
+
+00:34:46.710 --> 00:34:52.280
+They're also more expressive, you can have
+deferrable critical sections as I showed.
+
+00:34:52.280 --> 00:34:56.670
+And GCD had wait-free synchronization
+which helps scale better.
+
+00:34:56.670 --> 00:35:04.130
+And because it's a queue, we're going to build on this
+concept and enqueue other things than basic blocks,
+
+00:35:04.130 --> 00:35:06.250
+and we'll do interesting things with them later.
+
+00:35:06.250 --> 00:35:09.170
+So let's talk about condition variables.
+
+00:35:09.170 --> 00:35:13.139
+What are condition variables?
+
+00:35:13.139 --> 00:35:20.989
+This is the very POSIX pthread way of waiting for events.
+
+00:35:20.989 --> 00:35:24.000
+And in fact, they're not just waiting for any events,
+
+00:35:24.000 --> 00:35:29.519
+they're application defined events,
+and only application defined events.
+
+00:35:29.519 --> 00:35:33.050
+And the thread goes to sleep until
+the condition variable is signaled.
+
+00:35:33.050 --> 00:35:38.480
+It's common use, the most common use is about
+creating simple producer/consumer models,
+
+00:35:38.480 --> 00:35:45.230
+sometimes it's a set of consumers, but more often
+than not it's a set of producers and one consumer.
+
+00:35:45.230 --> 00:35:49.690
+The producer signals the consumer when work is added.
+
+00:35:49.690 --> 00:35:57.000
+Now to show you what that code looks like - whoops.
+
+00:35:57.000 --> 00:36:04.039
+So unfortunately, POSIX requires you
+implementation your own model for events.
+
+00:36:04.039 --> 00:36:12.090
+It's a lot of code, and the most unfortunate
+part about it is that forces this problem.
+
+00:36:12.090 --> 00:36:18.240
+There's no convention between frameworks and
+applications for how to coordinate events,
+
+00:36:18.239 --> 00:36:21.119
+there's just real no established standard.
+
+00:36:21.119 --> 00:36:26.819
+And it means that there's no real interoperability
+between frameworks and applications and other frameworks
+
+00:36:26.820 --> 00:36:30.200
+for passing events easily between each other.
+
+00:36:30.199 --> 00:36:32.589
+However, dispatch queues are the solution.
+
+00:36:32.590 --> 00:36:37.590
+It's a standardized metaphor, standardized
+API, and now it becomes really easy
+
+00:36:37.590 --> 00:36:41.809
+to have frameworks provide callbacks for any event.
+
+00:36:41.809 --> 00:36:47.269
+Or if you're working a large project in different
+teams, you can do this within your own application.
+
+00:36:47.269 --> 00:36:51.800
+So let's see what that looks like.
+
+00:36:51.800 --> 00:36:54.010
+I'll try not to bore you too much.
+
+00:36:54.010 --> 00:36:59.780
+If you see this somewhere in your code, a thread
+being created with a function that looks like this,
+
+00:36:59.780 --> 00:37:04.740
+some kind of consumer thread, it's going
+to have some kind of infinite four loop,
+
+00:37:04.739 --> 00:37:11.239
+and then it's going to acquire a mutex that
+protects the data structures for tracking the amount
+
+00:37:11.239 --> 00:37:14.679
+of work the consumer and producer are agreeing upon.
+
+00:37:14.679 --> 00:37:20.569
+It's now going to wait forever around like a
+while loop, waiting for events to be enqueued.
+
+00:37:20.570 --> 00:37:25.640
+And if there's no work, it waits on a condition
+variable, and then eventually the producer,
+
+00:37:25.639 --> 00:37:31.379
+which we'll see on the next slide, will signal that
+condition variable thus saying there's more work.
+
+00:37:31.380 --> 00:37:37.340
+We can then, that while loop will loop back around,
+we'll be able to succeed at finding an item.
+
+00:37:37.340 --> 00:37:40.190
+We'll get to this TAILQ_Remove.
+
+00:37:40.190 --> 00:37:43.860
+We can now finally remove an item and proceed.
+
+00:37:43.860 --> 00:37:48.420
+We can unlock the mutex, thus allowing
+more work to be enqueued.
+
+00:37:48.420 --> 00:37:52.260
+And we can finally take that item and run it.
+
+00:37:52.260 --> 00:37:58.250
+So this right here is what one part
+of a producer/consumer will look like.
+
+00:37:58.250 --> 00:38:00.570
+Again, just look for a function with an infinite four loop
+
+00:38:00.570 --> 00:38:05.050
+and a thread condition wait, and
+that's what a consumer looks like.
+
+00:38:05.050 --> 00:38:11.550
+A producer, not quite inverse, but very
+similar, you have some kind of function,
+
+00:38:11.550 --> 00:38:15.280
+might take a context, might even take a function.
+
+00:38:15.280 --> 00:38:19.060
+All it's going to do is alloc some tracking
+structure to hand off to the consumer.
+
+00:38:19.059 --> 00:38:21.639
+It's going to initialize that structure.
+
+00:38:21.639 --> 00:38:27.049
+It's going to lock the critical
+section that protects our TAILQ.
+
+00:38:27.050 --> 00:38:33.519
+It'll signal the condition variable if this is
+the first item being queued, insert the item,
+
+00:38:33.519 --> 00:38:37.170
+unlock the mutex so the consumer can use it.
+
+00:38:37.170 --> 00:38:40.309
+So these are two patterns you might see in your code.
+
+00:38:40.309 --> 00:38:44.799
+It's a lot of code, and we didn't even
+describe all the other things you would have
+
+00:38:44.800 --> 00:38:47.730
+to implement to make a producer and consumer safe.
+
+00:38:47.730 --> 00:38:52.420
+We didn't talk about any retain/release
+issues for these items or the data they track,
+
+00:38:52.420 --> 00:38:55.210
+that's more code you might have to implement.
+
+00:38:55.210 --> 00:39:01.530
+We didn't show the data structure definitions for these
+items, and we didn't show the creation of that thread,
+
+00:39:01.530 --> 00:39:07.320
+or how you might do the appropriate
+tracking to know when you can clean it up.
+
+00:39:07.320 --> 00:39:08.860
+This is the GCD alternative.
+
+00:39:08.860 --> 00:39:11.220
+[ Laughter ]
+
+00:39:11.219 --> 00:39:16.000
+>> Put a block on a queue, can't be any simpler.
+
+00:39:16.000 --> 00:39:21.949
+[ Applause ]
+
+00:39:21.949 --> 00:39:22.789
+>> Thank you.
+
+00:39:22.789 --> 00:39:26.500
+So yeah, we're really happy about this.
+
+00:39:26.500 --> 00:39:28.190
+[ Laughter ]
+
+00:39:28.190 --> 00:39:34.789
+>> So GCD provides a more convenient, more
+efficient model, and it's just plain a better use
+
+00:39:34.789 --> 00:39:37.099
+of your time and your intellectual energy.
+
+00:39:37.099 --> 00:39:39.509
+You've got more things to worry about.
+
+00:39:39.510 --> 00:39:44.800
+And it's fully integrated with OS frameworks,
+as you might have seen in other sessions.
+
+00:39:44.800 --> 00:39:50.890
+There are a lot of API now that are taking
+dispatch queues and/or blocks as parameters,
+
+00:39:50.889 --> 00:39:56.679
+and there's a lot greater events flying around
+the system now that are all queue-based.
+
+00:39:56.679 --> 00:39:59.079
+Thread pools.
+
+00:39:59.079 --> 00:40:07.949
+Thread pools are really just a set of consumers
+in the POSIX pthread producer/consumer model.
+
+00:40:07.949 --> 00:40:15.119
+Now as I described earlier, it's really hard for any one
+subsystem to know what is the right number of consumers.
+
+00:40:15.119 --> 00:40:22.159
+And even with the best attempts of like asking
+what the current active number of CPUs are,
+
+00:40:22.159 --> 00:40:25.949
+that's only one subsystem, there are
+still other subsystems and there's no API
+
+00:40:25.949 --> 00:40:29.289
+for saying how many other thread pools there are out there.
+
+00:40:29.289 --> 00:40:33.079
+There's no way of registering,
+it's just not a noble question.
+
+00:40:33.079 --> 00:40:38.670
+So GCD solves this problem with
+one consolidated thread pool.
+
+00:40:38.670 --> 00:40:43.200
+I'd also like to point out that this also shares
+the same problem of all the producer/consumer stuff
+
+00:40:43.199 --> 00:40:50.689
+that was just described, all the tedium, all the
+glue code, you have to do that with a thread pool.
+
+00:40:50.690 --> 00:40:54.610
+And really it's just a dispatch global
+queue which you can get and don't even worry
+
+00:40:54.610 --> 00:40:56.760
+about retain/release issues because it's always there.
+
+00:40:56.760 --> 00:41:07.080
+So I'd like to move on to our last section
+where we're going to talk about external events.
+
+00:41:07.079 --> 00:41:13.319
+So there's a loose convention among POSIX
+programmers for how to deal with external events.
+
+00:41:13.320 --> 00:41:16.960
+A framework might export a descriptor and a function.
+
+00:41:16.960 --> 00:41:22.869
+It is then the client's responsibility to get
+that descriptor and then monitor it somehow.
+
+00:41:22.869 --> 00:41:29.480
+The two most common ways of doing
+that are using select or kqueue.
+
+00:41:29.480 --> 00:41:36.510
+And then once that descriptor becomes readable, it's
+the application's responsibility to remember oh yeah,
+
+00:41:36.510 --> 00:41:39.910
+that descriptor is not mine, it's that framework.
+
+00:41:39.909 --> 00:41:42.969
+And oh yeah, I need to call that function they gave us.
+
+00:41:42.969 --> 00:41:49.679
+And that's the very loose convention that
+is existent in Unix we believe today.
+
+00:41:49.679 --> 00:41:57.849
+We'd also like to point out that the POSIX
+standard essentially failed in this regard.
+
+00:41:57.849 --> 00:42:01.469
+POSIX condition variables can not monitor external events.
+
+00:42:01.469 --> 00:42:06.849
+It is the application's responsibility to
+somehow shim the events from the kernel
+
+00:42:06.849 --> 00:42:10.519
+into some kind of consumer with a condition variable.
+
+00:42:10.519 --> 00:42:19.210
+Or alternatively, abandon condition variables altogether
+and use the kernel primitive to somehow wake a thread.
+
+00:42:19.210 --> 00:42:26.190
+Most common techniques are using a pipe or a socket
+pair to wake a thread instead of a condition variable.
+
+00:42:26.190 --> 00:42:32.420
+Again, instead of a condition variable
+you might see something like this
+
+00:42:32.420 --> 00:42:36.250
+on a thread, it's going to be an infinite four loop.
+
+00:42:36.250 --> 00:42:39.949
+You're going to set up some bookkeeping
+to deal with just getting data
+
+00:42:39.949 --> 00:42:42.869
+into the kernel for what events you want to find out.
+
+00:42:42.869 --> 00:42:47.099
+In this case, for select we need to
+iterate some kind of event data structure,
+
+00:42:47.099 --> 00:42:54.150
+get the descriptors we're interested in, add them
+to an FD set, and then finally pass it into select,
+
+00:42:54.150 --> 00:42:59.720
+all the while dealing with signals that
+might come in and redriving the select.
+
+00:42:59.719 --> 00:43:05.500
+Finally if that succeeds, we now need to evaluate
+the FD set that was modified by the kernel,
+
+00:43:05.500 --> 00:43:12.179
+iterate through our data structures, find the descriptors
+that fired, find our events, and then call the function
+
+00:43:12.179 --> 00:43:17.049
+that maps to that event and with the right
+context that maps to that descriptor.
+
+00:43:17.050 --> 00:43:22.670
+So that's a lot of glue code, and
+it's all solved by GCD quite nicely.
+
+00:43:22.670 --> 00:43:26.950
+We have a standardized event tracking subsystem,
+you don't need to worry about draining any events,
+
+00:43:26.949 --> 00:43:29.960
+we'll just call your block when an event fires.
+
+00:43:29.960 --> 00:43:34.360
+This is great for both single-threaded
+and multi-threaded applications.
+
+00:43:34.360 --> 00:43:41.180
+We're not obligating you to go multi-threaded,
+just being event-based might make your life easier.
+
+00:43:42.519 --> 00:43:50.800
+We also support both external and application defined
+events to really help you make your life easier.
+
+00:43:50.800 --> 00:43:55.690
+And there's no bridging you have to do, there's
+none of this getting a descriptor by the client,
+
+00:43:55.690 --> 00:43:59.289
+there's no finding out what function to
+call when that descriptor is readable.
+
+00:43:59.289 --> 00:44:07.570
+A framework can just install events on a queue and
+the application doesn't even need to know about it.
+
+00:44:07.570 --> 00:44:11.580
+Finally, with dispatch there's no looping
+or scheduling that you have to do,
+
+00:44:11.579 --> 00:44:15.889
+the system does it all for you,
+we'll manage all the details.
+
+00:44:15.889 --> 00:44:21.159
+So for a single-threaded application,
+I'd like to give a quick example.
+
+00:44:21.159 --> 00:44:27.029
+Inside of main we can create a source to monitor standard
+in, find out when someone is pecking at the keyboard.
+
+00:44:27.030 --> 00:44:32.050
+We'll direct the events to the
+main queue, we'll set a handler,
+
+00:44:32.050 --> 00:44:38.070
+and for brevity we'll use a function-based
+handler, and then we'll resume the source.
+
+00:44:38.070 --> 00:44:42.210
+That resumption let's GCD know that
+it can now start firing that function
+
+00:44:42.210 --> 00:44:47.730
+on that queue whenever there's an event on standard in.
+
+00:44:47.730 --> 00:44:49.139
+However, we're not done.
+
+00:44:49.139 --> 00:44:53.659
+We're using a library or maybe a set of
+libraries, or maybe even some internal libraries.
+
+00:44:53.659 --> 00:44:56.309
+And we need them to schedule events on queues.
+
+00:44:56.309 --> 00:45:03.480
+So we can just pass in a queue and that library will say
+okay, great, I don't know what that queue is or where it is,
+
+00:45:03.480 --> 00:45:09.369
+but I'll register some events on that
+because you want this library to work.
+
+00:45:09.369 --> 00:45:14.809
+And finally we can call dispatch main,
+and now the program is ready to go.
+
+00:45:14.809 --> 00:45:20.150
+Events are registered, if they come in, they
+will execute on the main thread all serial just
+
+00:45:20.150 --> 00:45:22.670
+like you would expect a single-threaded application to work.
+
+00:45:22.670 --> 00:45:29.550
+However, it's all event-based now,
+so a lot less code for you.
+
+00:45:29.550 --> 00:45:33.190
+A slightly different example with
+a multi-threaded application
+
+00:45:33.190 --> 00:45:40.039
+we're going to create a now background queue,
+and you know what, let's put all that standard in input
+
+00:45:40.039 --> 00:45:44.079
+on the background queue just because
+we're going to do some processing
+
+00:45:44.079 --> 00:45:48.929
+on that text before we redirect it to
+the main queue to draw the results.
+
+00:45:48.929 --> 00:45:54.730
+So we're going to again create the
+source, set the function-based handler,
+
+00:45:54.730 --> 00:45:59.500
+resume the source so that way it can actually
+start running around and doing things.
+
+00:45:59.500 --> 00:46:03.789
+And then like before, we'll call the library initialization,
+
+00:46:03.789 --> 00:46:09.320
+tell it to use the main queue, and
+enter the main queues of end loop.
+
+00:46:09.320 --> 00:46:14.250
+So in summary, this example is using two
+queues, the main queue and a background queue,
+
+00:46:14.250 --> 00:46:24.230
+and at no point did the application author need to write
+any kind of event draining logic or event, shimming logic,
+
+00:46:24.230 --> 00:46:28.030
+or any kind of redirection, just
+glue code, boring old glue code.
+
+00:46:28.030 --> 00:46:32.000
+It's all handled by GCD.
+
+00:46:32.000 --> 00:46:37.829
+[ Applause ]
+
+00:46:37.829 --> 00:46:40.980
+>> Yeah, we're quite happy about it too.
+
+00:46:40.980 --> 00:46:47.670
+So we have standardized event handling, there's
+consistent handling of all application defined events.
+
+00:46:47.670 --> 00:46:52.690
+You've got these queues, they're how everything
+reconciles with everything else; dispatch async,
+
+00:46:52.690 --> 00:46:57.190
+the resources, and all sorts of other events.
+
+00:46:57.190 --> 00:47:01.610
+We also support all the kqueue types
+for the modern BSD event delivery.
+
+00:47:01.610 --> 00:47:08.460
+You can monitor Unix descriptors for readability,
+writability , or if you know it's a file descriptor
+
+00:47:08.460 --> 00:47:14.110
+that maps to a file system object, you can
+monitor from metadata updates on a file.
+
+00:47:14.110 --> 00:47:21.599
+So for example, if the file is deleted or renamed
+or revoked, the metadata itself is updated.
+
+00:47:21.599 --> 00:47:24.339
+You can monitor all those things.
+
+00:47:24.340 --> 00:47:32.240
+We support timers, basic timers either on the
+abstract host clock or the more explicit wall clock
+
+00:47:32.239 --> 00:47:37.929
+for monitoring setting up an alarm
+so you can actually get up.
+
+00:47:37.929 --> 00:47:45.159
+Or you can monitor processes for
+reexecing themselves, forking, and exiting.
+
+00:47:45.159 --> 00:47:52.549
+You can also monitor a process for being signaled too.
+
+00:47:52.550 --> 00:47:58.289
+And finally, again, no glue code.
+
+00:47:58.289 --> 00:48:05.400
+So that's migrating to GCD, your code is probably ready
+to adopt today, you could find little sections here
+
+00:48:05.400 --> 00:48:12.920
+and there of either producer/consumers,
+or mutexes, or signals, or event sources,
+
+00:48:12.920 --> 00:48:16.539
+they're just ready to adopt and strip away some code.
+
+00:48:16.539 --> 00:48:19.009
+It's convenient, it's efficient.
+
+00:48:19.010 --> 00:48:22.460
+And we'd like to remind you it's a-la-carte.
+
+00:48:22.460 --> 00:48:26.909
+You can start small, find a little section
+here, give it a try, see how it works.
+
+00:48:26.909 --> 00:48:31.980
+We recommend you try and look for
+big wins and see what happens.
+
+00:48:31.980 --> 00:48:35.079
+Just verify that your goal has been accomplished.
+
+00:48:35.079 --> 00:48:40.079
+For more information, please contact Michael
+Jeruwitz, he's our grade developer tools
+
+00:48:40.079 --> 00:48:43.739
+and performance evangelist, he'll also be doing our Q&A.
+
+00:48:43.739 --> 00:48:47.629
+We have a developer forum for GCD so you can ask questions.
+
+00:48:47.630 --> 00:48:53.619
+We have documentation, both the awesome great
+concurrency guide that went online recently
+
+00:48:53.619 --> 00:48:56.289
+on the website, plus man pages and headed doc --

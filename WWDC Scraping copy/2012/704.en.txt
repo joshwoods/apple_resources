@@ -1,0 +1,169 @@
+---
+Title:  The Security Framework
+Year:   2012
+Web:    https://nonstrict.eu/wwdcindex/wwdc2012/704/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Good afternoon, everyone. My name is Dallas De Atley. And for the next hour, we're going to be talking about the Security Framework on iOS and OS X. So some of the things we're going to be talking about over the next hour include the basic building blocks of the Security Framework, How the operating systems use the Security Framework to store the user's secrets, like a password using the Keychain. How the operating system relies on the security framework to protect data as it travels over a network between devices or a device and a web server. and how the operating systems rely on the Security Framework to evaluate the trust of a digitally signed object.
+
+So the Security Framework on OS X actually is in a number of different places in the system. At the lowest level, we have our crypto implementation. And the Security Framework is primarily implemented as a CF API. But we also expose interfaces for developers at the Objective-C level and as a part of the AppKit level. But for the purposes of today's talk, we're just going to focus on those bottom two components that are the same on both OS X and iOS.
+
+Now, if we were to just focus on the entire Security Framework, it actually has a lot of technology in it, and we're not going to be able to cover all of this in today's session. So again, we're going to narrow it down a little bit and just talk about a couple of core concepts that we want you to take away from the session today.
+
+So the technologies that we want to talk about include the crypto itself. So the actual encryption and signing operations that we support on the platforms. We're also going to talk about the Keychain, which is the database that we use for securely protecting the user's passwords. We're going to talk about Secure Transport, which is that technology that we use for providing SSL on the device. And we're going to talk about how the system takes advantage of trust evaluation.
+
+So let's start with crypto. So we support our cryptography in a library called Common Crypto. And Common Crypto was designed in particular to be very performant. And so our goal with this library is to keep it small and fast. But not only that, The crypto library is at the lowest level of the system because we use cryptography on both platforms all over the place. And so we are very sensitive to it being as performant as possible, not only because in general, crypto algorithms are computationally very complex, but we also want it to be as power efficient as possible.
+
+One of the reasons we call it common crypto is we want to put all of the common algorithms that the system depends on in one location. So for example, before we developed this library, most of the engineering teams would copy and paste the specific code they needed into their own components.
+
+And this led to, for example, us having 17 different copies of the MD5 algorithm floating around the system. So now we've got all of that centralized in one place. The other benefit of common crypto is that for our clients in the OS, we have a stable interface that everyone can use. But the crypto library itself will actually take advantage of processor-specific optimizations.
+
+So if there's an instruction set on a particular processor that we can use to make AES go faster, then common crypto is going to take advantage of that without our clients having to know. In the same vein, if we actually have hardware acceleration available on a particular platform, we'll take that path. But again, none of our clients really need to know that all of this is going on under the hood because they're using a common set of interfaces.
+
+In particular, we support state-of-the-art crypto algorithms on the device. So what does that actually mean? Well, we support the majority of the FIPS 140-2 standard as defined by NIST. For those of you who don't recognize that alphabet soup, NIST is a federal group that works to define a lot of technology standards, and FIPS in particular is their information protection standard. So what they do is they publish on a regular basis the latest and greatest crypto algorithms and the best way to take advantage of them in your software. And so in particular, Our library, we aim to keep up with the latest standard as it's published.
+
+So what I'd like to do is talk a little bit about the types of crypto that we actually support. So for those of you who have a bit more experience, this might seem a little redundant, but we also want to go through some of the concepts that we use and the terms that we use when we talk about crypto for those of you who might not be cryptographers yourself.
+
+So what I have here is an example of what we call symmetric encryption. And the basic idea behind symmetric encryption is that you want to take a piece of plain text, like a file or a message, and you want to encrypt it and obscure it so that an attacker can't actually see what your original message was. And the key behind symmetric encryption is that you have a single key, but the operation is two ways. You can encrypt with the key and then decrypt with the same key.
+
+So in this example, you're going to feed that symmetric key and the plain text into an AES engine. And what you're going to get out the other side is what we call ciphertext. And that is the obscured text that should now be encrypted by that key. And as I mentioned, AES is what we call a two-way function. So you can then take that ciphertext and use the exact same key, feed it back through the same engine, and get the original plain text. And so this is the kind of... standard thing that people think about when they think about encryption and crypto in general.
+
+And it's what most crypto systems have been doing for a long time. The main issue about all of this, though, is if you want to encrypt a file and then give that file to someone else so that they can decrypt it, you also have to get them the key without an attacker being able to intercept it on the way. So there's another algorithm that we support, which is called a message digest. And a message digest is a way to decrypt a message.
+
+And it's different from encryption in that we call it a one-way function. So the idea is that you're going to have an arbitrary amount of data, a file, or a large message, that you're then going to run through a message digest algorithm, in this case like SHA. And what you're going to get is what we call a message digest. Now, a message digest is a much smaller value, and it uniquely identifies the data that you're sending. And the idea behind a secure hashing algorithm is that the odds of two different sets of data hashing down to the same message digest are very, very low.
+
+And so in most cases, you can rely upon an algorithm like SHA-1 as a way to uniquely identify a message. Now, as I mentioned, we call this a one-way function. So if someone just has the message digest and they don't have the original data, they can't have the message digest. original data that you actually hashed.
+
+[Transcript missing]
+
+So that you can get the same behavior for every crypto operation that you feed through the AES engine. And of course, you also want to take advantage of something that's called an initialization vector. Because what modern cryptanalysis is trying to do is manipulate the ciphertext and feed it back through AES in such a way that people can discover what your key was. And so one technique is to use an initialization vector to kind of prime the pump for the engine.
+
+But you can also run an AES engine in a number of different modes. So in this case, we have what's called the electronic codebook mode. And it doesn't actually work with an IV. So if you were to call the common crypto operation and put it into that mode and feed it an IV, it's going to ignore it. There's a different mode where you're actually chaining all the cipher blocks together. And what's going on there is that each cipher block that comes out is being fed back into the engine to provide a kind of feedback loop into the system.
+
+And so, if the one thing you take away from this talk, if you're not familiar with developing your own crypto systems and using crypto directly, we generally recommend that you use the higher level services of the system. So let me give you an example of how this can go wrong. So here we have a piece of artwork that we chose completely at random.
+
+And we wrote a little command line tool based on our own crypto algorithms that was designed to encrypt the file so that if someone got a hold of it, they wouldn't be able to tell what the plain text was. And we used that electronic code book mode to feed it through AES, which is an industry standard algorithm. And this was the result. So you can tell that an attacker can probably guess what our original plain text was. So again, the devil is in the details when it comes to this. comes to doing crypto operations on your own.
+
+So some things to keep in mind. Avoid using those crypto primitives. Use the higher level services. For example, on the operating system itself, we provide is an API that the Mail application uses called Cryptographic Message Syntax or CMS. And this is how Mail encrypts and signs messages for the S/MIME protocol. And so we've provided a higher level API that the Mail team can use so that they don't have to figure out how to encrypt and sign everything manually themselves.
+
+Now we provide a higher level API for folks who want to do encryption and decryption and signing and verify operations as a part of the set key APIs. And those APIs are available on OS X and iOS. Last year we also introduced a new API we call SecTransform. And I'd like to talk about SecTransform a little bit. So SecTransform is only available on OS X.
+
+And the ideas that we've provided in interface, which at the core foundation layer allows you to drive data through a GCD engine for doing encryption and data transcoding. Now again, it's only available on OS X. But you can do all of the standard crypto routines that you would expect. And you can do data encoding. So for example, if you would like to transfer a file into base 64, so you can then send it out over a network, SecTransform will support that.
+
+But One of the great things about SecTransform is it's a lot simpler to use than the existing APIs we had in the Security Framework. So here's a code example of how you can use SecTransform to actually encode something into Base64. So you're only going to be providing two inputs fundamentally, which is a CFData that represents the actual data you want to translate into Base64, and then the error code you want to get back from the call. And what you're going to do is first create that SecTransform. And when you create the transform, you're going to tell it, "I'm going to use this transform for doing Base64 encoding."
+
+And you're going to set an attribute on that transform. And in this case, the attribute is simply, here's the input data I want you to use. Once you've got that set up, you call SecTransform execute, and it's going to do all of that work on your behalf. It's going to return the output data to you, and then you can check for errors with that error variable.
+
+What's really cool about SecTransform is under the hood, it's taking advantage of GCD on the platform for you. So if you want to do a whole bunch of operations, either you want to chain them together or you want them to run all in parallel, SecTransform is going to use the existing dispatch APIs to do all of that scheduling on your behalf. So your application, you don't have to worry about those level of details. So let me give you an example of what that looks like. So in this code, what we're doing is we want to first encrypt the data and then encode it for sending over the network.
+
+So one additional piece of data that you're going to have as an input is the actual key that you want to use for encryption. And then the input data that you want to encrypt and then encode. And again, you're just going to create an encryption transform, set it up and give it the original key that it needs to use to do that encryption. And then you're going to create a separate encoding transform.
+
+And the way that you actually chain these together is by using what we call a SecTransform group. So you're going to create that group transform. And then you're going to connect those two transforms together. So you're telling the group that I want this transform to run first, and I want its data to feed into this transform that runs after it.
+
+At that point, you just need to set the original attribute on that encryption transform. So here's your input data. You can then execute those transforms asynchronously. And again, GCD will take care of all of the details of scheduling all that work on your behalf. And that's really all there is to it. And if you're familiar with using the APIs that we've had previously, this is far simpler. So now I'd like to switch gears and talk a little bit about the Keychain.
+
+So the Keychain is fundamentally intended to protect the user's secrets. So when the user enters in his passwords to log on to a website or even to log on to the device, You want to be storing them in the Keychain. It's also the right place for other types of crypto material like certificates and signing identities, things like that.
+
+One of the things the keychain does is it enforces access control. So the keychain is responsible for deciding if a calling application is allowed to get access to a keychain item. And this can be expressed through what we call access control lists, or ACLs, so that the original client that put something into the keychain can specify, here are the set of other clients that are allowed to get direct access to this keychain item.
+
+And on OS X, the keychain is also responsible for putting up the UI that will actually ask the user, this application in particular would like access to this item, and the user can make that choice. The keychain is cryptographically secure, so that when you put an item into the keychain, we are encrypting it and storing it locally, and it's bound to the user's password. So when I log into my Mac, we're unlocking the default keychain. Okay.
+
+And on iOS, when I enter in my passcode to unlock the device, the keychain items are then accessible to clients as well. One chief difference between the two platforms is that OS X supports the concept of multiple Keychains, so the user can take a set of Keychain items and put them in a separate physical Keychain. You can put it on a USB thumb drive, for example.
+
+So I'd like to walk you through an actual code example for how your app can use the Keychain APIs on iOS. So in this case, we have a standard UI alert view. And the UI alert views provide two different styles for your applications to ask the user for a password. In this case, we have the secure text input style. And so when the user types in his password, it's displayed as those black dots in the text field.
+
+There's also a UI Alert View style that allows you to ask for credentials, so the username and the password at the same time. But fundamentally, what your application gets access to is the string that represents that password. So when your application has the password, what it wants to do is go put it into the Keychain.
+
+And the way that you do that is you don't just put the password into the Keychain, you put the password and a set of attributes that describe how that item is going to be used in the future. So the first thing your application is going to do is create an attributes dictionary.
+
+And then set a couple of standard attributes that describe what that item is. So in this example, it's going to be just a generic password, and we're setting an attribute that associates it with a particular account. So that when your application wants to access that account in the future, it knows which one to go ask for. The last attribute that you set in the dictionary is the password item itself.
+
+And at that point, once you have your dictionary, you simply call sec item add, and it's going to put it into the Keychain. And the system is going to securely store that Keychain in the Keychain database on your behalf. So your application doesn't have to worry about any of the other details about protecting that Keychain item.
+
+and SecItem is an API that we provide on both platforms. Now if your application on OS X needs to use, needs to run on older versions of OS X, then there are pre-existing APIs that you can use as well. Now once the item is in the password, the next time your application runs, you don't want to have to ask the user to enter in his password again, you just want to go retrieve it on his behalf from the Keychain.
+
+And so what you do, it's a very similar operation, you're going to create another dictionary, and in this case you're going to set the attributes to describe the item that you want the Keychain to find on your behalf. So again, you're going to say I'm looking for a generic password associated with my account, and then you're going to call SecItemCopyMatching, and the Keychain is going to return the item that best matches the attributes that you provided.
+
+One thing to keep in mind is that in the case of calling CopyMatching, you need to set an attribute that says go ahead and actually return the data once you've found an item that matches properly. When you call CopyMatching, it's going to return a standard CFTypeRef that's the password that you can then use to go log into another service.
+
+So that's the Keychain. I'd now like to talk a little bit about SecureTransport. SecureTransport is a technology that the OS uses for protecting data as it travels over the network. So for example, if you're a web browser, and you're talking about a data transfer, and you're talking to an HTTPS server, underneath the hood, you're taking advantage of SecureTransport to do that work. It does this by negotiating what we call a secure channel between the device and the server via a protocol called TLS, which stands for Transport Layer Security. You've probably also heard of this, heard of people refer to this as SSL.
+
+In particular, Mountain Lion and iOS 5 support the latest TLS protocol 1.2 by default. And if your application is doing networking on either platform, most likely you're using the higher level CF network APIs for doing that network activity. And CF network and the NSURL APIs support Secure Transport natively.
+
+So if you're talking to an HTTPS server, CF network is going to use Secure Transport on your behalf. But if your application is talking directly to the BSD level APIs, you can then use Secure Transport to manually perform the handshake and then to actually send the data over the socket yourself.
+
+One thing to keep in mind is that there are older web servers that only know how to talk older dialects of TLS. And if you're using the default settings for Secure Transport on Mountain Lion and iOS 5, you might not be able to communicate with those older servers directly.
+
+We have a great tech note online that goes into details about how you can adapt to that. So as I mentioned, Secure Transport is heavily used by a web browser. So I'd kind of like to give you an idea of how that stacks up in the system. So in this case, we have Safari.
+
+which is fundamentally relying upon the CF network APIs for doing all of the networking and the HTTP on its behalf. In the case where you're actually visiting an HTTPS server, CF Network is automatically going to create an SSL context and perform all of the work to handshake with that server on behalf of the application. And once it has that context in hand, all of the actual data that's written over the network is done using the SSL calls that we provide in the Security Framework.
+
+So I'd like to talk a little bit about what that protocol behind TLS is actually doing. So in this case, we have an iPhone that's talking to a web server. And the first thing the iPhone is going to do is send a hello message. And the idea of the hello message is that the client is telling the server, hey, I want to negotiate a secure channel with you. And it's going to specify a handful of things that the server needs to know, particularly the supported versions of TLS that the client can speak.
+
+So it'll send a list of things that the client needs to know. So it'll send a list of I speak all of these different dialects. It's also going to tell the server, here's the crypto that I know how to use, so a specific encryption protocol, for example. Secure Transport also supports the idea of encrypting data and compressing it for network efficiency. And so the client can also tell the server, I know how to compress.
+
+At that point, the server is going to be the person who decides, "Here is the actual version of TLS, and here is the actual cipher that we're going to use for this session." So it's going to respond with its own hello message with all that information for the client.
+
+Something else the server is going to include is the certificate. And the certificate is how the server tells the client, here's who I am and here's how you can trust me. Now, if you're doing something that we call client-side authentication, the client is then going to respond with its own certificate.
+
+And at that point, both sides can use public key cryptography to then exchange a symmetric key so that all of the data that travels between them from that point on is encrypted. So, I'd now like to talk a little bit about certificates and how those play into trust evaluation on the system because it's heavily used by both Secure Transport and a lot of the technologies that we use for signing applications.
+
+In particular, a certificate contains the public key, and it also contains a set of attributes that describe that public key and how it should be used. So, for example, there are some public keys or key pairs that should only be used for SSL, they should only be used for signing SMIME. All of that information is included in the certificate, also including things like the certificate should expire after one year.
+
+At that point, you have all of that data in your certificate. It's then signed by the certificate that issued what we call a leaf certificate. So, for example, you'll have a leaf certificate like this one, and it's issued by a root certificate. The root certificate is associated with its own private key, and that's what signed all of the attributes in that leaf. And in fact, there are a number of root certificates in the world.
+
+and on iOS and OS X, the system ships with a set of default root certificates that the system will trust by default that we call root anchors. So in particular, the trust evaluation system that we've built into the Security Framework is built on top of X.509 certificates. So this is an industry standard for, it's the data format that the certificates are in and it's a Very extensive format. It has a lot of options. But in particular, both iOS and OS X ship with a standard set of root anchors that the trust evaluation engine will use by default. And of course, our clients can specify a different set of root anchors to use.
+
+And fundamentally, what trust evaluation is doing is evaluating what we call a certificate chain. So when you sign something, you're going to sign an object, and trust evaluation wants to verify that signature matches the public key in your cert, but it also is going to want to verify that that certificate was issued ultimately by a root anchor that it was told to trust.
+
+And trust evaluation also supports the concept of revocation. So keys can be lost. And in the case of a lost key, at the point you're evaluating it, you want to find out, hey, should I not trust this guy anymore? Because the data may have been posted on the internet or otherwise been compromised. And we support two different models of revocation. The first is called a certificate revocation list. And this is usually a URL that's included as one of those attributes in a certificate.
+
+So when the security framework is evaluating a certificate, if a URL, if a CRL is specified, the system is actually going to go out to that server that's hosting the CRL and download it to the device. And what trust evaluation is going to do at that point is take each of the certificates in the chain and determine if any of them appear on that revocation list, because then it will know that, oh, this guy's been revoked by its owner. We should no longer trust it.
+
+One of the issues with CRLs is that they can grow unbounded over time. And so they can get pretty big. And the effort of manually walking each certificate you want to check against that list can be expensive. So there's an alternate protocol that we also support called OCSP. This stands for Online Certificate Status Protocol.
+
+And the idea is that at the point in time where you've got a set of certificates in a chain that you want to evaluate, you're going to take those certs and talk directly to an OCSP responder and ask, hey, are any of these certificates been revoked? Are they all still good?
+
+So I'd like to walk through a very simplified example of what trust evaluation might actually look like. So when you buy an app on an iOS device and you download it to your device, it's going to come along with a signature. And it's also going to have a certificate.
+
+So at the point that the installer on iOS goes to evaluate, is this an application that it can trust, it's first going to take a measurement of that application. And that is going to get it a message digest that represents the actual data that it's going to be using.
+
+And then it's going to use the public key in the certificate to perform an RSA verification on that signature. And fundamentally, it's using that public key to decrypt the signature, and then the message digest should match. But it's not done yet. At that point, it now has a certificate that it then wants to evaluate against the root certificate coming from Apple, so that you know that this came from the App Store and not somewhere else. And of course, at any point, along that chain, it might have to reach out to a server to find out if any of these elements had been revoked.
+
+Now, if you'd like to take advantage of trust evaluation in your application, the API that you want to learn about is the SecTrust API. And we have a great reference online that goes into a lot of good detail about how to take advantage of it on both platforms. We also have an upcoming session this Friday. It's going to go into a lot of really good detail about how secure transport takes advantage of trust evaluation. and some practical examples for what that looks like.
+
+So one of the things I want to talk about is the cross-platform nature of the Security Framework. So we have a shared source space. So the same code that we use for OS X is what we use on iOS. And in particular, the crypto library is exactly the same.
+
+So what we submit for the OS X train is the same for iOS, as well as our Secure Transport engine. So Secure Transport is the exact same code on both platforms. And so in the cases of these two technologies, we have a shared source space. So we have a shared source space. And so in the cases of these two technologies, we're bug-for-bug compatible between the two platforms. One thing to keep in mind, though, is that the Security Framework on iOS is a subset of the overall API that we make available on OS X.
+
+One specific difference that I mentioned earlier is that iOS only supports a single Keychain. So it's the same physical Keychain that the Security Framework is using to store all of the Keychain items on behalf of those applications. And it's the Security Framework that's enforcing all of the access control on behalf of all of the applications. And that includes both system apps and third-party apps.
+
+Now, the API for interacting with the Keychain on iOS is only the SecItem APIs. So the other APIs that are on OS X for searching for other Keychains and then opening those, because we only have a single Keychain on iOS, those APIs aren't necessary. We do have a feature that is only available on iOS that is not on OS X called Data Protection, and I'd like to talk a little bit about it.
+
+So the idea of Data Protection is to protect the user's data on a compromised device. So if a device has been attacked and the security model has otherwise been exploited, we still want to protect the user's data. And the way we do that is that every single file that is created on an iOS device is given its own AES key, its own randomly generated AES key at the time the file is created. And this is the same for every Keychain item as well. So when a file is released, it's not a keychain. It's written to disk.
+
+It's written and stored on disk using that AES key. So the only thing that's actually stored in Flash is the ciphertext. And this is the same for every single Keychain item as well. And the way that we protect the data in the event of a compromised device is those keys are then protected with the user's passcode. So when you enable a passcode on an iOS device, what we're fundamentally doing under the hood is taking all of those keys associated with all the files and Keychain, and wrapping them with your passcode.
+
+The benefit of this approach is that when the user does enable that feature on an iOS device, we don't have to go back and re-encrypt any of the files or Keychain items because all of that's already been done by default. We just have to re-wrap some of those keys.
+
+Now we do support different classes of protection. And this is because on an iOS device, there are certain files that the operating system needs access to in order to boot up and bring up that lock screen. A good example might be the actual wallpaper that you chose. We want to be able to display that even if the user hasn't unlocked the device yet.
+
+So we have a particular class of protection, which is for the subset of files so that when the device boots up, those keys are made available to the system directly. We also have a set of keys that are available after the first unlocks. When you unlock your device for the first time, those keys are going to be available even if the user later locks his device. And this is useful for system applications that are running in the background, like mail, which is able to go and download files.
+
+So you can download files or download your email even if the device has been locked. The best level of protection that we offer is a mode where when the device is locked, all of the keys associated with those items are erased from memory after a 10-second grace period. Now there are a couple of features that we do not support in the Security Framework. The first is DRM. So we don't have any APIs for performing any type of digital rights management on iOS or OS X.
+
+The second is the we don't support the concept of jailbreak detection. And the issue here is that if there were an interface that your application could call to say, "Hey, am I on a jailbroken iPhone?" it would be very easy for a compromised device to simply lie. And so either way, we can't support that.
+
+So in summary, We talked a lot about the actual crypto that we support on the device and how all of that has been collected into a unified common crypto library that is primary focus is to be as fast and efficient as possible. And of course, if you need to use the cryptography, we highly recommend that you focus on the higher level SecKey and SecTransform APIs. We talked about the Keychain and how that is used by applications to protect the user's passcodes and other secrets.
+
+We talked about Secure Transport and how clients of the Security Framework can use that to protect data as it travels over the network between devices. We talked about trust evaluation and how technologies like Secure Transport and application signing rely upon it to know that it can trust digitally signed objects. And we talked about the data protection feature in iOS and how it can help to protect the customer's data on a compromised device.
+
+So we have a lot of really good references online if you'd like to learn more about all of the technologies that are available in the Security Framework. In particular, we have two really good introductions to the API set, as well as a secure coding guide so that you can make your own application as resistant to attack as possible. And last month, we also introduced a document that goes into greater detail on the iOS Security model.
+
+If you have more information, I highly recommend that you take advantage of our Apple Developer Forums. So if you have specific questions about how things behave, other developers and Apple engineers are on those forums. We also have our evangelist, Paul Danbold. So if you have other specific questions, please feel free to contact him.
+
+There are a number of really great sessions that are going into some greater detail on these technologies and others that we make available on both platforms. So if you missed any of these talks, we highly recommend that you can catch them online. The app sandbox talk in particular will be repeated this Friday.
+
+We also have a very good talk about privacy support on both platforms and how your applications can take advantage of that. And then this Friday we have another talk called Protecting the User's Data, which is going to give very practical examples of how secure transport and data protection can be used by your applications. And thank you very much.

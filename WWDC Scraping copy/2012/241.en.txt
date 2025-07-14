@@ -1,0 +1,247 @@
+---
+Title:  Cocoa Interprocess Communication with XPC
+Year:   2012
+Web:    https://nonstrict.eu/wwdcindex/wwdc2012/241/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Welcome. This is Cocoa Interprocess Communication with XPC. My name is Tony Parker and I am a software engineer on the Cocoa Frameworks team. So, first we're going to start with a brief history lesson. So, back when dinosaurs roamed the earth programming computers, they worked on machines that looked a lot like this one. They had a single core and a single CPU.
+
+So, we made our software have architecture to match with a single thread. Now, this architecture worked well for a long time until something started happening. CPUs started multiplying instead of just getting faster. And at that point, our architecture of a single thread for a single CPU started to break down and we needed to make a change. And that change, of course, was a move from single-threaded applications to multi-threaded applications.
+
+And this was a challenge, but technologies like GCD were there to help. And it wasn't something that our users could immediately see just by looking at the application that had made this transition. But it was still something that they appreciated. Their applications were more responsive and they took better advantage of the hardware that they bought.
+
+So today we're facing a similar challenging transition. And that is from a status quo like this, where we have a multi-user system. Now, you see that we have had for a long time barriers between these users. So somebody else can't get to my data, and I can't get to Roots data. But, we're finding that today's systems are really used by one person. And, although they're protected from somebody else, all of their critical files, their contacts, their photos, their personal data, is all accessible by any application that runs as their user.
+
+To understand why this is a problem, let's imagine an OS where every task shares just one chunk of memory. In fact, some OSs have behaved this way in the past. So what we'll do is we'll just split it up. So this part here is for writing my diary.
+
+And this part over here is for displaying my vacation photos. And then the part in the middle will just leave for executing some JavaScript that we downloaded from the Internet just now. And we'll have each task just pinky swear that they're not going to touch each other's memory or any data that the other task is using.
+
+Because they're all executing in the same memory space, of course, that's completely possible. We'll just, you know, take them at their word. Well, clearly that's a bad idea. What we really want is those barriers back and have each of these tasks to have just the level of permission that it needs to do its job. So we have barriers like this, and they are process boundaries. So another example, the preview application. Thank you.
+
+It's split into multiple processes. And these processes have different levels of permission. So the one on the left here has access to the hard drive and access to the network, and the one on the right has access only to the contacts. So this provides two really key benefits.
+
+The first is one of security, which I just mentioned. So the process on the right, if it's compromised in some way, either the application or any frameworks or libraries that that application uses, maybe it can access contacts, but it can't access the hard drive and it can't access the network, so the amount of damage it can do in terms of, like, shipping that information off to somebody else is really limited. The second benefit is crash protection.
+
+So if this helper process crashes in the course of accessing the contact information or processing it in some way, then the main GUI application can continue to run, and the user doesn't have to be interrupted with some minor task running into a snafu. So once we split up these applications into multiprocess applications, we need some way to communicate between them, and this is called interprocess communication, or IPC.
+
+Those dinosaurs we talked about earlier, we're using things called Mach messages. Actually, they're still around. They're the fundamental form of IPC in our system, but you may have also heard of other IPC mechanisms like sockets or distributed objects or new and lying XPC. So XPC was, its job was to simplify the low-level details of this IPC. It's a C API with custom objects, containers like XPC dictionaries and XPC arrays and data types like XPC string, XPC date, XPC data and so forth.
+
+When we introduced XPC, we put it at a low level in the OS X technology stack at the Core OS level. And if you had an application that uses Cocoa-level APIs like Foundation or AppKit, then you may find yourself in a situation that we sometimes call impedance mismatch. So you have an NSArray and you want to send it over to XPC.
+
+So you pack it up into an XPC array T and any objects it contains, send it over your connection, and on the other side you have to unpack it and recreate your objects. So to solve this problem and to introduce some new features, in Mountain Lion we have a new technology called NSXPCConnection. It allows you to use your own objects and interfaces with XPC and interprocess communication.
+
+Let's go over a few of the design goals of NSXPCConnection. So again, it's Cocoa. In fact, the NSXPCConnection header doesn't import even the XPC header itself. So XPC is abstracted away. It's designed to be simple. I think this talk will be enough to get you started. Because we're crossing privilege and process boundaries, it needed to be secure, and we designed it that way from the start. It's very opinionated about being asynchronous. Just because we've moved from single process to multiprocess doesn't mean we need to revert to a single-threaded kind of behavior.
+
+And all of the above, plus some other features like not being tied to CFRunLoop, being exception-free, except in case of program error, as is the normal Cocoa pattern, and also Arc-friendly. In fact, all of the examples and demos you see today will be using Arc, combined to make NSXPCConnection a very modern, friendly API.
+
+So let's look at a quick demo. I want to show you what one of these multiprocess applications looks like and then we're going to use it as a basis for the rest of the talk. Okay. So here I have an application called Flight Finder. And its job is to allow you to put in a destination, pick a date and approximate price, and search for available flights on that date.
+
+So this application is split up into multiple pieces. And one reason might be that let's imagine that this Flight Finder has access to my calendar data to find the next available date on my calendar. That doesn't sound like something that we necessarily want mixed with access to the general Internet. So that would be a good thing to put off in its own little process. So here is the structure of the application on disk in my build products folder, the Flight Finder.
+
+Now, if I show its contents, You see some of the familiar things here, including your Mac OS directory and resources, but there's this new directory called xpcservices. So an xpcservice is one of these helper processes that we'll be talking about today. If I look at the contents of that, there is another bundle called ticketagentservice.xpc, which is a bundle itself, so I can find it's executable if I drill down a little bit further.
+
+So now I'm going to pick a date, price, that much, and search. And what we'll see is in the background, our ticket agent service has started up. You see it's here. It's also sandboxed like the main application is. And we found our ticket for a price of $181. So that's a basic operation of the example. So let's go back to our slides and see how we might build this.
+
+Here's a preview of where we're going to end up. You see we have two processes, again, a Flight Finder, the GUI part, and the Ticket Agent, which is the part that actually did the searching for us and returned a result. We're going to need four major pieces. The first is an interface. The second is a connection. The third is a listener. And the fourth is a way to communicate, and that's messages.
+
+First up is interfaces. The job of an interface is to abstract away implementation details. And that's not just the details of how that ticket agent service or the flight finder are implemented themselves, but also how the IPC is actually happening between them. Interfaces provide a clear division of responsibilities. And in Objective-C, we have a really handy way of describing interfaces called protocols. You'll find that protocols form a fundamental piece of how NSXPCConnection works.
+
+So here's the division of responsibilities of our two processes in our multiprocess application. On the Flight Finder, it can get search input from the user, it can talk to the agent, it can show found tickets, and as we mentioned earlier, it has access to my calendar data. The ticket agent, on the other hand, its job is simply to find flights and perhaps to buy tickets and return the result back to the Flight Finder application.
+
+So we're going to describe the Ticket Agent interface with this protocol called Agent. In this protocol, you'll have a set of methods, like this one, CheckIn. It takes no arguments and has no return value. But of course, often you're going to want to send data to your helper processes, so there'll be arguments. This method, BuyTicketOnDateMaxCost, has two object arguments, a string and a date, and also an integer argument.
+
+Once we've bought a ticket, we're going to need to receive it back in the Flight Finder application in some way. So one way you might do that is by creating another protocol to describe the Flight Finder interface. Here you see I've got a method called setTicket, and it takes a ticket as an argument.
+
+But this request-response pattern is so common with these XPC services that instead we're going to let you build it right into the agent protocol via a reply block. So you see I've just added an argument that has a ticket argument as its single return value. And this reply block will be invoked asynchronously when the reply comes back. Now we're going to wrap up this protocol in an object called an NSXPCInterface. And to create one, use this simple constructor method, interface with protocol and pass in your protocol.
+
+A few more details about these protocol methods. The methods must return void. Again, that's because we're very opinionated about being asynchronous. Methods that return a value directly are very hard to make work in a pure asynchronous kind of fashion. So instead if you have return values or reply values, you just put them as one of the arguments to your reply block.
+
+The arguments of the method and the reply block can be one or more or none of the following types. Arithmetic types, like int, float, char, long, long, and NS secure coding protocol. The objective C Boolean type, null terminated C strings, C arrays that contain those types and C structures that contain those types, including C arrays. And finally and most importantly, objects. And those objects must implement the NS secure coding protocol, which we'll talk about a little bit later.
+
+Here is our preview again. What we're going to do is create one of these NSXPC interface objects in the ticket agent. You see it describes the agent protocol and we're going to call it our exported interface. That is, this is the interface we expect this ticket agent to implement for us.
+
+The Flight Finder also gets an NSXPC interface that describes the agent protocol, but there it's called the remote object interface. So this is saying that the Flight Finder expects its remote side, the ticket agent, to implement the agent protocol. So both sides have a clear idea of what the other side is supposed to do.
+
+Okay, that's interfaces. Let's move on to connections. So I promised you earlier there was an arrow there. There it is. And there are two objects, again, one on each side, called NSXPCConnections. This connection represents an endpoint in a bidirectional communication channel. On the ticket agent, there's one key property.
+
+This is an object that you implement and it's called the exported object. And as you might imagine from the name, its job is to implement the exported interface. You see here I've declared an object that implements the agent protocol. So let's look at how you would do that.
+
+Here again is our agent protocol that we just saw. And I'm going to create an object called a TicketAgent. It's a subclass of NSObject and it implements the agent protocol. In its implementation, we just implement those methods. So here's my check-in method. It took no arguments, so I can just get away with putting a comment there.
+
+But this method, as you remember, took two object arguments and an integer argument and has this reply block. And this one's actually pretty easy to implement as well. We take those values as we've received them and do whatever we need to do to create a ticket object. And then we invoke the reply block with our reply value. And the way you invoke a reply block is just like any other block, which is like a function. So this one has one argument, our ticket. And we're done.
+
+So the NSXPCConnection instance in the Flight Finder, you can create in three simple steps. The first is you call Alec an init with service name. The argument there is going to be the bundle identifier of the XPC service bundle that we saw. The second step is to set up its remote object interface. Here again is the same method, interface with protocol. And the third step is to resume the connection. Connections start suspended so that you have an opportunity to configure them, but you must resume them before they can be used.
+
+The XPC connection in the ticket agent is handed to us, and we'll see how in a second, but it also has just three simple steps to configure. We're going to set its exported interface, again, using the interface with protocol method, and set its exported object to be the ticket agent that we just created and resume it as well.
+
+A few more details about connections. So here in our example, we have one side has an exported object and the other side has a remote object. But connections are bidirectional, so you can actually have both on both sides if you choose. The lifetime of your XPC service is managed for you by XPC and by launchd.
+
+So they're launched automatically when you need them and they will go away automatically when the system needs resources, assuming they're not in the middle of doing some work. And finally, in this example, in this architecture of having an application and a service, you should invalidate the connection in the application when you're done to clean up any appropriate resources. And we'll see exactly how to do that in a demo later.
+
+So in the world of IPC, it's not always the case that everything goes perfectly, so we have some error handling opportunities for you. There's two blocks that are properties of the connection that you can set. The first is called an interruption handler. Interruption handler is called when the remote side crashes or closes the connection. In this case, the NSXPC connection instance is still valid.
+
+But because the other side crashed, you may need to restore some state to get back to what you were doing. So the reason that it's an interruption handler in this case is because this connection was created with a name or some other way to look up the connection again, so we can just recreate it for you on demand.
+
+So you don't need to recreate the NSXPC connection instance. On the other hand, you may get an invalidation error, and in that case, the remote side crashed or invalidate was called, but we have no way to recreate the connection. And in that case, the NSXPC connection instance is no longer valid. So generally, you're going to see interruption handlers in your application because your application looked up the service. And we know how to reconnect to it.
+
+But you're going to get invalidation handlers in your service because the service received the connection. So let's talk about listeners, which is how those connections are created in the service. That's the last object in the ticket agent, and the listener's job is to await new incoming connections and allow a delegate to configure them.
+
+Here's how you do it. This will be in the main function of your service. We're going to get the singleton service listener, set up its delegate, which is an object which implements the NSXPC listener delegate protocol. And like connections, listeners start suspended so you must resume them. Now for service listeners, when you call resume, we take over execution of the application. And from that point on, as I mentioned, we're going to manage the lifecycle. This is equivalent to calling NS application main or dispatch main or CFO on loop run or XPC main or any of those kinds of functions.
+
+The delegate just has one method. It's called listenerShouldAcceptNewConnection. You see that it has a connection argument. That's where the connection is handed to us in the service, as I promised. And here's the exact same code we just saw where we configured the connection by setting up its exported interface, exported object, and resuming it. And then we decide to return yes to accept the connection. If you choose to reject the connection, you can return no. A connection has a few properties you can check like effective user identifier and effective group identifier to see if you want to accept the connection.
+
+Today we're talking about XPC services, which are part of your application bundle and are for the exclusive use of your application. But the same NSXPCConnection APIs can be used to talk to launch agents and launch daemons as well. You just need to use the Mach variant of the init methods, as you see on this. And one more detail. Mach service listeners do not take control of your application when you call resume, unlike the service listener. That's because in this more advanced use case, we expect that you may have additional requirements for how you need to run your launch agent or daemon.
+
+All right, now we just need a way to communicate between these two pieces, and that's messages. So we saw earlier an exported object in the ticket agent that implements the exported interface and is responsible for receiving messages that are sent to the ticket agent. To send messages to the ticket agent from the flight finder, we have an object there called the RemoteObjectProxy. And you see it implements or appears to implement the agent protocol as described by the RemoteObjectInterface.
+
+To get one, you just ask the connection for it like this, Remote Object Proxy, an unsurprising name, and then send it your messages like Check In. That's it. Or this one, Buy Ticket On Date Max Cost Reply. You see I've passed in my object arguments and also that integer. And the reply block goes right there in line with the message sent. So that means that it's really easy to correlate any requests with any response action that you need to take, like updating your user interface.
+
+Earlier we saw that you could do error handling at the connection level. You can also set up error handling on a per message basis. And the way you do that is by creating a remote object proxy that has an error handler block. And using the method called remote object proxy with error handler. And in that block, you can take whatever action is appropriate for handling that error.
+
+I hope you don't do something like logging oops to the console. Users don't look at the console. A better idea might be to display placeholder or perhaps retry the operation if you have an algorithm to do that. Now this remote object proxy, you see I've just nested the call to get this remote object proxy with the exact same by ticket on date max cost reply message that we just saw.
+
+So it's important to note that what we guarantee for you is that exactly one of those two blocks will be called per message sent. So if you need to, for example, take a lock before you send this message, you can release the lock in both blocks and know that you're not going to over-release your lock.
+
+So that's a pretty handy thing to take advantage of. Let's look a little more detail about how this message sending works. So on the flight finder, I send a message to the proxy called Buy Ticket-On-Date-Max-Cost-Reply, and you see I specified a reply block as one of the arguments.
+
+What we're going to do is under the covers, NSXPC connection will gather up all of the appropriate information it needs, and then we're gonna hang on to the reply block until the reply comes back. The appropriate stuff is sent over the connection to the ticket agent, where we will unpack it and create a stand-in reply block proxy per message, and pass it all off to your exported object. And there we saw the implementation where we implemented it by calling the reply block with a reply value like ticket, and we just do the exact same operation but in reverse, and send it back to the flight finder and invoke your reply block.
+
+These proxies are lightweight objects. They're basically just an integer and a reference to the connection that you're using. They're immutable in the sense that you can't change their error handling blocks after you've created them. So if you need a different error handling behavior, just create another proxy using these two messages, these two methods. And these, you can send these to the NSXPCConnection itself or any proxies that you get from the NSXPCConnection, depending on whatever is most convenient for you.
+
+And an important detail, all the messages we're talking about, that is the ones delivered to your exported object and the invocations of your reply blocks in the application are delivered on a per connection private serial queue. It's not the main thread and it's not the thread that you sent the message on.
+
+The reason is because, again, we are trying to promote asynchronous behavior. So if you need work done on the main thread, then you should figure out what the minimum amount that you need to do is and then just move it there using NSOperationQueue or Dispatch, whatever is appropriate.
+
+So now we have all four pieces we needed to build NSXPCConnection. Let's go back to our demo and look at it in a little bit more detail. Here I have the Flight Finder project. And you can see it has two targets, a Flight Finder and a Ticket Agent Service. And in the build phases, I've configured it so that the main application is depending on the Ticket Agent Service. And I have an additional copy files phase to move that XPC service into the directory that we saw earlier, content/xpc-services.
+
+In the project itself, I have three groups of sources. The first is a set of shared sources. You'll find that model objects and interfaces described in headers are very common to share between both your application and a service. We also have the Flight Finder sources themselves and the Ticket Agent service. So we started with interfaces. Let's look at that. Here is the protocol for the agent with buy ticket on date max cost reply.
+
+In the application delegate for this demonstration, I've chosen to create the connection in the application-did-finish-launching method. Here I create the connection. You see I'm using the bundle identifier for my ticket agent service. I set its remote object interface to use the agent protocol, and I resume the connection. I'm storing my remote object proxy as an IVAR in this object, and I create it, and here is the error handler where, again, on the main queue, I'm going to update the UI to show that something went wrong.
+
+For the listener, in the main function of the ticket agent service, you see this is where I create my service listener, set up its delegate and resume the connection. The TicketAgent object implements the listener should accept new connection delegate method. Here I set up the exported interface, the exported object and resume the connection.
+
+When the application chooses to ask the ticket agent for something, we just send our buy ticket on date max cost reply message to the agent and when the reply comes back, we're going to execute this on the main queue which updated the UI as we saw earlier. And in the ticket agent, that implementation is just right here where we create our ticket, make sure that nobody's trying to get us a really cheap ticket so we make sure it's over $100. Pretend that we're actually doing some real work by sleeping and then reply with the ticket value.
+
+So I want to show you how easy it is to add new functionality to this as your requirements change. So as you saw earlier, we have -- or as you saw, we have this today's special button which is doing nothing. So I'm going to go ahead and implement that. So we're going to start again with interfaces. So I'm going to add a new method to our protocol.
+
+It's called getSpecialFlight. It takes no arguments besides the reply block. And when the reply comes back, we'll have a ticket. Excuse me. So then in the Ticket Agent, we're going to implement that new method because we added it to our protocol. There we go. You see I'm just going to, like we saw on the slides, create our new ticket, set its destination and price to New York City and $4.99 and then reply with the return value.
+
+And in the application, we need to just hook up our button. Here it is. It was empty before. There we go. So I'm sending a message to my remote object proxy, get special flight, and on the main queue, when the reply comes back, we set up some string values in the UI. So let's go ahead and rerun this and make sure that it works.
+
+I'll bring up Activity Monitor again so we can see if our process starts. I click Today's Special and you see there our ticket agent service was started on demand when we asked for a value and we got back our reply of $4.99. Okay, let's go back to our slides. All right, now we're going to talk about how those objects are actually moving between processes. That's the heart of the matter, the most important feature of NSXPCConnection, and that's using coding.
+
+So if you've used keyed archiver, then you're familiar with NSCoding already. If not, pay attention because I'm going to do a quick review. NSCoding is made up of two parts. There's the NSCoder subclass, like NSKeyedArchiver or NSKeyedUnarchiver. The NSCoding conforming class and this -- excuse me. And then this is made up of two activities as well.
+
+There's encoding in which the coder takes an in-memory graph of NSCoding objects and turns them into an archive that is suitable for storage on disk or for sending between processes maybe. And then there's decoding where we take that archive and convert it back into an in-memory representation of those objects.
+
+So here's encoding. You see I've got a graph of objects, an itinerary that holds a ticket that has a string. So the most important method in encoding is called encodeWithCoder. And in there, the job of this method is to tell the coder what data is needed to be stored, so that we can effectively restore ourselves later. Using methods like encodeBoolForKey and encodeObjectForKey.
+
+So when I call encodeObjectForKey, of course the coder will then call encodeWithCoder on the ticket. And there we're going to encode the string object. Now you don't need to worry about how NSString encodes itself, because as long as NSString conforms with NSCoding, we know it can be included in the archive.
+
+on the flip side is decoding. So here the most important method is initWithCoder. Here the job of this method is to get back that data from the coder and initialize the object using methods like decodeBoolForKey and decodeObjectForKey. And of course when we call decodeObjectForKey we're going to alloc and initWithCoder on the ticket object which will decode the string object and you don't need to worry about how a string inits itself as long as it conforms with NS coding we know it can be included in the archive. NSXPCConnection uses the exact same NSCoding design pattern. On message send, all the argument values are encoded and on the message receive, all the arguments are decoded. NSXPCConnection uses a new NSCoder subclass. It's not NSKeyedArchiver, but it does implement keyed coding.
+
+So here's the method that you might be sick of by now, buy ticket on date max cost reply. So let's use it as an example. When this message is sent, the coder will do something like encode object for key argument one and argument two because those are objects and encode integer for key argument three because it's an integer.
+
+As I mentioned earlier, the reply block is held on to until the reply comes back. So if you capture a lot of memory in your reply block, just be aware that we have to keep that alive until the reply comes back. And then on receive, we decode those objects using decode object for key and decode integer for key. Then we create that reply block proxy and stuff them all into the arguments to that message that you've implemented on your exported object.
+
+You may be wondering how the coder knows what kind of object to alloc here because it's not specified in the method and the return type is just ID. The answer is that the class came from the archive. However, the archive came from the remote process and because we're talking about privilege and process boundaries, we shouldn't just trust the remote process's opinion about what kind of class should be allocated.
+
+So we need some way to specify the expected class. The reason is because that class could have been any kind of class in your application or any frameworks or libraries that it uses. And that's a huge surface area to find a security vulnerability in. It would be much better to just specify up front a very limited set of classes that this object can be. So here's one way we can do it.
+
+In the protocol that we saw earlier, we specified some class information. We said the first argument is a string, the second one is a date, the first argument of the reply block is a ticket. So this information we can actually get now using some new metadata provided by the Clang compiler in Mountain Lion. So it's important -- oh, good.
+
+So the use of the Clang compiler is required for this feature, so that's important to note. But as we saw earlier, objects don't travel by themselves. They come in graphs. So we need some more information about this object beyond just the top level that was specified in the protocol. And to do that, we have a new protocol called NSSecureCoding and three new NSCoder methods.
+
+So in the past, in your init with Coder, you may have done something like this. Decode object for key and then check the result to see if it's a kind of ticket class or that means a ticket or a subclass of ticket. Now, this is useful from some points of view.
+
+If we accidentally send that ticket object a message that it doesn't implement, we would prevent an exception in this case. But in terms of security, it's already too late. And as I mentioned, that's because we already called Alec and we already called init with Coder. So it's not good enough. Instead, what we need to do is specify it up front using these new NSCoder methods. The first is called decode object of class for key.
+
+And so if the expected object is of one kind of class or a subclass, then you can use this method. Now, what will happen is if -- when using NSXPCConnection is that if the class doesn't match, then we're just going to drop the message on the floor. Your application or service doesn't need to worry about it. It doesn't even have to know that something came in that was unanswered. Under the hood, what's happening is that the coder throws an exception and NSXPCConnection catches it. So if you want to, you can catch the exception yourself and take some kind of alternate behavior.
+
+Now, if the class is not just one kind of class, but a property list type, one of our property list types, then you can use this method, decode property list for key. And if it's one of several kinds of classes that aren't property list types or it's a collection, then you can use this method, decode object of classes for key. The reason we use this for collections is because a collection, by design, doesn't know a lot of details about the content that it holds.
+
+So we just need a little bit of extra help from you to tell us what kind of objects are expected to be in it. Here's how you do it. Create a set that contains the expected classes, like that method looked like it contained an array of tickets, so I have ticket class and array class. And then I use decode object of classes and for key.
+
+So in order to send your objects over NSXPCConnection, they are required to adopt NSSecureCoding. By the way, NSSecureCoding is a subprotocol of NSCoding. So here I've got my ticket object, and you see it's got one property, a string, called destination. In its implementation, the EncodeWithCoder looks exactly the same as it has been in the past, where I use EncodeObjectForKey. Where things look a little bit different is in the EnitWithCoder. There you're going to use those new methods that I just talked about, DecodeObjectOfClassForKey.
+
+Now there's one more method to implement, this is the method in NS Secure Coding, called Support Secure Coding. It's a class method, and what you need to do is override it and return yes. There's one main reason for this. So NSSecureCoding protects a very specific security issue, that arbitrary code execution exploit that I mentioned.
+
+What it doesn't do is protect you against things like buffer overruns or a false trust in the remote process. By that, I mean -- imagine that we take a string argument, and then we just take its contents and run it as a Perl script as root. Well, clearly that's going to be an insecure kind of -- just the whole nature of it is insecure. We can't protect against that.
+
+So what we want you to do is, when you adopt NSSecureCoding in your class, review the code in your initWithCoder, put on your security hat, and look for these kinds of security vulnerabilities. Or, you know, maybe the class isn't suitable for crossing a privilege boundary at all. So put on your hat, review the code, and then implement that method right next to your initWithCoder and return yes.
+
+To help you with this, we implemented a rule that is that if you override init with coder in your class, you must also override support secure coding and return yes. So if your superclass implements NS secure coding and you override init with coder, your superclass' implementation of support secure coding isn't enough. We want you to look at your init with coder and make sure that it's secure and to indicate that, you just implement that one method and return yes.
+
+So we talked a little bit about collections earlier. Here we have a top-level collection that's one in the protocol. So again, the collection doesn't know any details about the content and because the protocol just says array, we can't know from the protocol. So again, we're going to need a little help to understand what kind of objects we expect to be in here.
+
+If it's a property list type, one of these, then we're going to automatically whitelist it for you and you have no additional work to do. If, on the other hand, it's one of your objects, like this one appears to be an array of ticket objects, then we need to set that information up in the NSXPC interface. Here's how you do it.
+
+So there at the top is our protocol again. So we're going to create our interface. Set its -- create a set of expected classes. In this case, I already know the top level is an array, so you just need to specify the stuff that's in it -- tickets. And then use this method on the interface object. Set classes for selector argument index of reply. I want to go through it argument by argument. The first one is the set of expected classes.
+
+The second is the selector in the protocol that we're modifying. The third argument is the index of the argument that we're modifying. Here it's argument index zero. And the last argument in this case will be no, because this method doesn't have a reply block. We're modifying the argument to the method itself.
+
+If instead it has a reply block, like this one, get lots of tickets, it's a getter, you see the selector is going to be that method. The argument -- sorry, the last argument is yes, because we're talking about the reply block, not the method itself. And then the argument index refers to the argument of the So again, use this method to tell the interface what the contents of your top-level collections are.
+
+Next, let's talk about a few design patterns that you'll see as you start to adopt NSXPCConnection. In your service, there are two key patterns. The first is one of having little state, mostly functional and short-lived kind of state. In that case, it's very common to have one singleton thread-safe object that implements both the NSXPC listener delegate protocol and your exported object protocol. The other kind of pattern is one where you have lots of state and you have long-lived kind of behavior. In that case, you'll typically have one NSXPCListenerDelegate and in its delegate method, will create one new exported object per connection.
+
+In the application, you'll see a pattern of, as we saw a little bit earlier, asynchronous UI updates and further separation of interface and implementation. So I'm going to do one more demo. I want to show you how to add an XPC service to a project. We're going to move some code from the main application to that service and I'm going to show you briefly how you might debug it. So let's go ahead and quit the Flight Finder. We don't need that.
+
+Here I want to use a slightly more complicated example. It's called Sandboxed Fetch. Now this is a public sample code that I've actually taken and modified to use NSXPCConnection. And what it does is you just give it a URL and it will download that from the Internet and then if this box is checked, it will compress that file before saving it to a user-specified location.
+
+So here I've picked a URL that has a fairly large image so that we can see some progress. And you see we've been presented with our save panel, so I'm just going to go ahead and save it on the desktop. And there is our file. So let's look at the implementation of this project.
+
+So as you can see here, we just have one target. So this is a single process application. It's code signed and it has the entitlements to allow it to have an outgoing network connection and also read/write access to my user-selected file. So if your application deals with file formats, especially compression formats, image formats, movie formats, audio formats, those kinds of things, those are notorious for having security issues and problems that cause crashes. So those are prime candidates for moving into a separate helper process that has a limited set of permissions. So that's what we're going to do. We're going to move the compression stuff into an XPC service. So to do that, I'm going to add a new target.
+
+Here in the framework and library section, you see there's our XPC service template. You should give your XPC service a name that reflects what it's going to do, like Zip Service. And I also suggest that you make the company identifier have your application name so that the full bundle identifier is a qualified bundle identifier so it's easy to identify. Again, this bundle identifier is what we're going to use to connect to it. And go ahead and click finish. So we're going to add a file to this zip service.
+
+A property list type called ZipService.entitlements And the purpose of this file is to enable sandboxing in our XPC service like our main application has. So the easiest way to do this is we're just going to crib something from the main application here. Here's the same set of entitlements we saw in that GUI earlier, but this is the real source of them. So I copy the app sandbox entitlement and I'm just going to paste it here.
+
+So we're going to have no permissions for this helper process besides just enabling the sandbox. Go back to our configuration. So in the build phases, I'm going to add a dependency on a library called libz. That's what's actually doing the compression. And in the build settings, I'm going to turn on sandboxing by code signing my application.
+
+Drag it over from here so I don't make any typos on stage. There we go. And we're done configuring our ZIP service. Now we just need to configure our application. This is in the same way that we saw earlier. We're going to add a dependency on the -- from the Sandbox Fetch application on the new service that we just created. That ensures that it's built correctly and up-to-date when we need it to be. And add a new copy files build phase.
+
+And into the wrapper we're going to put it in contents/XPC services, the same path that we saw earlier. And the file we're going to put there is our XPC build product. So let's just go ahead and build this application right now to see if everything worked correctly. So no build errors. And I'm going to show this project, this build product in Finder.
+
+And there's our XPC service in the XPC services directory. So it's been put in the right place. Okay, so that was step one. Now we're going to move some code from the main application into this helper service. Here is the header file that describes the zip interface. It's a singleton object where you get this shared zipper and then you send it this message, "Compress file to file with reply." It uses NSFileHandle.
+
+This is a good time to mention that NSFileHandle has been enhanced in Mountain Lion to allow it to be sent between processes using this NSXPCConnection. So that means that, as you notice, we didn't give the helper service any permission to open files on its own. The main application has it. And when we send this file to it over NSXPCConnection, the other process will have permission to access it automatically.
+
+So if you remember, one of my patterns was a further separation of interface and implementation. So what we're going to do is split out this compressed file logic into a new interface called ZIP. And this zipper object will conform to that and it will also be a singleton object because it's got very little state to hold and it's short-lived. So we're going to implement both the exported object protocol and the NSXPC listener delegate protocol.
+
+Let's go ahead and do that now. Here is the implementation of that zipper functionality. This is the compressed file method. What I want to do here is put in the implementation of the NSXPCListenerDelegate protocol. Listener should accept new connection. And again, we're going to set our exported interface to be the zip protocol. Set our exported object to be self because it's a singleton and resume the connection. Now pay attention because this is the hardest part. I'm going to move -- This logic from this file from sandbox fetch to the zip service.
+
+There we go. Okay. So that was the interface. Next, let's look at the listener. So we can add an import of our
+
+[Transcript missing]
+
+set its delegate to be one of these zipper objects and resume the connection. So finally, we just need to, in the main application, instead of creating the zipper itself, we're just going to instead send that request to our XPC service. So this method is called : Save file. And its job is to present that UI where we displayed the panel and then also once the user has decided to compress it, create a file handle and then zip the file.
+
+So what we'll do here is Create the connection. These are the exact same lines of code we saw earlier. In it with service name, there is our com.demo.SandboxedFetch.ZipServiceBundle Identifier. Set the remote object interface to be the zip protocol and resume the connection. As I mentioned earlier, we need to invalidate the connection when we're done with it. So this reply block will be called after the compression is done.
+
+That seems like a good time to invalidate the connection because we're no longer going to need it after that point. And finally, instead of using the singleton shared zipper that was in process, we're going to use the remote object proxy that comes from the connection that implements the zip protocol. So let's run it again and see if everything behaves correctly. I'll bring up Activity Monitor again.
+
+: We're going to filter it for zip service. I'll click fetch. The file is downloaded. Click save. Replace the one we already downloaded. You see that as the compression started to happen, our zip service started and it's correctly sandboxed. So, I mentioned earlier that NSXPCConnection has a feature of providing crash protection. So, to demonstrate that, I'm just going to go ahead and kill this background process.
+
+And you see that the main application just continued to run. In fact, the user didn't even need to know that that process went away. So I'll take this opportunity to show you some debugging tips about how to actually go ahead and debug these XPC services. There's a couple of ways.
+
+One way is you notice that we have a new zip service here, and we can edit this scheme. and choose our new executable in the same place that we saw earlier.
+
+[Transcript missing]
+
+You notice that -- oh, maybe it would be a good idea to actually set a breakpoint. Let's do that.
+
+In the compressed file. Through all that, our main application is still running, so that's the crash protection for you. And let's see, I'm going to go ahead and rerun our zip service. And it's waiting with a breakpoint this time. Download and save. And the main application is just waiting for the reply here. You notice asynchronously, because I can still, you know, although it's just playing a sheet, I can still -- wow, that's interesting.
+
+: Okay. Somebody report that one. Anyway, so in Xcode -- In Xcode, we stopped on our breakpoint in the sandbox fetch helper process. And you see that we are allowed to both debug the service and the application at the same time. So here I can, you know, view the values of various, you know, values or step through my process and then when I continue it, our main application has received its response and hidden the panel and everything is finished. So it's actually pretty easy to split up your process and debug it at the same time in Xcode.
+
+Okay. Let's go back to our slides. So just like we moved from single threaded to multi-threaded applications, today we're moving from single process to multi-process applications. It provides two key benefits. The first is security by allowing these helper processes to have only the permissions that they need to do their job.
+
+The second is crash protection, so if something goes wrong, then the user doesn't have to interrupt it and lose all of their work. NSXPC connection is designed to help you connect them. Again, it works with your own objects and interfaces. And it's designed to be both secure and modern. There are three main pieces. The interfaces, which provide a clear division of responsibility and abstract away implementation details. Connections, which provide the bidirectional communication channel between them. And finally, listeners, whose job it is to await new incoming connections and allow a delegate to configure them.
+
+For more information, here are some links for you. The sandbox fetch 2 example that I showed is available as part of this session. In the sample that you see online, I've split it up into three processes because three is better than two. And the third process actually does the downloading. So we've even separated out the permissions further.
+
+And for those of you watching on video, we hope to get this promoted to a public sample code as well soon. XPCConnection, NSXPCConnection is based on top of XPC, of course. So you'll find a lot of helpful information, especially about the error handling stuff in the XPC man pages.
+
+We have one more related session, that's tomorrow morning, and that's Asynchronous Design Patterns with Blocks, GCD, and XPC. So this session is about the underlying parts of NSXPCConnection, but the design patterns that they're going to go through are really helpful to help understand how you might segregate your application. I gave you some simple examples, and they'll show you some more advanced ones. So that's it. I hope you go out and make some great applications.

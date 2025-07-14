@@ -1,0 +1,265 @@
+---
+Title:  Getting Started with Mac OS X Kernel Programming
+Year:   2007
+Web:    https://nonstrict.eu/wwdcindex/wwdc2007/104/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+This is session 104, Getting Started with Mac OS X Kernel Programming. My name is Nik Gervae. I'm a software engineer with the I/O Kit team. Today we're going to be covering the basics of programming for the kernel. That includes packaging your code, installing as well as runtime considerations in the kernel environment.
+
+Following that, we're going to get into the kernel programming interfaces themselves, starting with drivers using the I/O Kit, and then we'll cover file system plugins and network kernel extensions. This first part, as mentioned, is developing for the kernel. Now, we know there are a lot of sessions at WWDC, so we want to get things out of the way right away, in case there's someplace else you'd rather be, and ask, "Do you need to be here?"
+
+This is largely because kernel code runs without the protections afforded to user space programs. A single mistake can bring the whole OS down or hang the machine. So with that in mind, we've made a lot of things possible from user space that you might think require kernel access. Printer, scanner, and camera drivers, for example, are accessible from applications. And a lot of other kernel services, such as a lot of USB devices, are available from user space.
+
+If you're curious about that, you can check out documentation on the I/O Kit.framework. That is a framework that applications can use to connect to devices. We want to stress that you should check user space facilities before resorting to kernel code. And do note that running in the kernel does not make your code run faster. That is not really a good reason to run in the kernel.
+
+Considering that, what does typically require kernel code? First off is device drivers that need register access to hardware or that need to handle interrupts. And more significantly, drivers that have clients in the kernel, of course, need to run in the kernel so that they can communicate directly. Also, most file system plugins, kernel authorization plugins, and network stack filters need to be packaged as kernel code.
+
+The form of that packaging is a bundle. If you're not familiar with that, it's a scheme we use on Mac OS X to package resources together under a directory that's treated in the UI as a single file. So a kernel extension is just a folder. It's a bundle with a KEXT extension containing at minimum a relocatable object file, in this case, my driver, and an XML file called Info.plist that contains the bundle's identifier, its version, dependencies, which we'll be covering shortly, and whatever other information might be needed for the subtype of kernel extension. Xcode makes it easy for you to create those subtypes with I/O Kit driver and generic kernel extension project types.
+
+The process of loading a kernel, because the kernel extension is basically just a .o file, we're going to do a static link and copy it into the kernel's address space and start it running. This is how it looks. In this scenario, we have the Mach kernel running and some other KEXTs already loaded and running in the kernel. Your driver is sitting on disk and we want to load it. So we're going to run the KEXT loader, which reads that KEXT in that Info.plist, which contains the library IDs.
+
+Using those library IDs, it looks up the dependencies of that KEXT, in this case, the kernel itself and the library KEXT. Once it knows those, it figures out where they're loaded in the kernel so it can do the relocation. does it right there, copies the image into the kernel, and then invokes a start routine so that the Kix can start doing its job.
+
+Now, the dependencies that I mentioned earlier are declared with OS bundle libraries. This is just an XML property whose keys are bundle IDs and values are the versions needed, as you can see on the bottom there. There are two general kinds of dependencies. As far as you're concerned, they're the same thing. You declare them the same way.
+
+The built-in KPIs are parts of the kernel that have their own linkage, and then there are libraries. You can actually load other kernel extensions at load time as libraries. There's a new program in Leopard called kextlibs, so when you build your KEXT, because all of this stuff is handled at load time, this will tell you what you need to declare in your PList because it isn't done in Xcode.
+
+The interfaces I mentioned, there are four of them. First is the Mach KPI. These are the lowest level kernel interfaces. Above that we have Libkern. Those are utilities for memories and strings, atomic operations, and C++ classes for I/O Kit drivers. Above that there are two more KPIs. One is BSD. This covers interfaces related to the BSD kernel, such as networking and file systems. And then I/O Kit is the core I/O Kit interfaces and classes.
+
+Now, I/O Kit is really big, as you're going to find out in a little bit. So we break out a lot of its functionality into libraries called families that provide additional interfaces. All of these headers are in the kernel framework under the header subdirectory. This is the only framework that kernel extensions can use, and it's only available to kernel extensions.
+
+Now, you may be asking, why are we breaking up the kernel into these subdivisions? Why not just link to the whole kernel? The way we do versioning kind of dictates that. The Mac OS X kernel is really big and it has a lot of symbols. So if you declare your dependency on the kernel and some symbol you're not even using changes, then your KEXT could fail to load. These subsystems do change from release-to-release. The KPI lets you limit that linkage so that if you're doing a generic KEXT, it won't be affected by changes to the I/O Kit and vice versa.
+
+I mentioned a startup routine that gets called earlier in the kextload slide. Every KEXT has a startup function and a shutdown function. The I/O Kit gives you these for free with drivers, but generic KEXTs have to implement them. When you create your generic KEXT, Xcode creates placeholders and you can just fill in the code that you need to do. These functions are called automatically when your KEXT is loaded or unloaded, and this is where you do your setup and teardown.
+
+You register and deregister with whatever facilities you need, create and destroy your dynamic resources, as well as threads for any active processing you might be doing. It's important that these functions do not block. You shouldn't go into a loop expecting to do long-term work here. If you're not going to be doing active thread processing in your KEXT, it can serve as a library for other KEXTs. You can just create a function package.
+
+The loaders I mentioned, there's two of them on Mac OS X. First is the kernel extension server, kexty. This handles demand loading of drivers as requested by the kernel, basically for I/O Kit drivers in the system library extensions folder. The other program is called kextload. This is for explicit loading by user space facilities and developers while you're working on your KEXTs. It handles generic kernel extensions no matter where they're installed, as well as I/O Kit drivers that are not in the system extensions folder.
+
+The next one is kextload. kextload has a lot of development and debugging options. You're going to be using -t and -n probably a lot, because if it fails to load your KEXT, it's going to print out a terse little message. These options together mean test without loading, and they will tell you what's wrong with your KEXT.
+
+Now, once you've finished developing and debugging your kernel extension, you're going to want to install it, probably in the system library extensions folder. Because these things run in the kernel, you want to make sure that they can't be scribbled on by any old user. So they need to be owned by the super user root in group wheel, and they have to have their permissions closed so that they're not writable by group or other.
+
+Again, when you install them, you want them atomically written so that partial keks don't get loaded into the kernel. So copy them to a temporary directory, change the owner group and permissions, and then move them into the destination folder when you're done. Once you've done that, you can reset the keks system.
+
+This is particularly important for drivers so that they can get loaded automatically. You'll run touch on the extensions folder to update it and invalidate any caches, and then send a HUP signal, hang up signal, to the kernel extension server keksd. This is required on Mac OS X 10.3 and later. On early releases, you need to force a restart of the system.
+
+Here's a list of the tools that you might use while developing a KEXT. First are the kextload program and then the counterpart kextunload, the kernel extension server kexty, and then some others that you might find helpful. kextstat lists the kernel extensions that are currently running in the kernel.
+
+kextlibs, mentioned earlier, lists the libraries you need to load your KEXT. If you make any changes, you might want to run that again just to be sure. And then kextfind is a utility. If you need to look up some KEXT, say something that exports a particular symbol or depends on a particular symbol or has problems, you can use that. It's kind of like find for kernel extensions.
+
+Now we're going to get into what it's like to programming in the kernel. You have to remember that the kernel is the longest running process in Mac OS X, and your keks may be running nearly as long. It might get loaded as soon as the machine starts up and not get unloaded until the machine shuts down. So it's really important not to leak.
+
+Also, any memory you allocate is wired by default. This means it can't be paged to disk, and it's not available to user applications. There's also limited stack space in the kernel. When you're programming, you have to keep that in mind. So don't allocate any 1K buffers on the stack, and avoid recursion if you can. And if you have to use it, keep it limited.
+
+There are no floating point or vector facilities in the kernel. Libc-style support is incomplete. It's there, but it's pretty minimal. And there's no file I/O. Finally, debugging is more complicated than for user programs. There's a session in this room after this one you might want to stick around for.
+
+Texts within the kernel run within the kernel's 32-bit virtual address space. There's no sandboxing or virtual address space protection, so if you dereference a null pointer or go into a loop or hit a deadlock, you're going to panic or hang the whole user system. All code running within the kernel is inherently trusted. This means it can do pretty much whatever it wants, so be careful of that. Again, if you can't implement your feature in user space, please do so.
+
+For more information on kernel extensions in general, you can contact Craig Keithley, our IO technology evangelist, and check out the WWDC website for some documentation. The specific titles you want to look for if you're getting started are Accessing Hardware from Applications to find out if you need to write a kernel extension, and then the Kernel Programming Guide and Kernel Extension Concepts, which has some really good tutorials to get you started on writing a generic kernel extension with Hello Kernel or an I/O Kit driver with Hello I/O Kit.
+
+There's also a lab today on kernel debugging. You might want to check that one out. Now we're going to cover the I/O Kit. The I/O kit's really big, so I'm going to give you a view from about 10,000 feet, and you'll probably want to dig into the documentation more to learn, but let's get started with some of the basic concepts that you're going to need to know to understand how things work.
+
+First off, the I/O Kit is an object-oriented driver model that we use in Mac OS X. It's a pretty large set of C++ utility classes and driver superclasses. And much like Cocoa and UserSpace, this is a framework. This means we implement general driver functionality already for you. We've got a set of design patterns that we use, and your driver will fill in the hardware-specific details within those patterns by overriding established superclass methods to do output or input or registering callbacks for the same purpose. The I/O Kit system will call on your driver to control its device and perform I/O.
+
+As I mentioned, I/O Kit is implemented in C++, but it's a limited subset because it is running within a kernel. This means we can't do exceptions. You don't know what thread your code might be running on, actually. There's no multiple inheritance. The standard RTTI is not included. We have one that we have developed for use within the kernel environment. There's also no standard template library, and although we don't use templates, you can use them in private C++ code. You just can't use them in any of your I/O Kit classes.
+
+Now, the I/O Kit defines a class hierarchy much like Cocoa does. We have OS object as they have NS object. This is the class that provides all of the basic functionality needed to play with I/O Kit objects, including dynamic typing, introspection, reference counting, and lifecycle. Any class that you implement as a subclass of a driver superclass, for example, is going to inherit from OS object.
+
+If you have a C++ library that is for use within a kernel environment, you can use those privately, but you can't interface with the I/O Kit using those. There are also some container and collection classes from Libkern: wrappers for numbers, Boolean values, data buffers and strings, as well as collections indexed sets and dictionaries.
+
+Now, we're going to get into the I/O Kit proper with the central superclass that every driver inherits from. It's called I/O Service. And this implements the bulk of general I/O Kit functionality. There are basically three kinds of classes in I/O Kit that you're going to work with. There's this one, there are the generic device class superclasses, and then there's going to be your specific class. So I/O Service is the root of this.
+
+And it handles the general functions of driver lifecycle from matching and startup of your driver to tear down when the device is removed. And it also handles automatic unloading of your KEXT when you have no more instances outstanding. iOS Service also handles the general principles of power management and access control.
+
+Below that, there are a number of families that implement generic features of a bus or device class. Families define superclasses such as IO Ethernet Controller that provide the general features of that class and the abstract methods that you're going to be overriding. Your driver, if you have an Ethernet card, for example, you would subclass IO Ethernet Controller and implement just the methods that you need to handle IO and device configuration.
+
+These families are implemented as library kecks so that if they're not needed, they won't be consuming wired memory, and their headers are in kernel framework headers sub-IO kit. Down on the bottom there, you can see a list of the families we have available on our system. They cover basically any device or bus that you might see in a Mac.
+
+Now we're going to get into some of the actual design patterns that we use down at the level you're going to be working with. The first is a distinction between subclasses of I/O service. There are two kinds, and we call this the device driver pattern. The first type of object that gets created when a device is discovered is called a device object or a nub. These are completely generic objects.
+
+They represent the baseline services for a given bus. For example, I/O PCI device knows that there's a PCI card in that slot. It knows nothing else. They give access to that bus to find info, and they provide access to I/O operations using memory map registers or whatever that bus provides.
+
+These are typically created by bus drivers as they scan the bus to represent those devices in a completely generic manner so that we can discover what driver is needed. You typically don't subclass these. But once we find out what is needed, we load your driver, and that's the driver subclass.
+
+These provide hardware and I/O control for a specific device. So this is what would know that that PCI device is actually an Ethernet controller, for example. The abstract family classes provide the structure that you would use, and then your driver subclass handles the details of the specific device, for example, my Ethernet controller. These are attached to the nub via programmatic link, and then it uses that nub as its bus connection to do its I/O.
+
+Here's what the big picture looks like. You can see the nub right-- oops, hang on. Right here, that's the IOPCI device. In this scenario, the main logic board driver has a number of drivers leading up to the PCI driver down here. And it scans the bus and finds out there's a card in slot 2, so it creates an IO PCI device.
+
+The I/O Kit then figures out from the PCI configuration space what drivers are needed, and for that one we need my Ethernet controller. So it creates an instance of your driver and attaches it onto that PCI device. Your Ethernet controller would then publish an IO Ethernet interface device or nub object, which then talks to the BSD networking stack, which is outside of the scope of I/O Kit.
+
+So as you can see, IO service objects form a chain going from the platform driver, the logic board driver, up to whatever other facility in the kernel might be using them. In this scenario, my Ethernet controller is a client of the PCI device, and this is the provider-client pattern. And IO PCI device is a provider to my Ethernet controller. Basically, provider links go up and client links go down.
+
+As you can also see from this diagram, most of these links alternate between devices. So if you have a driver and device objects, this isn't always the case, but it's pretty commonly the case. Every IO service running in the kernel is connected in this way in a big graph of objects that we call the IO registry. And it's not like that other registry, so don't worry.
+
+As I mentioned, this is a graph of all I/O service objects in the kernel, basically running drivers. Each object has properties that show the driver's inheritance and state. Most of them are derived from the plist of the KEXT when it got loaded. It can be added or modified to by registry objects, including other drivers, and they contain a lot of useful diagnostic information that you might want to use, whether you're reading it from kernel space or user space.
+
+In fact, you can use the I/O registry explorer.app, which is rewritten in Leopard, or the ioReg command line tool to see what's in the registry. You could learn a lot about the I/O Kit just exploring the registry. If you go fish around in there, you're going to see a lot of interesting stuff.
+
+Getting outside of the driver classes themselves, we've got some support classes to help you do the I/O that you want to do. First is a group of memory management classes, among them I/O Memory Descriptor and I/O DMA Command. There's also I/O Buffering Memory Descriptor for allocating long-term buffers. The main memory management classes give you structured access to the memory at various levels and in device memory as well.
+
+They do address-based translation from user data buffers and handle scatter-gather operations as well, collecting individual smaller buffers into one larger I/O operation. For synchronization, and this is pretty important, so I'm going to emphasize this, we have a paradigm that you're going to want to work within. Much like in user space, we have CFRN loop, in I/O Kit we have I/O Work Loop and also I/O Event Sources for interrupts, timers, and commands, which are client output requests.
+
+These handle serialization of I/O operations. They're a key part of the I/O Kit model, unlike a lot of other OS driver models. You really want to avoid rolling your own or trying to get some other locking scheme from an existing driver working within this, because if you try, you're probably going to get a deadlock. So, let's talk about the I/O Kit.
+
+That said, I want to show you how simple I/O can be in the abstract here. As I mentioned before, you really just have to subclass and override a method to do your output and register an event source to handle your input. So when your driver gets created, you're going to register an event source or two or three or however many you need, maybe one for a timer if you need to pull or one for interrupts if your device is interrupt-driven. You'll set those up in your work loop using the event source and service methods. And then when you do that, you provide the address of a callback method. So whenever that interrupt occurs or whenever the timer goes off, that method will get called.
+
+Similarly, output commands coming down from clients get set up in a command event source, and you implement these just by overriding an abstract family output method. You know, I/O Ethernet controller, for example, has output packet. In both cases, these methods are called within a work loop synchronization context for use. So you don't have to worry about synchronization. It's handled for you. If you need to handle optimization, if you really need to get things working, there are some ways to do that, and you can find that in the documentation.
+
+and that was the I/O Kit from 10,000 feet. We hope you got something out of that. If you want to find out more, you can talk to Craig Keithley, and the documentation to check out on the attendee site would include Getting Started with Hardware and Drivers, I/O Kit Fundamentals, and I/O Kit Device Driver Design Guidelines. Those include the view from probably 50 feet down to zero. And if you want a view from 1,000 feet, last year we had a talk on I/O Kit called Writing Device Drivers for Mac OS X.
+
+That is available at ADC on iTunes at that URL right there. So there we go. I'm going to hand things off. Well, list of labs. We've got a lot of labs, mostly on USB, Bluetooth, and AirPort. and now Ramesh, Ananthakrishna Ramesh is going to come up and talk about file system plugins and kernel authorization.
+
+Good morning. My name is Ramesh. I'm a senior software engineer in the kernel team. Today I'm going to talk about non-IOKit and the non-networking kernel extensions, that is the file system and the kernel authorization plugins. Before I actually start on either one of them, I would like to go over some of the KPIs which are generic for all BSD kernel extensions. They may look a little different than what you're used to in other platforms, but they're essentially the same.
+
+The first thing that I want to go over is the memory allocation APIs. The header file to include is the libkern os-malloc.h, and the dependency to declare is the libkern symbol set. And BSD kernel extensions can allocate pageable or wire memory, and the first thing that anybody needs to do to allocate memory is to allocate a tag.
+
+To allocate a tag, you call os-malloc tag-alloc and provide a unique string that represents your kernel extension, and then the flags field there takes whether it's pageable or not. This routine returns you a tag. You use this tag to go with malloc, which allocates the memory for the size that you're asking for. And then you can use os-free to free this memory that you just allocated. And the reason why we use the tag is to associate the memory that is allocated to a kernel extension and also keep track of how much memory has been allocated to a kernel extension.
+
+The next KPI that I want to talk about is the locking primitives. The kernel provides three locking primitives, the mutexes, simple locks, or spin locks, or read/write locks. The way to allocate a mutex is lock_mutex_alloc_init, which actually returns the initialized allocated mutex handle. And as you notice, there are two arguments for the lock_mutex_alloc_init, the lock_group_structure and the lock_attribute_structure.
+
+The lock_group_structure is very similar to the tag that you provide a unique string to allocate a group, and you can also set whether you want statistics or not for that group of locks. And the lock attribute is a way to dynamically use, at the runtime, whether a particular lock should be running in a debug mode or not.
+
+Then once you get the handle to the lock_mutex, you can use lock_mutex_lock_to_lock and lock_mutex_unlock_to_unlock. And then to free the mutex, you call lock_mutex_free. And the spin and the read/write lock variants are similar. The mutexes in Mac OS X actually spin for a while if the mutex is held by a thread that's running on the other core.
+
+We also do priority boosting for the mutex. So that's actually the preferred synchronization primitive that I recommend. The spin locks are strongly discouraged because they block preemption as well as interrupts. That could affect the interrupt latencies on the system as well as the response to the real-time threats. So I would encourage you to avoid using the spin lock.
+
+There are a few more KPIs that I would like to point out. One is the msleep and wakeup, where it's to do a sleep and wakeup. For the msleep, you pass a mutex, which actually asserts the event and then drops the mutex before it blocks. And there are two kinds of time routines. One is the system time, and the other is calendar time. System time is the time since the last boot.
+
+Micro-op time actually gives the time since the last boot, which is a lot faster than the calendar-based time. And if we're just looking for a timestep, you could use micro-op time rather than the calendar time. And of course, the calendar time is actually needed for the file systems, like when a file was created, the date and time for the file.
+
+And if you want to use the timeout function to set up a timeout, you can use the thread call APIs. You do a thread call allocate to allocate a callout structure, and then do a thread call enter to set up your timeout function. To do the data movement between the kernel and the user, you can use a copy-in, copy-out.
+
+What I want to point out in that is the copy-in, copy-out actually take the 64-bit user address space, even though the user application that you may be writing to is just 32-bit. So please make sure that you include the proper prototypes so that you don't have any trouble for the bit sign extension or something like that.
+
+And the UI Word data structure-- the data structure is an opaque data structure. There are constructors and deconstructors available in the KPI, but I think, generically, for a file system, all they use is the UI move to copy the data out from the kernel of the user space.
+
+Now I'd like to talk a little bit about the file system. First thing that I want to talk about is what all-- if one wants to implement file system, what all pieces are necessary. There are a few things that are specific to Mac OS X, and then the rest of them are similar to others. I'm going to take an example of the local file systems, because the remote file system almost somewhat fall into the same pattern.
+
+Of course, you would need a kernel extension, which resides in system robbery extension for the file system. And along with the kernel extensions, you also need a file system bundle, which is in system robbery file systems. And in this bundle, there are two things that I want to highlight. One is the utility function, and then the Info.plist. The utility function for the local file systems is basically you need to support three arguments. There's -p, -m, and -u.
+
+-p is the probe. If you give--when the utility function is invoked with -p option, it verifies to see whether the given volume is supported by this file system or not. And if it does, it actually returns the volume name to the caller. The Info.plist has lots of different keys.
+
+The values that you can write. And a few things that I want to point out is the fsname, which is actually the name of the volume format that the file system supports. And then the probe order, the order in which--if a new volume arrives, you know, the order in which the different file system needs to be probed to find out whether that volume is supported by any of the file systems.
+
+And of course, there are in the /sbin directory, they will have three boundaries, the file system checker FSEK, which needs to support -q option just to quickly verify whether the volume is clean or dirty. And then the new UFS is to layout in file system on a new volume, and then the mount to mount the file system.
+
+I just want to quickly go over and see how all these different components work together. When the new device volume appears, I/O Kit notifies the disk arbitration demon in the user space, which then calls the utility function with the -p option. And if the file system actually is - the volume has the file system that the particular kernel extension supports, then it returns success with the volume name. And this is where the provider for the Info.plist is actually used to look one after the other. Then the disk arbitration calls FSEK with -q option to see whether it's clean or dirty.
+
+If it's actually volume is clean, it actually goes and mounts the file system. If the volume is not clean, it actually runs the FSEK to clean up the volume before it actually mounts. Once the mount is successful, it actually notifies the finder and finder puts the desktop icon on the sidebar as well with the volume name. that was actually passed from the utility function.
+
+The unmounting of the file system, the way it works is once, for example, a user drags the icon to the trash or clicks on the eject, the finder notifies the disk arbitration, which then in turn notifies all the clients who are interested in that volume. And the purpose of this is the clients can actually withhold the unmounting if they actually want to hold it for some particular reason or to drop all the references that they have on the volume so that the volume can be unmounted. If there are no dissenters, then the disk arbitration goes and calls the unmount of the file system. If the unmount succeeds, it notifies the finder, which then takes the icon out from the desktop and the sidebar.
+
+Mac OS X implements BSD/VFS style file system. For some of you who are not familiar, I'm going to just give you a very quick highlight of what that is. The user level actions actually come to kernel as a system call to the system call layer, and then the file system related activities comes to a generic layer in the kernel called VFS layer. This generic layer is same for all the file systems. It then calls the corresponding file system to do a specific action. It calls a routine which does a specific action.
+
+In fact, the files, the core of the file system is implemented as a set, series of such routines with each one of them doing a specific operation. And there are two sets. One set that actually operates on the individual file level, which is called VNode Operations. The file itself is represented inside the VFS layer and the kernel by a VNodeT data structure. And the examples of this is, you know, the VNode operations open, read, write, delete, you know, things like that. I actually want to point out one more VNode operation. That's the lookup operation, which I'm going to use in an example in a bit.
+
+The user opens a file or does an action in the file with a path name. The path name consists of all the name components separated by a separator character slash. The lookup operation, which is the one that performs to translate from this name component to a file system node number, and then construct a file system node and then associates a VNode with that particular file.
+
+And then all further operations on that file happens using the VNodes in the VNode operations. The second set of routines, that is the ones that operate on the volume level, and they're called VFS operations. And the volume itself is represented in the files, in the VFS layer and the kernel by MountT data structure. And the examples of that is Mount, MountVolume and MountVolume, write all the dirty data to the disk for all the files that haven't been written yet. And of course, lastly, the file system will also have the module start and stop functions.
+
+There are some few things that are really very different in Mac OS X compared to other file systems that you may be used to. I would like to point a few of them. All the generic data structures are completely opaque to the file system. The file system has no, doesn't know how the data structures are, you know, laid out or anything like that.
+
+There are KPIs to manipulate them and use them to do the file system work. There are three kinds of KPIs. There's accessor KPIs. You know, which access to individual fields that are relevant. And then there's also functional which does some particular functions in the convenience API. So I'll give you a few examples in the next slide.
+
+All the vNode operations are symmetric. All the vNodes that come to vNode operations come with a reference and they go back of the vNode operations with the reference. And they're all lockless. The vNode actually enters with no lock held. There's actually no serialization done that way for the vNode operations.
+
+And that brings to my next point. The locking that we apply in the VFS layer is completely transparent to the file system. The file system doesn't know anything about locking and the vice versa. The VFS layer does not impose any particular locking scheme on the file system nodes.
+
+File systems are completely free to implement any locking scheme that they want to protect their own data structures. For example, HFS Extended uses Rediriter locks to protect and there are other file systems that uses mutex to protect their file system nodes. All the block numbers in the file system node, the file system node numbers, interfaces between the VFS layer and the file systems are all 64 bit. And all the vNode operations are called with the opaque data structure called VFS context, which contains the marker that is necessary for authorization for the user of that particular operation at that point of time.
+
+The header file to the rough interest here is the sysmode.h from the kernel framework for the VFS KPIs and the vnode.h for the vnode-level KPIs. I just want to point out vnode-if.h, which is actually included in the vnode.h, where it actually provides all the descriptors and arguments that are called for the different vnode operations.
+
+And the symbol set to declare is the BST symbol set. I'm going to take a sequence of operations just to give you a overview of how the basic file system works. The sequence that I'm going to follow is the file system gets loaded and it gets mounted. A file gets looked up in the file system and that file gets deleted and the volume gets unmounted and then eventually the file system gets unloaded.
+
+First the kex gets loaded. When the kex gets loaded, the file system specific start/stop function gets called in. And this is the place where the file system needs to register to the VFS, the file system with the KPI VFS FSR. It actually provides a list of the VFS ops and the VNode ops that it actually implements.
+
+And this is a good place to allocate the malloc tags and the group structures and create anything that you need for the entire file system via data structures. When the volume gets mounted, it comes to the VFS layer, which actually creates the mount data structure and fills in all the few fields that are relevant at that point in time and then calls the file system.
+
+file system VFS mount VFS up, and it passes this mount data structure to that. One of the things that happens in this is it creates its own file system specific to the mount data structures, and then it calls a KPI to associate between the file system specific data structure to the generic mount data structure.
+
+The KPI is VFS set FS private, and that sets up an association between the two. All the VFS hops get called with the mount T as an argument, and to get back from the mount data structure the file system specific data structure you call VFS FS private and pass the mount data structure to it.
+
+When a user starts a file inside the volume, then it comes into a lookup data structure, lookup vNode operation, which then looks up, you know, let's assume that actually the file has never been used before, so it's not in the name cache or in the file system cache.
+
+It actually translates the name to the file of FSNode number and then goes, reads the FSNode data from a disk, and then sets up this FSNode completely. And in the very end of this operation, it calls the KPI called vNode create and passes the FSNode and the other relevant information like the file type and all kinds of stuff. Then the vnode create actually creates the vnode and associates the file system node with the vnode. At this point of time, the vnode is completely visible in the system. All other operations can happen. That's why it's important to do it in the end.
+
+All the bnode operations are called with the bnode as an argument. To get back to your file system, nodeU is a KPI to bnodeFSNode. If a user deletes a file, then it calls a remove operation of the file system, which then basically, first thing it does is it takes it out of the name space.
+
+It basically purges from the name cache and the file system cache that nobody else can find them. There may be still references to the VNode, so all it does is it actually calls a VNode recycle. This slide is slightly wrong. It's actually not VNode reclaim, it's VNode recycle.
+
+KPI, which then marks the VNode for termination. When all the users of that particular file are completely out of the system, then the VFS layer calls a VNode operation called reclaim VNode operation, which then is free to free up all the data structures. The first thing that it does is to dissociate between the VNode and the file system node, and then it can free up all the file system level data structure and resources that it has.
+
+And then the reclaim operation returns back to the VFS layer, which then frees up the generic data structure and any resources that the VFS layer has. This is just to show, you know, the VNode is alive across the whole VNode operation, and VNode is currently to be alive when the VNode operation happens for a file system.
+
+When the volume gets unmounted, it comes to the unmount VFS operation in the VFS, which basically first dissociates the file system mount data structure to the generic mount data structure by VFS set private, FS private. And then it frees up the file system level mount data structures. And then once this VFS operator, the VFS layer then cleans up everything else, mount structure and rest of the resources. When the KEXT itself gets unloaded, it can actually call, its stop function gets called, which can then re-register the The file system for VFS by calling VFS/CFS remove.
+
+( Transcript missing )
+
+Good morning. I'm Laurent Dumont. I work in the networking in CoreOS, Mac OS X CoreOS. So we're gonna talk about the networking KPIs. And the first thing I wanna, um, you know, look at here is a little bit how the networking stack is working in Mac OS X.
+
+So here we got a--a picture that kind of split some of the layers, um, that we have in the kernel-- in the BSD part of the kernel for the networking. So you can see that at the top, we get the socket layer, which inside the kernel is responding to the user sockets and also, you know, handling, buffering, and so on for your sockets. And in the middle of that, we get the protocol layer.
+
+Here we have IP and IPv6 that, you know, does all the protocol stuff. And at the lower, um, level, we get the interface layer, which handle all the particularity of, you know, Ethernet or, you know, PPP and all those kind of tunnels and all those kind of interface. And so-- so we show here that, um, this is on top of the I/O Kit layer.
+
+So Nick, uh, earlier talked about, you know, how to do your Ethernet driver in I/O Kit, and that would be at this level here. That would interface with the interface layer. So what we'll see is that we have different levels of, uh, KPI here that, um, basically give you access at different, you know, um, area in the networking, um, subsystem, if you want.
+
+So in blue here, you can see socket, socket filter, IP filters, uh, plumbers that are used, you know, for associating your interface filter, and also interface filter and the interface. So we'll--we'll do a quick overview of all those, um, level of KPIs and see how you can, you know, with your CACs, um, you know, plug in in there and--and, you know, do different--different types of, uh, of networking, um, operations.
+
+So first, what we want to say here is that in the kernel and in the KPI, all the structures are all opaque. So basically, you'll get some handles and you won't be able to see what's inside a socket or inside any of the other things that we have in the kernel. And we'll provide some accessors so that you can, let's say, look at what's in an MBuf, or things like that.
+
+And we do that for binary compatibilities. That way, we can make sure that your kex is going to work in a subsequent version if we change something in the structures. And for Leopard, we changed a lot of things. And that's why we don't want you to be able to access inside the structures. All the KPI definition we're going to talk about here are all in the kernel frameworks.
+
+And common to all the KPI for networking, we use data on the form of MBuf. So if you're familiar-- if you're familiar with BSD networking, you know what an MBuf is. The difference here is that we'll have some accessors to look at what's going on with the MBuf and access some of the fields instead of directly accessing the MBuf.
+
+structure. So first, we'll look at the socket, at the socket KPI. So the socket KPI pretty much lets you use sockets in the kernel. So you can have an application which is doing the use for socket like doing, you know, read and write and, you know, your own socket. So you can do your own client in the kernel. And it's only for socket clients.
+
+So you cannot do a listener or a server in the kernel because we don't have support for a lot of the primitives that we have in user land for socket for doing a listen. So we don't have things like, you know, select or something like that. So but otherwise, the life cycle for socket, you have pretty much everything you need. You can create, set options, do a connect, do a send, a receive, or a close. And some, you know, all those KPIs are in the KPI socket .h. stage.
+
+So here we'll see an example of how you create a socket in the kernel. So you call here the sock socket function. And the difference compared to, let's say, calling socket in userland is, here we're creating a TCP socket. And you're going to provide, if you want, an upcall function, which is going to be called back from the kernel each time we have an event for that socket.
+
+Let's say you get connected or you get a read. You'll get called in that callback. You can also provide your own cookie where you can decide of the state of your socket or whatever information you want to stash away and recognize that socket by calling sock socket here.
+
+Here, it's what's going on when, let's say, we get the read, and we're in the input, and we're getting some data coming in. So we're calling your up call function. And here, as you can see here, you get your cookies. So you're looking at, hey, I'm in a connected state. And now you're going to call another KPI, which is a soc read, to do the actual read and get the data and, you know, do whatever you want with the data after that.
+
+You have to be a little careful about locking and all those kind of things because here, you call on the input thread, and you need to take care of your own locking for your own data. All the socket state from the kernel point of view, it's all, you know, consistent. And we're taking care of the locking for the socket. But you need to make sure that you're taking care of the locking for your own structures that you manipulate associated with the socket.
+
+( Transcript missing )
+
+layer. So another layer -- another level of KPIs that we have here is the IP filter. So the IP filter, it's -- it lets you do a certain number of things, because now you have access to data as it's seen by the protocols. So you can -- you know, you have -- you see reassembled inbound IP packets when they're coming in.
+
+And you also see outbound IP packets when they're going out to the interface. You can put your filters there and also, you know, do that before and after both the IPsec encryption and all the encapsulation if there is any. So you got different levels in the IP filter where you can, you know, put your KPI and decide what to do and manipulate. You got full access to the IP layer header. So you can change the checksum. You can change the destination. You have a lot of possibilities that you can do in your -- in your text. With this KPI.
+
+The life cycle of the KPI, you attach and you -- or you detach to the IPv4, IPv6. So you decide which kind of packets you're interested in. And then you get called in, you know, when there's something at your level. The locking, you know, same thing. You have to drop your locks before you inject data into the stack. And you're responsible for locking your own data. And the framework for it, the kernel framework, it's in the KPI IP filter.
+
+We're going really fast. But there's a lot of KPI. So it's just an overview. So the other -- the other level here of -- of KPI we have for networking is that the interface filter. So the interface filter is a level down where basically you can access data as it's seen for the interface. So you can filter inbound and outbound packets. And we're not talking here before for the IP filter. We're talking about IP packets.
+
+Now we're talking about front end packets. So you can access to the Mac, you know, link layer and the other depending on the type of interface. And you get access to the interface IOCtl in this layer also when you do your filter. Some of the common use for that KPI is doing, you know, packet layer firewall where you can have full access to the packet. And also things like virtual packet switch, like things like, you know, like parallel stuff like that. They use -- they use interface filters. So this -- all the definition for this is in the KPI interface filter.h.
+
+Another level of KPI here is to do your own network interface. So, You can do a network interface BSD style which would work with a stack which is not an I/O Kit driver because let's say you're doing a tunneling device or something like that that doesn't really need to have any physical access to a media which sits on top of Ethernet or sits on top of let's say PPP or what have you. This is how we implement things like the bounding interface and stuff like that.
+
+So here what you can do, you can create your own IF-NET interface. So you get access and you get to provide a function for inputting and outputting packets from I/O Kit or not. So you get packets from I/O Kit and you decide to change them or if you're sitting on another interface or another tunnel, then you'll get those packets.
+
+You get to provide a DMUX also so we can handle the add and remove of protocols. So if there's a new protocol coming up, you need to provide a DMUX let's say for IPv6. So maybe your interface is handling IPv6 differently than IPv4. So you get to provide the DMUX or Apple talk. You also do the framing for the outbound packets in that layer. So in your interface, you will be called in and do the framing.
+
+Also, you have to handle I/O CTLs like the multicast if it's just something like Ethernet and you want to emulate something like multicast on the wire or on your interface, you get access to the -- you get to provide access to the I/O CTL for the multicast or also for the state change if your interface goes down or goes up, those kind of things.
+
+The KPI for this is in the KPI interface.h. And there is more interface-related accessor in that KPI interface, things that let you access IF-NET type stuff like the stats for the interface, and add statistics, you know, because you get some packets that you refuse or some packets you filter. All that is in KPI interface.h.
+
+Another level here which is kind of associated with the interface KPI is a plumber KPI. So the KPI is basically the glue between your interface and an existing protocol. Let's say you're providing a new type of interface and you need a new form of arping for IP, you would provide that in the protocol plumber.
+
+So you register your plumb and unplumb functions with the plumber. And so you attach that to a protocol to an interface. And also you get called when you want to unplumb for detaching the protocol from the interface. And one word of warning here is that this is not a KPI for adding new protocols. We don't have that. So this is for existing protocol but a different type of interface that has different requirements like arping, I think. So mainly. And so those are in the KPI protocol.h.
+
+Also, I want to mention here some ways for you as a KPI to inject new packets you're creating, let's say, in the protocol layer in your interface or any other place you want to create some packets, so you get some packets that you want to inject because you're a tunnel, you're going to call proto input, which is a function where you pass the packet.
+
+And this is what you call from the inbound pass, so, you know, simulating something that is coming in from the physical, you know, the driver layer. And also, if you're in a kex and you're trying to send a packet, you know, in, but you're on the outgoing side, you're going to call protocol inject. And if you're familiar with the BSD kind of model, it replaces a little bit the NetISR. This is the protocol inject that you will call in that case. And those are in the KPI protocol.h.
+
+The other thing that we have here, which is a KPI that is used for communicating with your kegs pretty much. It's a kernel control socket. So it's a special type of socket that we use to communicate with user space. So you can use that to configure some setting in your kegs or get some information about, let's say, we're talking about earlier about getting your connect and deciding if we wanted to allow or not the application to connect to a certain address. You can use the kernel control socket to send that information back to a daemon in user space and get that information and get it back on the kind of a side channel.
+
+So they're pretty useful for this. There's some locking consideration to think about is that those kernel sockets, control sockets are not serialized. So you need to be careful about that. But it's safe to send to your client at any time. So whatever context you're getting in, you can do a send back to your client and they will get it. And we mentioned it here. It's in the kernel control dot H that you'll see all the KPI associated with kernel control sockets.
+
+( Transcript missing )
+
+For more information-- that was really fast. But for more information, you can contact Craig Kistley, which is the technology evangelist. And some documentation, sample codes are on the website. The TCP log NKE is a good NKE to look at how to do a KPI. And the network extension programming guide is going to give you also some more in-depth information than we can do here.

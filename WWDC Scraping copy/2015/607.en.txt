@@ -1,0 +1,175 @@
+---
+Title:  What's New in Metal, Part 2
+Year:   2015
+Web:    https://nonstrict.eu/wwdcindex/wwdc2015/607/
+
+[!] This transcript has potential transcription errors.
+---
+
+[Dan Omachi]
+Good morning, welcome to the second part of our What's New in Metal presentation. My name is Dan Omachi. I'm an engineer in Apple's GPU software frameworks team. Today my colleague Anna Tikhonova and I will talk about technologies that build upon Metal, helping you deliver great rendering experiences on both iOS and OS X.
+
+So this is the second of three sessions at this years WWDC talking about Metal. In the first session, Rob Duraf talked about developments in Metal that have happened in the past year. He also described some of the new features in Metal we just released. He also described how app thinning is a great match for your Metal applications.
+
+In this session, I will be up here first to talk to you about MetalKit, convenience APIs allowing you bring up Metal applications much more quickly. Then Anna will come up to talk about Metal performance shaders framework, which offers great shaders for common data parallel operations available on iOS devices with an A8 processor.
+
+And tomorrow, you will get a chance to catch the Metal Performance Optimization Techniques session, where they will introduce the Metal System Trace Tool and provide you with some best practices for shipping an efficient Metal application. So let's get started with Metal kit. Utility functionality for your Metal apps.
+
+So because Metal is a low level API, there are a number of things you need to do to get up and running. MetalKit hopes to help with this by providing efficient implementation for commonly used scenarios. This requires less effort on your part to get up and rendering and we offer increased performance and stability over the standard boilerplate code that you might implement yourself. There is less maintenance for you as the burden of that maintenance has been shifted from you to us.
+
+So MetalKit consists of three main components. First is the MetalKit view. A unified view class between iOS and OS X for rendering your Metal scenes. Second is the texture loader which creates texture objects from image files on disk. And finally, Metal kit's model I/O integration which loads and manages mesh data from Metal rendering.
+
+MetalKit view is the simplest way to get Metal rendering on screen. It's a unified class on both iOS and OS X. It offers pretty much the same interface on both Operating Systems, but naturally it's a subclass of UI view for iOS and a subclass of NS view on OS X.
+
+Its main job is to manage displayable render targets for you, and it creates render path descriptors for these render targets automatically. Now, it's super flexible in terms of the ways that it can execute your draw code. You can use a timer-based mode where it will execute your draw code at a regular interval in synchronization with a display, or you can use an event-based mode which will trigger your draw code whenever a touch or UI event has occurred, so you can respond to that event. Finally, you can explicitly drive your draw code, perhaps in an open loop on a secondary thread at your own frame rate.
+
+So there are two approaches to using the MetalKit view. The simplest approach is to implement a delegate to handle your draw and resize operations. In this case, you would implement the draw in view method to handle your per-frame updates including encoding any rendering commands. You would also implement the view will layout with size method to handle size changes to your view. This is where you might update your projection matrix or change any texture sizes to better fit your displayable area.
+
+Now, if you have any other pieces of the view that you need to override, you can subclass the MetalKit view. And in this case on iOS, you would override the draw Rect method to handle your per-frame updates and the layout subviews method to handle resizes. Likewise on OS X you would handle, you would override these two methods, the draw Rect and set frame size method.
+
+So here is an example of setting up a view controller that also serves as the delegate to our view. In the view did load method, after we received a reference to the view, we will assign ourself as the delegate, and particularly important on OS X is that we will need to choose and set a Metal device.
+
+Once we are done with that, we can configure some of the view's properties including choosing our own custom pixel formats for the color and depth and stencil buffers. We can use multisampling by increasing the sample count property to a value above 1, or we can set our custom clear color.
+
+Now, here is a very basic usage of the MetalKit view in the implementation of the per frame update. In our drawing view method, we call the views render, I'm sorry, current render past descriptor. Now, the first time you access this property each frame, the view will call into core animation and get a drawable back, which you can encode your rendering commands and render to.
+
+So we will render our final render pass, which will show up in this drawable. And then we will present the drawable, which is stored in the view's current drawable property and we will commit our command buffer. Now, because of its importance in structuring your per-frame updates, let me take a minute to talk about managing these drawables. So there are a limited pool of drawables in this system all managed by core animation. There are only a few of them mostly because of their size, they take up some space. Now, these drawables are concurrently used through many stages of the display pipeline.
+
+Here is roughly how it works. First, your application encodes commands to be rendered onto the drawable. It sends that drawable down to the GPU as your application encodes commands for the next frame and the GPU renders to that drawable, and core animation at this stage may do compositing with other layers into that drawable.
+
+And finally, the display can take the drawable and slap it up onto the screen. Now, the display can't replace it with anything until another drawable is available. So if any of these previous stages are taking a lot of time, it just has to sit there for awhile. Additionally, the display can't recycle that drawable back up to your frame until it has something available. So let's take a look at your application frame with respect to these drawables.
+
+First, you call the MetalKit views current render past descriptor which reserves a drawable. Then you will encode rendering commands that you want into that drawable, and finally you will present and commit the drawable which will release it back to core animation. Now, this is fine if all we are doing is rendering a single render pass, however, it's likely we will do other operations such as some app logic, encoding in offscreen render pass where we don't actually need the drawable, or running some compute kernels for physics or whatnot.
+
+In this case we are essentially hogging the drawable from our future self because in a subsequent frame, we will call this current render pass descriptor and it will sit there waiting for a drawable to become available, which may not be the case because we are doing these other operations and reserving it for much longer than we need to.
+
+So to solve this problem, let's put these operations before our access to the current render pass descriptor. Now, let me just note that this isn't a problem specific to the MetalKit view. You need to be aware of this issue if you roll your own view in access core animation directly. So this is information that's quite useful in any case. Now, here is a more complete example of our per-frame rendering update. First, as I described we want to update our app's render state, encode any offscreen passes, do anything where we don't need the drawable.
+
+And then we can continue as we did previously, get the current render pass descriptor, encode our commands for that final pass, and present and commit our command buffer. The key point is that these two stages should be as close together as possible. It's a critical section where we are holding onto a resource and we don't want to hold onto it any longer than we need to.
+
+That's it for the view. Let's move on to the texture loader. It's textural loading made simple. You give a reference and you get back a fully formed Metal Texture. Not only is it simple, it's fast and fully featured. It asynchronously decodes files and creates textures on a separate thread.
+
+It has support for many common image file formats including JPG, TIF and PNG and also supports the PVR and KTX texture file formats. What's interesting about these formats is that they store data in a raw form that can be uploaded to your Metal Texture without any conversion. Additionally, you can encode data for MIT maps for any of the other types of textures including 3D textures, cube maps, and texture arrays.
+
+Its usage is really simple. First, we create a texture loader object by supplying a device. Then, once we have that texture loader object, we can create many textures with it. First, we will give a URL location of our image file, and we can supply a number of options including how we want to treat the sRGB information in the file or whether or not we want to allocate memory for MIT maps when we create this texture, and finally we will supply a completion handler block.
+
+Now, this block will get executed as soon as the texture loader has finished loading the texture and created it. It will pass the texture handler back to you which you can stash away for later and render with when you need to. That's very simple, the texture loader. Let's move on to model I/O.
+
+So model I/0 is a new framework introduced with iOS 9 and OS X El Capitan. And one of its key features is that it can load many model file formats for you. You can create your own importers and exporters for proprietary formats if you need to. Some of the cooler features here are that you can do offline baking operations. You can create static ambient occlusion maps, light map generations, it also includes the Voxelization of your meshes.
+
+It provides you a way to focus on your rendering code and write your shaders. You don't have to deal with creating some parchers to get some stuff off disk. You have to deal less with serialization, you just load a model file with Model I/O, put it into some form you can render it with, and start writing your shaders. So what does MetalKit provide in this context? It's utilities to efficiently use model I/O with Metal.
+
+It offers optimized loading of model I/O meshes into Metal buffers, the encapsulation of mesh data within MetalKit objects, and there are a number of functions to prepare mesh data for Metal pipelines. Let me walk you through the process of loading a model file with model I/O and getting it rendering on screen with Metal. And here are the steps we will take.
+
+So first, we will create a Metal render state pipeline that we'll use to create our mesh, to render our mesh. Then we will actually load the model file by initializing the model I/O asset. And with that asset, we will create MetalKit mesh and sub mesh objects. Finally, we will render those objects with Metal.
+
+So let's focus on creating a Metal Render State Pipeline and we will pay particular attention to creating a vertex descriptor that will describe the layout of vertices that we'll need our mesh to be in to feed our pipeline. Here is the bare bones of a vertex shader. It uses the stage in qualifier which basically says that our per vertex inputs, the layout for them, will be described outside of the shader in our objective-C code using a vertex descriptor.
+
+It uses this vertex input structure which is defined up here. And the key part of this vertex input structure are these attributes, the indices here which we will use to connect up outside inside of our Objective-C code. Note that these floating-point vector types define how the data looks within the shader, not actually how the data looks as it's being fed into the shader from our Objective-C code.
+
+For that, we need to create a vertex descriptor. Now, I'm going to put this vertex input structure up here just for reference, but let me just remind you that it does not define the layout of the data as it's being fed into the shader. We are actually creating the Metal Vertex Descriptor that is down below.
+
+And for that, what we will do is for attribute zero, the position will define as using three floating points, three floating point values. For attribute one, the color will specify that it's going to be composed of four unsigned characters, not the four floats above, four unsigned characters and it will have an offset of 12 bytes immediately following the position data.
+
+Now, for the texture coordinates in attribute 2, we will define that it uses two half floats. And that it immediately follows the position and color data with an offset of 16 bytes. And finally, we will specify that the size of each vertex is 20 bytes by setting the stride to 20 for that buffer.
+
+Now, this defines the layout of each vertex within our array of vertices. So now that we have got our Metal Vertex Descriptor, we can assign it to our render state pipeline, and with that render -- excuse me, with the render pipeline descriptor, we can create a Metal Render State Pipeline.
+
+So let's move on to actually loading our asset and using model I/O for that task. And we will actually use the vertex descriptor we just created in the previous step, along with a MetalKit mesh buffer object, a mesh buffer allocator object. I will describe a little bit more about its importance as we continue.
+
+So the model I/O vertex descriptor and Metal Vertex Descriptor are very similar, but while the model I/O vertex descriptor describes the layouts of vertex attributes within a mesh, the Metal Vertex Descriptor describes the layout of vertex attributes as their input to a render state pipeline. Now, they are intentionally designed to look similar as they contain attribute and buffer layout objects, and the reason for this is it simplifies the translation of one object to another.
+
+Now, each attribute in a model I/O vertex descriptor has an identifying string base name. Model I/O assigns a default name if one does not exist in the model file or that model file does not support these names. These names include position, normal, texture, coordinate, color, et cetera, and model I/0 defines these with the string based MDLVertex attribute constants. There are a number of files including the Alembic file format where you can customize those names. Be aware if you are changing the names you will need to access these attributes with those customized names.
+
+So we recommend that you create a custom model I/O vertex descriptor, because by default model I/O loads vertices as high-precision yet memory-hungry floating-point types. This is one of the advantages of using model I/0. You can actually load a model format and have the vertex data in any form that you would like and use model I/0 to massage that data into a format you can actually use. In this case, we want to feed the pipelines with the smallest type that meets your precision requirements. This would improve your vertex bandwidth efficiency; as you are feeding each vertex to the pipeline, you don't really want a bloated vertex.
+
+So here is the layout we defined previously when creating our Metal Vertex Descriptor. Now, we will create our model I/O vertex descriptor by calling this MTK model I/O vertex format from Metal and we will supply our Metal Vertex Descriptor. This builds the majority of this model I/O vertex descriptor, yet we still need to tag each attribute with a name, so model I/O knows what we are talking about. So for attribute 0, we will tag it with the vertex attribute position name. And similarly for attribute 1 and 2, we will tag them with a color and texture coordinate attributes.
+
+The other thing we will do here is we will create a MetalKit mesh buffer allocator and we will supply a Metal device. Now, what this object does is it allows model I/0 to load vertex data directly into GPU backed memory. Now, you don't have to use a MetalKit mesh buffer allocator, but what that will do is it will allocate system memory for these vertex and index buffers inside of the mesh. And when you want to actually render it, we will need to copy from that system memory down into the GPU backed memory. So for efficiency, it's really desirable to use one of these mesh buffer allocators, and here is how you use it.
+
+Now, we are going to load our asset file. We will supply the URL location, the model I/0 vertex descriptor which will tell model I/0 how to lay out each vertex and we will also supply this mesh buffer allocator so that model I/0 can load this data directly into GPU backed memory.
+
+So now that we have got our asset, let's actually create some MetalKit mesh and some mesh objects. So here's an example of an asset that might be created by model I/0. Inside of an asset, we might have camera objects, light objects, and particularly important to us right now are the mesh objects. Now, MetalKit is primarily concerned with these mesh objects. It doesn't really deal directly with the light and camera objects because that sort of data is very specific to your custom shaders and your engines.
+
+You can actually introspect into this object or go look inside this object and grab out that camera and light information to plug it into your shaders, but MetalKit isn't directly involved in that process. So what we can do is pass in this asset directly to this mesh, meshes from asset class function which will create an array of MetalKit meshes.
+
+Let's take a look at what's inside this mesh object. So first are these vertex buffers which includes the position attributes, the normal attributes, textural attributes, et cetera. In our example, we only needed one array because we interleaved all of our data. However, you can define the layout to use multiple arrays, and therefore you would have multiple vertex buffers. You could define that attribute 0 would be inside of a single array, so you would have an array of positions in one array, an array of texture coordinates in the next, another array with colors, and so on.
+
+The mesh also includes a vertex descriptor which defines this layout and it's the same object we just created and passed in when we initialized our asset. And finally, the mesh contains a number of sub mesh objects. Now, the key part of each sub mesh object is this index buffer, which references vertices inside the vertex buffer. Additionally, there are a number of properties which you can use to make a draw call with Metal. So now that we have got our Metal kit mesh and sub mesh objects, let's go ahead and render them.
+
+So first we will iterate through each vertex buffer. Now, we may have a sparse array, so we need to make sure that there is actually something in each buffer, but once we are sure of that, we can continue on and set the vertex buffer in our render encoder.
+
+Now, the vertex buffer actually has two properties, the buffer itself, and an offset within the buffer where your vertex data resides. We also need to supply a buffer index telling the pipeline exactly where the data is. Now, we will actually render our mesh. We will iterate through every sub mesh, and make our draw index primitives call. Note here that the sub mesh has all of the parameters for this draw index parameter.
+
+So today we posted this MetalKit essentials sample on the WWDC 2015 site. I encourage you to download it. It describes a number of the techniques I described. It uses model I/0 to load this little airplane object that's stuffed in an OBJ file and creates a MetalKit mesh and renders it on screen. So you can get an idea of exactly how this is all done.
+
+So I encourage you to check that out. So that's it for me, my name is Dan Omachi, I will be at the Metal Lab tomorrow if you have questions about topics I have discussed. I would like to welcome my colleague, Anna Tikhonova on stage to talk about the Metal performance shaders frameworks. Thank you.
+
+[ Applause ]
+
+[Anna Tikhonova]
+Good morning. Thank you, Dan, for the introduction, my name is Anna and I will be talking to you about Metal performance shaders. Let's get started. So first of all, what is it? It's a framework of optimized high performance data parallel algorithms for the GPU in Metal. When and why would you use it?
+
+If you are writing C code and you want to add a common sorting algorithm to your CPU application, you are very unlikely to implement one from scratch unless it was out of self-interest. You are a lot more likely to use the implementation provided to you by the library because it's already been debugged and optimized for you. Likewise, if you wanted to add an image processing operation to your CPU application, on our platform, you would use the accelerate framework because it uses vImage. It's a powerful, high-performance tuned image processing framework for -- that utilizes the CPU's vector processing.
+
+These are just a few examples. The point is that there is a rich environment available for your CPU applications. On the GPU the story is a bit different, you simply have fewer options but we would like to change the story. Our goal is to enrich your Metal programming environment.
+
+We have selected a collection of common filters that we see often used in graphic processing pipelines in your image processing applications and games. These algorithms are optimized for iOS and available in iOS 9 for the A8 processor. The Metal performance shaders framework has two goals, performance and ease of use. It's designed to integrate easily into your Metal applications.
+
+It operates on Metal resources directly. They are the input and the output. We are not only giving you collection of these high performance optimized awesome kernels -- we are giving you that, but we are also taking care of all of the host code necessary to launch these kernels. We take care of the decision-making process of how to split up the work for parallel computation. The work you have to do to take advantage of this framework in your applications usually amounts to only a few lines of code. It's as simple as calling a library function.
+
+So now that I have introduced the framework to you, let's take a look at the available operations. Here is a full list and let's start from the beginning. I will cover just a few of these actually and I will show you examples. So first, the framework supports the histogram filter and the histogram equalization and specification filters.
+
+The equalization and specification filters, they allow you to change the distribution of color intensities in your image. The equalization filter is a special case. It changes the distribution from the current distribution to the uniform one. And the specification filter enables you to set any distribution of your choice. You specify the histogram that will be used in the filter. This is an example of the equalization filter.
+
+It increases the global contrast in the image. Here it brings out the rainbow in the sky quite beautifully. One thing I'd like to mention about these filters is they are not an end in themselves. They can be used as an intermediate step in a more complex algorithm. The histogram filter can be used as an intermediate step in implementing tune mapping, which is a technique commonly used by graphics developers to approximate the appearance of high dynamic range. So moving on, we also support Lancos resampling. It's a high-quality resampling algorithm that can used to downscale, upscale, squeeze, and stretch images. In this example, I stretched the image vertically and squeezed it horizontally while preserving all of the image content.
+
+You also support the thresholding filter. It can be used to find image edges if chained with a Sobel filter. Let's take a look at an example. This is the output of the thresholding filter, and now it's fed into the Sobel filter to give you image edges. And finally we support a whole range of convolution kernels including general convolution, where you can specify your own convolution matrix. And we also support Gaussian blur, box tent, and Sobel filters. My final example will be of a Gaussian blur. You should all be very familiar with it; we like to use it in our UI.
+
+What if you wanted to use a Gaussian blur in your own application, the Metal performance shaders framework makes it very easy. How easy, you ask? I'm building some anticipation here. It's just two lines of code. You first have to create a blur filter object, and then you have to encode the filter to the command buffer.
+
+And that's it [applause]. Thank you, guys. And one thing I just wanted to point out again and just note is that this API takes your common Metal resources as input. Your device, your command buffer, your textures. These are the Metal resources that you already create in your application.
+
+And now that I have shown you these two lines of code, let's take a look at where they plug in into your current Metal work flow. So this is a graphical representation of your command buffer. It contains all of the commands you are going to be submitting to the device.
+
+You do your work as you usually would. You render your scene by issuing draw calls and you do your post processing effect by dispatching kernels. Now you have decided that one of your post processing effects is going to be a blur filter. So this is exactly where it goes.
+
+And don't forget that you still have to submit your commands to the device as you normally would. Nothing changes here. And now, if you would like to look at the sample code for the example I was just going through, you could do so right now. You can go to developer.Apple.com and download the example called Metal performance shaders hello world. I've mentioned before that the Metal performance shaders framework has two goals, performance and ease of use. I just showed you how easy it is to use. Let's take a quick look behind the scenes at what's giving you this performance.
+
+For every one of these filters including the Gaussian blur filter, we had to choose the right algorithm. The right here means correct and it has to be the fastest. The fastest for a particular combination of input data, input parameters, and device GPU. What do I mean by this? There are multiple ways to implement Gaussian blur. There are constant cost, log 2, linear, and brute force algorithms.
+
+All of these approaches have different start up costs and overheads. One approach may work really well for a small kernel radius but perform very poorly on a large kernel radius. The point is we had to implement each one of these approaches and find out experimentally which one is going to be the fastest for a particular combination of input problem, input parameters, and device GPU.
+
+And after this process, all of the kernels had to be tuned for such parameters as your kernel radius, your pixel format, your underlying hardware architecture's memory hierarchy, and such parameters as number of pixels per thread and thread group dimensions. This is what determines how to split up your work in parallel. And finally, I would like to mention that the framework also performs CPU optimizations for you.
+
+It optimizes program loading speed. It also reuses intermediate textures, and finally it does some compute encoder optimization for you. Specifically, it can defect if you are using multiple computing coders in a row and if so it will coalesce them. And after we have done all of these steps for you, that's cool, but what would this actually look like in terms of code, for example, for an optimized Gaussian blur shader that I just showed you?
+
+Well, are you ready for it? Here is the code. So now all of you know how to implement your own optimized Gaussian blur, right? I bet you didn't know you were going to learn this in this session. Basically all joking aside, this is 49 Metal kernels, 2,000 lines of kernel code and 821 different Metal Gaussian blur implementations where each implementation is some combination of these 49 Metal kernels, so it looks like a lot of work we did and now you don't have to. Now, let's take a look at the Metal performance shaders framework in action.
+
+So first, I will demonstrate the performance of a simple textbook separable Gaussian blur implementation that took only minutes to write in Metal. This is probably something you would start with if you had to implement your own blur and you didn't have Metal performance shaders available to you. So now we are happily running at 60 frames per second but we are not actually doing any work yet. The sigma value is 0. Let's change the sigma value to 6 and we are down to about 8 frames per second. Dare we go any further? Let's try a sigma of 20.
+
+Okay. And we are down to 3 frames per second so that's not going to work. Let's switch to the Metal performance shaders implementation. So now we are back to 60 frames per second, not doing any work, sigma of 6. Still 60 frames per second. Sigma of 20. Still 60 frames per second. And, of course, we had to go further and really blur it, still at 60 frames per second. So this looks like a winner.
+
+[ Applause ]
+
+Okay. So your screen refresh rate is 60 hertz. This means that we are running at 60 frames we are second, so the performance of this optimized Gaussian blur shader you have seen in the demo is capped at 60 frames per second. This means that you have 16.6 milliseconds to draw your frame, and this also includes any compositing work that your system might need to do.
+
+This chart shows you the execution time of this optimized Gaussian blur filter for different values of sigma and as you can see, the execution time is a lot less than 16.6 milliseconds. So this means that you still have some extra time to do additional GPU work, and still hit the desired 60 frames per second.
+
+And now there are just a few more details I would like to cover. Sometimes you will need to work on very large images and you will need to tile them. And sometimes you will just need to work on a portion of your image. So there is a mechanism for that. It's called source offset and destination clip Rect.
+
+Clip rect has an origin and size. It determines the region of the destination texture, which is going to be updated by a filter. The source offset only has an origin. The size is implicit, it's determined by the clip rect, and it is just an offset from the upper left corner of your source texture. They work together to give you the final image. In the Metal performance shaders framework your source and destination can be one in the same texture. In this case, the clip rect and source offset work exactly the same way.
+
+When the source and destination are the same texture, we call it an in place operation. Use it to save memory. How could you do you actually encode one of these filters in place? You have to use the encode to command buffer method that takes in place texture and a fall by back copy allocator.
+
+One thing to keep in mind here, it's not always possible for the shaders to run in place. It depends on your filter, on the filter parameters and properties. If you want this operation to always succeed, use a copy allocator. It will be called automatically, only in the situation where the in place operation is not possible. And we will create a new destination texture for you so that the operation can proceed out of place if necessary. And here is an example of a simple fall back copy allocator.
+
+This one simply creates a new destination texture with the same pixel format and dimensions as the source texture, very simple. So now I have shown you an example before of an in place operation where you only modified a portion of your destination texture and everything outside of the clip rect remained unchanged. You can also do this in the copy allocator. Just initialize your destination texture with the contexts of your source texture.
+
+And I would also like to mention that all of the usual Metal resources such as your device and your command buffer are available to you in the copy allocator. Now that I have covered these details, let's jump into the summary. I would like to say please use the Metal support frameworks, MetalKit and Metal performance shaders, they are robust, they are optimized, and as I have shown you, they're easy to integrate into your Metal applications.
+
+They will allow for faster bring up time of your applications. Now, you can spend the time on making application unique instead of implementing common tasks. And, of course, as an added benefit, there is less code for you to write and maintain. And come to our labs, give us feedback. Let us know how to get started or give us questions. Let us know if there are new utilities or shaders you would like to see added to the support frameworks.
+
+You can always find more information online. We have documentation videos available, and take advantage of the Apple Developer Forums and technical support. For general inquiries, contact our gaming technologies evangelist Allan Schaffer. You can watch the past sessions online, but if you would like to learn new Metal performance optimization techniques, come to our talk tomorrow at 11:00 a.m. Thank you.
+
+[ Applause ]

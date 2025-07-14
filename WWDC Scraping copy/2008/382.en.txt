@@ -1,0 +1,201 @@
+---
+Title:  Simplifying Multicore with Grand Central Dispatch
+Year:   2008
+Web:    https://nonstrict.eu/wwdcindex/wwdc2008/382/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+The original doCallback function is the change from a star to a caret in the parameter prototype. The invocation of the block looks the same, but the big difference is that when we invoke the callback, we don't actually have to have a separately defined function elsewhere. We can just put the block of code directly in line in our doCallback call.
+
+So queues are a concept in Grand Central Dispatch that are basically a very fundamental
+
+[Transcript missing]
+
+Once the work has been submitted to a queue, the work is run one at a time for that queue in FIFO order. So the queue is basically a serialization mechanism all of its own for serializing work that's submitted to it.
+
+Here's an example where we have a couple of work blocks, and they might be on two threads running at the same time. Both get submitted to the same queue, and the queue will take the first one that's submitted to it, execute that work block. When it's done, it'll execute the second work block.
+
+To speak of how this can help with MultiCore, well, if you have multiple queues that are each working on work independently, those queues can have their work scheduled on different CPUs. So here we have an example of a queue that might be working on a work block, and if work gets submitted to the second queue, we can start working on that as well on a different CPU on the machine.
+
+Why would you want to use queues instead of Pthreads? Well, aside from the challenge of knowing how many Pthreads to create, it should also be noted that queues are much more efficient than Pthreads. They're a simple data structure on the order of about 256 bytes, whereas a Pthread with its stack and all of its kernel resources, you know, might be well over half a megabyte of information.
+
+and Grand Central Dispatch manages a pool of threads that execute the work that are submitted to queues. The queues themselves are not bound to any specific thread. They will be executing on any thread that's available to this pool that's managed. However, again, a queue will only execute one work block at a time for that queue.
+
+So you'll never switch threads in the middle of a work block, but between work blocks that are executed on a queue, the underlying thread might change. In this way, we can scale the threads dynamically with the number of CPUs that are available based on queues from the kernel and the kernel scheduler and the activity that's happening both in the hardware and with other applications on the system.
+
+So as a design pattern, what we'd recommend is that queues are used for distinct subsystems of your code. And this allows the different subsystems in your application to potentially execute concurrently, but the access to the data inside of a subsystem you don't need to take locks on because of the serialization nature of the queue. Any updates to the state of that subsystem are implicitly serialized, so you don't need to incur the expense of locks. And one way to look at this is each queue becomes an island of serialization in a sea of concurrency.
+
+So here's some sample code of creating a queue. Up at the top here, we're creating some context data that we're going to associate with our queue. This is the context data that the queue is going to serialize access to. You can see the first argument to dispatch queue new is a label.
+
+We've given you the ability to attach labels to queues. This helps in debugging to see what queue is supposed to serve what purpose. And we're informally recommending the reverse DNS style naming for queues so that as you create queues and frameworks create queues, we can keep them all apart.
+
+There's a block as the third argument to the new queue function, which is a deletion callback. So when the queue is deleted, this gets invoked, and this basically lets us free our context data that's associated with the queue. And then we pass in the context data itself. I should note that blocks do have all of the outer variables in scope in the block. So yes, it's okay for that block to free context data, and it really does see that pointer that's from the calling function.
+
+Further down on the slide, you can see we have a dispatch call wait. That's one of our very primitive calls. It simply enqueues a block for execution on that queue. And so you could imagine that there might be multiple threads that all want to print this context data.
+
+Perhaps there's, you know, some, computation that needs to be done. Things need to stay synchronized in the context data to generate the representation to be printed. So this would keep things serialized. It would make sure that no two threads are trying to print the context data at the same time. And then finally, we have an example of deleting a queue via DispatchQueueDelete. And once the queue is deleted, it will fire that block that will free our context.
+
+So a higher-level concept than DispatchCallWait is something called DispatchCall, and that operates using items. And items are essentially handles to a block that's outstanding. But it's more than that. It's not just the block that needs to be run. It's also a completion block that will be run when the first work block has completed to let you know that the work has finished.
+
+And then context data can also be associated with an item. And the use of item allows for synchronization between multiple queues. The same item handle that's created when you make a DispatchCall will be passed to the work function, and again it will be passed to the completion callback so you can correlate the two events.
+
+Another interesting aspect of items is that in our API, there's a uniform mechanism for canceling them. The cancellations advisory, which means that the work blocks and the completion blocks need to test if it's been canceled and voluntarily exit early if the item has been canceled. And we do this for memory management reasons, which I will discuss in more depth later. But the work block and the completion block are always called, and this gives your application the ability to clean up any context data that are associated with the work.
+
+So here's a little animation of a queue using DispatchCall to submit some work to another queue and then receiving a completion block. So here on the left we have a queue which is working on a work block. That in turn is making a DispatchCall to call out to a second queue. The second queue will execute its work block, and when that finishes, a completion block will be submitted back to the first queue that initiated the work, letting it know that its work is now complete.
+
+And here's some sample code for using DispatchCall. DispatchCall is called with the queue as the first argument. We have a work block, which this is going to iterate over an array and perform some potentially expensive operation. So maybe we want to do this in the background. We don't want to do it on the main thread, because that'll block the UI from processing events. We can submit it to this background queue.
+
+And then once the array has been processed, we'll get the completion callback. We can make a note in our structures that the array has been processed, and then the UI can update appropriately. And the last argument in the call you can see is the item. That is the item handle that refers to this asynchronous operation. It's the same item that's passed into the work block and is passed into the completion block.
+
+This is an example of the same code which is testing for cancellation as it should. So there's an API, DispatchItemTestCancel, which we will be testing for in each iteration of our expensive operation on the array. And if at any time we see that the work has been canceled, we simply break out of the for loop. We don't need to continue processing it.
+
+You know, the user has hit the cancel button or done something else to indicate that they don't care about the results of this operation anymore. And then in the completion callback, we again test for cancellation to see if we really should honor the results of this computation or not.
+
+But you might ask yourself, what if each of these indexes on the array can be processed independently? Maybe there's no correlation between the two, and we have a lot of CPUs. Is there anything we can do to get more multi-core efficiency? Well, we have a concept called subtasks that allow your applications to break the work up into multiple subtasks. And the subtasks may run concurrently on available CPUs. Of course, they're not guaranteed to run concurrently. They just may run concurrently. And that, of course, depends on how many CPUs are actually available to perform the work. And that might change during the course of the computation itself.
+
+So subtasks can be thought of as a group of work blocks. We actually represent all of the subtasks by a single item handle, and cancellation applies to the group as a whole. So you can kick off a bunch of subtasks, have them all run, cancel them all as a group. Completion is also done as a group. So basically the completion block will fire once all of the subtasks have completed.
+
+We have two APIs for working with subtasks. DispatchSubtasks takes an array of blocks and it will run all of the blocks in the array as a subtask concurrently with the current work block and anything else on the current queue. And you will get the completion callback when all of those blocks have terminated. And DispatchApply is a similar API which only takes one work block, but it takes a range, a numeric range that should be applied. And so this is where you might have the same operation that you want to apply to multiple things in an array.
+
+So to illustrate how subtasks allow concurrent execution, here we have a queue that's running on one core. It's executing a work block. That work block might kick off four subtasks. So the first two start executing on a couple of CPUs. The third and the fourth start executing once the first two are done. And then when all have completed, the completion block gets enqueued back on the original queue.
+
+Here's that same example of performing an expensive operation on an array, but this time it's using DispatchApply instead of using a for loop in the work block. It looks very similar, but instead of a for loop, we are getting our index from an API called DispatchItemGetIndex, and this tells us which index of the apply operation the work block is currently operating on. Again, we test for cancellation to see if the operation's been canceled. We perform the expensive operation.
+
+There's a new argument in the middle here called count, and this tells us how many times we need to iterate over the work block. And then, of course, once all iterations are complete, the completion callback is returned, and that looks the same as it did in the previous example.
+
+Here's an alternate example using the Dispatch subtasks, where maybe you don't have the same work that you want to perform multiple times, but you actually have discrete units of work that need to be performed in parallel, or may be performed in parallel. So here we have an example of a Sudoku puzzle, where we are validating whether a number is a legitimate choice in a particular square.
+
+And of course, the constraints on Sudoku are that the number may not reappear in the same row, the same column, or the same 3x3 grid. And so we can test each of these constraints independently, and each block is colored corresponding to the region of the puzzle which it's testing. And the API call we use is DispatchSubtasksWait, so it runs all three of these subtasks potentially at the same time, and then continues running 1x1. once all three have completed.
+
+The final concept of Grand Central Dispatch is that of events. We've added a lot of support for tying in core kernel types into an event loop that can be managed by your queues. And so we have sources of work for queues that can be automatically generated based on timers, signals, file descriptors, pipes, processes, Mach messages, all sorts of core kernel types.
+
+And these sources are bound to a specific queue, so every time an event fires on that core kernel type, a work block will automatically be submitted to your queue. And here's a sample code. We have a timer which is going to print ping to standard output every second. So we're creating a new timer, running it once a second on an interval, and it's just simply printing ping.
+
+We have some more sample code here, which is a simple implementation of the cat command in Unix, and that simply echoes standard input back out to standard output. So you can see we're creating a new event source on the standard input file descriptor. We're reading data from that file descriptor when we get this work block called, and it indicates data as readable.
+
+If we got data from the file descriptor, we'll go ahead and write it back out again to standard output. Otherwise, we'll test for an error condition or test for the end of the file and exit appropriately. And so we hope that providing some of these event delivery mechanisms will help tie Grand Central Dispatch into other aspects of your application more naturally.
+
+Now on to some of the advanced topics of Grand Central Dispatch. And these are suspending and resuming queues and event sources, how Grand Central Dispatch deals with preemption, some techniques for memory management, how deletion is handled and just resource deallocation in general, ways to use queues for synchronization in your applications, how Grand Central Dispatch is integrated with the frameworks on the system, and a final note on how to properly abstract the use of dispatch queues.
+
+So suspend and resume. Queues and event sources may be suspended or resumed. The suspend and resume is reference counted, and basically any time this reference count is greater than zero, it's considered to be suspended. Suspension, like cancellation, does not interrupt anything that's currently running. It's just some internal state that's tracked in our objects.
+
+However, once the current work block has finished executing, no new work blocks will be run from that queue if it's suspended, and no further work blocks will be delivered from an event source if it's suspended. But when either one of them is resumed, anything that had been pent up will be sent through.
+
+For event sources, it's also important to note that some of the events may be coalesced. So if a file descriptor is readable and you suspend it, you're not going to get a flood of callbacks. When it's resumed, you'll probably only get one callback indicating that there is data to be read on the file descriptor.
+
+Grand Central Dispatch is designed to work well with preemption. Queues use a weight-free algorithm. Submitting work to queues does not need locking. And so they are preemption-friendly. The kernel can preempt threads that are submitting work to a queue. However, the queues themselves never preempt the work that's running.
+
+The work is always run one at a time in FIFO order. The work blocks are always executed, and the completion blocks are always executed. So you do have the guarantee that you will see that block fire. You will be able to manage your memory. and queues are not reentrant in any way. Again, that's just consistent with the one-at-a-time philosophy.
+
+So memory management is a very important subject. Dispatch call is asynchronous, and a lot of other of the API calls in Grand Central Dispatch are asynchronous. And so it's important not to reference the local stack in the blocks. If you're using integers or floats or other small instance variables or stack variables, those will get copied into the block. Dispatch call will retain the blocks as necessary and release them when it's done. But you don't want to do something like refer to a large structure that's on the local stack that might get freed before the dispatched block actually gets around to executing.
+
+So we advise the use of Dispatch Call in a way where the context data that goes along with the Dispatch Call is copied specifically for that Dispatch Call, or the ownership is just completely handed over to that Dispatch Call. And then the copy is freed, or the ownership means the original is freed, whenever the completion callback fires. And that is why we always run the work blocks and the completion blocks.
+
+Deletion is also fairly interesting in Grand Central Dispatch because it's very asynchronous. When you delete a queue, it doesn't actually free the memory right there. It waits for any outstanding callbacks that may need to come back to that queue to have completed. and the deletion block will only run after all of the outstanding work that's currently enqueued on the queue and all of the outstanding completion callbacks have returned.
+
+At that point, the deletion block is a good opportunity to free the context data because nothing else is going to be accessing it. And the handle to the dispatch queue will be invalid at the point that the deletion block returns. So the deletion block is your application's notice that that queue is going away. It should not refer to that same queue at any point after the deletion block has fired.
+
+Event sources will automatically be deleted whenever a queue is deleted. And the reason for this is that the event sources are bound to a specific queue. That's the only place their work blocks will go. So if the queue gets deleted, there's really no point trying to generate any work blocks for those events anymore.
+
+And there's also an optional flag you can pass to DispatchQueueDelete, which will implicitly set the cancel bit on any work that's remaining on the queue. So there might be a bunch of work that's already waiting on the queue. You decide you don't want to do any of it.
+
+You want to delete the queue. Passing this flag means that as each of those work blocks are run, whether or not the individual items are canceled, the queue itself will just mark that cancellation bit on each of the items. So the work blocks will test for that. They'll exit early, and it lets you delete the queue as quickly as possible while still fulfilling the guarantee that everything will be run.
+
+A note on synchronization is that we recommend the use of queues instead of locks. You can run blocks using DispatchCall to implement critical sections in your code. And this guarantees mutually exclusive access to the resources that you want to protect. So there's really no need to use mutexes or spinlocks when you can use the DispatchQueues. And this has a few advantages. One is the weight-free algorithm of DispatchQueues does scale better with multiple CPUs. You are wasting fewer resources trying to acquire a lock.
+
+And as programs evolve, we've typically noticed that critical sections tend to get bigger and bigger. So even if it seemed really cheap to acquire a lock and there wasn't much contention to begin with, usually more code gets added, different functions and different subsystems start doing more work, those locks get held for increasing periods of time, the chance of contention increases, and the performance goes down as the number of CPUs scale.
+
+So our weight-free queuing algorithm really helps address that. And it's also important to note that the proper use of a dispatch queue and that proper use is to always specify a completion block. Don't use the weight variance, but actually use the fully asynchronous APIs. That will avoid deadlock because you're scheduling all of your work at that point. The system will always be able to make forward progress executing work that has been submitted to the queues, and you've eliminated the potential for deadlock, which is one of the more common obstacles of using locks with a bunch of threads.
+
+So here's a very simple example of some sample code where we're using dispatch call to implement a critical section. This is an example you may have seen in a CS class a long time ago, where you have an account balance at a bank, you make a deposit, and somebody else might be trying to make a withdrawal, and you don't want to end up in some weird intermediate state. You want each of the transactions to operate in completion and one before the other, hopefully the deposit before the withdrawal.
+
+And so we can see here that we're making a dispatch call at the top of the slide. There is a work block. It's implementing the critical section by being submitted to the queue, and it adds a deposit to the balance of the bank account. The bottom half of the slide is an example of a withdrawal.
+
+We are subtracting the amount from the balance, determining whether there were sufficient funds in the account. If not, we're using a trick of actually canceling the item itself from within its work block. And this is a fairly effective way to see whether an item succeeded or not. It's also very useful for subtasks. If maybe one branch of many subtasks decide the operation wasn't worthwhile, it can cancel itself. And that actually takes out all of the other subtasks at the same time. Otherwise, if there were sufficient funds, we subtract the amount from the account balance.
+
+So you may be curious about how Grand Central Dispatch is integrated with the other frameworks on the system. We do plan to have integration with the CFRunLoop and NSRunLoop. I'll speak to that, the current state of the integration, in a minute. But the ultimate plan is that they will be integrated, so all the completion callbacks that come back to the main thread will be delivered to the current RunLoop. So in other words, if you're running a thread in a CFRunLoop or an NSRunLoop and you use a dispatch call, the completion callback will automatically be scheduled with your RunLoop.
+
+NSOperation is being worked on to provide a higher-level abstraction for Dispatch Queues, but it will be using Dispatch Queues as its underlying mechanism, so they'll be fully consistent there. There are some important considerations which are fully documented in the headers. I'll point to the headers a little bit later. About POSIX threads compatibility.
+
+As I mentioned earlier in the talk, a queue is free to run work on any thread that's managed by Grand Central Dispatch, and that thread may change between the invocations of work blocks on a queue. So there are a lot of things that continue to work as they always have, but there are certain things you should be aware of.
+
+In particular, some of the Pthread get and set specific data won't work. If you've changed which thread you're working on, you might not find certain values that you've cached away. So you really shouldn't be manipulating threads that you didn't create. Calling Pthread exit, for example, would be a particularly rude thing to do from within a work block. And so one good rule of thumb is to not use Pthread exit. The other one is to take nothing but pictures and leave nothing but footprints when working in work blocks with Dispatch.
+
+And finally, it should be noted that if a dispatch call is made from a context that's completely outside of any dispatch queue, the completion callback will get invoked. We'll route that back to the main thread's RunLoop. And so if you're using a RunLoop in your application, you can handle all of these completion blocks. If you don't use a RunLoop in your application, there is a DispatchMain API call that can be used as a low-level POSIX RunLoop.
+
+So a final note on abstraction and queues as an implementation detail. That's exactly what we view these queues as, an implementation detail of your applications and our frameworks. We're going to try not to expose the queues directly as arguments in our higher-level API, but they'll be used internally for thread-safe classes to protect the access to instance variables in the objects, for example, or to coalesce work that might be coming in for multiple threads but needs to be performed on a single thread by a particular subsystem.
+
+And so in your own frameworks and your own classes, we recommend you do the same, to use the queues as an internal implementation detail to achieve thread safety, but not necessarily be passing queues everywhere, because once you start passing queues between different subsystems, they have to start having knowledge about what the context data that's associated with the queue is, what blocks are safe to execute on that queue, and it starts getting more difficult to maintain.
+
+So a final note is that Grand Central Dispatch is a work in progress. There are certain things that you may have seen in the presentations this week that aren't on the developer seat yet. We're working on things like a D-trace static probe provider and a dispatch instrument to help analyze code that's using Grand Central Dispatch and aid with debugging. These aren't in the seat yet. There was a demonstration of the technology earlier today in getting started with instruments.
+
+There's also a known issue, and that is the integration with CFRunLoop and NSRunLoop is not in the Snow Leopard seed. However, that hopefully will be coming soon. So now on to some demonstrations of the technology. The first demonstration I have is a Sudoku solver. And we're using a brute force algorithm that-- oops, can we go back to the slide for a second?
+
+We're using a brute force algorithm, and this is essentially iterating through the puzzle linearly, trying possible values for each of the squares and backtracking if it ever gets itself into a situation that it can't solve the puzzle from. We'll use the subtasks API to break the puzzle up into multiple copies, pin another initial variable down so we have a smaller puzzle to solve, run all of these smaller puzzles in parallel, and if any one of them finds the solution that's valid, it will cancel its own work item, which stops the computation of all the other threads. And that means that once the subtasks have returned, either a solution has been found or no solution has been found. So now, if we go to the demo machine, Is that large enough?
+
+So we have a worst-case puzzle here. The one on the left-hand side is going to be solved serially using the brute force algorithm. The one on the right-hand side is going to be solved in parallel using the same algorithm, but with a smaller search space. And one of the reasons this is a worst-case puzzle is because the top row is all blank, which means it's going to need to do a lot of backtracking to fill in the values there.
+
+And we actually know the solution is at the top row, 987654321. So it really has to backtrack a lot to get that first square up to the value of nine. And so we will start. And you can see the parallel version found the answer in about a second.
+
+[Transcript missing]
+
+So our second demonstration is a simple web server. This is actually available as sample code that's associated with the session on the website. The architecture of this server is to use a dispatch queue for each HTTP connection that's initiated on the server. HTTP connection really is a conversation between the client and the server that needs to happen in a specific order.
+
+There's not much opportunity for concurrency there, but obviously if there are multiple connections at the same time, there's a lot of opportunity for concurrency. The web server is also a great example of using the events API. All of the I/O in the web server is non-blocking and asynchronous, including reading the files off of the local disk.
+
+And another great example of the web server is that it uses queues for serialization. So we don't need to lock when logging to our log file. We can just use dispatch call to send a message to our logging queue, and that will append all the log messages to the file in the right order.
+
+So looking at the demo machine. I already have the web server running, but I'll pull up Safari, and you can see it loaded a bunch of images from the Sierras. And each of these thumbnails is actually the full big image. And Safari is actually what's scaling it down. So we can bring up Top.
+
+And this process right here is the Dispatch web server. You can see this is an eight-core Mac Pro. It's actually scaled up to using nine threads. It has the main thread and the eight Dispatch threads. And it's not a great example of using a lot of CPU because it's actually all non-blocking. So as we refresh this, the CPU actually stays relatively low. But it is a good example of design patterns that you want to use with dispatch queues.
+
+And if we can go back to the slides, please. Our final example is an interesting example of a variation of Conway's Game of Life that is completely asynchronous. If you're familiar with Conway's Game of Life, you'll recall that it's a grid of cells, cellular automata, and the cells become alive if they have two or three neighboring cells that are alive, and the cells die if they have less than two neighboring cells because they're lonely, or if they have greater than three neighboring cells because there's population overcrowding.
+
+However, we have a quite unconventional implementation of this. We're actually creating one queue per cell in the simulation. And each cell will use dispatch call to contact neighboring cells to ask them whether they're alive or not. And as the completion callback will indicate whether or not it's alive.
+
+So all of the queries are performed asynchronously. There's no locking that needs to be done to look at the state of the neighboring cells. Once all the results have been accumulated, the cell decides whether it needs to change its own state according to the rules. And if it does have a state change, it'll broadcast yet another message out to all the neighboring cells to indicate that the state needs to change in those cells, or potentially needs to change in those cells, and then they'll start up their own queries, and the whole process just kind of cascades.
+
+So here's a little animation. I have a simple 3x3 grid. There are three dark squares which are considered to be living. There are other white squares which are considered to not have anything in them at all. The center square will be checking out its surroundings, so it sends a dispatch call to the queue that represents each of the neighboring cells. Those, in turn, will all reply with either a 1 or a 0, indicating that they're alive or not. In this case, there are three living neighboring cells, and so there will be a state change for this middle cell to be alive.
+
+So if we can go to the demo machine, please. So here we have each of these squares is represented by a dispatch queue. There's over 12,000 dispatch queues right here. We can pull up the processor palette to see how busy this Mac Pro is. Pretty busy. Because Grand Central Dispatch adjusts to the number of available CPUs, we can actually start turning off CPUs.
+
+And you'll see the simulation start to slow down. You'll also see more gray appear on the screen. Gray is all of the cells that are in an intermediate state. They've received a notification that they should change, but they haven't heard back from all of their neighbors yet. And you can see the work is building up. We have a backlog of work to do.
+
+There's a lot of cells that need processing. And then as we re-enable the CPUs, will start to catch up with the simulation more. A lot of those gray regions will start to vanish. So this is a great example of how dynamic Grand Central Dispatch is in dispatching work to available CPUs.
+
+So back to the slides, please. So to get more information about Grand Central Dispatch, there are header files in the Snow Leopard preview. They're at userinclude-dispatch.h and userinclude-dispatch-events.h. Dispatch.h is what we're calling the core API. It has queues and dispatch call and subtasks, and then events are where you can monitor for activity on any of the core kernel event types.
+
+There's also HeaderDoc HTML documentation that's available on the WWDC site associated with this session. You do need to log in to the attendee site to get that information. And we've also set up a mailing list, or actually not a mailing list, but just a dropbox for mail. You can send feedback to gcd-feedback at group.apple.com. It's not a mailing list. You can't subscribe to it because this is still pre-release technology.
+
+We're not going to discuss it in a public forum. But if you have questions or comments or feedback, feel free to send an email there, and we will read it. Value of nine. And so we will start. Thank you. And you can see the parallel version found the answer in about a second.
+
+Whereas it took the serial version 5.5 seconds. The great thing about this is if you reduce the number of CPUs, it actually runs in about the same amount of time as the serial version because it's doing the same amount of work that it would need to have done anyway. It's just that by executing them more than one at a time, you can find the solution faster. All right, go back to the slides, please.
+
+So our second demonstration is a simple web server. This is actually available as sample code that's associated with the session on the website. The architecture of this server is to use a dispatch queue for each HTTP connection that's initiated on the server. HTTP connection really is a conversation between the client and the server that needs to happen in a specific order.
+
+There's not much opportunity for concurrency there, but obviously if there are multiple connections at the same time, there's a lot of opportunity for concurrency. The web server is also a great example of using the events API. All of the I/O in the web server is non-blocking and asynchronous, including reading the files off of the local disk.
+
+And another great example of the web server is that it uses queues for serialization. So we don't need to lock when logging to our log file. We can just use dispatch call to send a message to our logging queue, and that will append all the log messages to the file in the right order.
+
+So looking at the demo machine. I already have the web server running, but I'll pull up Safari, and you can see it loaded a bunch of images from the Sierras. And each of these thumbnails is actually the full big image. And Safari is actually what's scaling it down. So we can bring up Top.
+
+And this process right here is the Dispatch web server. You can see this is an eight-core Mac Pro. It's actually scaled up to using nine threads. It has the main thread and the eight Dispatch threads. And it's not a great example of using a lot of CPU because it's actually all non-blocking. So as we refresh this, the CPU actually stays relatively low. But it is a good example of design patterns that you want to use with dispatch queues.
+
+Our final example is a variation of Conway's Game of Life that is completely asynchronous. If you're familiar with Conway's Game of Life, you'll recall that it's a grid of cells, cellular automata, and the cells become alive if they have two or three neighboring cells that are alive, and the cells die if they have less than two neighboring cells because they're lonely, or if they have greater than three neighboring cells because there's population overcrowding.
+
+However, we have a quite unconventional implementation of this. We're actually creating one queue per cell in the simulation. And each cell will use dispatch call to contact neighboring cells to ask them whether they're alive or not. And as the completion callback will indicate whether or not it's alive.
+
+So all of the queries are performed asynchronously. There's no locking that needs to be done to look at the state of the neighboring cells. Once all the results have been accumulated, the cell decides whether it needs to change its own state according to the rules. And if it does have a state change, it'll broadcast yet another message out to all the neighboring cells to indicate that the state needs to change in those cells, or potentially needs to change in those cells. And then they'll start up their own queries, and the whole process just kind of cascades.
+
+So here's a little animation. I have a simple three-by-three grid. There are three dark squares, which are considered to be living. There are other white squares, which are considered to not have anything in them at all. The center square will be checking out its surroundings. So it sends a dispatch call to the queue that represents each of the neighboring cells. Those, in turn, will all reply with either a 1 or a 0, indicating that they're alive or not. In this case, there are three living neighboring cells, and so there will be a state change for this middle cell to be alive.
+
+So if we can go to the demo machine, please. So here we have each of these squares is represented by a dispatch queue. There's over 12,000 dispatch queues right here. We can pull up the processor palette to see how busy this Mac Pro is. Pretty busy. Because Grand Central Dispatch adjusts to the number of available CPUs, we can actually start turning off CPUs.
+
+And you'll see the simulation start to slow down. You'll also see more gray appear on the screen. Gray is all of the cells that are in an intermediate state. They've received a notification that they should change, but they haven't heard back from all of their neighbors yet. And you can see the work is building up. We have a backlog of work to do.
+
+There's a lot of cells that need processing. And then as we re-enable the CPUs, will start to catch up with the simulation more. A lot of those gray regions will start to vanish. So this is a great example of how dynamic Grand Central Dispatch is in dispatching work to available CPUs.
+
+So to get more information about Grand Central Dispatch, there are header files in the Snow Leopard preview. User include dispatch.h and user include dispatch events.h. Dispatch.h is what we're calling the core API. It has queues and dispatch call and subtasks, and then events are where you can monitor for activity on any of the core kernel event types.
+
+There's also HeaderDoc HTML documentation that's available on the WWDC site associated with this session. You do need to log into the attendee site to get that information. And we've also set up a mailing list, or actually not a mailing list, but just a dropbox for mail. You can send feedback to gcd-feedback at group.apple.com. It's not a mailing list. You can't subscribe to it because this is still pre-release technology. We're not going to discuss it in a public forum. But if you have questions or comments or feedback, feel free to send an email there, and we will read it.

@@ -1,0 +1,217 @@
+---
+Title:  Mac OS X Core Audio: Multichannel and Beyond
+Year:   2000
+Web:    https://nonstrict.eu/wwdcindex/wwdc2000/176/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+So we'd like to get this session started, so I'd like to thank you all for coming. It looks like we have a full house, which is great to see. This is the second of three sessions on audio focusing specifically on Mac OS X. The first session we did on Wednesday was to do with the new audio unit and music services that are being provided on OS X, as well as the MIDI services.
+
+The MIDI services are obviously at a lower level to deal with MIDI devices. The music and audio units sort of sit up above those, and so application services that programs like QuickTime and other applications would use. In this session we're going to be covering the Sound Manager as it exists on OS X and some revisions of what's been going on with the Sound Manager over the last few months. And then we'll be getting into the background of the sound management and the sound processing.
+
+So we've got the sound manager, which is the lower level interface that expresses the interface between your application or the higher levels of the audio engine to the particular audio devices, from an application point of view. And then in the session following this we'll be talking about what is going on underneath that API in the kernel and in the I/O Kit world. So without any further ado, I'll get Jeff Moore to come on, who's been doing most of the work in this area, and make him welcome. Thank you.
+
+Hi, everybody. Wow, it is full. It's good to see there are this many people who are as interested in audio as I am. So let's get started. So like Bill said, today we're going to talk a little bit about the Sound Manager first. We're going to talk a little bit about what the Sound Manager can do for you. Specifically, we're going to talk a little bit about how the Sound Manager is implemented. We're also going to talk a little bit about what's changed in the Sound Manager over the past year. Been a bunch of different versions.
+
+It's been a little bit of confusion about it. From that point, we're going to go into what's new with OS X and the Core Audio services that we've been working on. Then, by the end of this, hopefully you'll understand where we're going with all this stuff and you'll be able to move your own audio data to and from devices and all over the system.
+
+So first we're going to talk a little bit about the Sound Manager. The Sound Manager is available now on three platforms: Mac OS X, Mac OS 9, and Win32. The Mac OS X and Win32 versions are very similar in terms of feature set. Mac OS 9 has a few more features than the other ones.
+
+Then I'll talk a little bit about things we've changed. Most notably, we added variable bitrate decoding, and we've fixed a bunch of synchronization bugs recently. Then I'm going to talk a little bit more about what we did to bring it up on Carbon and what's there, what isn't there.
+
+So, to start off with, the Sound Manager itself, we're all pretty familiar with sound channels and the general procedural API for playing sound and for bringing sound into your application. I thought I'd do a quick review a little bit about how all that is implemented under the hood because it's not exactly clear because a lot of this stuff is not exposed through the procedural API. So, under the hood, all sound channels are implemented via a network of sound components.
+
+They do all the actual processing work and moving the data and massaging it into a format that you can play or encoding it, decoding it, whatever. There are a bunch of different areas that the Sound Manager focuses on. Rate conversion is arguably the most time-expensive thing the Sound Manager will do for you. Now, all these little components are linked together in pretty much linear chains.
+
+That is, you won't have two inputs feeding one sound component. They just have one in, one out. And then, all the semantics of the procedural API are really handled at the low level by the system mixer component. It's a pretty monolithic architecture that... "It does the job, but it's beginning to show its age a little bit."
+
+So this diagram kind of represents a runtime view of a system using the Sound Manager and the connections of the various componentry. The first two chains you see show what is typically the full chain you get. That is, you start with a sound source component whose job is to be the traffic cop with the buffer of data that's being pulled through the chain.
+
+And then you have a decoder component, which is the component that will take a stream in one format and convert it into a format that the rest of the system can use. Typically that's a linear PCM format. And then you have an equalizer component. The equalizer component actually has two jobs. Its first job is to provide the implementation of the base and trouble controls that you see in QuickTime.
+
+The second job it has is to implement the spectrum analyzer that you see in QuickTime. To do that, it siphons off the stream and puts things into a buffer and then performs the FFT at event time. This thing will never perform its FFT at interrupt time. So it's not too much of a performance drain if you're not using the equalizer for actual base and trouble adjustments.
+
+And then finally, you have a rate converter component. And the rate converter component does two roles. First, it will take the raw data and convert it to the rate that you see in QuickTime. It will convert it to the rate that the hardware wants. But it also does the work of handling the rate multiplier command.
+
+So if you say, "Play this sound twice as fast," it upsamples and then downsamples to get everything back into the format that the hardware wants. And then finally, everything is junctioned at the system mixer component. On Mac OS 9, you only ever have one mixer component talking to one output device component. On Windows and on Mac OS X, you have one of those.
+
+You have a mixer and an output device per process. Everything is handled in user space for the sound manager.
+
+[Transcript missing]
+
+Go figure. You'd see a whole bunch of unstable connections. Specifically, if you were using tunneling IP for encryption, you would have a lot of trouble trying to get through.
+
+So, variable bitrate decoding was a very interesting problem and a very interesting feature to add to the Sound Manager. Now, as most of you know, variable bitrate encoding is a technique that varies the number of bits used to encode a sample or a block of samples over time. Typically, this yields better quality encoding for a lower overall bitrate. We added that specifically to support QuickTime's MP3 decoder in QuickTime 4.1.
+
+So to do it, we had to basically grapple with the fundamental issue that you don't, with variable bitrate situations, quite often you just don't know the relationship between a buffer's size in bytes and the number of samples you're going to get out of that when you decode it. And as the Sound Manager is pretty reliant on the fact that you know ahead of time the number of samples in a buffer.
+
+So we had to go and mess things up a little bit so that we could express that notion of a buffer size in terms of the number of bytes it had rather than the number of samples. To do this, we ended up extending three data structures. The scheduled sound header needed to be extended so that you had access to schedule a block of variable bitrate data.
+
+The sound component data structure had to be extended so that the component chains could talk about variable bitrate data with each other. And then the sound param block had to be changed so that the mixer could keep track of it as well. In all cases, what we did to extend these data structures were we added a new flag to their flags field that said, "I'm extended." And then you could cast that to one of these extended structures and then you would access to extended fields that included another flags field. And the flags field for that was used to indicate whether the structures was counting by sample frames or by bytes. And then the field to actually hold the byte count as well.
+
+So, in addition to that, we also revved the Sound Converter API to better support variable bitrate situations and, in fact, be a better and easier to use system in general just for any sort of conversion. So, we added a new routine called Sound Converter Fill Buffer. It's a direct replacement for the functionality you got from Sound Converter Convert Buffer.
+
+In particular, the difference is that the mechanism for moving data through Sound Converter Fill Buffer is a callback mechanism where you specify a routine that the Sound Converter can call to get more data to decode or encode. This gives you complete control over the buffering in the system.
+
+You specify the output buffering when you call Sound Converter Fill Buffer, and you have complete control of the input buffering because you have a function to feed it into the system. Finally, this obviated the need for calling Sound Converter to get buffer sizes for really any reason if you're using Sound Converter Fill Buffer since you are already in control of all the information both on input and output. There's no need to ask the Sound Converter about it anymore. So the best place to find more about this stuff is the recent QuickTime 4.1 developer update note. And that's a URL where you can get the PDF version.
+
+[Transcript missing]
+
+So the other big thing we did was the Carbon Sound Manager. And we brought that up for, I think it was DP2. Yeah, it first showed up in Developer Preview 2 of OS X. So the Sound Manager for Carbon is pretty much full featured, with a few exceptions.
+
+Now, in most cases, the features that we did not choose to port were primarily because the functionality was either duplicated by other services in the Sound Manager, or indeed on other services in the OS. But also because the services that they were providing were obsolete in a lot of cases.
+
+So, among other things, these included the wavetable synthesizer and related commands. This is things like freak command and, let's see, there are a bunch of other ones that escape me at the moment. The other big one that we didn't include, choose to port, was sound play double buffer.
+
+Sound play double buffer is probably the most inefficient mechanism for feeding sound into the Sound Manager at the moment. You are much better off to use buffer commands and callback commands, or even better yet, you should be using scheduled sound. Scheduled sound is far and away the best way to get sound in and out of the Sound Manager at a specific time.
+
+We also don't have any support for recording to or playing from disk. Again, we feel that these features are best accomplished through QuickTime. Then there were a bunch of other sound commands whose services that we just don't need anymore or didn't work right. Some examples of these are the amp command.
+
+It's pretty much exactly what the volume command does. The rate command, which does sort of what the rate multiplier command does, only it has an interesting problem in that it treats all the rates as if you were scaling 22 kilohertz sound, which can give you unpredictable results if you're not sure ahead of time what you're doing.
+
+Then there's commands like the load command, which were about querying registers on the old Apple sound chip. I don't think anybody was using those. At least I hope not. So, ultimately, where this leaves us right now is that we have a system that's pretty well optimized for handling 16-bit words, stereo channel formats, with a 44.1 kilohertz sampling rate.
+
+Now, we support constant and variable bitrate formats, usually the simpler variety of those. And we're using a lot, we're seeing native processing coming along, we're using a lot of it ourselves. And we've also got a fairly loose synchronization model, all things said and done. But it's doing the job pretty much for what we have to do today.
+
+So going forward, the sorts of things that we see coming down the road are at the hardware we see 24-bit integer formats coming straight at us. And then in the software realm, you see a very heavy reliance on 32-bit floating point to support all the bandwidth you need. And then in channel formats, surround sound is just beginning to take off now. You're seeing it more and more at the consumer level.
+
+You're seeing it more and more at the authoring level. A lot of games are being authored in 5.1. And in the pro market, you're starting -- in the authoring market, you're seeing much higher sampling rates than what we've been used to in the past. 96 kilohertz certainly looks like it's going to be the next bump up in the standard. And then we're also beginning to see even more complex encoding schemes than the variable bitrate stuff that you see in MP3.
+
+Specifically, you see codecs that you, that, encodings that are going to be doing different techniques for data resiliency when you transport it over the network. New kinds of perceptual encoding techniques that result in better, smaller, faster, whatever. But they're coming and we need to be ready for them. And then we also see, you know, native processing is just going to explode. We're talking multi-processors. I mean, it's like 4G, 4G. You've got plenty of bandwidth to burn for signal processing.
+
+In addition to that, we also see hardware acceleration starting to take off. In fact, on the PC platform, it's already taken off like crazy for games, for doing 3D rendering. We also see an increasing requirement for tight synchronization with other media, both internal media and external to the box. Increasingly, we need to run machines in sync over a network or in sync with a SMPTE deck. We feel that all those features need to be encompassed in any audio architecture at the operating system level.
+
+What is Core Audio? What are we going to do about all that stuff? First, we're going to provide a new low-level audio device API. Specifically, it's geared to allow you to read and write data from a given device, and to do that in a way that can be shared across many processes. Then, we're also going to do some inter-application communication stuff, so that you can have audio being generated in one application and sent to be processed in another application.
+
+And then on Wednesday, Chris Rogers went in-depth about the new component model that we're going to be supporting on OS X and in other places as well, the audio unit architecture. And I hope you saw his talk because you're going to hear a lot more about that stuff as the year progresses. And then probably the best news about all this is that we're going to open source all the low-level sources, or the services.
+
+We feel pretty strongly that while we think we're pretty good, we know what we're doing, you guys have more knowledge about the specific areas and more knowledge about your specific hardware so that you could tell us, "Hey, you're not doing that right," or, "You're not going to be able to support my hardware." We really want to encourage you to participate in what we're trying to do and to make it better.
+
+So this diagram kind of lays out the way Core Audio is being spread about the system. Now down in the kernel you have I/O Kit. That's where all the drivers live. That's where all the hardware lives. So the big problem with a protected mode system like this is how do you manage the, how do you get the communication out to the application so that you can move the data fast enough and enough of it so that you can do something useful with it. So we're going to tackle that with the Audio Device API. It specifically manages moving data to and over the kernel user boundary.
+
+And it sits entirely itself, entirely in user space. It doesn't have a single part piece of it that lives in the kernel. And then it lives individually within each client process that's using it as well. So each, so you link, it's just another shared library. And then on top of that, while clients can directly access the Audio Device API, we only really expect to see that done with clients that have a really high degree of need for low level control and management and whatnot.
+
+Mostly we hope to see you using audio units to deal with the hardware as we'll be providing audio units that completely wrap up the use of the Audio Device API as well as the audio IPC mechanisms that will allow you to move data across processes. completely in user space again.
+
+So, what are the goals of the Audio Device API? So, like I said, it's designed to be multi-client. The Macintosh, since its inception, has been able to play sound in two applications simultaneously. If we weren't able to do that in OS X, that would be a huge step back. So it's very important that multi-client features be carried forward. Further, we're supporting multi-channel. Obviously, we think surround sound is important. We've got to be able to talk to devices that have more than two channels.
+
+And to be able to do that in a way that has low latency, so that when you say, "Play this buffer," it gets out there on the wire as fast as we can get it there. The Audio Device API is designed to have very low overhead. Specifically, for the latency, we depend very heavily on the Core OS Scheduler to make sure that the threads that have our code in them run when they're supposed to run.
+
+Then the latency will obviously also depend on the transport layer you're using to send the audio to the hardware. It's like PCI has one kind of latency. USB has a totally different kind of latency. Then another primary goal is synchronization with the Audio Device API. It's very important that a device be able to be synchronized with both internal hardware and with external hardware. Both SMPTE signals, digital clocks, word clocks, Studio Sync, everything. We're bringing that into the system. Then finally, we hope it sucks a little bit less.
+
+Jim here. So the data formats for the Audio Device API, well, it's pretty much format agnostic. Now, we do treat PCM data a little bit better than we treat other kinds of data, but by and large, whatever your hardware wants to take, the Audio Device API is prepared to ask for it from the client code.
+
+We pass every, all the data is passed around in void stars, and we don't make any requirements about the data. Now, if you do choose to use PCM, the PCM format that we use internally is 32-bit floats, and we support both interleaved and non-interleaved streams for PCM data.
+
+And further, we'll do all the mixing for you internally if you're using PCM data. Otherwise, you pretty much have to rely on the driver supporting mixing in some fashion for other formats, because we don't know how to do that, and we're willing to let the driver figure it out. And further, with the 32-bit floats, to actually convert into the hardware format, we also rely on the driver, providing us a routine to do that.
+
+So, conceptually, a device in this model encapsulates an I/O cycle to read and write the data to the device and a clock to keep track of that I/O. And the clock generates timestamps that specifically map out the relationship between the host clock, which in our case is the CPU time register, as specified by uptime, and there are other system services on OS X for retrieving that clock value, and the sample clock of the hardware, that is the counter that's counting the samples going by. It's really important to know to a high degree, as accurately as you can, the relationship between when a sample is played and the host clock time that it was played at. You'll see why in a few minutes.
+
+Devices also have a set of properties. Properties are used to describe the state and configuration of a device. They have getters and setters, and they are specified as selector value pairs. The selector is an integer ID, and the value is any format that the property wishes to express. Again, it's expressed as a void star in the API.
+
+Another big feature of properties is that you can schedule the driver to make the change to the property for you ahead of time. That way, if the driver supports it, that gives you a way to do sample accurate scheduling with hardware changes. This will be much more important as FireWire devices start coming online.
+
+Finally, clients can register for notifications in the changing of properties. The notification mechanism specifically will, you will get a notification only if the value changes and if it changes anywhere on the system. So if process A makes a change and process B is looking for that change, process B will get a notification that process A changed that value.
+
+So, on the inside, what we have is a single ring buffer that gets mapped by I/O Kit into each client process. Now, IO-Kit reads and writes to this buffer asynchronously from what the client's up to. In fact, it's usually done via DMA program. We're trying to avoid having to have any kernel threads actually executing to do any audio processing if we can at all help it.
+
+And then the interrupts that we get in this system are only generated when the device driver wraps back around the ring buffer. Now, the size of the ring buffer is typically fairly large. In the current system, it's about three-quarters of a second. So you're going to only see the interrupt rate for this system is extremely low. Now, you all have a lot of questions, I can tell.
+
+So, every time the buffer wraps around, we get a new timestamp for when that wraparound happened. And that timestamp comes out of the sample clock and from the host clock. And you can also get a timestamp whenever you want. So you can generate more as you need them. And sometimes those timestamps are going to be interpolated because we may not have specific data on the time that you're asking for. So we have code that keeps track of the history of time and can predict one value given the other.
+
+In this diagram, you kind of see what's going on from the device's point of view. So there's an input ring buffer and an output ring buffer. And the client is spinning around, reading and writing to those buffers. And the DMA heads chase those heads around and clean up or write new data after them.
+
+And then, as you can see, when the head gets back to the interrupt point, we'll raise an interrupt. And at that point, we'll generate some new timestamps. And we'll do a few other housecleaning chores. But other than that, we don't actually call out to applications to get data. That's a big difference to the way systems have worked in the past.
+
+So how do we get data to the system? So from the client's point of view, implicitly, you're going to be doing a lot of multi-threaded programming with audio. Just be clear on that because that's pretty complicated and it's a lot different than the Mac OS 9 implementation. There are a lot of new issues you're going to have to face about atomic operations on data, making sure that you're not waiting on a semaphore that's not ever going to get signaled on, or the usual things that you have to deal with when you're dealing with a multi-threaded environment. It's now coming to bear right on you when you're dealing with audio.
+
+So the client has one high priority run to completion thread per device in the process. Now the client can give us the thread and you can configure it however you want with your own priorities or we will do it on your behalf and we will set things up so that we give you the appropriate priority as well for the type of latency that you're looking for in your I/O.
+
+[Transcript missing]
+
+Okay, so the code that's running in this thread needs to, obviously, because it tends to be a very high priority thread, in fact, audio tends to be one of the highest priority threads in the system, there's a high degree of, there's a high chance that you will lock the system up if you take too much time in the I/O thread. Consequently, there are a number of things you can do to alleviate that. You can just not take so long. That's a fine idea. Optimize your code.
+
+Perhaps the better strategy is if your situation allows it to have a secondary thread available that runs at a lower priority than the audio thread that you can use to generate or render your audio or read it off the disk or get it from the network or do whatever you need to do to get your data and process it and get it into a form that's ready to be handed to the hardware.
+
+Perhaps the better strategy is if your situation allows it to have a secondary thread available that runs at a lower priority than the audio thread that you can use to get your data and process it and get it from the network or do whatever you need to do to get your data and process it and get it into a form that's ready to be handed to the hardware.
+
+Now, in fact, if you do take up too much time in your I/O thread, first we're going to tell you about it. We will send you a notification that says your thread is taking too much time. And you will also hear glitches in your stream, obviously, because you're not generating the audio at the right time to be played so that the stream can be continuous.
+
+The other sorts of issues that you're going to see is... You can lock the system up, but still not panic the system. The machine will just freeze, and the only thing you can do is a cold reboot. Given that, the implementation of the Audio Device API goes to great lengths to keep that from happening, to the point where it won't reschedule your thread for you if it sees that you're taking too much time. So if you eat too much processor time, we're going to scale you back a little bit, so that you're not starving the rest of the system.
+
+So what do you do in this thread? Right? And that's kind of an important question. So the I/O thread is basically scheduled to wake up periodically in a way, and when it wakes up, the idea is that you read your input and you write to the output. Now, the way we schedule the thread to wake up is so that it kind of simulates a double buffering situation.
+
+That is, specifically, by default, your thread will be scheduled to wake up about a buffer ahead of the buffer you're supposed to render for output. This gives you roughly 100% of CPU to do whatever it is you need to do and still be able to deal, to deliver the audio to the hardware on time so that you have glitch-free audio.
+
+Like I said, the input and output are presented to you synchronously. So when your I/O routine gets called, you get both the input data and the output data. Further, you get timestamps that talk about when that data was acquired or when that data is going to be inserted in the output stream. And you get a third timestamp that tells you what the current time is as well, so you don't have to ask and can potentially save a little time in the I/O thread.
+
+Now, the buffer size that you're using is completely configurable by the client. We can do this because we're just writing into one shared ring buffer. We just know that we need to write that data at a certain space ahead of the DMA read head so that we keep the stream continuous.
+
+The buffer size that you use is entirely up to you. You can make it as big or as small as you want. Obviously, you have trade-offs with overhead in those terms. The smaller the buffer size, the more frequently we need your thread to run. Also, the more effect the jitter in the thread wakeup is going to affect you.
+
+For instance, if you want to render at, say, 64 sample buffers, that's roughly three or four milliseconds of data. Now, if the thread that you're using to render that data has a jitter of some number of microseconds, obviously the smaller your buffer is, the more that jitter number is going to matter to you.
+
+So another thing that's configurable about this whole process is the wake-up time. So you can say how much time in advance you want the thread to wake up. You can make it as close to the actual delivery time as you want, provided you know, have a good idea about how much time about you take to deliver your data.
+
+The general rule, there are a lot of interesting applications for that. One reason you might want to go as close to the delivery point as possible is to be as responsive as possible to interactive events like MIDI keys or user interface events or user experience, user interface devices and whatnot.
+
+So given that those parameters that you've told us how big your buffer is and how far in advance you want us to wake up, we're going to have to wait a little bit longer. So the actual wake-up time that we schedule the thread to wake up for is then calculated using the previous timestamps and the relationship between the number of samples played and how much host time has passed in order to generate the appropriate time to set to wake the thread up at.
+
+[Transcript missing]
+
+So, I thought I'd finish this up by showing you exactly how easy it is to write a real live client with this stuff. This code was adapted specifically from the SDEV component that's used in the Sound Manager to talk to this API. So, first thing you got to do is you got to find a device to talk to.
+
+So, to do that, you use a property of the entire system, which is a little different than a property for a specific device. You can tell system routines versus device routines by the name of the routine. System routines start audio hardware. Device routines start audio device. So, the first property you're interested in is trying to find out the default output device. So, you call, get the system property for the default output device. Pretty simple.
+
+Then you need to figure out what kind of data you need to send to this device. So to do that, you get the devices stream format property. Now the stream format in this API is encompassed by the AudioStream basic description struct. It contains enough information to describe any constant bitrate format where all the channels are the same width.
+
+This applies to most of the general compression techniques that you see in the Sound Manager today, like IMA, Linear PCM, MuLaw, A-Law, all that stuff. Now the struct will supply you with the sample rate, the number of bytes in a frame, the number of bytes in the channel, and the number of bytes in a packet if the format has another grouping above the sample frame and the channel structures.
+
+More complicated formats obviously have more information to talk about than just how big their individual fields are. For variable bitrate data, you need to know where do the frames actually start in the stream. More complicated formats also provide an extended description which is format specific and is defined by that format. That's also available via another property on the device.
+
+In order to do I/O, you also need to know how big your I/O buffer is. In this case, we don't really care what the I/O buffer is because this is just a simple client. He's just going to take whatever the default buffer size is for this device. Again, you just call audio device get property to do that.
+
+And one thing I should mention that sizes in this API are almost always passed around in terms of bytes. And you can calculate the number of frames, if you can calculate the number of frames for that format, by getting the stream format and doing the appropriate math using the description in the stream format descriptor.
+
+So to start playback, you need to tell the device about your I/O routine. So you install it by calling audio device at I/O proc. Now you also are given a place to pass in a pointer to whatever kind of data you want, passed back to your I/O routine, so you can, you know, that's really useful for keeping track of context on multiple, well, you all know how to use those things, been around forever.
+
+So, and then you start the, you see, then you just start the device by starting it. There's a routine to start it. And stopping a device is pretty much the same but in reverse. You call audio device stop, and then if you're done with I/O, you can remove the I/O proc as well.
+
+Now, one thing I should point out that you'll notice that with start and stop that you also need to pass in the I/O routine again. Now, the reason why is that you can install multiple I/O routines on a given device. I'm sure that there are a lot of reasons to do that, but it's just useful for a number of things.
+
+So here's the prototype for the I/O routine. When it's called, you get the ID of the device that the I/O is happening on. You get a timestamp that represents now. Like I said, timestamps represent the mapping between the sample time and the host clock. You also get a pointer to the input data and a timestamp for when the first frame of that input data was acquired. And then you get a pointer to the output buffer and a timestamp for when the first frame of the output buffer is going to be inserted into the output stream. And then you get back your client data pointer as well.
+
+And here's the entire implementation of the I/O routine. In my case, I'm using a My Nifty file object in my client data field so that I can get my data back, so I can get some data to play. And I cast that back, and then I use it, and I put that data right in the output buffer.
+
+And then if I find out that I'm done, I can just turn off that I/O routine. And the semantics there is that when you turn off an I/O routine from during an I/O process, that current I/O will complete, and then no more I/O for that routine will happen.
+
+So, when are we going to give this to you? So, like I said, the Sound Manager is in DP4 now. It's been there since DP2. The Audio Device API is also in DP4. The IPC mechanism is going to be, we're going to start seeding that prior to the public beta and we'll hopefully have it GMed for the public beta. And then with the audio units architecture, we're looking at this fall for releasing. We don't really have anything specific there.
+
+So next, I'm just going to show you that it all actually works and it's really alive. First, I want to point out that the music that you heard when you came in was coming live off my PowerBook using QuickTime Player on OS X on top of the Audio Device API.
+
+I think you can hear me. So first up, I want to say in DP4, by default, the Sound Manager is not set up to use the Audio Device API. You can add a magic cookie to the framework, and it's documented on DP4 how to do that, to make that actually happen.
+
+But other than that, there's one reason why all the demos you've seen previous to this haven't been running through the Audio Device API. So first up, I'd like to show just a reasonably high frame rate QuickTime movie. And the thing to watch for in this one is synchronization. The synchronization is still pretty solid. It's not 100% perfect yet, but it's pretty good already.
+
+"Gotta like that. Alright. And how about that? The sound stopped right when the movie did. Thanks, Mark. Right in sync. Let's try that again." Don't you love it? You don't have to reboot. Hey, and you don't have to reboot. How about that? Oh, another interesting thing about the Audio Device API is you don't have to reboot to reinstall a new version of it either. As long as you're not playing sound, you can just put in a new version and go. That's kind of neat. It cuts down on the development time. So, let's, you know, once more from the top.
+
+delivers 10 times out of 10. Who's the cat that won't cop out? Shea Ray. They say I'm a complicated man. I might take you down, but I'll never let you down. Who's the man who'd risk his neck for his brother man? Now, what's my name?
+
+[Transcript missing]
+
+Another thing I wanted to show you a little bit was some of the benefits of variable bitrate encoding. You see some examples of some MP3 files I've encoded using different kinds of different data rates and whatnot. First, I'd like to play the original. I'm going to give you a feel for what this sounds like before I give you all the compressed versions.
+
+Okay, of particular note, you should hear the cymbal sounds and what they sound like. Kind of remember that and try to figure out, you know, which of these sound the best. First, let's start with the high data rate version since those are the easiest. Obviously, they're going to sound relatively good. And the relative difference between variable bit rate and constant bit rate starts to go away when you use larger bit rates. But they're still there.
+
+I mean, if nothing else, you get smaller files. So here's the variable bit rate, or here's the 128K constant bit rate kind. This is typically the format you find on the Internet. It sounds pretty close to the original. And here's the variable bit, the high-quality version for this encoder of-- As you can see, the file size is a bit smaller than the 128K size.
+
+And again, you can hear it's still pretty close to the original mix. And in this case, the savings are obvious. Variable bitrate wins because it's a smaller file size. Just kind of an interesting aside, the normal encoded version, at least for this encoder, wait for the variable bitrate to parse.
+
+[Transcript missing]
+
+This almost doesn't sound like a hi-hat. Let's take a look at the variable bitrate version in the lowest quality setting that squeezes the most bits out of it. In this case, again, you see the file size is roughly the same as the 64K version. It depends on the, uh, the actual content. Hold that question.
+
+So you can see the low-quality version is much, much better than the 64K version, and you get the same file size. So, you know, use VBR, I guess. So to finish things up, you need to contact Dan Brown to-- We're going to finish things up and participate, particularly if you want to participate in the seeding program. We're going to be seeding the core audio services a lot quicker than we've been running in the past.
+
+We're hoping to keep things moving, get things out into the open, get you guys working with the stuff, and working with us to make it better so that we can actually meet your needs for a change. So contact Dan and he can get that working. So next we're going to finish things up with a little Q&A, but Bill has something to say first.

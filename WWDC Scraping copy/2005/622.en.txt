@@ -1,0 +1,179 @@
+---
+Title:  Building Xsan Applications
+Year:   2005
+Web:    https://nonstrict.eu/wwdcindex/wwdc2005/622/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Good afternoon everybody. Welcome to Building Xsan Application Session 622. My name is Jason Thorpe and I manage the Xsan engineering team at Apple. First of all, how many of you know what Xsan is? Raise your hand. Yay, that's just about everybody. So for the few of you who didn't raise your hand, Xsan is the SAN file system for Mac OS X.
+
+SAN stands for Storage Area Network and that's going to be kind of a key thing in my presentation here today. Remember that, Storage Area Network. So what I'm hoping you're going to come away from this presentation with today is one, how Xsan works, and two, the volume characteristics that your applications are going to need to be aware of.
+
+Three, some tips on configuring your Xsan volumes and also on how to make your applications compatible with Xsan. And also how to improve your application's performance with Xsan. To facilitate those, we're going to teach you about some Xsan Developer APIs and we're also going to demonstrate setting up a simple Xsan sandbox for doing application development with Xsan. And in the course of that, we're going to actually show you how the Xsan Admin Application works.
+
+So let's just jump right in and how Xsan works. So first of all, how many people attended last year's Xsan in-depth session? Did anyone go to that? So some of this is a review. We're going to go over just basically some file system types that you might be familiar with, traditional file system types, the first one being direct attached storage.
+
+This has been around for decades. It's your traditional hard drive connected to your computer. It's a single disk that contains both a catalog and your user data. And the file system code runs on the single computer that accesses that data. And examples of these kinds of file systems are HFS+ and UFS, the two really common ones in Mac OS.
+
+Next we have the network attached storage type file systems. These solve the lack of shared access that direct attached storage file systems have. It allows multiple computers to share files in the file system. The way these work is they accept high level calls from applications, transmit them over the wire to the file server, then the file server in turn translates those calls into basically the direct access storage system that's connected to that file server. And examples of this type of file system are AFP and NFS.
+
+So in contrast, a Xsan file system works a little differently. First of all, the disks are attached to all the computers on the Xsan via some fabric. And the most common fabric for Xsans out there today is fiber channel. The catalog and the user data are actually stored separately.
+
+They are stored separately so that one process running on a dedicated machine can actually act as an arbitrator and serialize access to that information. It basically acts as a server that translates these high level metadata calls to block offsets on the actual disks themselves. The kernel side file system client on each client computer is then able to access the data directly on the disks using the Fibre Channel Fabric.
+
+So, just to illustrate how Xsan works, we have kind of a diagram here of a very simple SAN. We have a metadata controller, the XServe G5 there, along with a G5 desk side as a client system. And a couple of XServe RAIDs connected with Fibre Channel and the client and the controller are connected via a private IP network.
+
+And then we have, since we have two XServe RAIDs, each XServe RAID has one controller per side. So we have four RAID LUNs, logical units. LUN1 we've configured as a RAID 1 and the other three we've configured as RAID 5. And if you're curious why that is, we'll get to that just in a minute. Okay, so we select one LUN to store the metadata and we've highlighted there LUN number one. And then the controller is configured to know that all those LUNs together are grouped into a volume.
+
+So, it's important to note that the client side has no knowledge of the layout of the data on the disk. It doesn't know how directories work, it doesn't know about things like inodes or anything like that. It knows that there's some disks out there and there's some data out on them and that's all that it knows.
+
+So an application then is able to access that data by communicating with the metadata controller. And to illustrate that, we have a hypothetical application that's writing some data. It makes a write call to the Xsan volume. In turn, the file system code on the client sends a message to the controller, basically asking where is the data for this file. The controller then reads the catalog data from the metadata LUN that we've designated, LUN1 there. And then it responds to the client telling it where the file lives and we call these file extents. The client then writes the data directly to the disk.
+
+Okay, so in Xsan you group disks together into what we call storage pools. And you do this primarily for better performance. This is really similar to how RAID 0 works, software RAID 0. So if you've used the Apple RAID facility that comes in Mac OS X to put a couple of RAIDs together into a larger RAID volume, this works very similarly.
+
+Except that instead of being handled by a driver on the client computer itself as a block level driver, this is actually handled by the controller. So to illustrate that, we're going to just basically make the same call again. and the controller responds that that file is actually split in half on two different LUNs.
+
+And then the client can write to both of those LUNs in parallel. So this means that it actually has two paths into the data at once. Since your Apple Fiber Channel Controller has two ports, this allows you to actually have two full 2 gigabit per second paths to that data at once, doubling your bandwidth. So where the data lives is completely transparent not only to the client but also to the application. And this abstraction allows us to simply reconfigure the controller to add more storage to the volume.
+
+So the controller is very important in Xsan. It happens. Hardware fails, power goes out, someone trips over the Ethernet cable. If your controller fails, you can set a backup controller to actually take over if the primary should go down. The way this works is it actually uses the journal data to actually reconstruct the state of the file system from where the previous system failed. The clients then reestablish any locks they might have. This whole process is very quick. The new controller can be hosting the volume in just a matter of seconds.
+
+It's important to note that during this time that the failover occurs, if the clients actually know where their data lives, they can continue to stream directly to the disk. They don't even know the controller is gone. This is a huge difference from a traditional file server where the controller is directly involved with all IO to the disk themselves.
+
+Okay, so now that you have a basic understanding of how Xsan works, let's talk about how you actually configure it. First of all, metadata storage. The metadata is comprised of both the catalog information, basically your directory entries and other information about the files, as well as the file system journal that's used to provide crash recovery and failover capability for the file system. This metadata should be isolated from all other data. This is good for both performance reasons and it can actually avoid some problems that can occur if the LUN where your metadata is stored otherwise gets too full.
+
+Metadata is extremely important. If you lose your metadata, you are going to lose your file system. For this reason, the LUN should be redundant, so RAID 1, etc. You should have a hot spare so that you can immediately rebuild in case one of those drives should fail. You also need to have good random I/O performance on that LUN.
+
+That's critical for the performance of the entire file system because metadata operations are small and they're scattered all over the disk. So you don't want to have prefetching turned on or anything like that. It's really key that good random I/O performance is on that LUN. And you don't need a lot of storage for metadata, about 10 GB per 10 million files or so. So for this reason we really like to see people use RAID 1 for their metadata LUN. Going back to the previous slide where we actually did that in the diagram.
+
+So for data storage, again, you want to combine your LUNs into storage pools. This increases the performance through striping, and again, this leverages the multi-pathing capability that's built into Fibre Channel. But you only want to combine LUNs with the same characteristics. If you have some LUNs that are slow and some LUNs that are fast, you don't want to combine them together because you're going to bring down the effective speed of that pool to the lower speed LUNs. And you also don't want to combine LUNs of different sizes because in order for striping to occur optimally, what happens is that the larger LUNs will be truncated logically to the size of the smallest one. So that's something you need to watch out for.
+
+Second of all, you really want to create different storage pools for different kinds of workloads. This is key for performance of certain types of applications where you may have a combination of random I/O and streaming I/O. and it allows you to basically choose the optimal RAID configuration for each type of data, not only at the file system level, but it allows you to configure the XServe RAIDs as well for the type of workload that you're going to be subjecting them to.
+
+This also has the advantage that I/O that's occurring on one pool does not interfere with another. For example, if you have a digital asset management application and you're streaming some data off of your archival pool to get into your video production workflow, you don't want the indexing operations or lookup operations that are happening by some other user interfering with streaming that data off the drives. You can do that with storage pools. So here's just a quick example to illustrate storage pools here. Going back to our diagram, So again we have our one metadata storage pool. We just got a single RAID 1 one there.
+
+Then we have in this hypothetical example an audio storage pool. We don't need a lot of space for this. It doesn't need to stream a lot of data off quickly. And so we're just going to use a single RAID 5 for that. But in this instance we're using say uncompressed high definition video and we really need the bandwidth. So for video we're going to go with four RAID 5s so that we have a total of four 2 gigabit per second paths to that data. But this all appears as a single icon on your desktop, one volume.
+
+So storage pools, they're powerful. How do we use them? This is where affinities come into play. So a controller normally assigns files to a storage pool in a round robin fashion. As you create a file, it starts here at storage pool one, you create a next file, it goes on the storage pool two, etc. But affinities give you the ability to steer data to specific storage pools. These storage pools can also be marked as an exclusive storage pool so that data is only assigned to them if it's specifically steered towards it.
+
+The Xsan Admin application allows mapping of folders to specific storage pools and Mike Margolis is going to demo that for you later today. There's a command line tool that allows you to query and set storage pools for files and folders and also an application API that we'll get into shortly.
+
+Okay, so now you've learned a bit about storage pools now, so let's talk about Xsan volume characteristics. These are of particular importance to application developers who are writing applications that actually do file system-y stuff, actually talk to files on a disk. First of all, performance characteristics of Xsan.
+
+It's a shared volume, but the metadata operations are actually much faster than a traditional file server. For one, the IP network is not involved in the actual data transfer. We actually recommend that you use a private Ethernet network for connecting your metadata controllers to your clients. For this reason, that network is lightly loaded and should be highly responsive. In addition, the metadata controller itself, unlike a traditional file server, is not actually involved in the data transfer. So it can respond to those metadata operations quickly.
+
+But it's also important to remember that this is not a local volume. Talking to a local disk is always faster than taking a round trip on the network. So things like lookup, create, anything that changes the attribute of a file, these all require the client to go out onto the network and talk to the metadata controller, which is slower than talking on the local volume. But file I/O is going to happen at RAID speed.
+
+So, some things you need to be aware of when you're writing an Xsan compatible application. First of all, it's a shared volume. So you need to be aware that file locking comes into play here, just like any other shared volume. We support all the standard file locking APIs, both the shared and exclusive lock flags to open as well as POSIX byte range file locking.
+
+You should also expect very large volumes with Xsan. Multi-terabyte volumes are extremely common as are very large numbers of files. So if you're writing some sort of backup application or any other data management application, you need to make sure to use the correct types for file sizes, for block numbers, for inode numbers, etc.
+
+Now, this is not an HFS+ volume. It's actually a lot more like UFS in a lot of ways. It's case sensitive. It's a single fork file system so Carbon uses Apple Double. Bear that in mind if, again, you're writing backup software, you need to pay attention to these little dot underbar files that are scattered all over the place. And you need to be aware of ownership and file permissions. Unlike AFP and SMB where you actually log in to create a session to the SharePoint, there is no user ID mapping in Xsan. We rely completely on standard POSIX UID and GID and POSIX permissions.
+
+So getting the most out of Xsan performance wise, first of all, again, remember the metadata operations require a network round trip. There's latency involved there. So try to avoid them at all costs. Don't use lots of small files in your application. Don't use the file system like a database. Actually create a database file if you need that type of functionality.
+
+And then use the Xsan APIs to preload file extents. When streaming data, this actually reduces the number of round trips that you'll have to make to the controller while you're streaming data off. And it also allows you to continue to stream data more reliably if the controller should fail over to the backup.
+
+You should also keep file fragmentation to a minimum. File fragmentation means more work for the metadata controller and more work for the client having to talk to more drives and it does not always generate the optimal I/O pattern. So you can do this by preallocating storage when you write files. We actually support two preallocation APIs, both the fpreallocate fcontrol that's available in POSIX and also the fsallocate fork call that's available in Carbon.
+
+Finally, make sure you issue large I/O requests when possible. The magic number we talk about is about a megabyte. This allows two things. One, the file system, if you're not using pre-allocation, can avoid fragmentation this way because it sees that you're making these large sequential writes. Also, it allows the file system to exploit the parallelism that's built right into the Fibre Channel Fabric.
+
+Alright so, let's talk a little bit about the developer APIs that make some of these So the developer APIs, again, they provide access to Xsan-specific features. These include extent preloading, bandwidth reservation, and affinities. Now, the underlying API uses sysctl. It's not the prettiest API in the world, but if you're not, there's plenty of example code that's available on the Xsan CD. And the Xsan CD is actually available to all registered ADC developers. You can actually download that developer preview.
+
+Now the API is still in flux. We said that last year and it's still true. But rest assured that every effort is going to be made to maintain binary compatibility so that your applications that actually take advantage of Xsan's features, while they may need source code changes going forward, the old applications will continue to run fine. And finally, we're actually working toward better integration with the other Mac OS APIs so that you don't have to think about this stuff so much in your application. We're hoping to make this a little more automatic in the future.
+
+First of all, we're going to talk about file pre-allocation. This is not something that's Xsan specific at all, actually. HFS also supports file pre-allocation. We actually strongly encourage you to just do it, no matter what kind of file system you're talking to. You can treat it as an advisory call, you can ignore any errors, but basically what it allows the file system to do is make optimal block allocation decisions for your application.
+
+So here's just an example of using F control to actually do this. It's pretty straightforward, very similar to actually using the POSIX byte range locking. You fill out an FStoreT structure. You want to tell it basically what the position mode you want to use. You always want to use the physical end of file position mode in this call. Tell it where to start. So offset zero from end of file is basically where we're starting. So we're starting at the end of the file.
+
+And then you want to tell it how much you want to allocate. In this case the file size because we're saving a file here. And it can also actually return to you the number of bytes that have been allocated. You can ignore this. You can pay attention to it.
+
+It doesn't really matter. Again, I encourage you to treat this as an advisory call in your application and issue it all the time. If an error comes back from a file system that doesn't support it, who cares. Thank you. And here's just the same thing again in Carbon. Again, very straightforward.
+
+So the rest of the APIs that we're going to talk about actually require that you issue them only on an Xsan file system. So the way that you tell if a volume is actually an Xsan volume is you use the statfs system call and you pass it a path and you get back a statfs structure and in that statfs structure there is a file system type name. And in the header file that we provide in the Xsan software development kit there is a string constant that defines what that file system type name is and you just compare it and if it returns zero then you know that it is an Xsan file system.
+
+So this is just a really simple example of how you make a call to the Xsan API. This particular example, we actually are just querying the version information of the file system. And as you can see, it's pretty straightforward. That fs_sysctl function is actually included in the example code that's on the CD.
+
+And you can just cut and paste that directly in your application so you don't have to worry about rewriting exactly all the stuff that it does. It does a few sort of bookkeeping things to make sure that, or to actually find out the index, the file system index number of the file system in the kernel. And that function takes care of it. You can just use that.
+
+So preloading file extents. You want to use the F_LOAD_EXT API call. I strongly encourage anyone who is writing a streaming application to use this call. It's going to make your application work much better, especially if you have a controller failover. Very straightforward. You basically, here in this particular example, we've determined the size of the file using stat.
+
+We just provide that to the little data structure that we pass up to this call. We issue it and it does all the communication with the metadata controller and preloads all the extent information right into the kernel on the client side so that it can just begin to stream data as soon as you start to read.
+
+Bandwidth Reservation. We actually demoed this a little bit last year. I don't actually have any sample code that will fit on one slide for bandwidth reservation, unfortunately. There's lots of things you have to do. But fear not, this is documented in the documentation that's included on the Xsan CD.
+
+But essentially what you do is you use the FsetRTIO API call to enable real time I/O on a file. Now keep in mind this does require some additional configuration on your metadata controller. This configuration, these configuration knobs are not available in the Xsan Admin GUI. You actually do have to edit a config file manually to do this but it's very straight forward. I've got a little example snippet there of what you might put in the config file.
+
+Essentially for each storage pool what you need to do is specify the throughput that's available on that storage pool. That's something the Xsan Admin Application can't really determine. There are tools out there that do disk performance testing and you want to use those types of tools to determine the throughput available on your pool.
+
+And then the next thing you need to do is you need to specify the amount of bandwidth that is reserved for non-real-time applications. So by default this defaults to 1 megabyte per second where you don't want, you essentially don't want an application to be able to reserve all of the bandwidth available because then you might deadlock other applications out from being able to read and write that volume at all. This example we've just reserved 10 megabytes per second for all non-real-time clients.
+
+So, affinities. There are essentially three basic API calls used to manipulate affinities in Xsan. First is the fgetaffinity API call. This, as the name might suggest, gets the affinity that is assigned to a file. Then there's the FSGInfo API call. And what this does is it returns information about the storage pools that are available on the volume. Each volume actually has an 8-byte key assigned to it.
+
+And then that key is used with the FsetAffinity API call to actually assign the affinity for the file. And that affinity then takes effect for all new data, all new extents allocated for that file. It will not move extents that are already assigned to a file. There are actually command line tools available in Xsan to do that for you. Or once you've assigned a file, you can actually copy it and it will go to the new place. So how you might use these three API calls together.
+
+Say your application has a save file dialog and you want to allow your user to specify the affinity for that file. You'd use the getAffinity call to provide a popup, sorry to provide a default for a popup. That popup would then contain a list of all the storage pools available and you can get that list using the SGINFO API call. The user can then select the popup they want or leave the default. And then when you write out that file, you'd use setAffinity to actually set the affinity.
+
+So, just to illustrate this, we're going to walk through an example of saving a file to an Xsan volume. Pretty simple operation. These steps are really similar to what the Carbon and Cocoa safe-save operations do. First of all, you would use the open system call to create a temporary file. Then you could optionally use the setAffinity API call to assign it to a specific storage pool.
+
+Next, because you're all good Xsan citizens, you're going to pre-allocate the storage for that file. Xsan is the Xsan application for Mac OS X. Learn the basics of how Xsan works and how its differences relative to HFS+ might be important to your products for maximized performance. Now, if you allocate all this space and you don't use it all, that's OK, because when you close the file when you're done, all that unused preallocated space will be freed back to the file system so you don't have to worry about wasting file system space.
+
+Finally, in order to provide atomicity from the user's perspective, you use rename to rename the temporary file to the user's specified file name. This provides consistency for the user if any of these operations should fail in middle and you abort the operation. So, you're all charged up to develop your Xsan compatible applications I hope, but you're probably wondering, "Well, how do I do this without spending a whole lot of money on gear?" Well, you don't actually have to do that if you just want to make sure your application is compatible with Xsan.
+
+Really all you need is a desktop or a powerbook, a FireWire drive, and a network connection with a static IP address and you can have a fully functional sandbox. With that, I'm going to turn the podium over to Mike Margolis and he's going to show you All right, I have cheerleaders I guess. So, demo machine.
+
+So you're going to need a FireWire drive right here. The first step is going to be to plug it into your machine. Now this is an HFS+ volume. I use it to store some random files for work. What we're going to need to do is remove the HFS+ partition so that Xsan can use it. The second step, because the first step was plugging in, is to erase that. So we launch Disk Utility. We click on the volume.
+
+Click on partition and you format it as free space. And then go ahead and partition it. And we'll get a little error back. Don't mind that, that's normal. We now run the admin tool now that we have a FireWire drive that's ready. So let's log in as our local administrator here.
+
+And this will go ahead and connect. So as you can see the file system is running but we don't have any mounted clients or capacity. We don't have a Xsan volume yet. If you were here last year some of this might be review. You can use the admin to see the logs for any machine on the system and you can even filter the logs.
+
+You can use graphs for the IP network traffic, fiber network traffic, or CPU usage. There's no fiber traffic. There's no fiber. So the CPU usage of any machine on the network as well. Right now there's just one. And here's where the fun comes in. We're going to set up a SAN on this machine. So the first step is to select the machine and it says you must enter an Xsan serial number. Well luckily we have an Xsan serial number right here.
+
+So let's go ahead and paste that in and it will validate automatically so it won't let you enter weird invalid serial numbers and you can see this expires Monday, June 13th. We need this to be a controller as well so that it can serve up volumes. The failover priority isn't too important right now.
+
+Normally it lets you specify the order in which machines failover when they go down but we only have one so that's not the problem. Not a problem here. So we also want to access the Xsan via built in Ethernet. If you have a multiple NIC machine you want to specify if you want the private network or the public network. Usually the private needs to tell it which one it is.
+
+This is actually important for your PowerBook development. You need a static IP address because the file system configuration files use this IP address so if you come up again with a different IP you won't be able to mount your volume. You'll kind of have to scrub and start over.
+
+So let's go ahead and click OK. And let's name this WWDC-San. Click over on LUNs. Then step two which we conveniently numbered for you. Go ahead and you can see it's a 27 gigabyte LUN. So it's definitely a FireWire device. Click on storage. Step three. This is the fun part. Create the volume. So you click the new volume button here. And let's name this MicSan.
+
+Mic volume actually. There are certain configuration parameters here like the block allocation size and the allocation structure. We don't need to tweak with them right now but if you need to know more about them you can click on the help button in any sheet and it will bring up inline help in the application. And that's it.
+
+The next step is to click the new storage pool button next to the list and we create a storage pool. Now normally we recommend that you separate your journaling and metadata into its own storage pool. In our case we only have one LUN so we're going to go with any data. Again there's more configuration values here that you can play with and you can click on help to get information about them.
+
+And finally we click on available LUNs and you drag and drop create a Xsan right there. And you click save and it pops up a warning saying oh no you're only using one storage pool. Are you sure this might hurt performance because if you mix your user data and your metadata you can interrupt your streaming performance. And you might even run out.
+
+So we don't really mind. It's not a real SAN anyways. Click save. So this is going to go ahead and create our volume. While it's creating it I'm going to show you notifications. Xsan has the ability to send you email notifications if certain things happen like a controller fails over, someone takes scissors to the fiber channel. It'll email you about that if you really want.
+
+[Transcript missing]
+
+Great, thanks Mike. Go back to slides, thanks.
+
+Hopefully you're all excited about developing your applications to be Xsan aware. Before we wrap up, I'm going to go over examples of some applications that really ought to be made Xsan aware. You can maybe take this as a little challenge to application developers out there to go out and do this. If you do, you'll have a leg up in your competition when you work better with Xsan.
+
+Being involved in the management of this product, I hear a lot of complaints sometimes. One of the questions we feel a lot is backups. How do we do backups on Xsan? I don't know if any of you were at Rusty Tucker's ACL session a couple of sessions ago. They talked about Tivoli Storage Manager and how it actually has Xsan support.
+
+Backup software. There are a couple of Xsan specific things in backup software that you really want to support. One of them is to be able to backup and restore the affinity information for individual files. If there is a catastrophic failure on your SAN, when you restore it you want it to have the same performance characteristics that it had before.
+
+You can do that by extending your backup catalog information to be able to store the affinity for a file. When a volume is restored, it is restored with the same types of storage pool names and when those files are restored, they are restored to the correct storage pools.
+
+Secondly, we are often asked, "Well, how do you back up quota information?" Quota information is really kind of a property of the volume and you can actually use Xsan APIs to query the quota information and then you can store that in your volume attributes in your backup catalog.
+
+Next, digital asset management. I think I mentioned this earlier in the slides. You can use storage pools in a digital asset management application to really improve the performance of your application. You can separate your index, your previews, and your full res data from one another. You perform data isolation this way. This allows you to continue to stream full res data off while you do indexing operations and that I/O won't conflict with one another.
+
+Next, distributed applications. How many of you are familiar with Xgrid? Raise your hands. You've heard of it? Used it? Okay, so in distributed applications, traditionally, data is copied from the scheduling entity out to the processing entities. And that's usually done over a network. So we'd like to encourage you to use, instead of the pass-by-value semantics of actually sending that data over the network, pass it by reference. Provide it a path name and connect all of your computing resources to the Xsan. This allows all of those applications to actually read that data at full speed directly from disk instead of having to shuttle it over the network manually.
+
+Next, streaming applications. This would include any type of video production software. This would include streaming media servers. Anything where you open a file and you read it to the end. One, you should use extent preloading like we talked about before. This is going to improve your performance and your reliability. Also, consider using the bandwidth reservation APIs in order to make sure that you don't have interruptions of service as you are streaming that data out to the network or any other consumer of that data.
+
+Next, Media Ingest Applications. I guess this would be kind of the flip side of the video post production workflow, pulling the data in. Use pre-allocation when you're writing that data to the Xsan. It's going to greatly improve the performance of your application as you then read it back later. And then finally you can also consider using bandwidth reservation in this scenario as well in order to have guaranteed service so that as you're streaming it off of tape you don't suddenly drop a frame and have to back up and start over again.
+
+So, just to wrap up here, I think we've shown you that Xsan actually allows for highly flexible use of storage. Much more flexible than just your traditional direct attached storage, much more flexible than a file server, and it also allows for shared access at high speeds. Next, the applications really should be aware of Xsan's volume characteristics.
+
+There are some differences from traditional HFS that you need to be aware of. Also, the flipside of that is that applications can then be tuned for better performance on Xsan as well. Finally, it's really easy to set up a sandbox for developing an application to be compatible with Xsan.
+
+So for more information about Xsan, obviously the first place you should go is the Xsan webpages on www.apple.com. It's chock full of information including examples of how it can be used in various types of environments, be it high performance computing, video workflow, and enterprise IT type deployments. Also, I strongly encourage you to join the Xsan users mailing list.
+
+For those of you who are using and deploying Xsan, it's a great resource for seeing how other people use Xsan and just a good user community for sharing tips and tricks. For application developers, this is also a good resource for finding out how your potential customers are using Xsan. I strongly encourage everyone to sign up on that mailing list if you have any interest in Xsan at all.
+
+So, documentation and sample code. We don't have anything up on the WWDC website, but you can actually get this on the Xsan CD that's available from Apple Developer Connection. Again, any registered ADC member can actually download a developer preview of Xsan and start using it. And there's a software development kit included there with PDF files, got documentation in it, along with sample code and the API header file that you need in order to get started.

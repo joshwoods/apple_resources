@@ -1,0 +1,313 @@
+---
+Title:  Best Practices for Networking Programming
+Year:   2005
+Web:    https://nonstrict.eu/wwdcindex/wwdc2005/133/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Welcome to Best Practices for Networking Programming, Session 133. My name is Becky Willrich. I'm the tech lead for CFNetwork and for the NSURL technologies. And here's the scenario I want to take you through today. You had this great idea. You have the next great web app. You finish the prototype.
+
+You showed it to the boss, and he's stoked. He wants to ship this. Only problem is he wants to ship it next week. So what do you do? What do you do to take this networking application from something that works well in the lab under a controlled networking situation and get it ready for deployment?
+
+Well, in terms of networking, getting ready for deployment mostly means you need to get your networking code ready for a wide variety of network configurations. You're used to running it in the lab over a nice fast link to a server sitting right next to the client. Everything works great at that rate.
+
+But out there, once your app is deployed, it's going to be used on slow connections. It's going to be used in places where some bozo set up the network and it doesn't work. It's going to be used in companies that are protected from the internet at wild with firewalls.
+
+And it's going to be used in places where you need to use a username and password just to get to the server. That's what we're going to be talking about today. We're going to be talking about what you need to do to make sure your application works in all of these situations.
+
+So here's the one sentence, one bullet answer to each of these. To deal with slow connections, use an asynchronous download. To deal with misconfigured networks, add Net Diagnostic support. To deal with firewalls, make sure you support proxy configurations. And to deal with authenticated servers, well, add support for authentication. Did I mention I'm a new mom?
+
+So this is the application we're going to talk about and we're going to use in the prototype. It's the image client application. All it does is you type in a URL. It expects to find 100 pictures at that location, and it chooses one at random and shows it. You can see two library buttons at the bottom, one for CFNetwork, one for Foundation. That's just so we can choose which loading library to use.
+
+Now, I hope you all got a chance to pick up the sample code. When you look in that code you're going to see an image client version for each of these different steps that we're going to take. We're going to start out with a first prototype. First thing we're going to do is convert it to use asynchronous downloads.
+
+Next thing we're going to do is add support for diagnosing network failures. Then we're going to look at supporting proxies. Then we're going to spend a long time on a variety of different authentication methods. And then finally we're going to crown off with an application that's prepared for authenticating firewalls as well.
+
+Like I said, I hope you all had a chance to download the sample code. You'll find a bunch of image client applications there. All the code is there. I encourage you to follow along by bringing the old step and the new step up in File Merge. And you can see exactly the code diffs we're looking at.
+
+Now, we meant to have configuration files on that in the sample code as well, so you can set up a server yourself. Unfortunately, there was a glitch in pushing that out to the WWDC servers. So that's not there right now. I was just told that they're going to do a new push sometime early next week.
+
+So I encourage you to go and get it then. Or if you'd rather, there's a big lab tomorrow morning, Networking Lab 9:00 to noon. We can hand out the configuration files then. I also encourage you to come there with any networking questions that you might have. We will be there, but there will also be a couple people from CoreOS if you have some basic low level networking questions. And we got some people from Cocoa coming as well, so that they can answer some Cocoa networking questions.
+
+OK, with that, I'm going to introduce you to the Image Client application. The architecture is real simple. We've got a window at the front. It's talking to a controller. The controller is the Image Client class. To actually perform the downloads, it's talking to a loader class at the back end.
+
+So when Image Client detects it needs to load a URL, it sends the load URL message to the loader. Or if it needs to cancel a load in progress, it calls cancel load. The loader is going to perform the download. And when it's done, it's going to send one of these two messages back to the Image Client, either set image data or error occurred. But of course, we actually are showing two different libraries. We're showing using CFNetwork or NSURL to perform the downloads. So the actual architecture looks like this. At any given time, only one of the two loaders is active, but both are there inside the running code.
+
+So that sort of begs the question, why are there two libraries for this, right? Which library do I want to use, CFNetwork or NSURL? And I like to explain it in terms of the pictures on the left. NSURL provides prefab components. It's feature rich. It's got everything nice and easy and all put together for you to use. But if what you need to do isn't in one of the prefab components, you're kind of going to be in trouble. CFNetwork, on the other hand, is the lower level library that the NSURL library is employing. It's more flexible.
+
+It gives you all the raw tools. But it's raw, so you're going to have to do more work if you use CFNetwork. So I've just given you a list here of some of the features NSURL supports that CFNetwork doesn't. We've got automatic proxy support, a caching infrastructure, a stronger authentication and credentials infrastructure, and integration with cookies. CFNetwork, I've listed some of the things that you can do with CFNetwork that are, at best, difficult to do with NSURL.
+
+You've got much finer threading control in CFNetwork. You can configure the proxy settings. And in general, you just have a lot more access to the details of how the download is taking place. And for those of you who don't want to link in foundation, CFNetwork is free of the Objective-C dependency. I should also add one more thing here. CFNetwork is open source. NSURL is not. CFNetwork is in Darwin as of Tiger.
+
+All right, so let's get into the code. Here's the loadURL method for the NSURL loader. Real simple. It's passed a URL. It calls resource data using cache. It gets back some data. If the data is good, it calls said image data on image client. If not, it passes back an error. Nothing to it.
+
+Here's the same code in CFNetwork. Now, I didn't need to break this into two methods, but I went ahead and did to ease the transition moving forward. So all loadURL does is create an HTTP request for the URL, and then it goes off to load request to do the actual download. Load request looks like this.
+
+create a read stream from the request, open the stream, and then sit in a loop reading bytes. As we read the bytes, we look at the return value. More than zero, we got data. Zero, we're done. Less than zero, and an error has taken place. Once that's all done, we have a little bit of cleanup code. Close the stream, release it, set it to null.
+
+And that works. It works just fine. I can-- in the lab, I can launch this version of imageClient, and it will load the images properly. But there are a bunch of problems with it. It seems to hang when it's used over a modem line. When something goes wrong, you just get this sheet that says, something's wrong, and there's really no recourse for the user to figure out what's going on.
+
+It'll break if used behind a firewall. And if those images are sitting on a password protected server, it's not going to be able to retrieve them. And those are the problems we're going to look at solving. First thing we want to do is add asynchrony. And on our platform, that means integrating with the run loop.
+
+So why asynchronous? This is all basic stuff. We should all know this. Asynchronous download, if it hangs, is going to bring up the spinning wheel of doom, and that's bad. User actions can't take place in that state. So we want to go asynchronous to avoid that. And remember, any download could be lengthy. I hear this all the time from developers all over the place. Well, I'm only downloading 256 bytes or 10K, and it's on a really fast server, so I'm not going to bother.
+
+I'm not going to worry about making this asynchronous. Well, it turns out any download at all could be lengthy, and your program needs to be prepared for that. Well, why could it be lengthy? Maybe you're suddenly connected over a modem. You always figure your app would run over a nice, fast LAN, but it's not. Or maybe the connection's fast, it just happens that right now the user's downloading 10 gig of pictures.
+
+Or maybe the DNS server's down, so even if you could get to the networking part, you could download the bytes, but you're stuck waiting for a DNS response. Or maybe that nice, fast server is just overloaded because suddenly there are 10 million hits when you only expected 1 million.
+
+So now why would I choose to use the RunLoop to support asynchrony? There are some other models you could use. The RunLoop is the one we recommend. And the main reason why is you can avoid an extra thread in almost all cases. We'll talk about the limitation on that in a moment. But by and large, if you integrate with the RunLoop, no threading.
+
+You're avoiding busy waiting from a solution like polling. You're never going to be using the CPU unless there's actually data that needs to be processed. And perhaps most importantly, actually, is that you will integrate well with all the other event-based activity in your application. User events coming in, Mach messages coming in, all of this is designed to work well inside the context of the RunLoop. And if you play in that pool, too, then the network events are going to come in and flow smoothly along with the run loop.
+
+So now the caveat on avoiding an extra thread. It is possible that you would need an extra thread. In order to do it, you have to be shifting bytes so fast from the networking card that the CPU has no time to do anything else. So far, he chooses to use an extra thread.
+
+I can't think of any other application that actually puts enough load on the networking card. In fact, Safari doesn't need the extra thread except in the most extreme cases. So if you think you need an extra thread, think again, because you really have to be shifting the bytes terribly fast for that to be an issue.
+
+Alright, so let's look at the code here. Here's the NSURL loader, and here's the new loadURL method. We used to just call url data and ask it directly for the data. Now instead we're going to use the NSURL loading system. So we're going to start off by creating a request for the URL we're going to download. Once we have that request, we're going to create a connection. And that's it. We're done. That's going to cause the connection to start the download right away. Now how do I get information back?
+
+That's what this delegate argument at the end is. The delegate just specifies which object should be informed as data arrives, and we're just passing self. So now let's look at the callbacks. Here are the three main callbacks you need in order to process bytes coming off the connection.
+
+Did receive data tells you when chunks of data arrive. Here we're just appending it to immutable data to look at later. Did finish loading tells you when a successful download of data has completed. And didFailWithError tells you when something bad has happened. And the details are inside this error object.
+
+Now we have to do a little bit more work when we cancel the load now. If we've got a connection, we need to cancel it, then release it, and then set the instance variable to nil. Why cancel it first? Well, any time you put something in a run loop, you have to explicitly clean it out. Just releasing it isn't enough, because someone else may have taken a retain on it at some point or another. So when you're really done with something like a connection, and you don't want to receive any more callbacks, make sure to call cancel.
+
+OK, so now let's look at the CFNet Workloader. Here's that load request method. So instead of just opening the stream and continuing on, what we're going to do first is set a client on the stream. The client is the object that's going to be called as events happen on the stream. It's the same as the delegate in the NSURL case.
+
+So we set the client, and then we schedule the read stream on the run loop. You didn't have this option with NSURL because it has chosen a threading model for you. But with CFNetwork, you have a choice of where you want your stream to run. In this case, we're just going to put it on the current run loop, and we're going to receive events any time that run loop is running in the common modes. Having done that, now we're ready to open and return.
+
+So now let's look at the callback. You recognize this code? This is the old synchronous load request method. And what I've done is I've highlighted the sections of the code that show where you're actually processing data and making decisions. Well, what we're going to find is that those move directly to the callback. So this first chunk where you're reading the bytes becomes the body of the callback when we receive the hasBytes available event.
+
+The next one is what we're going to execute when we get the endEncountered event. And finally, when we get the errorOccurred event. So now the callback looks like this. The highlighted chunks of code have not changed. All we're doing is when we get the stream event in, we're going to look at the type of the event and execute the appropriate block of code.
+
+Now, this was the cleanup code we had at the bottom of load request. Now that we're asynchronous, we need to put that in the cancel load method instead. But in addition, we need to do a little more cleanup because we're in the run loop now. So we need to clear out the client, so we call set client null. And we need to unschedule from the run loop we scheduled in. And with that, I want to bring Jeremy Wild up on stage, and he's going to give you a short demo.
+
+demo one. So basically what I'm going to show you here is just a little bit of getting familiar with the application, kind of see how it works, how you interact with it, and so forth. Just build and go. And so this is the application Becky was talking about. Simple place to put the URL and then two buttons here that allow us to switch which loader is actually running. So we can tell it to use CFNetwork loading code or use the NSURL methods.
+
+And so what we'll do is we have a server running on this machine. It's just serving up a set of files that's in a directory on the machine. And hopefully, you'll get these same configuration files maybe tomorrow if you stop by the lab. And all this is all put together for you so you can simply just run this and test your apps yourself. So I'm just going to go to HTTP. We'll go to local host.
+
+And we've got these running on port 16,000 right now. And this is just Apache. And this is just Apache server running in the background. So the app's going to download new pictures every 15 seconds or something like that. We can go back and forth between the two. And that's all it does. Loading pictures, go back and forth. We're invoking the different loaders. There's nothing special going on here. So that was just a bit of an introduction to Image Client. And we'll go through some more later. Back to Becky.
+
+Okay, so now that we've seen the basic application and we've got it running asynchronous, we're going to go to the next step, which is going to be adding NetDiagnostics. So what is CFNetDiagnostics? It's new in Tiger. And the problem we're trying to address is the problem of setting up networks. Networks are easy to misconfigure. They're fragile. If a router goes down, that's it for the network in some cases. And it's difficult to debug. It's difficult to find that router that's down.
+
+So what CFNetDiagnostics does is provide you with an API that you can call when something networky has gone wrong. You don't know what. It would take a lot of code to try and figure out what it is. So instead, call us, and NetDiagnostics will take care of it. It's a very small API. This is all of the public calls.
+
+And when you use it, what you're going to do is first create a net diagnostics object after some kind of a networking failure has taken place. You can either create the object from a stream if you're working with a failed CF stream, or you can create it from a URL if you have failed to access a URL.
+
+You can use it to display a diagnostic string to the user inside the context of your own application by calling copy network status passively. Or you can call diagnose problem interactively to lead the user out of your application to the net diagnostics application, which will walk the user through the basic steps of configuring the network and finding out what is wrong.
+
+So how are we going to change the architecture here? Well, now instead of just sending an error occurred message, the loader is going to add an argument to that. And the argument is going to be a CFNetDiagnostics object. That will allow the image client to lower a sheet on the window to show the failure. And it's going to add this button, the Network Diagnostics button. And if the user clicks on that, it's going to bring up the NetDiagnostics application, which will examine the network and prompt the user if it discovers something that's wrong.
+
+So how do we do that? Here's the NSURL side. Little extra code to save the URL now. We didn't even bother to save the URL in the simple case. Now we do. And then when we receive a did fail with error message from the connection, we create a diagnostic object from the URL that just failed to download. Having done that, we pass it back to image client using error occurred loading image.
+
+On the CFNetwork loader side, we have a stream, not a URL. So we call net diagnostics create with streams. If we had a write stream as well as the read stream, we would put that in the third argument, but we only have a read stream. Once we've got the diagnostics object, again, we just call image client.
+
+So now what does Image Client do? If you look at the diffs in File Merge, you'll see a bunch of UI changes to bring down the sheet in the new form. But here's the heart of the matter. When the sheet is dismissed, we're going to receive this ErrorSheetDidEnd message.
+
+And all we're going to do is look at the return code. That'll tell us which button was clicked. And if it was the default return, well, that means the user clicked the Diagnose button. And we're going to call DiagnoseProblem interactively. And that's all there is to it. So now I'm going to bring Jeremy back up here to demonstrate that.
+
+All right. So this time I'm just going to run the same app. But this time what I'm going to do is, you know, we got the dumb old user, me. And I'm walking along and, whoop, I just tripped over the network. So now when I run this, though, and I go to another server, right, I'm going to run the same app.
+
+I just-- something happened. I don't know what. So what we wanted to do and what Becky showed you was the fact that with network diagnostics, it'll help us get through that a little bit better. More importantly, it offloads calls from your customers from your call center so that they can figure some of this stuff out at home. Going to go to the same server.
+
+Okay, got a network error. Gives me this option here to diagnose what's going on. And yeah, I've connected to the net before. Let's go ahead and continue. Yeah, I used the Ethernet before. Yeah, I want to use the built-in one. And so it'll go off and it's going to-- hopefully, there it goes-- starts bringing up the green lights. And now I can get connected to the network. Now, if we were a good app, we would have recognized that the network configuration had changed, and we would have automatically loaded. So hopefully you will do that in your applications. Thank you, Becky.
+
+So I just want to highlight a couple things that Jeremy said. First of all, the reason why you really want to add the NetDiagnostic support is this is going to save your helpline support calls. You're not going to have to pay for the user calling into the site just because they forgot to plug in the ethernet cable. And that's money in the bank. Secondly, what he mentioned about being a good app and detecting the change, we'll get there.
+
+OK, next step is navigating firewalls. And what a firewall is is a proxy configuration to the user, essentially. The user, when he is told by a system administrator, or someone does it for them, that there's a firewall in place so they have to set their proxy settings to a particular way.
+
+They're going to do that by going into network preferences and set the proxies there. That proxy information is then stored inside system configuration. And as programmers, your access to that is through the system configuration framework. And I've highlighted a couple points there. First of all, dynamic store copy proxies is the basic call which gets the proxy settings and gives it to you. And secondly, in order to register for notifications of network changes, sc_dynamic_stores is the object that will give it to you.
+
+So with the NSURL loader, there's nothing to do here, because NSURL always looks at the current proxy settings, always applies them, always notices when those settings change. However, with CFNetwork, there's a little bit of work. There are a couple different approaches to this in CFNetwork. What I've got up here is the quick and dirty way. All you do is call dynamic store copy proxies that returns a proxy dictionary. You apply it to the stream, calling read stream set property, specifying the HTTP proxy.
+
+And this code will work fine, but it has some limitations. It works, but it's expensive. And it's expensive because it's going to recreate the dynamic store on the back side every time. It's going to reestablish the connection back to system configuration every time. And it's not going to keep track of any remembered state for you.
+
+So this is perfectly appropriate code if you're doing just a one-off or a rare download. The only time you're going to do a download is if the user needs to update to a new version of the app. That's fine. Or if you know that the download is going to be very lengthy, and the length of the transfer is going to swamp the time that it took to talk to system configuration, then it's fine to use it in that case, too.
+
+But Image Client isn't in either of these cases. It's in this third case where we're going to be performing a frequent download. We're downloading every 15 seconds. This code, incidentally, is also not appropriate for any performance-critical regions precisely because you're losing all that remembered state and having to rebuild it.
+
+So now let's talk about the robust way. What you're going to do is first create a single persistent dynamic store. This is going to represent your connection back to system configuration. Once you've got it, you're going to put it in the run loop so that it can notify you any time the proxy changes. And at that point in the setup phase, you're going to go and get the latest proxy settings from it.
+
+Then you just sit back and wait. If you ever get the callback telling you that the proxy has changed, you're going to update your local copy. And then finally, when you're all done, you need to clean up and dispose the Dynamics store. So here it is step by step in the code. Here we're just creating the dynamic store. The context is used to specify which object to message as changes are detected. So again, we're passing self.
+
+Now, we need to tell the dynamic store what changes we're interested in. Well, we're interested in proxy changes. So we call dynamic store key create proxies to get the correct key for registering for proxy changes. Once we've got that, we marshal it into an array because that's the argument we need. Then we call dynamic store set notification keys to tell the dynamic store that this is the key, the proxy key is the one we're interested in watching.
+
+Then we add it to the run loop. This is a slightly different model than the read stream calls to add to a run loop. What we have to do here is actually fetch the run loop source out of the dynamic store and then add the run loop source manually. Okay. So then we preload our data, and we do that by simply calling dynamic store copy proxies, passing the dynamic store that we just built.
+
+So now what happens when the proxy changes? Well, we just make that same call again, dynamic store copy proxies, and we'll get the new proxy settings. Now, how do we apply that proxy data on the stream? Well, this is the same as the quick and dirty way. It's just we have the proxy data sitting in the proxy dictionary all along.
+
+So the last step, clean it up when we're all done. So again, we need to get the run loop source out of the dynamic store. We need to get that run loop source out of the run loop. The way we do that is by calling run loop source invalidate. Once we've done that, we can do the rest of our cleanup and just release the objects. OK, and one more demo.
+
+Okay, so this one, this demo requires a little bit of background. So what we have here is a machine that's on its own net. It's not connected to the network in general. I can bring up Safari, you'll see that we don't have network connectivity. We go and we look at the network panel, we'll see that, oh, It's on its own network. So we have no DNS, nothing. Nothing available to us. So we bring up the image client proxy.
+
+And I know that I've got the server run over here, and if we try going to demo one, 16,000, well, we get nothing. We get our failure, right? And I'm not going to step through that. What we're going to do is we've got a known proxy that this guy sits behind. So we've created his firewall. We'll go set up this guy's proxy. And the proxy's just sitting on port 18,000. We go ahead and apply it.
+
+Oh, what do you know? Foundation automatically applied it. CFNetwork automatically applied it. Simply by watching for that key change to take place, once we hit Apply All, it picked it up. We'll go back to Foundation. We'll let it run a little bit. And we'll drop that guy again. No proxy again. And you'll notice that he'll stop updating. So there you have it. He fails.
+
+to the slides. All right, so the next step is handling authentication. You need to handle authentications because servers require passwords sometimes, proxies require passwords sometimes, and if you don't support it, you can't traverse those things. You cannot hit the server, you can't get your request out through the proxy.
+
+And the basic architecture, or architecture, the basic flow of data in an authenticated transaction looks something like this. The client sends a request to the server. The server looks at the request and says, hey, you don't have credentials for this. So it sends a challenge back to the client saying, prove to me you have the right for this data.
+
+At that point, the client marshals the request, this time adding credentials that presumably it got from the user, and sends that back to the server. At this point, the server and the client are going to enter a negotiation. It could take several legs back and forth before the authenticated channel is open. But once that's open, the server will finally send back the response that the client is requesting.
+
+Here's how it's going to look in our application. The loader will detect that it's received a server challenge and needs credentials. It'll send a message to the image client, authorization needed. That'll cause the image client to bring down this sheet for the user and ask for a name and password.
+
+Once it's got that name and password, it's going to go back to the loader and say, OK, resume with credentials. At that point, the loader will ask the image client for the username, password, and account domain. The loader will then send a message to the image client that the image client just received. And using that information, it'll allow the request to continue.
+
+So in NSURL Loader, this is pretty straightforward, because the engine does all the work of detecting the challenge and marshalling it into a useful form for you. You're going to receive a Did Receive Authentication Challenge message from the connection. That second argument, new challenge, contains all of the information about what the server is asking you for. So what we're going to do is hold on to the challenge for future reference, and then we're going to fetch the protection space out. The protection space represents that part of the server that you need access to.
+
+In particular, it includes the host and the realm, which we are now going to pass on to Image Client via the authorization needed message. OK, so that causes Image Client to go off, ask for their username and password, and then eventually it's going to come back with this message, resume with credentials.
+
+Well, to set the credentials on the connection and allow the connection to proceed, what we need to do is create an NSURL credential object from the username and password we received. Once we have that credential object, we just send it back to whoever sent us the challenge. So we say, challenge sender, use these credentials for this challenge. And that'll allow the connection to proceed normally, and from that point forward, you'll receive the old data callbacks or the data delegate methods.
+
+In the CFNetwork Loader, it's a little more complicated. Remember I said that NSURL connection provided you with a slightly richer infrastructure for handling authentication. So here's what we're going to do. The server response is going to come back for the unauthenticated request. We're going to look at that response and say, hey, is this a challenge? If it's not a challenge, then we'll just keep going like we did before.
+
+But if it is a challenge, then we need to go and modify the request. Once we've modified the request, we can issue the new changed request and go back to waiting for the server response. And remember, the server can challenge us as many times as it wants to, so you have to be prepared to re-enter this code path.
+
+So the first step in this is recognizing the challenge. It's pretty straightforward. What we're going to do is the first time we look at the headers, we're going to call isAuthorizationFailure to figure out if it's an authorization failure. And if it is, we're going to go into this other method, retry after authorization failure. The one thing I want to highlight on this slide is that you have to check at both endEncountered and bytes available, because if there are no data bytes in the response, you'll never get a bytes available. So make sure to check both places.
+
+So how do we know if it's an authorization failure? All we need to do is get the HTTP response. We do that by calling read stream copy property, passing a property of the HTTP response header. This gives us the response header. We look at the status code. If it's a 401, that means it's a server challenge.
+
+When we get to proxy support, we'll add 407s, for those of you that are like, don't you have to check for both? But for right now, we're just going to look for origin server challenges, which come back as 401s. Okay, so we've done this first step, figure out if it's an authentication challenge. Now we're going to modify the request.
+
+Just like handling proxies, there's a quick and dirty way, and there's a robust way. The quick and dirty way I've got here in pseudocode. It's also in the sample code commented out. Just call CFHTTP message, add authentication, pass it the request, the challenge response you just received, and the credentials. It will modify the request directly, and then you can send that request again.
+
+But like the quick and dirty way with proxies, it has some problems. There's not going to be any remembered state if you issue several requests to the same server. That means that for some authentication methods like digest, where there's a lot of upfront computation, you're going to be redoing that computation every time.
+
+There's no support here for multi-leg authentications. Those are authentication methods where you're going to have to go back and forth with the server several times before getting a clear channel. In particular, that includes NTLM. So if you use the quick and dirty method, you will not have support for NTLM servers and proxies.
+
+And in general, the performance is just poor. And all of these things together mean that this method is not really suitable for deployment code. You want to bring up a prototype fast, go for it. But know that before you have to deploy it, you need to move off of this API.
+
+So what is the robust choice? The robust choice is to use CFHTTP authentication, which is an object that encapsulates all the information you need to process an authentication request from a server. It tracks the dialogue with the server so it knows how much has already been computed. It enables things like NTLM, where you're going to have to have a lengthy conversation with the server. It keeps as much data as is necessary to streamline future requests to the same server. However, it does not actually hold the credentials. It is your job to hold those credentials somewhere and to supply them on demand.
+
+So then how do you go about applying it to the request? Well, you take the request, you take the HTTP authentication object. If it's needed, you also take the credentials and you put them all together and apply the authentication and the credentials to the request. So then how do you go about applying it to the request? Well, you take the request, you take the HTTP authentication object.
+
+If it's needed, you also take the credentials and you put them all together and apply the authentication and the credentials to the request. and we're gonna go ahead, we will show it to you in code, but first I'm gonna show you a flow of how the data moves.
+
+But first I'm going to tell you the three basic rules of using CFHTTP authentication. It can be a little tricky to use CFHTTP authentication. It's tricky because there are so many different authentication mechanisms out there. And NTLM is nothing like Kerberos, and Kerberos is nothing like Digest. So here are the three rules to see you safely through. Once you have an authentication object, keep using it until it reports that it is invalid.
+
+With one authentication object, always use one set of credentials. When you throw away one, throw away the other. They come together as a pair. And when the authentication object does become invalid, try and create a new one, because the server may allow you to try multiple times with different credentials. One of three things is going to happen. You might get null back. If you get null back, that means CFNetwork could not understand the server's challenge. Maybe they're asking for an authentication method we don't support. Maybe the response is not parsable. But CFNetwork can't handle this response.
+
+You might get an HTTP authentication object back that is invalid from the get-go. What this means is that the server shuts you down. The server's like, no, you've tried long enough. I'm not going to give you access. Just forget it. But you might get a valid CFHTTP authentication object. If you do, that means you can try again. You just need to get a new copy of the credentials.
+
+So what does it take to modify a request using CF HTTP authentication? Here's that flow chart. First thing you have to do is find a valid HTTP authentication object. Once you have that object, ask it, do you need credentials before you can modify a request? You might not. Kerberos, for instance, once you've got a valid Kerb ticket on the system, you don't need a username and password from the user. It's all set up.
+
+If you do need credentials, though, go and get them. Once you've got them, take the credentials plus the authentication, apply them to the request, and that'll give you the new request so you're ready to go. If you didn't need credentials, you're doing essentially the same thing. You apply the authentication to the old request. It's just you don't have credentials this time. Either way, you're done, and you're ready to issue the modified request.
+
+So let's take this step by step, finding a valid CF HTTP authentication object. And I've got a pretty flow chart for you for this one too. Start out by looking and seeing if you already have one. If you already have one, terrific. If not, create one. Once you've created it-- if you can't create it, we're in the situation where CFNetwork can't understand the response and you have to fail.
+
+But if you succeed, you're going to go through the same path as if you started with one. Check to see if the authentication is valid. If it is valid, you're done. Terrific. This is the authentication object you will use. But if it's not valid, then you need to throw it away and throw away any credentials that go with it. Once you've done that, you can look and see why the authentication object became invalid. If it's because the credentials were bad, if you simply have the wrong password-- all right.
+
+If that's not the case, then you've got to fail because that means the servers just shut you down. No new credentials will help. It's just decided that it's had enough. But if the problem was that the credentials were bad, you can try again with a brand new CFH-GTP authentication and see if just getting new credentials will work. So you go back up and create a new one.
+
+Here's that same flow chart in pseudocode. And now we're going to walk through it and show you what it looks like in code. So we'll start with this one. If you don't have an authentication object, create one. If you don't have an authentication object, get the response header from the stream, and then create an authentication object from that response header.
+
+Now we check to see if we don't have an authentication object. Well, if we don't, we just call error occurred. Now for the interesting bit. Look to see if the authentication object is valid, and if not, figure out what to do. So if the authentication is not valid, first thing we do is destroy the credentials and authentications. I've spared you all the CF releases here. Now we're going to look and see what the failure was.
+
+You can see that the is valid call took an error argument that is passing out. Well, we look at the error. If the domain is HTTP and the error code is either bad username or bad password, that meant we had bad credentials, and we're going to try again. We re-enter the same function calling retry after authorization. We're going to try again. We re-enter the same function calling retry after authorization. We're going to try again.
+
+We re-enter the same function calling retry after authorization. Otherwise, we're dead. The server doesn't want to talk to us anymore. And so we call image client error occurred. OK. So now let's move on to actually using the valid authentication object we got. Well, what part of this flow chart is it? It's everything else.
+
+So we go through all that code that I just showed you to get a valid authentication object. Now we look to see if either we already have credentials or if the authentication object tells us we don't need credentials. If either of those are the case, we're good to go, and we'll just call resume with credentials. But if not, we need to get credentials from the user. OK, so first we need to see if the authentication object provided a Realm. So Realm-- Sorry.
+
+The authentication object may require an account domain. This is something that's special to NTLM predominantly, where the server is going to ask you to tell it which part of the server you want access to. If we don't need an account domain, well, then we have a valid realm and we'll pass that out. An image client knows the difference, and that's how it decides whether to prompt you for an account domain.
+
+Okay, so then image client asks the user for the credentials. What do we do next? It'll call back into the loader with resume with credentials, and at this point, What we're going to do is create a credential dictionary. We just grab the username and password, shove it in there. Once we've built up that credential dictionary, we call http message apply credential dictionary. We pass the request we want modified, the authentication object tracking this communication with the server, and the credentials dictionary carrying the credentials.
+
+And that's the modify request phase. So now what about this last part, issuing the new request? Well, turns out that's really simple. Just call selfload request. Just go back in and start the request as if it were a new one. And now I'm going to bring Jeremy back on stage to show you what that looks like in the running application. Jeremy Lin All right. Demo one.
+
+So what we'll do is we'll go look at one of our earlier ones here. On this same server we've been using, we now have another port that's opened up that's just simply wanting basic authentication. And in this case, we'll see that we're not so prepared for it. And again, we get the network diagnostics failure. It doesn't understand what in the world we're talking about here. So let's go over to the simple authentication. Now, I would have shown the Foundation one, but like she said earlier, Foundation does all this stuff magically for you.
+
+That was for Chris. So here we get the prompt that tells us, hey, we need to provide some credentials here. So we set this up as WWDC demo basic auth. And now we get our load. And if I hop over to Foundation, same sort of thing. wants us to do it.
+
+But wait, we had told CFNetwork that we gave it, and it didn't remember this stuff. And so one of the things that we're going to show next will be saving those credentials. Now, one of the other things I'm going to try here, bear with me. This is my home PC running Windows that I punched a hole in my firewall this morning. So it's been running for eight hours, so it may be full of VIRAI by now.
+
+Okay, so we notice that it's doing NTLM authentication because it's also prompting for a domain. Now this happens to not be a domain user, and I put in a password so the rest of you hooligans out there wouldn't go crashing on my server. But there it does, doing NTLM authentication. from CFNetwork. And now Becky will go into holding credentials so that we can retry later.
+
+Okay, so as we saw, Image Client was not remembering the credentials from download to download, so as soon as it went to download the next image, it had to prompt you again. We're going to talk about reusing them now. Okay, so you reuse credentials so you don't have to pop the username and password sheet down endlessly. Just a warning to make sure to watch out for security issues anytime you store a password. And here we're going to walk you through storing those credentials in two different places, in memory and in the keychain.
+
+Now, I'm going to talk about the in-memory portion right now, and I'm going to gloss through it kind of quick because, frankly, the keychain is the more interesting store. So I'm just going to walk through the basics of this. With NSURL Loader, you're already done. Well, why are you already done? Because in this method, Resume with Credentials, you created an NSURL credential.
+
+And when you did, We specified a persistence. We said, make this password persistent for the session. So that'll hold the credential in memory for the length of the running application. In the CFNetwork loader, though, it's a little more complicated because there we're using CFHTTP authentication, and HTTP authentication will not hold the credentials for you.
+
+So first thing we do is create a store that's going to hold all of our authentication objects. So where we used to hold a single authentication, instead we're going to hold a mutable array of them. Next, we're going to need to create a mapping from the authentication objects to the credentials we've received from the user. So we've replaced the single credentials dictionary with a credentials dict that's going to hold all of them.
+
+Finally, you just maintain and use these everywhere that you maintained and used the authentication or single credential object before. So here, where we used to simply release the credentials because they were stale or whatever, instead we're going to end up removing the credentials from the dictionary we're maintaining.
+
+Finding authentication objects and credentials. So I've got a request. I'm issuing it for the first time. I need to know if I have any authentication objects that apply to it. There are many interesting algorithms for figuring out how to do this. Here we're just showing you iterating through the array.
+
+And the call I want to highlight is the one in yellow. CFHTTP authentication applies to request. You're asking the authentication object, can you handle this request? Do you apply to it? If the answer is yes, then this is the authentication object we should use. If not, continue on to try and find another one.
+
+Before prompting the user, look to see if you have credentials already in the dictionary. So here we go to the credentials dict and see if anything is filed under the authentication object. One word of warning, though. Never apply the credentials before you've received a server challenge. The reason for this is that the server may have changed, or you may be routing out through some new proxy or through some new chain of hosts in the network, and you may never get that challenge. Well, if you don't get the challenge and you shipped out credentials, you've just created a security leak. So for this reason, don't apply the credentials before you've received a server challenge from that server.
+
+Okay, that's as much as I want to say about keeping the credentials in memory. Now we're going to talk about keeping credentials in the keychain. So what does the keychain provide you with? First of all, it's secure and it's persistent, so you don't have to worry about all of the security headaches of storing the password. Secondly, this is where all of Apple's apps keep the passwords for their own use.
+
+Safari, Mail, and WebDAV are three examples of that. So if you use the keychain as well, you can automatically get the passwords that have been entered in Safari. Safari can automatically get the passwords that you've entered. It all means fewer prompts for the user. Once we've moved to the keychain, the in-memory storage becomes merely a local cache, and the keychain becomes the persistent store that we're going to use for the passwords.
+
+So here are the changes on the NSURL loader side. We're going to add this checkbox to the password sheet. Remember this password in my keychain. The state of that checkbox is going to be returned by a new method on image client save credentials. So now, in NSURL Loader, when we create the credentials, we're just going to look at the state of that checkbox and determine what persistence to use. If we pass credentials persistence permanent, that tells the connection loader to store the credentials permanently. That means in the keychain.
+
+In the CFNetwork Loader, we're going to add two new methods. The first one, Find Credentials for Authentication, is going to look through our local store and try and find the credentials. If it can't find it there, it's going to go out to the keychain and look for credentials there. The second one, Save Credentials for a Request, is going to take the credentials that we've just used and save them out to the keychain. We're going to walk through those now. Finding Credentials.
+
+First things first, check your local store. If you have it in your local cache, that's great. If you don't have the credentials in your local cache, you're going to call seckeychain findinternetpassword. That's going to go to the keychain and try to find a seckeychain item that matches the request that you're transmitting. Now, you'll see this when we go to the code.
+
+The seckeychain item takes a bunch of arguments. Most of those arguments, well, all the arguments are fairly straightforward, but you need to know where to get them. Most of them are going to be taken out of the URL. They're things like the host name that you're trying to access and the port you're trying to access.
+
+A couple of them come from the authentication object because they have to do with the type of authentication you're performing. Those two are the realm and the authentication method. The authentication method is digest versus basic versus NTLM. Once you've got that keychain item, you can call copy content to get the actual value of the password. So let's look at it in code. First, check your local store. That's not too tough.
+
+If you didn't find one, call seckeychain find internet password. I warned you there were a lot of arguments. So first we pass the server name, then the security domain. We're not passing an account name because we don't know what the account name is. We're asking the keychain, do you have any credentials that match this hostname query? The path that we're trying to access, the port we're talking over, what protocol we're using, what kind of authentication we're using, and then we're not supplying a password because that's what we're trying to get.
+
+Once we have the key chain item called copy content-- so copy content takes an attribute list specifying what attributes we're interested in. The attribute we're interested in is sec account item adder. So we pass that in to copy content. We pass the item we got back from find item. We pass in the attribute list. And then lengthen out data are parameters that are going to be passed out to us.
+
+And in specific, what we get out is the username and password. The username is stored in the modified attribute list, so we go into there to get it out. The password came out in the out arguments. Once we found those and have created CFStrings from them, we need to free it up because those were objects Keychain created for us. And so we call secKeychainItemFreeContent. Then we proceed as before. We've got credentials. We create the credential dictionary and go.
+
+must have stepped out of range. There we go. All right, so let's look at the storing side. Well, pieces of this look a lot like the finding side. We're going to start by calling findInternetPassword to find the correct item in the keychain. That's going to look just like the call that we made to find a credential in the first place, except this time we have the account name, so we're going to supply it.
+
+And what we're looking for is a keychain item that's an exact match for the credentials we've got right now. If we find an item, all we're going to do is update the password entry itself, calling setKeychainItemModifyContent. But if we didn't find an item, we're going to create a new one by calling addInternetPassword.
+
+Okay, so here's the modified find internet password call, and you can see all we've done is add the username argument to specify that that's the account we're going to modify. Assuming we did find an entry, we're going to set up our attribute list. Again, we're modifying sec account item adder. And then we're going to call modify content, passing the adder list and marshaling the password as the data to be set.
+
+If not, we're going to call addInternetPassword and pass all those arguments again. Now, why don't we just do this all the time? If we know that the old credentials are bad, why don't we just call addInternetPassword and blast over the top of them? Well, because as a keychain item lives on in the system, it collects a lot of metadata. And that metadata is valuable and should not be discarded unless it's necessary.
+
+In particular, if you modify the existing Internet item, then those are other times, other prompts that you're saving your user later down the road. And Jeremy, we've got one more demo for you, yet one more. JEREMY CHO: Sorry, I got distracted by sirens. I'm like a dog. Okay. So, same sort of thing. I've got to make sure I have my proxy set up again. Okay.
+
+We're using the proxy. So just like before, we log in. We're going to go over to-- Demo 1 again. And the authenticated port was 16,001. And we're going to get prompted. And we showed WWDC demo, and that was basic auth. And now it's holding it in our memory cache. So in another 15 seconds or so, we should get another load. Or I can just hit Return again. OK, so we know we're reusing. But if we run it again, we'll see that it's going to prompt us again.
+
+Because we didn't save that username password, right? So we'll enter it again. But this time we'll check, tell it to save, and there we have it. And if we go over to Who, Safari and we say demo one, we'll go to the same port and we're going to ask for zero JPEG. And it didn't work. Nice. That's really nice. Well, we'll go look at Keychain and find out what it has in there for us.
+
+Nice. So what we'll do is we'll ignore that that ever happened. And we'll remove that. Now we'll get it added correctly. We'll verify that indeed the path came across correctly so that when we go over here-- man, who wrote this? I stink. Well, it should have been much like this guy. If we run him again, we'll see that he gets it.
+
+And I will have to figure out why that didn't work, and we'll have to update
+
+[Transcript missing]
+
+But one more thing I wanted to show you is that what I'm going to do is we're going to approve this thing, say, always loud. So keychain access is always loud to get to this username, password, and show it. And that is now metadata on this.
+
+keychain item. So then we can see who's allowed to access this. And if we were always creating and destroying these things, this metadata would be lost. And so every time, if you were always adding a new internet keychain password, that metadata would be lost. Which means every time a user would relaunch mail or something like that, it would ask them, just like it did for me for keychain access, whether that application should have access.
+
+And so you don't want to always cause the user to have to retype and say yes and so forth to those things. So make sure to use the modify calls. But what I'm going to do here is actually we're going to give it a bad password. I'm going to save it.
+
+And now when we run this, because it pulls that out of The keychain, it knew that the username password was bad because it failed to authenticate. And so now what we'll do again is-- We'll tell it the right password, tell it to save again, and now when we go look at this thing again, show password. I didn't get prompted again because the access control list was saved because we used the modify entry opposed to the add entry. So we played nice with keychain.
+
+Back to you. OK. One last programming topic. Of course, origin servers aren't the only things that require authentication. Firewalls do as well. When they do, there's a couple pieces of news. The good news is that the code we've written so far is largely going to work for the proxies. There are a few small changes, and I'll show you those. However, there's also some bad news.
+
+And the bad news is that every request that you make is going to have to go through both code paths, one for the origin server, one for the proxy. Because, of course, you may have to authenticate twice. It may be that the proxy is going to challenge you, and then when you finally get to the origin server, it's going to challenge you as well. well.
+
+So every request needs to be checked for both. You're going to need separate stores for the proxy and the origin server data. A couple good reasons for this. First of all, you're going to use the proxy credentials over and over and over again. And again, you may need two sets of credentials.
+
+If the proxy settings change, just discard the proxy credentials you have. And then one final note, once you've successfully navigated the proxy, make sure and save your credentials then. Do not wait until you've gotten something back from the origin server, because something could go wrong past the proxy, and you don't want to prevent that from saving your credentials.
+
+So here are the basic differences. First of all, your user prompt should be different. The user needs to know whether it's validating the proxy or validating the origin server. Proxy challenges are 407s, not 401s. And then when you make your keychain calls, the arguments are going to come from the description of the proxy host, not from the URL which describes the origin server. And that's it. And we have one last demo-- yay, Jeremy-- which is going to be the full image client application.
+
+Okay. So now the gods will frown upon me again. But this time, we're going to go -- instead of -- we've been running through that proxy that was wide open, and a lot of times corporations don't like to do that. So we are going to go ahead and say different port, it's basic authentication, and this time when I go to -- Demo 1, 16,000. This is the one that's wide open on the server. We're going to get the proxy prompt.
+
+And there it goes. It tells us we're going to connect to proxy 10.0.1.2. So same password scheme that we've been using all along. And I'm going to add it to the keychain so we don't get prompted. And so now we're making it through the authenticated proxy. And because we have the keychain items saved for that server for the authentication, we're going to get a failure under the covers.
+
+Nice. Under the covers. And what it's going to do is get the failure 401. It'll go looking for the credentials in the keychain. It'll apply those. Plus it applied the proxy authentication and went through both authenticated. And so we end up getting through everything. And if we go look at keychain access again, we'll see that-- It didn't save it right. So don't use the code up on the website. It's the wrong code. You guys need some new code. Come see us at the lab. So there you have it. Thank you.
+
+You tired of seeing pictures of my baby yet? All right, quick wrap up for you. Documentation sample code, there's all kinds of stuff up on developer.apple.com. I'll also say that if you go to the tech resources, the documentation site at developer.apple.com and do a quick search, there's a fair bit of sample code there as well.
+
+Some related sessions. First and foremost, the lab tomorrow morning. We're all going to be there. We got people coming from CoreOS. We got people coming from Cocoa. It's going to be a party. Also, we're running a little short on time now, so the Q&A is going to be cut short. You can take further questions to the lab.
+
+Other sessions that are interesting, implementing networking using the Cocoa classes happened this morning. If you get a chance, take a look at the slides and take a look at the demo apps that they put up on the website because they had some great demos there. And then in this room in just a moment, designing network-friendly applications. We'll talk about what it takes to write an application that's not particularly network-savvy.
+
+Networking isn't at the heart of its work, but it needs to be ready to work inside networking environments. Contact information-- Xavier and Mark are fabulous people out of WWDR. And now, unfortunately, Mark couldn't be here today. So I'll be running the Q&A. And I'm going to invite the rest of the team to come up. And we'll take some questions.

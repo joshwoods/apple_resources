@@ -1,0 +1,183 @@
+---
+Title:  Customizing QuickTime and Darwin Streaming Server
+Year:   2001
+Web:    https://nonstrict.eu/wwdcindex/wwdc2001/407/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Hey, everybody. So I'm Chris LeCroy. I manage the engineering group that does the QuickTime streaming server and the Darwin streaming server at Apple. And some of the things we're going to talk about today are we're going to go through, I'm going to have some of the engineers come out and show you some of the different ways that you can modify and extend the server using the server module API. It's an API that we've built into the server that allows you to build modules that actually add functionality to the server.
+
+We've added a new protocol in streaming server 3 that allows you to, using straight HTTP requests, make requests to get and set values out of the server. I'll have an engineer talk about that. And we've added a new web-based admin, which is also extensible, and we'll talk about that with a third engineer.
+
+So let me briefly tell you what's going on with QuickTime streaming server. We just released this week QuickTime streaming server 3.0. It's available now. You can download it for the web. It's easy to install on Mac OS X. It's also included as a standard service in Mac OS X server, which was also just released this week.
+
+and all of the Darwin versions of the server are available for download as well, 3.0 versions of those servers. And there's also a tarball of the source code that's downloadable, as well as the CVS repository being fully up-to-date. Okay, so Steve Ussery is going to come out and talk to you a little bit about how to write modules using the module APIs. Steve?
+
+Good morning, everyone. Is this on? Yes, it is. As Chris said, my part of the talk is going to be on how you extend QuickTime Streaming Server with the module APIs. And more specifically, I'm going to talk about the following areas. First thing I'm going to talk about is the module architecture, kind of a real high-level overview of what the module architecture is.
+
+I'm going to talk very briefly about what's new in the API for QTS 3.0. And I'm going to walk you through a very simple source code example of what a module extension would look like. And then I'm going to give you a really brief demo of that module.
+
+So I should warn you before I move on that there's a lot of material here, and I'm going to cover it very, very quickly. If you would like more detail, the place to look is to download our source code and look at the top level. You'll find a documentation folder, and inside that documentation folder, you'll find a streaming server modules documentation file. It's a PDF file, between 300 and 400 pages, I believe. So there's a lot of detailed information in that if you're interested in this.
+
+So, let me talk a little bit about the module architecture. For those of you who are familiar with the Apache web server, our module architecture is very loosely modeled on that architecture. The concepts are the same, but the details are different. In other words, the implementation is completely different, but the overall concepts are the same. There are two types of modules, static and dynamic. A static module is compiled in with the streaming server source code itself. So when you build the server, you have to compile in a static module.
+
+A dynamic module, on the other hand, is an external code fragment or shared library that's placed in a streaming server modules folder that is identified as one of the preferences in the streaming server preferences file. So once the server starts, it will detect modules in that modules folder and load them. And from that point on, they behave exactly the same as a static module would.
+
+So the API is implemented as what we call module roles. And what module roles are, they're callbacks when the server is in a well-defined state and you're passed an environment through a parameter block that's defined for every role. And each role has a specific parameter block format. To show you how powerful this feature of the server is, all of the features of QuickTime Streaming Server, all of the ones that are of interest, I should say, are implemented as modules within the server itself.
+
+So I'm going to bring up a diagram that's meant to be illustrative of kind of the overall architecture of the module itself, of the module's architecture itself. At the topmost box, you'll see what's called the QuickTime Streaming Server module itself, and that's the main module that handles all roles in the absence of any other module to handle that role. And most of those handling roles in that module are do-nothing roles. In other words, they just return no error and do nothing.
+
+Immediately below that, in the six boxes below that, are not actually modules, but those are collections of cross-platform C++ code that you can call and use within your module. There's all sorts of things in there that are platform-independent ways of doing networking, of threading, of mutexing, all sorts of things that you would need. In fact, on the upper right side of that, you'll see something called... Qt file. That's of interest because that's the code that knows how to parse the QuickTime file itself and take it apart and see what's in it.
+
+In all the green area down below, those are typical static modules that are compiled in with the streaming server itself. And I'm not going to describe all of them, but I'll pick out a few just kind of at random here and talk about them. QTSS access. What that module does is it handles all the authentication for the server. Let's pick another one. The QTSS Reflector module is interesting. It's one of the more complex modules in the server. What it does is it takes a broadcast stream from an external broadcaster of some sort and replicates that stream out to multiple clients.
+
+We pick one more, QTSS Admin Module. What that one does is it handles our web-based admin protocol, which you will hear John in the following discussion after me describe in detail. I should also mention that many of the C++ classes up above are based on something we call QTSS objects and are actually registered in a dictionary structure within the server itself, so you can actually access them through the web admin and change and set parameters within those classes dynamically.
+
+Down at the very bottom of the diagram, you'll see two blocks in lavender. Those are meant to be illustrative of modules that somebody else wrote, perhaps you. That are loaded at the time the server starts up to provide some kind of new functionality that's not available in the core server. So let's move on and talk about module roles.
+
+Okay, so the very first role you'll see on the list is the register role. That's the one that your module will be called in no matter what. That's the one role that's always called within a module. And its only purpose is to say what other roles your module supports. So that callback is called immediately after the server starts and your module is loaded in memory and your module is responsible for saying what other roles it supports.
+
+The next one on the list, initialize and shutdown role. Those are useful if you need to allocate global data or allocate memory or set up global data. If you do set up global data, you'll probably want to remember that the server is multi-threaded and... Your global data can be called in multi-threaded contexts, so if it's critical past stuff, be sure the mutex protect it.
+
+The next roll-down is one that's only of interest if your module needs to read preferences. So that's your callback to say, okay, it's time to reread the preferences file, which is XML-based, and grab the preferences out of there and set some data within my module based on those preferences.
+
+The error log roll is mostly not of interest to most people, but it will be of interest to us today because that's a very simple one I've chosen to use in the demo because it's really easy. The only thing the error log roll does is any time the server generates an error log message to be written to the log, if your module is registered for this roll, it's also called back with a pointer to the error message. So you might use this, say, for localizing error messages, perhaps.
+
+RTP roles. RTP is the standards-based protocol that's used to carry a stream pipeline from the server to a client. It's a connectionless protocol, meaning it's like a datagram or packet-level protocol. And it's the primary transport for sending a stream from the server to the client. So that's a very powerful way to actually get into and look at the stream or do something with it. So if you maybe wanted to do something like server-side encryption of the stream itself, you could use that role. So let's continue on with the roles that I think you'll find the most interesting.
+
+And that's the RTSP roles. RTSP, unlike RTP, is a connection-oriented protocol built on top of TCP. And it is very powerful in that it manages all of the communication between the client and the server, and it's responsible for managing all the streams within that context. So, most of the opportunities for doing interesting things to the server lie within the RTSP roles.
+
+So, I'm going to take the very first one there, the RTSP filter role. Whenever the client starts a session with the server, it sends an RTSP request in what we call an RTSP describe function. And that's very similar, if you're familiar with HTTP, that's very similar to an HTTP GET.
+
+So, within that, you can do a lot of things. that describe is all sorts of parameters to describe the session that the client wants to see. So what the filter role can do is grab any of those parameters and change them or modify them or augment them. So it's a powerful way you can use to augment what the client's asking the server to do.
+
+The next one, the route role, someone yesterday asked me how would I, from a client, I want to have my students type in a URL, and once it gets to the server, I want to look up that URL in a database and substitute some other URL. So you could use the route role for doing that. That's primarily the kind of things it's suited for.
+
+The authorized role allows you a chance to get in and do authentication, other than if you're not happy with the way the streaming server does authentication, you want to write your own authentication-level module, that would be the role you would want to register your module for and use. RTSP pre-processor role is your last chance to get into the stream and do interesting things once the client session is set up and all of the variables and internal things have been set up to begin the stream itself. That's your last chance to do it.
+
+That lends itself to interesting things, like you could perhaps do a redirect to another server at that point. But if you do do something like a redirection, you have to notify the client by replying to the request yourself. And in that case, you will not call the next role the request role, which I'll describe momentarily.
+
+The post-processor role is primarily interesting if you wanted to do something like gather statistics, like for logging. The final role you probably won't call, because only one module can call this role, the RTSP request role. That's the one that actually manages the real streaming session between the client and the server.
+
+And that's going to be done for you automatically by the main QTSS module. So you probably will not want to use that. But it's there if you do want to use it. If you want to manage the session yourself, because you don't like the way the server does, does it, feel free to write the code yourself.
+
+Okay, here's some new API that's in QuickTime Streaming Server 3.0. So, one of the things we were asked to do is provide callbacks for doing file I.O. So, any time your server reads a media file, it now has the opportunity, if it's registered for these roles, to be called back at interesting times. The very first one is the open file pre-processed role. That's used to say, yes, I support this media type, or no, I don't open this kind of file type.
+
+Or, no, I don't have file permissions to open this file type. So, you can do those kinds of things. It's a yes or no, I handle that file. The open and close file roles are interesting if you want to do something like, instead of opening a POSIX file, you want to open a media type from a database. And when you are done on the other side, close the database connection.
+
+You can do it there. The read and write roles are read from the media file, write from the media file. And the request event file role are only of interest. If you want to do asynchronous I/O. And you can use that for being called back when your reads are write complete.
+
+So, as I said, I was going to show you a very simple module, and the module I'm going to show you augments the error logging routine, and what it's going to do is, in addition to writing to the error log, it's going to email an administrator the error message. And so I'm going to walk you through the code real quick to do that. It's really short.
+
+The very first thing your module would do would be have a main function, and every module must have a main function. That's the only entry point that your module is called in. Anything else goes through that function, and the only thing it will in turn do is call the dispatch function.
+
+A dispatch function is just a switch in case statement, switching on the roles that you support. And other than the register role, the only one I'm showing here is something called the error log role, which I have written a routine called handle error that is my own routine within my module that's going to do something interesting with that error message. And I'll show you that code in a moment. And below that, you would see other roles that I was registered for, such as initialize or shutdown.
+
+So, in order for those roles to be called in that dispatch function, you also have to have a register role. And the register role, as I said previously, is called when your module loads. It tells QuickTime Streaming Server what roles your module supports. As you see in this slide, I support initialize and shutdown the error log roles. The only thing my initialize and shutdown roles do is I've written a very simple SMTP class, which I won't show you.
+
+It's kind of boring. It initializes an SMTP class, and then on the other side, when the server shutdowns, it closes down the SMTP class. The code that I did write is the handle error role, and you saw that in the dispatch slide on the previous slide. So, in order for that dispatch function to be called, I have to register that, that I support the error log role, and this is where I do it.
+
+So let's look at my really complicated function for handling error messages. There it is. The my_send_mail function is, just calls my little simple SMTP class to send. I grab from the parameter block pointer that's pointing to me the string, the error message string, and I send it on its way. So now that we've seen all this wonderful code, let's see how it works.
+
+So one of the things you would normally do on-- The first step to make this work would be you would drag your module into the modules folder and restart the machine. I didn't want to do that, so I just... This is my demo folder here. Now here is the compiled module I built. And I have this alias on the desktop to my streaming server modules folder.
+
+I'm going to drag it in. OK, it's in place. Now my server functionality is extended. Next thing I want to do is bring up the web-based admin, which Mythili will show you as the last talk. So I won't go into it. Let me click on that. So I'm bringing up the web-based admin. It tells me the server's not running. So I'm gonna click on Start Server Now. And if all goes well, I'll see the page of statistics that tells me the server's up and running.
+
+There it is. So I'm gonna stall a little bit because I'm waiting for my mail to be routed from my SMTP host to my POP server. But I'm going to bring up this really nifty mail program from Mac OS X, which I really like. I thought it was pretty cool.
+
+And you'll see, suddenly it magically appeared as an error message from the server. So in addition to writing this error log message to the server, to the error log, and I did something to make this error occur, I intentionally... made this error occur by not having a QuickTime groups file in my server configuration area. And so, now you've seen me extend the capabilities of the core server without actually touching the server code itself. And that concludes my demo. So I'm going to ask Chris to come back up.
+
+Thanks, Steve. So I think the important thing to get from that demo is that it's really simple to write these modules. That's obviously simpler than most. But what was it, 15 lines of code? Something like that, minus the mail stuff. We won't talk about that. Anyway, we're going to have John Murata come out and talk to you about the admin protocol. And the admin protocol is something new that we added to 3.0 that allows you to administer the server remotely through a variety of means. Here's John.
+
+So one of the great new features of the 3.0 server is the ability to control and access information in the server from a remote or local application. And we do this through something called the admin protocol. I'll be covering that and showing some examples at the end of my talk.
+
+This first diagram is just a simple review of where the admin module, which implements the protocol, sits inside of the server. It's, as Steve was mentioning, a built-in static module. It uses the QTSS API to access the data in the server and turns around and speaks to any of the applications who are talking to it over HTTP.
+
+The data that the module has access to is the same as for all modules, and that's information concerning the server. As in the server object, there is a client session object for every client that's connected. There's the preferences for the server and a lot of other objects that are all defined inside of the QTSS API.
+
+So the admin module can go ahead and get, set, delete, or add data attributes and the values for those attributes inside of the server. An application that's external to the server can go ahead and have access to that data on a par with any of the compiled-in modules.
+
+This diagram is an example of the hierarchy that's new in 3.0. Prior to this, as a module, you just received a set of objects each time your module was called. What we've added is the ability for an object to encapsulate another object. What this means is you can walk starting from the server object all the way down to the individual streams of each of the clients that are connected to the server. So, as an example, we have our server object down at the bottom of the next square. There's the client sessions, and then underneath that, the streams.
+
+This is an example of the protocol. It's very straightforward. When we say HTTP, that's what it is. It's just a GET. There's a URL, which is made possible by the hierarchy built into the server. The URL specifies an object and its data. For this example, I'm using a GET of the server container object, and I'm passing in a wildcard, giving back all of the attributes for the server container.
+
+And so this is just a brief overview. If you want an in-depth read on the protocol and the various options available to you, download the source code. There's a documentation directory. You'll find admin protocol readme inside there, and take a quick look at that. And now I'm going to show you some examples of the protocol working.
+
+OK, so I've just created a simple web page here with some predefined URLs. Their URLs are individual queries to the server. The first HTTP query is to the server object, and the command is get. So I'm just going to-- Click on this, and I received the response from the server through the admin protocol and admin module. It starts out with the container. It says that I've asked for the server attribute inside of the admin container, and I have a zero error status code.
+
+So this next query is the same as the first, except I'm adding the attribute for the server version that's contained inside of the server object. And once again, it's a get. And you can see that I'm receiving back the value for that attribute. Once again, this attribute, the name may look a little odd to you, but if you've seen the QTSS API, you'll recognize that as one of the fields inside of the server object. In this next URL, there's an asterisk wildcard which says, take all the attributes inside this object and return them. So we have a full list.
+
+and David LeRoy, and David LeRoy, and David LeRoy, and David LeRoy, and David LeRoy, and David LeRoy, So some of the other things that you can find inside of the server are the preferences. This is the QTSS server preference object. This is also the same information that you'll find in the XML preference file inside of the server. So each of these values represents what's in that file. One of the nice things is that if you were to change this, any of the values here, or add new attributes through the protocol, it also updates the file on the server itself.
+
+If you have a module and you've compiled it and added it to the server, it'll show up here in this modules list. And you can see here we have the file, some of the example modules, the error mail module that Steve showed you, file module which handles the on-demand movies, reflector module that handles broadcasts through the server, and some of the various other modules built in.
+
+So the way you would provide a UI, perhaps, for your module is-- To have the protocol access your preferences, and in this case I've just said give me all the preferences for all of the modules, all in one query. The way this query was executed, The first wildcard represents the name of the different modules, and the last wildcard, asterisk here, represents all the attributes at that object. Okay, so for this next example, I'm going to bring up QuickTime Player. And we're going to add a couple of movies.
+
+Okay, so this particular query is going to go and look at the client sessions that are currently playing. I've asked it to get each of the sessions. There's two of them playing right now. You can see the URL, the movie duration for the first movie, and also for the second movie. The interesting thing about this particular query is that I've asked for specific fields inside of each of the sessions. So I've narrowed it down from just a basic wildcard search to these three attributes inside of the sessions.
+
+Now, one of the features that you'll find inside our web admin is the ability to turn it on and off access of a port. And the way we do that is we have a list of ports, and I have two right now that the server is listening on. So what that means is I can... Bring up one of these movies, and if I ask for a port that doesn't exist, It will fail the connection.
+
+But one of the nice things about the protocol is it allows you to Control the behavior of the server. So in this case, I'm going to tell it to add the port value 8080. We got it back. A status is zero. You can see that it's been added. Now we're playing. So we just changed the behavior of the server.
+
+So this last query that I have for you pretty much starts out at the server level as we started. But I'm adding all of the parameters that are currently defined inside the protocol. So the R is recursive search. Verbose means give me the full path for each of the attributes. T is the type. Give me the type of every attribute.
+
+A is for access privileges. And the last one, D, is any debug information that you might have. It's asking that the admin module return that in the protocol. So here's an example of all of the information that you can actually pull out of the server from an HTTP application. So it starts out here at the server. Keeps on going through the modules. And keeps on running.
+
+and all of these are, you can see that we have different, the values, the data types, Access privileges, this one's read/write. And here we have a list of error messages that the server will be sending back at various times. And finally, we have our error status, which is zero, and a verbose message of OK. And that's our demo.
+
+Thanks, John. So pretty obvious that that protocol is really powerful. We're hoping to see people write a lot of tools around it. We obviously use it for the web-based admin. And Mythili's going to show you a little bit about the web-based admin and ways you can extend that-- Mythili Devineni.
+
+We talked a little about the QTSS API and the admin protocol. So now I'll talk about how you can use this knowledge and a little more to be able to customize the web admin. The web admin is one of the new features in QTSS 3.0, as you would have probably gathered if you were in the earlier session. I'll talk a little bit about what it is and how it works. Also, I'll give you an example of the special tags that we use in the admin and end it with a demo.
+
+The web-based admin is a simple web server written in Perl and has some CGI scripts and server-side includes. It is entirely written in Perl, and the CGI's handle all the HTTP response headers. The other thing that's different from a regular web server is that the authentication is provided by QTSs, so the web admin server just acts as a pipe between the browser and QTSs, and it does not do any authentication of its own. Of course, it does SSL encryption, and that's part of the web admin server itself. It's based on the admin protocol, and that's how it talks to QTSs, using the admin protocol.
+
+Now, why would you want to customize the web admin? That's probably the question that you're asking yourself. Now, if you want to be able to configure or modify advanced server preferences or add advanced monitoring capabilities to the server, then you'd want to extend the web admin. Otherwise, if you're a module developer and you've always wanted to have an easy way to configure and monitor your module, then extending the web admin is the way to go. You'll find that you can have a very easy to use interface.
+
+How does a web-based admin work? What happens when you actually get an HTTP request? It's very similar to a regular web server because when a request comes in, it looks for the file and in this case it's a CGI, so it executes a CGI. The CGI looks for the template HTML file, which is whose file name is passed in as the argument to it.
+
+Now, the template HTML file has a bunch of special tags, which are kind of like server-side includes. And they tell the admin server what to do with the tags. That is, whether to go fetch data from QTSs and process them and display them in the format that you want them to be displayed.
+
+So, while parsing the template, when the CGI finds such tags, it will send a request to the QTSs server using the admin protocol. Well, it'll actually talk to the QTSs admin module, because the admin module is the one that implements the admin protocol. It gets a response back, and the response is usually in the form that you've probably seen when John demoed the admin protocol. The admin protocol response is parsed and the values extracted and processed based on the information in the special tags.
+
+Once the tags are parsed, the tags are removed and the data, the process data is put into the HTML, and the last step is to append the CGI headers and Then send the HTML to the browser. So it's very simple, very similar to a web server. The only difference is that there's an interaction between the admin server and QTSS. Now I've mentioned these special tags all the time, so you're probably wondering what these look like and what they are, because this is what you need to know if you have to use extend or extend the web admin server.
+
+So one example of the tags is echo data. And echo data basically tells the server, the admin server, to fetch some data, which is actually the value associated with the attribute, the parameter, and process it, strip out everything else, and just get the value and replace the tag with the fetched value. So if a tag such as this is found in the HTML template, The admin server translates this to an admin protocol request, which is again a simple HTTP GET. As you can see, all it did was append.
+
+modules admin to the actual parameter that was in the template HTML. And once it gets the response back, it parses the value and replaces the tag in the template HTML with this value. So it's very similar for the other tags. There might be more process information, like format it into a radio button or things like that, or take an array and display it as a table. So there's a lot of things that you can do with these tags.
+
+To illustrate the use of these special tags, I'll do a short demo. You'll find that the admin server can talk to QTSs and it handles all the other details like authentication, encryption, things like that for you already. It's only a matter of writing simple HTML to extend the web admin.
+
+Now, earlier you got a glimpse of how cool the web-based admin is, but I find that that wasn't enough for me, so I decided...
+
+[Transcript missing]
+
+As you can see, the static HTML shows up as the form elements are all formatted. The only thing that's interesting here for us is the special tags.
+
+They look very strange, but those are the ones that actually do all the job for you. The example that I gave you, echo data, is up there. Then there are other tags called get value and format float and things like that. These are the ones that you'll find very useful when you're extending the web admin. If you see, there's nothing other than just these tags. These tags are doing all the work where they're talking to the admin protocol. Authentication is taken care of. You don't have to do anything yourself.
+
+Okay, and I also wanted to add, have a way to get to my page from the current web admin. So I modified the navigation page, the current navigation page to include a link to my page. So I'm going to drag this in to the admin HTML folder and my snapshot page. And let me go to the web admin and see if it shows up.
+
+There you go. There is a link to my snapshot and there it is. So here is my custom snapshot page. It has only certain data that I care about, which gets refreshed every five seconds. Let's see if we can connect a couple of clients to it and see if it gets refreshed and you have the right output.
+
+So as you can see, the CPU load and the current RDSP connections, all the data is being refreshed every five seconds. And it's only data that I care about, which I can very easily get to. And all that is authenticated. I don't have to write anything else, no other scripts or any code to get this information.
+
+So it's very easy to customize the web admin, and all you need to know is how to write some HTML, which pretty much everybody knows. So, well, hopefully everybody knows. And it's very easy to get started if you don't. And, well, the cool thing is that we've done everything for you so that you don't have to go and redo all the work.
+
+Thanks, Mythili. So obviously, you guys can see how powerful that is and how simple it is once you understand the tags. So let me talk about some development opportunities. If you're in the prior session, you've already heard these. But there are a lot of ways to modify or enhance the server. The first one is, since we're an open source project, obviously, you can modify the source code directly.
+
+That's great if you really need to do-- you typically don't need to do that unless you're going to be doing some really bizarre things or maybe fixing a bug. Those types of changes fall under Apple's Apple Public Source License, which means that if you make changes to the source code directly, you need to provide those changes back to Apple. And the reason for that is so that we can let those changes out to the rest of the world. As Steve showed, you can write a module. Modules are relatively simple to write, depending upon what you're doing.
+
+But at the same time, you can also write really complex modules, too, that do some pretty amazing things. You can extend the UI using simple HTML, possibly a little Perl script that does some additional parsing. If you've got some complicated UI elements you need to deal with. Or you can write a monitoring tool using the protocol that John showed, which is basically just straight HTTP, which HTTP that allows you to get to every attribute in the server, basically. And you can also implement our caching protocol. And this is not something we showed today.
+
+But the caching protocol is basically an extension that we've offered up to the IETF to RTSP and RTP for providing additional information to caching streaming servers for giving them additional metadata so that they can make sure that the stream from the caching proxy to the client is actually as good as the stream from a server directly to a client. So we encourage you guys to take advantage of all of these when you can or where you can.
+
+For more information on all of this stuff, probably the best place to go is make sure you're subscribed to our developer mailing list. And you can go to lists.apple.com, just search for the word stream and you'll find the developer's list and the user's list as well. And these lists are actually really good.
+
+The content tends to be very focused. The traffic is actually not so high that it's annoying, between 5 and 20 messages a day. And all of the engineers and part of marketing are actually on this list and we respond to questions or requests on the list. And it's a great way to just get a hold of us directly, too, if you have any questions or need some help with anything.
+
+The open source projects, including the Darwin Streaming Server, are all available at www.opensource.apple.com. So you can go get the source code there, get all the documentation for everything, as well as sign up to be a Darwin developer. And for any kind of non-server QuickTime-related things, such as how to hint movies, how to author movies, QuickTime APIs for broadcasting, things like that, you can go to the developer site for QuickTime at developer.apple.com.
+
+And one thing I'd like to ask you guys is if you guys plan to do anything around any of the ways to extend the server, let us know. Let us know on the mailing list. And we actually are really excited to help people get things done. We want to make sure that you get it done right, and we want to make sure it's kind of painless for you, too, because we want to see some really cool things out there.
+
+Today's Thursday, so we've only got a couple of things left in relation to QuickTime. There's a feedback forum at 3.30 in room J1, and that's a feedback forum for QuickTime in general, so it'll be both client-side feedback and server-side feedback. We'll have both server and client people there. And there's also a beer bus tonight at Apple, and we will have server engineers at the beer bus as well. The way they've got it organized, we're kind of broken into different areas, so check out either the server group and or the QuickTime area.

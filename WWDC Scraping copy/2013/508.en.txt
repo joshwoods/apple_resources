@@ -1,0 +1,296 @@
+---
+Title:  Working with OpenCL
+Year:   2013
+Web:    https://nonstrict.eu/wwdcindex/wwdc2013/508/
+
+[!] This transcript has potential transcription errors.
+---
+
+Welcome. My name is Jim. I'm an engineer on the OpenCL team at Apple. Our purpose with today's session is threefold. First, I'm going to talk to the newbies in the audience, those of you who have an application, are wondering about OpenCL, if it's appropriate for your application. My goal is to give you a checklist. So if you answer the questions on the checklist, you'll have a good idea of OpenCL is appropriate for your application and also how to use it.
+
+Then my colleague, Abe, is going to talk to you about some best practices and some performance tips for using OpenCL in Mavericks. And then last we have Dave McGavran from Adobe, and he's going to show you how Adobe has used OpenCL to accelerate portions of the video processing pipeline in Adobe Premiere, and he has a really cool demo, so stick around for that.
+
+So let's first talk about where OpenCL is going to work. When we launched CL in Snow Leopard, you could use OpenCL on the CPU on any Mac, but if you wanted to use OpenCL on the GPU, you were limited to those machines we were shipping that had certain discrete GPUs, an AMD or NVIDIA GPU.
+
+So what about Mavericks? Well, now we're happy to say that you can also use the integrated GPUs from Intel, starting with HD 4000. So what that means for you guys is that OpenCL is now supported on the CPU and the GPU on all shipping Macs, so that's great.
+
+So let's get to this checklist I was talking about. Your first question you ask is "am I waiting for something?" So what do I mean by that? I mean you start up your application, you click the Go button to do something cool, and there's a progress bar, and you wait and you wait and you wait. Or maybe you have some cool video processing program and you want to render effects on the frames in realtime but once you kick on the effects everything slows down, it's choppy. That's what I'm talking about.
+
+So, like any good developer, what do you do? You fire up Instruments and take a look at your application running, you look at it with Time Profiler. And that's going to let you zero in and find the part of the program and causing you to slow down. That's the piece I want you to hold in your mind as we go through this checklist.
+
+But maybe the answer to this question is no, but maybe the reason is you've avoided doing something intensive. So maybe there's this really cool new algorithm that you really wanted to put into your application but you were afraid. You were afraid that if you did that, it's going to slow it down, your users will hate you, so you don't have to be afraid, maybe OpenCL is the doorway to this new algorithm that you want to use.
+
+So let's say you can answer yes to either of these two questions. So then you want to ask yourself about that piece of code, about that code pathway, "do I have a parallel workload?" Now, a lot of you people probably know what I mean when I say a parallel workload, but let's just make sure everyone is on the same page like we always do with a really terrible haiku.
+
+Pieces of data, all changing in the same way, few dependencies. So you can count my syllables and I'll go through these lines and tell you what they mean. Pieces of data is pretty obvious. Anytime you're going to do computation you have data that you need to process. All changing in the same way is a little bit more subtle.
+
+That means that for each piece of data, you're going to apply the same instructions, the same program to each piece of data. And few dependencies is the worst one of all. What that means is that the results of one computation is not needed for any of the other computations, or while I'm doing my computation, I don't need to know what my neighbor did. They're all independent. So that's what we mean when we say "a parallel workload."
+
+So let's make this concrete, image processing. Canonical example. You want to sepia tone this big cat, so you're going to pluck out a pixel, you're going to throw it through the math that changes it to sepia, and then you're going to plop it back into the right spot. Okay, that's a classical example of a parallel workload, and in fact core image in Mavericks is running on top of CL on the GPU.
+
+But we don't want you to think that CL is only for graphics type stuff. So, when we showed CL first in 2009 we showed you this really cool physics simulation. Now, we showed you the results using pretty graphics, but the guts of what was happening, the computation that was moving the bodies around in space according to the physics calculations, that's just arbitrary computation, and we want you to remember that when thinking about CL. CL is good for arbitrary computation like this.
+
+And in fact, an example of a parallel workload that you might not even consider is grepping a large file. Think about what you do when you grep. You open up this file, you look at the file line by line and you apply the same regular expression to each line of the file. That's an example of a problem that you might be able to apply CL to solve. So let's say you look at your problem and it's not exactly parallel.
+
+So the question then becomes "Can you earn a parallel workload?", and this is usually the trickiest piece. What I mean by "earn" is, can you take your non-parallel problem and twist it somehow or change it so that it becomes parallel? So let's look at an example of a problem like that.
+
+Consider computing a histogram of an image. So for the image you have some RGBA image, 8-bit color, and you have a histogram for each color channel, one bucket per possible color value. And what you do is you look at the pixels in the image -- so let's just look at one of them -- so we look at this guy and we see he has a red value of 79, green of 148, and blue of 186. Fine. So we go to each histogram, we find the bin that we're supposed to increment and we knock it up by 1. So for example here we would increment the 79 bin for red, increment it by 1.
+
+So, at the end of the day you have this nice histogram which gives you a distribution of the color as it's used in the image. And you'll have a good idea of how colors are being used, and more importantly your algorithm will have an idea of how color is being used. Image histogram is an intermediate step in a lot of cool algorithms.
+
+So this feels like one of these parallel problems I just talked about, so what's the problem? Why is this not parallel to begin with? Well, let's look at just 2 pixels in parallel, so let's look at these two. Now, these two happen to have the same blue channel value.
+
+So what's going to happen? They're both going to go to that blue bin they map to, let's say the value in there is 35 -- they're both going to read out 35, increment it by 1 to 36, and try to write it back. So that's a problem. You have a classic collision. You're going to have the incorrect value in that slot. So what do we do when we hit a problem like this?
+
+Well, normally you synchronize around that code, you would make that an atomic operation. You've taken some problem that seems very parallel but there's this serial bit of it that just really ruins your day. So now we have to get clever. So what we can do instead is we break the image into groups of pixels. So let's take a look at one group. Let's look at that one.
+
+So what we're going to do in this group is the same thing that we were going to do to the whole image. We're still going to compute a histogram for that group of pixels. But instead of a global histogram, we're going to update only a partial histogram. So this group's going to have its own histogram for each color channel, and it's only going to update that histogram. And all the groups, each group has its own partial histogram.
+
+So the thing is, these collisions that I talked about for the whole image, they still exist for the partial histograms, but only within this group. And OpenCL has a lot of language facilities that expose underlying hardware that let you deal with these collisions within a group very quickly.
+
+So we also get a win, because all these groups can operate in parallel, so we've taken this and we've made this parallel. Okay, so we're done, right. Well, not yet, because now we kind of have what we don't really want. We have this big pile of partial histograms. What we wanted was one total histogram. So now we have a second step, a new step to the algorithm. This time our data is not the image. Forget about the image; it's this partial histogram set.
+
+And now each independent thread of execution -- which in OpenCL is called a work item -- they have a job. This guy's job is to sum up bin 79. So what will he do? He walks down through all the partial histograms, summing up bin 79, and he writes the result in that total histogram. Now, he's the only one writing to that slot, so there's no more collisions in the total histogram.
+
+So what we've done here is we've taken this problem, this image histogram problem, we've twisted it just a little bit and made it purely parallel. And the cool thing is, we do this for all the partial histograms, all threads operating all together, all these work items in parallel.
+
+So if you can answer yes to either of these first two questions and yes to either of the second two questions, then you have a problem that is probably appropriate for OpenCL. That's good. So now the question is "do I run it on the CPU or the GPU?" You've probably heard that you can run it in either place. This breaks down to three questions. Where is my data now, where is my data destined, and by that I mean destined to be used, and how hard am I working on each piece of data?
+
+So let's look at some data. Now, this happens to be image data, but again, remember, arbitrary computations, just some data on the host, and by host I just mean your CPU, in its memory space, memory that you get through malloc, for example. Okay, so when you do computation on this data, you process it somehow. The computation is exemplified by this green arrow. If you were to measure the total time you spent, it's going to be the total time you spent doing the compute. This is a normal situation; now let's bring OpenCL into the picture.
+
+When you're doing compute with an OpenCL device, OpenCL has to be able to see that memory you want to work on. So normally you have to sort of "transfer" it over to OpenCL, and we'll define that transfer in a second. Then you can do your compute in OpenCL, and then if your host wants to use that memory, it has to be able to see that memory. So then you have to give that memory back to the host.
+
+So now when we're talking about the total time, it's not just your compute time, hopefully faster, it's also this transfer time. So let's talk about that, this transfer time, what is that? It depends on your device. If you're on a discrete GPU, that's a function of the amount of data you want to send and your bus speed, the PCIe bus. That makes sense, got to get it over to the VRAM, get it over to the device. But if you're working on the CPU as your OpenCL device, this transfer time is nothing, because the host and the OpenCL device share the same memory space.
+
+And if you're on the integrated GPU, sometimes this is also nothing. Now, that's a maybe because this is only true if you're using OpenCL buffers. If you're using images, a copy still has to be made, because the integrated GPU will set up that image data in a way that takes advantage of texture caches, stuff like that.
+
+So now you have an idea of what that transfer cost is. Now, what about the compute -- now this might go without saying, but if you're working on a problem like I described, one of these data parallel problems, the OpenCL device is going to beat the code that you're writing on the host. So let's just get that out there right now, so for these kind of problems, OpenCL is going to win.
+
+So let's look at a problem like this, where you're doing a lot of computation relative to the amount of data transfer you're doing. Lot of compute versus data transfer. In this case this is an ideal scenario for the discrete GPU. This is where you want to use the discrete GPU, because this transfer cost that you incur by using the discrete GPU is dwarfed by the amount of win you get for the compute.
+
+Now, what about a situation like this. Here you're doing a lot of transfer and not so much compute. You're spending too much time doing transfer. In this case you might want to consider it using the OpenCL CPU device or staying on the integrated GPU, and then that transfer cost may go away.
+
+Now, remember, I talked about the question of where is my data at now and where is it destined to be. Well, let's imagine that you're using an OpenCL device, the GPU, that it happens to also be the display device. You might be sharing data with say, OpenGL, like Chris talked about in the previous session or IOSurface, like this. This data is the same and it's already on the GPU.
+
+Likewise, you might be doing some computation then using the result of that to be displayed to the user, for example; again, shared through GL or shared through IOSurface, or you may have both. In this case, it's kind of obvious: stay on the GPU and do your compute. Your data's already there, it's going to be used there, just stay there.
+
+Even in a situation like this, where your data is starting on the host and then is going to be displayed to the user on the GPU after processing, it makes sense even if the transfer cost might be a little bit high, to go to the CL device -- that's the same as the display device -- do your compute there, because that leaves your host free to do other computation.
+
+So let's just talk a bit, for those of you who weren't in the previous session, about the kind of data that might be on the device. We said we can share with GL or IOSurface, so let's talk about GL. Now, GL has a lot of different that it can have. As an example, it can have vertex buffer objects, it can have textures, and you use those and you render some cool picture.
+
+Now, that picture might be a texture attachment or a render buffer attachment to an FBO. Great. And along the way you can hit that in OpenGL with some cool shaders to produce some nice effects. So where does CL fit into this picture? Well, typically you would share something like the VBO as a CL mem object, as a CL buffer.
+
+And likewise, you would share textures or render buffer attachments with OpenCL as an image memory object. And where it fits into the pipeline is right here. You're going to use a CL to modify or generate vertex data in that VBO, and then you might want to do some post processing in CL after you're done with your other GL pipeline, and you might want to do that because you can maybe express things more cleanly in the OpenCL programming language than you could in say, a GLSL shader, or you might want to launch your CL kernel over a smaller domain than what GLSL will let you do.
+
+Now I do want to say one thing to the people who are already using CLGL sharing. So previously in 2011 we told you that the sort of paradigm you should follow when using shared objects in CL from GL is flush, acquire, compute, release -- you're going to finish with your GL commands and call glFlush, and then you're going to clEnqueueAcquireGLPObjects, do your compute, wail on it with CL, whatever you want, and then call clEnqueueReleaseGLObjects. And within that function call we internally will call clFlush for you to make sure your CL commands made it down to the GPU before GL would go do more work with those objects.
+
+That has changed. In Mavericks we want you to follow something else. You notice that "acquire" has disappeared from the list. Flush, compute, flush, or maybe "Flush when you're done," something like that. So first you're going to call glFlushRenderAPPLE, and then you're going to do your compute, and then you're going to call clFlush.
+
+Now, you call that. Before, we did that for you. And notice this is glFlushRenderAPPLE, so why that? Well, for single-buffered contexts, this allows you to avoid a blit. If you have a double-buffered context, this doesn't matter. It's the same as glFlush. There's no penalty to using it so just use it.
+
+And then I mentioned IOSurface is another way you might be sharing with CL. So if Mac OS X technologies are Tolkienian creatures, IOSurface would be Gandalf. It's a container for 2D image data, and it's really magical in that you can set up an IOSurface in one process and then just using the IOSurface handle you can use it in another process, through the IOSurface API, and that process might be 64-bit where the other process is 32-bit. And more, that process might be sharing the IOSurface with OpenGL, which is hammering on this data on the GPU.
+
+And we make sure, under the covers, that this data is always in the right place at the right time and you have the consistent, correct view of the data. So it's really cool, especially for those of you working on video. You can get your video frames as IOSurfaces fairly easily and then share those with CL or GL and do some cool things to them, so please do that.
+
+Now, we talked about IOSurface sharing in detail in 2011. I talked about that in the talk, "What's New in OpenCL," so if you want to learn more details, go listen to that talk. It's on the developer website. And also, Ken Dyke had an excellent talk in 2010 called "Taking Advantage of Multiple GPUs" where he talks about IOSurface in some detail.
+
+So that brings us back to this checklist. So those of you who walked in here and had no idea if CL was appropriate for you, you should have a better idea, but if not, come talk to us in the lab. It's right after the session; we'll be there.
+
+I do want to say something about the OpenCL programming model, though, before I go. So if you look at the OpenCL spec, you'll see that it's 400 pages. And even the OpenCL Programming Guide, which is a good book, a gentler introduction, it's not exactly a lightweight tome. But I'm going to give you an easy way to think about OpenCL. It breaks down into two pieces. It's a C-like programming language and a runtime API, so let's talk about the language first. We say "C-like" because it's basically C with some new types, and has some nice built-in functions to make your life easier.
+
+And you describe your work from the perspective of one piece of data. Remember, we talked about in the haiku, "all changing in the same way." That's what you do in your OpenCL kernel, which what you write with the OpenCL programming language. You do this all the time, every day when you write code.
+
+You write a loop, and in your loop you say "For My data, do this thing." Well, "this thing," that's your OpenCL kernel. Let's look at an example. Here's a bunch of C code. Let's go through it bit by bit. So first, what are we doing? We're converting a big image from RGB to HSV.
+
+So first we're going to loop over the data. That's what we have to do, a pixel at a time. Once we're inside the loop what pixel do I do? Oh, I'll use the loop indices to find out what pixel I should modify, great. I grab that pixel, I shift out the color values because it's stored in one integer, and then I convert that to floating point because my RGB to HSV conversion function, which I'm going to show you in a second, expects float. Fine. I call that function and I write back the result to my output image.
+
+Seems easy. And let's take a look at this RGB to HSV function. You don't have to know what's going on here, I just want you to notice it's a simple function, takes in some parameters, RGB, and writes out HSV, according to the algorithm for the algorithm for converting this. So let's turn this into an OpenCL kernel.
+
+Now, remember, an OpenCL kernel is launched over some domain. In this case we've launched our kernel over a 2-dimensional domain that corresponds exactly to the number of pixels in the X and Y dimension. So this kernel will run for each pixel of the image. And you can see here that every instance of the kernel that's running is going to have access to that input and output image.
+
+So how do we find out what pixel to work on? Well, here we call some OpenCL built-in functions, getglobalid(0) and getglobalid(1). That gives us the global ID in the first and second dimensions. This happens to correspond to X and Y. So then we use another OpenCL built-in, readimagef.
+
+And that will tap the input image at that coordinate and give us back 4 channel float data. Now, notice, this doesn't know anything about the underlying image format. That's one nice thing about using an OpenCL kernel. You can swap out image formats and OpenCL, the kernel will still do the right thing for you.
+
+And then you're going to call the conversion function like before, and you're going to use another built-in, writeimagef, to write the output. So let's dive into the kernel version of this conversion function. So here it is. Now you probably don't have a photographic memory, but it looks a lot like the previous version. I do want to call out one thing. You can see here that we only have one parameter. We're taking the input pixel and then returning a float4 output pixel.
+
+But otherwise, this looks a lot like the previous function, so let's just bounce back and forth between them here. So here's the CL version and that's the C version. So CL, C. So you can go back afterwards and see that they're almost identical, so it really is just the guts of the loop that we've extracted out. That's not always that easy, but usually this is where you start when you're writing your CL kernel.
+
+So let's talk for a second about the runtime API. Now, if you look at the OpenCL API there's a lot of functions in there, but really they break down into three categories, I'd say, discovery, setup, and execution. Discovery. That lets you ask, "hey, OpenCL, what devices are there on my Mac for doing compute?" Straightforward.
+
+And then more interestingly, "hey, given this device, what's the best way to break up my work?" And that's because your integrated GPU and your CPU and your discrete GPU, they all have different parallel capabilities, so you would use the answers from this part of the API to decide how to break up your work the best.
+
+Setup. "Hey OpenCL, I have this kernel, compile it and let me use it." Or "hey, OpenCL, set aside this memory. I'm going to do some compute and I want to write the result there." That's setup, pretty straightforward. And then finally, execution. Once you have this all set up, you want to say, "okay, fill up that memory with this data that I have here on the host, or run this kernel and run that one. Do my work," basically.
+
+So, hopefully I've given you an idea of how to start thinking about OpenCL. And like I said, if you have more questions, come down and see us in the lab. And with that I'd like to hand it off to Abe, who's going to talk to you about some practical tasks.
+
+[ Applause ]
+
+[Abe Stephens]
+Good afternoon. My name's Abe Stevens, and I'm an engineer on the OpenCL team, and today I'm going to talk about some practical tasks that you can do with OpenCL, and I'm going to focus on a couple features that we've added for OpenCL and 10.9. I'm going to tell you how to take advantage of some of the program loading and compiler features that we've added to decrease the startup time of your applications, and then I'm going to take a step back and talk about how to save power on laptop configurations by using the discrete GPU and setting your application up so that it can transition to the integrated CPU, since we now support Intel HD graphics on all of our shipping configurations.
+
+And then I'm going to talk about a couple features that are related in some ways to what Jim just told you about. Jim was talking about how to look at the transfer time that your application requires to transfer data from the host to the GPU, and I'm going to show you a couple ways of reducing that transfer time and reducing the amount of copying your application has to do.
+
+So let me start off by talking about how to address the start-up time, or the time it takes for you to load OpenCL programs when you start your application. In OpenCL there are really three different functions that contribute to a slow startup: building a CL program, compiling that program and linking that program, which are three different steps that a program has to go through before you end up with an executable binary that you can execute on a GPU.
+
+Now, in OpenCL you can generate these programs using three different types of input. You can start with a piece of CL source code, and that can be either a string that you produced at runtime or maybe a string that you loaded from a .cl file that you shipped with your application. It can be an LLVM bitcode file, and that can be a bitcode file that you generated in Xcode using a .cl file at build time and that was shipped with your app.
+
+And then the third type of input that I'll talk about the most today is an executable binary specifically for the device that's in the system that's running the app. And this is something that you can create at runtime the first time your app launches and then use it on subsequent launches to really decrease that startup time. So let me show you how much faster using executable binaries can really be.
+
+Let's say we have a really simple application. This is a 30-line CL kernel which is going to load a couple pixels or read pixel values. It's actually used as a macro here to load, pixels and a stencil, and then it's going to take these values, compute them and use them to process a simple video effect.
+
+Now, if you take this application or this kernel and you sort of set up the system in the worst possible kind of case, where the compiler service hasn't started, the program hasn't ever run before, it might take the system about 200 milliseconds to compile that CL kernel and give you an executable program binary.
+
+Now, if you had started with the same system in that cold state with a bitcode file that you generated in Xcode, you could do it in about half the amount of time, so about 80 milliseconds. Now, if you had a warm system or maybe you'd launched the application recently and the compiler service was started and some of the data was cached it actually gets a lot faster.
+
+That source, compiling from source, can go down to about 1 to 2 milliseconds, same thing for the bitcode file and here is the kicker. Here's the really neat thing. If you'd had an executable binary already, and so you could skip all that compiler work, you could actually get started and start executing the program in under 1 millisecond. So let me show you how to set up your application to do that.
+
+Well the first step is to actually start off with either a .cl source file or a bitcode file, and you would want to take this and load it into your application, and in this case I'm going to show you how to use a bitcode file. Bitcode files are a great way of avoiding having to ship source code in your application.
+
+You can ship the bitcode file in this case for 32 GPUs and load it at runtime. Here I'm going to load this using some Cocoa code and then pass it to CLCreate program with binary and then build the program, then I end up with this executable device binary.
+
+I can take that binary and save it to a cache, and I'll show you how to figure out where to put that cache in a second, but in order to extract the binary I just call CLGetProgramInfo and pack it into a Coca data object and then store that out to the file system.
+
+So I call GetProgramInfo and get the size of the binary and then the actual binary data itself, and then send it out to the file system. Now, let's say the user has stopped using the application and they started up again later on, and I want to figure out if I have a cache file that I can load.
+
+So if I look in my caches directory, I can compute just using some simple Cocoa code here, a location that a cache file would be located and then try to pull it into memory, and if that's successful, I can go and pass the executable binary into CLCreateProgram with binary and then CLBUild program. So that's what I'm going to do here. You'll notice there's actually some error checking code in here, and this is important.
+
+It's possible that the runtime will -- even if you did have that binary, even if we were able to load it successfully from the file system, it's possible that the runtime might refuse to load an executable binary and it could do that for a couple of different reasons.
+
+It might be that your user took their home directory and moved on to a different machine or they moved that binary onto a different computer, maybe they installed a software update and the software update installed new graphics driver versions and the graphics driver versions ended up not supporting that particular executable binary version.
+
+And if that happens, your app has to have a fallback path that it can go back to to regenerate the executable device binary. And so of course, that fallback path could be as simple as going back to whatever mechanism we used two slides ago to produce the binary in the first place if you go back to source code or to a bitcode file.
+
+So after you pull that binary from disk and you pass it to CL, CreateProgramwith Binary and CL build program, check to see if this invalid binary error came back, and if it did, make sure your app is a fallback path and of course you won't at the sub millisecond build time but you'll be able to take advantage of the faster device executable binary load times on subsequent launches of your app.
+
+So I took the code that we just saw, and I applied it to a couple different programs, the 30-line program that I showed you the very first part of, and then a 1,000-line program that was actually from an app that we were working on, and then I had a much larger test case, 4,000 line program.
+
+And you can see that the time to load source code in each case kind of went up quite a bit for each of these different programs. I went from 200 milliseconds to 3,000 milliseconds in the worst case. But the best case here to load that executable binary was always under 1 millisecond.
+
+And so really, depending on -- regardless of how big your program ends up being, taking advantage of that executable binary can save you a lot of time at startup. Now I'd like to talk about another topic, which is that in 10.9, OpenCL is supported on integrated GPUs, the Intel HD Graphics, and of course, it's also supported on discrete GPUs.
+
+And so if you're working on a configuration like this Macbook Pro Retina, you'll see that the discrete GPU, the Nvidia 650 and the integrated GPU both support CL, and if you can take advantage of both of those, one thing you can do is save power for your users. And so OpenGL apps have actually been able to do this for quite some time.
+
+Now, an OpenGL app running on this GPU has a choice to make; it can either run only on the discrete device or it can support what's called automatic graphic switching, and when it supports automatic graphing switching it's been written in a certain way and it follows conventions that allow it to transition from the discrete GPU to the integrated GPU if the system tells it to do so, and if it does that, all the applications in the system are able to make that transition, that can save power for the user when there aren't any applications running that require that discrete GPU. So let me show you how to do this with OpenCL.
+
+Now if you have an OpenGL application, you probably have an NSOpenGLView. If you're working on an application that doesn't use Cocoa, you can actually do the same kind -- perform the same operations in a slightly different way, but in your NSOpenGLView you probably have some code that checks to see what the current virtual screen is.
+
+And here, my NSOpenGL View is keeping track of the last virtual it used to render the previous frame, and it's going to compare that to the virtual screen that the GL context is asking you to render into for the next frame, and it'll check to see if these two things are different.
+
+And if the two virtual screens are mismatched, it's going to execute a couple of8 GL commands to check and see if the new device, that new virtual screen, the device associated with that is capable of running everything that it needs to execute. And it might adapt its usage, it might use smaller textures or avoid using certain extensions or otherwise adapt its usage. Now, we want to do the same kind of thing in OpenCL when we detect that this render has changed.
+
+And so since OpenCL doesn't use virtual screens; it uses CL Device IDS, we need to call the function that -- actually, Chris showed you this function in the previous talk -- CGLGetDevices for CurrentVirtual Screen Apple. What that'll do is it'll map whatever our current Virtual Screen is from a virtual screen to, ID'd back to a CL device ID, and then we can start creating that CL Device ID and learn more about the new device that we're supposed to use.
+
+So CL does actually a lot of the conversion between two devices automatically because a bit part of the OpenCL API is the ability to work with multiple devices and to say run operations on two different CPUs, or the CPU and GPU. So a lot of the CL objects are context level objects, and they'll handle sort of switching from one device to another automatically.
+
+Memory objects, images and buffers will do that. CL kernel objects will handle moving between the two devices and of course programs, if they're built for both devices, will handle the transition as well. Also if you have an event dependency or you create an event on one command cue, that event will sort of work and will track a dependency if you associate it -- or you tell a command that's cued on a different command cue to wait for the event.
+
+There are a couple of things that you need to check in OpenCL. And those are that you have to make sure your context that you're using contains both devices and so you can create command cues for both devices. And of course, you have to make sure that if you create programs for the two devices, that you create them for either the right executable binaries, or if there are PPUs in this case, that you create them with this GPU 32 bitcode file.
+
+And so there are other things that you might have to check as well. These are less common. It's possible that if your program is using Double Precision and you have some highly tuned numerics in your program, when you compile this for the integrated device, it'll be -- instead of running with double it'll run with single prevision floating point, and you have to make sure that that's enough precision for your application.
+
+Another thing to check is that a lot of the capabilities of the devices are a little bit different, and so the kernel work group size of the integrated GPU and the discrete GPU will be different, so when you initialize OpenCL, you compile your programs, you should check to see what your kernel work group size is of the discrete GPU, of course, and record that and figure out how large of kernels to launch, and then do the same thing for the integrated GPU. That way when you detect this switch, it'll be really easy for you to switch to in cuing kernels that use the appropriate likely smaller work group sizes.
+
+So now I'd like to go over a couple of performance features that we've added in 10.9, and these features have to do with reducing the cost of memory transfers or reducing the time that our application will spend waiting for transfers to complete. And the first thing I'd like to talk about is buffers and images. In OpenCL, buffers are really just like pointers to memory in your kernel. You can read and write them, manipulate them as global pointers. You probably saw those in the example Jim showed earlier.
+
+Buffers support atomic operations and on most GPUs, the global memory that you use to access buffers is usually not cached, and so sometimes it can be higher latency to access tasks as buffer objects. Image objects are kind of like GL textures. They're either read only or write only, so you have to decide when you're writing a kernel if you're going to either only read or only write for a particular object. And they support harbor filtering.
+
+So what if you had an instance where you wanted to support both? Say for example, you had this set of kernels where you have a histogram operation and then you would like to output data in a floating point array but then later on, perform a read image operation where you'd like some hardware texture filtering.
+
+Well, in 10.9 we supported the image 2D for buffering extension, and this allows us to basically take a buffer object that we've created here and wrap it with an image object. So here the image object has been sized so that it contains enough pixels to fill the buffer, and I'm essentially wrapping the allocated buffer with an image, and then in my kernel I'll be able to -- or in two different kernels, I'll be able to access the same underlying piece of memory once as a buffer and then also as an image.
+
+So when you're using image 2D from buffer, you have to be careful of a couple of different things. One thing is that if you've created the buffer using UseHostPointer, which is a popular technique, you have to make sure that the UseHostPointer address that you pass in matches the device's base address alignment. You also have to make sure that if you specify a row pitch that the row pitch matches or is a multiple of the pitch alignment for that particular device.
+
+Now, in computeApps, data movement is -- there are a lot of different patterns for data movement and Jim talked about a few of these in the previous section of the talk. One common pattern is a pattern where you write some data to the device, you process on it, you execute a couple of kernels, and then you read back that data. And so that would look something like this, and this is common in say video kind of operation where for each frame you're writing it to ComputeDevice, processing it for a little while, and then reading it back and maybe encoding it.
+
+In this kind of a system, let's say it takes about 2 milliseconds to move those pieces of data to the device and 6 milliseconds to do the processing. Well, that would be about 10 milliseconds per iteration. And so if I was going to do 100 iterations, I'd end up spending 1,000 milliseconds and I'd only really actually be doing compute work for 60% of that time.
+
+Well, it turns out in many discrete GPUs there's some DMA hardware that can allow us to overlap the read and write work with the compute work. And so if we take a look at a piece of compute work, say integration N here, we can try to think about what the system might schedule using in a DMA engine for iteration N.
+
+So for example, the system could schedule the readback of the previous frame. So we know that the system is done, the GPU is done processing work for NMIs 1 and so it can do the readback for that frame. It could also actually, since there's no dependency between each frame, it could also do the -- it could also write for it and write iteration and +1s data out to the GPU. And so if we repeat this pattern, we can see that we can keep the DMAengine busy and also keep the computeEngine busy for most of these iterations.
+
+And so if I look across all of my 100 iterations, I might be able to do this in about 40% less time -- a little more than 40% the time by fully subscribing both the DMA and the compute sides of the device. To set this up in OpenCL, I'd want to write some code that looks something like this.
+
+Here I'm using nonblocking read and write commands, and of course my EnqueueKerneland my EnqueueNDRange command is always nonblocking, so I'm going to set up the first kernel and then have a pipeline loop that iterates over the body of the work, and then at the end I clean that up by enqueueing the last kernel and then reading back the last result.
+
+And this code will work for M input and output buffers. In a sort of practical system I'd probably have a relatively much smaller pool of buffers that I'd work on, much smaller than say 100 buffers, and I might have to track dependencies and make sure that it's safe to reuse a buffer after it's been sent to the device.
+
+So before I close, I'd like to talk about some programming tips for using OpenCL and these apply to 10.9 and to the other implementations of OpenCL that we've shipped. One tip that we have is that when you're able to, you should prefer passing page line pointers to the system.
+
+So if you create or an image as a used host pointer, try to pass in something that page lined, you can also pass in pageline pointers when you have to read or write data into the system and the driver will try to take an optimized path when you do that. One way of getting pageline pointers is to call POSIX Memoline instead of Malik when you're allocating a host buffer.
+
+Another tip that we have is to avoid using CLFInish. It's great for debugging and for isolating a problem in your code, but it'll create sort of large bottlenecks or bubbles in your pipeline, and is not something that you should use in production code in most cases. If you do need help debugging, you can use CLLog error, which is an environment variable that you can set and it will turn on verbose log messages in case there's an API problem, or if you're trying to debug a problem with a kernel on the GPU, consider using printf.
+
+So Open CL Mavericks, today we talked about a mechanism for loading your program faster using executable binaries, and the important part there was to have a fallback mechanism so that if there is a binary and compatibility your app can fall back and load either from the code files or from source.
+
+Then we talked about how to make sure your app follows the conventions that are necessary to support automatic graphic switching so that you can reduce battery life if you're able to move everything over to the integrated GPU. And lastly, we talked about a couple mechanisms that are available to decrease the overhead of having to copy data from the host to the device. And so now I'd like to hand the talk over to David McGavran from Adobe, who's going to tell us about how he's used OpenCL and Adobe Premiere Pro, and I think he has a demo for us.
+
+[ Applause ]
+
+[David McGavran]
+Good afternoon. My name's David McGavran, I'm the senior engineering manager on Adobe Premiere Pro. So about a year and a half ago, we announced that we ported the entire GP rendering engine in Premiere Pro to OpenCL. That was a big announcement for us. It was a really exciting time for us and we were doing that specifically to target the Macbook Pro that shipped at that time.
+
+So we're very excited about that, and we came here to WWDC last year and we talked to this session about the improvements we made in Premiere using OpenCL and it was really exciting. This year I want to talk about what we've done since then. We obviously didn't stop working, and OpenCL is a great way to really excite our users and really make them enjoy working in Premiere.
+
+So I want to talk about the differences in Premiere Pro CS6 to what we're doing in Adobe Premiere Pro CC that's shipping in four days. So last year in Premiere Pro CS6, we were very careful about what we targeted. It was a massive effort to port the entire GPU engine to OpenCL, and so we were very careful. We targeted just 2 GPUs.
+
+We targeted the GPUs that were in the Macbook Pro line at the time, so the 650M and the 670M. Well, we've been getting much better at OpenCL, and we've done a lot more testing, so the first thing we're going to do is we're going to really increase the places where you can use Premiere Pro on OpenCL. So you can see here, we support just about every card that's shipping in Macintoshes today.
+
+The other thing that we've done is now that we know how well we can take advantage of OpenCL, sometimes cards come out after we ship a version. So traditionally we've white-listed a card, and then that's the card that would work. If you got a new card, it took us a little while to catch up with you.
+
+So now that we're really confident in OpenCL, we're also allowing it so that you can turn on a new card as a user, and as long as it has a gig of RAM on the video card, and passes some basic video card tests, you'll be confident that it's going to run well on your GPU, so that's pretty exciting. So we've really taken advantage of all the different computers that are out there.
+
+Furthermore, we've really worked hard on continuing to improve the program elements. We've showed you some pretty amazing demos with CS6 about what you can do with OpenCL, but we still want to always go further. We really want to take advantage of every bit of power on the machine.
+
+So we did three things. Last year we were saying that one of the pitfalls we ran into with OpenCL was trying to get pin memory to work. We struggled with it, we didn't quite get it done in time, we've gotten that done now, so OpenCL with pin memory is working really well for us, and it really shows some real world performance improvements.
+
+We've also been working with some of the stuff that you saw earlier in these slides to take advantage of the image to buffer translation. That was a pretty heavy problem for us. We have a lot of kernels that run really well on images, and a lot of kernels that run really well on buffers, having to copy between those was a pretty expensive piece of problem for us. So we take advantage of this new thing, and that's quite exciting.
+
+You also saw something in the keynote about the new Mac Pro shipping with dual GPUs. So in Adobe Premiere Pro CC, when you're rendering a sequence down to a file, we fully take advantage of multiple GPUs in your system, so that obviously gives you a really big performance improvement when you're running on a system like that. So we're really excited about the Mac Pro announcement and what it's going to do for Premiere Pro customers.
+
+So last year -- I brought up this slide to show all the different things that Premiere does on OpenCL. So if you're doing basic video processing, you need to do DM releasing, you need to do compositing, you need to use blend modes, you need to upload all this stuff onto your graphics card and you can do effects, you can do transitions, you can do color, effects, and all that stuff.
+
+So we always want to continue to see if the other stuff we can do on the GPU. So this year with Premiere Pro CC we've added a few effects. Now, this doesn't really look like a big list. We have some new blurs, we have wipe and slide, some basic stuff that you would expect for us to do on the OpenCL kernels. But on the bottom right there you'll see the Lumetri deep color engine. I want to talk about that for a little bit.
+
+The Lumetri deep color engine came from an acquisition we made about a year and a half ago. It's a technology from a company called Aridos. They have a super high-end color grading application called Speed grade, and that was a very, very powerful application that they used to do things like grade the entire Blue ray release of James Bond -- all the entire series. We took that entire GPU engine that they had, brought it into Premiere Pro under the Mercury Playback engine, and ported it all to OpenCL.
+
+So this in itself, this omen effect, is built up of 60 kernels, all doing really, really complicated stuff, on the GPU. And this allows the editors using Premiere Pro now to actually apply creative looks to their movies that I'll show you in a demo in a minute, and that just changes the way they completely use the Premiere Pro. You cannot do that without the GPU. It was a painful experience to sit there and use that engine without the GP running behind you. So that's how we can really take advantage of OpenCL to delight our users.
+
+So using these performance improvements, what are we seeing? So if we just talk about the pin memory, and the image to buffer and just do a simple encode without them and with them, we're seeing about a 30% performance improvement. That's pretty good, considering we got a massive performance improvement just switching to OpenCL, so that we can go with another 30%, that's pretty good for our users.
+
+If we take everything into account that we're talking about -- the new blurs, the new transitions, and the multiple GPUs, we're seeing somewhere upward of 200% performance improvements on an encode. This is very exciting. You take Premiere Sequence, you render the same sequence with all these optimizations and it's 200% faster. This is what OpenCL can really do for your users.
+
+So last year, after we were done with our initial port and all the engineers took their breath and calmed down for a little bit, we said there were still some things we would like to do with OpenCL that we didn't have in CS6. This is a slide we put up. So with Premiere Pro CC -- again, you can get it in 4 days, we're very excited about that -- we've increased the set of effects that work in OpenCL.
+
+We now support third party effects. Now, this is something brand new that I didn't talk about yet. Traditionally in Premiere Pro CS6 if you went out and bought an effect plug-in that works in Premiere, they didn't really get the opportunity to use the OpenCL. They could use OpenCL but they'd have to take it off the GPU device, put it back up on the device in their OpenCL context, do the compute, pull it back down and give it back to us and we put it back up -- that's not good. So we've now expanded our SDKs so that third party developers can actually write their kernel -- their plug-ins and effects using OpenCL and stay on the GPU and be as fast as any of our native effects. So that's really exciting.
+
+We didn't get to GPU encoding and decoding, still something we're investigating. We're waiting for that to make sense for our users, but we did go to do multiple GPU support, and that's very, verity exciting, especially with the keynote announcements. So another thing that we're still interested in doing is taking our scopes and putting them on a GPU and we haven't done that yet. We also have some really other great ideas that we're not ready to talk about today, because OpenCL has really allowed us to do some great stuff. So now I want to show you a demo.
+
+So here we have Adobe Premiere Pro CC, and I'm just going to start playing back here. This is a real project done in Premiere Pro. This is the documentary about Danny Kaye from Waiting for Lightning, and everything you're seeing here is processed on the GPU using OpenCL. You read the files off disk on the CPU, you put them up onto the GPU and everything that's going on here is on the GPU.
+
+I know 4Ks all the rage; some of this footage is 5K from the Red Epic. There's no proxies, this is all full res stuff. We're mixing Canon 5 Vmark 2 footage, we're mixing DNHXD, pro res, red, red epic, 54K, all on this timeline here. All the effects you're seeing are being done on OpenCL.
+
+So this is really how you can change the way you use your applications using OpenCL. So that's pretty exciting. So I want to show you one other section here. And so what I'm going to do here is I'm going to start playing back this section of the timeline and just put it on loop.
+
+So here we can now go in and go into my timeline here and look for a color corrector in here and just add that to this clip. And now you can go over here and you can very easily start change the creative look of that effect in Realtime while they're playing back.
+
+Now, that's pretty exciting, right. That changes the way you can really edit video. While it's playing back you can start adding effects to it. But I did show you that last year but this is actually something different. This isn't a single clip in the timeline. This is a clip composite with a bunch of other clips, but that clip itself is a nested sequence with a bunch of other video files in it.
+
+That's an extremely complex set of composites that I'm able to add a color correction to and actually edit in real time. So that's pretty exciting. And this is in a Macbook Pro retina using 5K footage in real time editing without any proxies. So that's pretty exciting right, and that's all possible because of OpenCL. So I talked a little bit about the Lumetri deep color engine, so here's another movie clip. This is from a movie called "Whalen's Song." And here you can see it looks like, it's good, it's pretty, but this is sort of how it comes off the camera.
+
+And that looks nice, but let's try to make this look a little bit more cinematic. It's what you'd expect to see in teh theater. So the first thing I'm going to do is I'm going to just put down a mat so you get that sort of cinematic wide screen look, and I'm going to go into my what we call a looks browser. So looks are very complex descriptions of what you can do with video grading.
+
+So it's not just a color correction; it can add vignettes, masks, feathering, very complex stuff to creatively change the way your video looks. So this is our look browser and these are like I said everything in there. I'm just going to apply that to an adjustment layer. And all of a sudden, you know have a sort of a more cinematic look to your video.
+
+This is very complex way, and this is what you can do when you're shooting with some of these new cameras that are shooting in logC and you want to give your director much more of a look of what your film's going to look like when it goes to the big screen. You can do this now in the process of editing video in real time.
+
+This is all happening on the GPU using OpenCL. So we're really excited about the way OpenCL's allowing our users to do things that they could never actually do before in a video editor. So that's Adobe Premiere Pro CC and all the great improvements we made with OpenCL. So thank you very much, and I'm going to give it back to Abe.
+
+[ Applause ]
+
+[Abe Stephens]
+Okay. Well, thanks for coming this session and listening to what we had to tell you here about using OpenCL and Mavericks. If you have more questions about using OpenCL and 10.9 or about anything that you saw here in this session, you should talk to Alan Schaefer who's our Graphics and Games Technology evangelist.
+
+Also, there are a couple of related sessions that you might want to take a look at. Now, the first session here actually happened earlier today in this room. It was the OpenGL session. There's also a session on Core Image, which is the technology in Mavericks that uses OpenCL and thanks very much for your attention.
+
+[ Applause ]

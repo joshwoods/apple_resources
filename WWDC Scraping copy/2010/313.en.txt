@@ -1,0 +1,229 @@
+---
+Title:  LLVM Technologies in Depth
+Year:   2010
+Web:    https://nonstrict.eu/wwdcindex/wwdc2010/313/
+
+[!] This transcript has potential transcription errors.
+---
+
+ Good afternoon everybody. My name is Ted Kremenek and welcome to the LVM Technologies in DEV session. This afternoon we're going to talk to you how LVM is playing an intrinsic role in both the new Xcode 4 tools release and in various uses in Mac OS X. So roughly the talk is divided into two parts.
+
+I'm going to talk about how the Clang front end which is the part of the LVM compiler that understands your C and Objective-C now C++ source code. It's used to drive new features like code completion, new Fix It feature we saw on State of the Union and of course indexing and edit all in scope.
+
+Then I'm going to hand the reigns over to my counterpart on the Compiler Code Generation Team, Evan Chang, and he's going to talk to you about the new LVM based debugger, LLDB and a new integrated assembler which is part of an LVM compiler. So it's an exciting session I hope you enjoy it. So let's first talk about Clang being used inside Xcode 4.
+
+So Clang as I said is the compiler front end, it's the part of the compiler that understands your source code and so what we've done is literally taken it and put it inside Xcode 4 and so before I talk a little bit more about what that actually means, I wanted to step back and kind of explain why on earth we decided to do this in the first place because this is actually taking a very large and complicated piece of software and putting it in another complicated piece of software so what are we trying to achieve here?
+
+So essentially a couple of years ago when we started working on Clang and the new LVM compiler we were just looking at the set of you know C, Objective-C and C++ source tools that were out there, like the landscape of tools IDEs and document generation tools and whatever, and there's really you know despite a lot of valiant efforts to build great tools there's just a lot of mediocrity and the question is why right and the reason is that these languages are just beasts to build great tools around.
+
+I mean if you consider features like you know the preprocessor you know like macros they just fundamentally change what the code means you know just by having a pound define, or if you consider C++ features like function overloading, or operator overloading what you type and what it means, means completely different things depending on the context and just you know how you might have uttered something and this just requires more than just raw syntactic analysis to extract meaning from what your program means.
+
+You have things like name spaces or the really needy features C++ templates, most source code rules just like fall over on this right. This is just our experience is that these tools just don't feel like they understand our code as much as they can and any intelligence that has been built in has been through heuristics and any time your code just kind of deviates from that they feel like they just go off a cliff and this is just not ideal we're building real great software with these languages still and we will for a long time so we want great tools to match that.
+
+So let's take a look at the Xcode 3 tools release and kind of like why are we in this position and how can we improve it? The Xcode 3 tools release is a great tools release and Xcode 3 is great, co-completion is awesome but there's a lot more we can do and like what is the fundamental problems we have to address? And if you just look at this diagram here on the right you can kind of see what is like a fundamental design problem.
+
+Here I have 3 separate tools: The compiler, the Xcode ID itself and the debugger GDB and if you notice each one of them has a separate C parser because each one of them needs to understand the C language at some level. The compiler needs to compile your code, Xcode 3 has to actually be syntax highlighting, indexing you know it does things with your code to try and understand it and then GDB does expression parsing and so forth so that you know it can give you intelligent results you know from your debugging session. So there's a ton of replication here.
+
+There's no overlap in any of these implementations and these are complicated languages so replicating all of this work is really air prone and the debugger it's just not really and the ID is not really in the business of being a compiler right I mean these making a front end to handle these languages is hard, there's a lot of work and so what we've experienced is it's been very air prone to try and replicate building all the understanding of our languages into all these tools in a way that makes sense and then you just get inconsistencies where one tool thinks your code means one thing and another thinks it means another. So this just sucks. So we really wanted to you know go beyond this and have a unified experience that all your tools look at your code in the same way.
+
+So the natural question is why can't we just reuse the compiler's parser in all of these tools right? Fundamentally the compiler is the ultimate source of truth of what your code actually means. When you hit build who decides what your code actually means? It's the compiler and so if it decides what's true can't we just recycle it?
+
+And the benefits obviously are obvious. You're going to get very precise results, think of it as your debugger or the ID saw your code in the same way as the compiler. It's going to have this consistency with the compiler that means every time that we add new language features or we change things in the compiler these tools just automatically pick up those changes. There's just none of these weird bugs are there.
+
+But if this was so easy to do people would have obviously done it already right? They don't want to necessarily replicate all of this and so the problem is that compilers have been around for a long time and they tend to be very monolithic. They have a very singular purpose in mind that they just take your code, suck it in and build an executable and so they're not really engineered to be reused in this way because you can't break them apart and use the pieces that you want. Second, because they have this singular purpose they often drop many pieces of important information on the floor that you would need to build other tools.
+
+So if you look at GCC the preprocessor is not integrated so all the macro information is not actually seen by the compiler, or accurate line and column information, if you wanted to build syntax highlighting to IDE need great ranges and things like that. So all this needs to be there in order to build a great tool experience and finally you need all that support, you need all that modularity but the parser needs to be wicked fast so you can have these very responsive UI experiences.
+
+So this is really the challenges that we saw when we wanted to go out and build Clang so what we've done in Xcode 4 is we've taken the Clang front end which is fast, modular, it can be reused in a variety of ways and we put it inside the Xcode 4 ID and we're using it to help power in conjunction with Xcode these features like source code indexing, syntax highlighting, code completion, and edit all in the scope and the end result is you're going to get a huge amplitude in the precision of these features and that makes all the difference in the world and because we've taken all the brains of the compiler and put it inside the IDE you've going to be able to do more advanced features, much more easily things that you just wouldn't have thought of doing before like the Live Morning and Fix It feature that is now in Xcode 4.
+
+So I'm going to talk about these features and how they actually work in the Xcode 4 release. So the first step of taking the power of the compiler and putting it inside the IDE is think about how is this integration actually mechanically work? And so what we've done is we've taken the Clang front end and packaged it up as a dynamic library.
+
+It sits within the same process of as the Xcode IDE and so if we want to do some analysis on some source code Xcode, the IDE which is managing you know your open editors and so forth passes the source information over to the Clang dialer for processing but there's some other key element that's needed here.
+
+Xcode, being an IDE that can actually go and build all your code knows how your code is meant to be compiled. Right all the bill flags, the include paths, all the macro definitions, were flagged to change the meaning of the various types. These are all really important. When you think about C it's not just the raw text that you type. It's all that extra stuff that changes what the meaning of your source code actually is and this is extremely important for building a rich tool experience.
+
+If you think about a standalone editor it just doesn't have this information because it's not integrated with the build system. So we have the really the capability of doing something truly fantastic here that can't be replicated in a different setting so all this information is very crucial for building a rich source code analysis, source code tools.
+
+So after the sources and that information is passed to Clang, Clang generates a rich semantic representation of your source called an abstract syntax tree that contains things like line numbers, type information on your expressions and so forth and then this information is then passed back to Xcode which can then just go over, extract the symbol information that it needs and then power things like syntax highlighting. So we're going to talk about those kinds of features in a little bit more detail. So the first feature I want to talk to you about is code completion and how it actually works being driven by the compiler.
+
+Code completion in Xcode 3 is actually pretty good, well not actually it's very good, especially for Objective-C but it's been tuned over many years. But there's a lot of cases where it just doesn't have the precision that we want because it's missing important semantic information from the compiler.
+
+Right definitions about structs and so forth and some things just only make sense in certain contexts and if you're a C ++ programmer you especially know this because that's just how the language works. So we had some pretty strong goals about bringing Clang based code completion to Xcode 4.
+
+First, we need to provide some very accurate typer information for expressions in order to compute reliable code completions and you'll see what this actually means on the next few slides but essentially as you're typing something right you're typing some expression and you want to complete it the set of available completions that only make sense just depend on the types of the you know the remaining part of the expression right and if you type something that would not compile that's not a good code completion right. So the compiler has all of that information and we want to use it in this context.
+
+Second, in order to build a great feature like this that AST, that semantic representation of your source has to represent the language with high fidelity and this gets back to the whole thing about C++ and you know C in general is they're hard languages, they have a lot of rich features and if your ad hoc parser just doesn't handle everything it's just going to fall over in some corner cases.
+
+And finally, we wanted to be able to handle really the cases where code completion and Xcode just doesn't work really well at all. Think about overloaded operators or overloaded functions in C++, more templates right. I mean this is a first class language feature. Our IDE should be able to handle this just fine.
+
+So let's step through an actual code completion example and how the Clang front end actually processes it. Now this is C++ and the reason I'm showing C++ is because it really shows where the semantics of the compiler are needed in a very small example and it illustrates all of the points I've just mentioned. The precision improvement also applies equally well to Objective-C or C apps, you will notice the different but this particular example Xcode 3 wouldn't really give you any great results at all.
+
+So here we have 2 classes named Wow and Foo and we have this function which is passed in a template list, an STD list of type with Foo as the elements. We're just iterating over the loop, iterating over the list and we want to do something to each of the elements in that list. So we're typing this and so only certain things would actually make sense in this context. So what would the Clang front end need to do to actually give you a meaningful completion?
+
+So what we do is we actually we parse our code as normal and so what is involved to get to the point right before the character I? We have to actually have parsed the definition for Wow and Foo, know what their fields and members are right? I mean we actually understand what these things mean.
+
+We have to have instantiated the template, STD list for the type Foo. I mean this is important because it affects what types are actually available in the type system and what you know methods and fields are available and then we also need to figure out what this iterator type is and what does it actually mean.
+
+Then we keep on going we see this I token and so we have to figure out what does this mean? It could be a type you know it could be some variable, it could be the variable in the current scope or some name space I mean it could be in a whole bunch of places right there's a lot of things that goes on when your code is actually compiled by the compiler and so after doing all of that work, the result is that I is and only is the variable that was declared in this local scope.
+
+The next thing when you do is figure out what this arrow operator actually means and if this is straight C or Objective-C well this would be a pointer reference so we'd have to go and look if I evaluated to a pointer if that made sense and what it actually means but if it's a C++ this could be an overloaded operator so we need to go and figure out if there is a related operator method and in this case there is, we can see it's from the STD list iterator class and that's and the compiler just knows this and so by the time we get to the code completion we know that whatever we're going to complete is based on the result of calling that overloaded operator function.
+
+We know it returns a pointer to Foo and we know the only things that we can access from Foo are well we know its methods and so in this case the only results you're going to get is the method bar and you could explicitly call the destructor for Foo; very precise results, these are operator overloading and templates, this is something that you could just not do in Xcode 3 without the precision from the compiler.
+
+[ applause ]
+
+and so I could keep on typing.
+
+I could type bar; I could do another code completion, the same exact procedure would happen as before. In this case we see that the overloaded the arrow means a pointer reference and then we see the actual results from the Wow class, so very precise and it acts just as you would expect so I'll go ahead and completed this example, we'll return to it in a second.
+
+So let's talk about Fix it right Fix It is this great new feature in Xcode 4 and it rides off of the way we've implemented code completion. So let me first talk about what Fix It is kind of meant to address. As the compiler is parsing your code right we want it to be able to handle cases where your code isn't completely correct and this is especially important for the case of using it for things like syntax highlighting.
+
+I mean often as you're typing your code isn't just ready to be built and so we want the front end to be able to recover in cases where it encounters something that doesn't look quite right and so part of that recovery and part of that mechanism is the compiler has to decide well you uttered something that's nonsense but chances are it's close to something that did make sense and so I'm going to try and think what that is and if I come up with a good guess I can use that to keep on going, pretending that's there but if the guess is you know seems unambiguous why not just suggest that to the user right I mean like a missing a semicolon for example.
+
+Right I mean it's just obvious and so Fix Its falls out from the natural recovery logic of the compiler and so what that means is that they aren't some you know great way to find all the bugs or fix all of the bugs in your program, it's not some Google refactoring mechanism, it's these very localized choices made by the compiler parser just to figure out what your code is doing wrong in a very localized sense. And so the suggestions will be very local in nature, they're part of the hot path of the compiler and they don't necessarily involve a tremendous amount of you know artificial intelligence to figure out what you know your program is meant to do in the grand scheme.
+
+So with this feature like any other is like code completion we had some very strong goals or else it's not useful to you. First the air recovery in the parser it needs to be great in order to determine the fix it right if we suggest some garbage to you that's not useful at all.
+
+Second, in order to actually power this feature we need really precise accurate line and column information so that when the front end tells Xcode look this is what I think needs to be fixed; Xcode is going to go and edit your source code. Right I mean how scary is that if that information wasn't correct? And this includes you know taking to account that there could be macros involved; we need to do the right thing.
+
+So how does a Fix It actually work? Well it actually rides off of the same mechanism for code completion. As we're doing code completions we could be detecting errors and those errors can be sent over to Xcode for reporting. This is the same code fragment as before and what I'm going to do is remove some of these characters so let's say I just decided to type very quickly, I omitted the R in the bar call and I also left off the parenthesis right. So this is the resulting code and if I ran this you know I hit build, this is the actual diagnostics would be emitted by compiler.
+
+So if you actually look at the build transcript in Xcode 4 you will see these are the actual raw output from the compiler, the green text is the Fix It output from the compiler itself and so you see it actually detected 2 errors and it figured out that you meant to call bar and that well there you know there was a missing parenthesis here to actually do the function call so it's 2 separate errors. So how did it actually figure this out?
+
+So just like with code completion we're going through the code. When Clang hits this token that's "ba" it has to figure out what it means. You know is it an identifier? Is it a type? You know is it some variable on the current scope? So the interesting thing that's different from the example I showed before is what if it doesn't find anything? Right so this is where the whole Fix It recover comes in.
+
+What we do is we have a list of available identifiers that makes sense in the current context and we compute an edit distance between what we saw in the code and those identifiers and that edit distance takes into account insertions and deletions. If we unambiguously find a matching identifier with essentially the minimum edit distance that's what we use as the suggestion and so in that case we will suggest the fix it of "bar" to the user and the front end will then pretend that bar was actually what we saw and continue parsing.
+
+When we hit the arrow token we have to then decide you know does this semantically makes sense? Well in this case we pretended that bar is actually what we saw so looks like we're applying the error operator to a method in the class. This doesn't mean anything at all so we have to recover, this is an actual error right?
+
+We saw the diagnostics earlier but this is a common mistake right we know that this we can see that the type of bar is a method so chances are they meant to actually call it so let's just pretend that they did, report that fix it to the user and then continue parsing as if we saw that. And so by the time we hit the token member everything is fine. Right that we had recovered perfectly the code is semantically correct and we could keep on going.
+
+Now of course these were all educated guesses right? This is all heuristics but it's all based on patterns that either we see in real code and that's really just kind of how the magic of this feature. So very localized intelligent guesses that just work really well in practice.
+
+So the last feature that I want to talk to you about that's powered by Clang in Xcode is Clang based source code indexing. For those of you who are not familiar with the index in Xcode it's essentially Xcode tries to build a corpus of all the symbols in your project, you know all the variables, all the functions and it uses this power of variety of features you know very quick navigation so you can use the Jump to Definition feature to jump to the definition of a function call, or it ties in with the quick help.
+
+In Xcode 4 you can you know you can say you point to an utterance of NS object and it will show in the quick help the actual definition or the information about that class. This all ties in with the index and then there's this great Edit All in Scope feature which allows you to do these batch semantic edits within a single source file so you see it's like some utterance of a variable you just want to let's say you wanted to rename that you just say edit all in a scope, you just start typing in the new name and it edits all the places where that occurs in the source file.
+
+This is all based on the index. But clearly the power of these features it just depends on the precision of the index, if the index is imprecise, these features aren't very useful. So what we bring to the table in Xcode 4 is a new indexing mechanism that uses the Clang front end to extract all of that reassemble information and it's far more precise than Xcode 3.
+
+Xcode 3 has a custom C parser, it's pretty good but it just can't handle so many cases and that precision is just really important when dealing with real projects and it's so good that I strongly believe that it's going to actually aid in understanding large code bases. Remember when I talked before about wanting us to build great tools right? Great tools is more than just something that just kind of gets us by or can kind of let us skip around our code, if it's truly great it will help us understand our code in new and interesting ways and that's really the goal here.
+
+So what are our goals with Clang based indexing? First precision: This is the reason we're doing this. We want to especially handle the cases that we can't do well in Xcode 3 because of design limitations. This involves ambiguities such as you know overloaded functions, operators and so on.
+
+We want good indexing results even if your code contains errors in it. You might just be typing and you haven't hit build yet and there's this problems there we need to give you reliable results despite the fact that there's problems. Just like with Fix It we need accurate line and column information. If you say jump to a definition you want to get taken exactly to that definition and nowhere else and finally and this is really important is that we need really great understanding of macros.
+
+Alright macros whether you love them or hate them are our first class entity in language and Clang has an integrated preprocessor this is different from the approach taken in GCC so we actually in addition to the line and call information have the full inclusion stack in our source and line information. We know whether something was instantiated from a macro we can use all of this information to generate very precise index results.
+
+To kind of explain how this precision works I'm going to show you an example again it's C++ code but it's the same idea even if you're using Objective-C, a code that contains ambiguities. So here I have a couple of things, I have overloaded functions, methods so at the very top we have two different functions, the same name but they have arguments of different types and then on the following line we have a call to one of those overloaded functions. In this case because we know the argument is of type int it would be the function to find at the top is what we're actually calling.
+
+Then we have this shape class which has two methods that are overloaded one because it has this cons qualifier so the second method would be called if you were calling it through a cons pointer to that class. Then we also have another class that also has a draw method but it has no relation at all to the shape class, like none. Finally we have a call to draw through a cons pointer to shape. So what would the results look like in Xcode 3?
+
+Well with overloaded functions the theme here is that you're going to see what we can only do with mainly lexical analysis with something that just isn't really getting into the deep precise meaning of what these functions are. Both of these print functions are not distinguished, essentially they're collided in the index with the same name.
+
+So that means if you said jump to definition on the print call Xcode 3 would give you a list of all the functions in your project that are named print and I mean that's just not very I mean if you think about a large code base where you might implement this many times that's just not very useful.
+
+Let's look at the shape class with these methods that are named the same. Well here you have the same problem but we throw the information away of you know the closing class, the name space you know all the qualifier all that's thrown away so that means when you say jump the definition on the draw method below you're going to get a popup that says ok these are all the possible draw methods. I mean that's just not very useful.
+
+So what is it with Xcode 4? With the overloaded functions we're going to give them what we call different symbol resolutions, this is essentially a key generated by the Clang front end that the index is going to use to identify these different functions in that database and that symbol resolution takes into account the argument types, the name spaces, basically everything that would need to be used to distinguish the middle linker and so that means when you say jump to definition on this call to print it's going to unambiguously take you to the definition at the top and it's not going to give you a popup it's just going to immediately take you there just as you would expect.
+
+Similarly yes
+
+[ applause ]
+
+Similarly with the draw methods right where before we had a collision with these methods weren't distinguished, we take into account with the symbol resolution the qualifiers you know cants, volatile, whatever, whether it's static or non static, the enclosing class even the name space, just all that information which goes into naming what these things actually are and so that means when you say jump the definition on draw at the very bottom you get 1 result, it immediately takes you to the cons draw in the shape class, you don't get this ambiguity, it just works as expected.
+
+And so if you're a C++ programmer you will notice the difference in experience here, it's just an order of magnitude better and for C and Objective-C programmers the difference it just shows up all the time in the same kind of ways and so we're really excited about just you know just improving this, this is such a fundamental part of your work flow but they're so many other exciting things we can build by having the power of the compiler inside the IDE itself.
+
+So we think we're really on a fantastic trajectory of building some really exciting features into the Xcode IDE to make your experience just awesome. So with that I want to hand the reigns over to Evan who will talk more about how LVM is being used in other context in both the Xcode 4 release and in Mac OS X.
+
+[ Applause ]
+
+ Thank you Ted.
+
+[ applause ]
+
+ Here at Apple we're really excited about LVM. Think about a modular compiler technology and all the things we can use to build on top and build all kinds of incredible technologies. So in the second part of the talk we're going to talk about some of the client LVM.
+
+You know hopefully you'll find some of these interesting or inspiring. So one first clients you might find interesting Mac OS X. It turns out Mac OS X has been leveraging the LVM technology for the last few years. We're building a lot of interesting things on top of it.
+
+Last year we introduced OpenCL. OpenCL is this new programming technology. You can use it to write C-like code and that will tap into your power sub GPUs as well as CPUs. I'm not going to go into a lot of details but OpenCL usesboth the client parsing technology as well as LVM's code generation technology. The results were astonishing. We sped up the core image by over 25%.
+
+There's a couple of other clients in Mac OS X. OpenGL has been using LVM for several years now since the Tiger 10.4 timeframe and there's Mac Ruby which is the open source ruby implementation that's pushed by LVM I mean is driven by Apple, it's also building on top of LVM technologies. But today we're going to talk more about all the several low level tools that come with Xcode 4. The first one you may have heard about is LDB.
+
+[ applause ]
+
+LDB is a new debugger and we have a lot of interesting ideas about it.
+
+What is LDB? It's a modern compiler that we want to design using the same LVM philosophy. We want to build not just one application; we want to build a lot of libraries which can be used to embed in other kinds of technologies. We want to be modular, we want to be speedy.
+
+Well we want it to perform well when loading a large application it should load right away. You know if you're debugging something you should just get out of way and let you do your work. We wanted to handle all of the languages constructs C, C++, everything, templates. Have you ever tried to debug something that involved templates in GDB? It's not a good experience. We want to do a lot better. We want to handle everything. We want to give you a better experience when you're debugging multithread code.
+
+We want to just utilizing a lot existing compiler technologies. The key things here is we want the other tools to stop trying to be compiler because like they say the compiler is the truth. You know there's no other tools out there that can understand your programs as well as the compiler so the debugger should you know just rely on the compiler to do a lot of deep analysis. Another great thing about LDB it's totally open sourced. You know it's open sourced under LVM umbrella. If you're interested in contributing to it, or just curious you can go to LDB.LVM.org.
+
+Well [laughter] how about making GDB better? We've been trying.
+
+[ applause ]
+
+Yeah it's a quick picture I'm sorry [laughter]. GDB is being built upon we've been adding a lot of stuff to GDB; we've been just doing the best we can. It's time to move on. It's a large code base, it's old, it's hard to maintain, it's hard to add new features and it's got its own C, C++ parser. It's got its own disassembler, it's got a lot of stuff in it. We think we can do better.
+
+Well why does a debugger need its own parser? Well let's take a look at one example. This is probably something you do every day, you know debugger you want to evaluate expression in the debugger. This looks really simple to you where it's turned out it involves a lot analysis.
+
+Expression printing in GDB is complicated. It uses its own C, C++ expression parser; you know it needs to understand what exactly do you mean by this? What's my shape? What's this type? You know so its type is to implement its own C type system. It needs its own type checking logic. Is this even a valid expression? What is argument type of scale? Is it a double?
+
+In that case then debugger needs to know how to convert an integer 4 into a double. There are many things it needs to know. So the cost of this is pretty obvious right you know the GDB is not a compiler. It's not going to be 100% correct. It's not going to be 100% precise and you can appreciate how difficult it is to test compiler. Think about testing a compiler that's embedded in another tool.
+
+That's difficult and think about all the new features we get adding to the language. You know C we're adding blocks, you know then C++ is all kinds of new stuff is coming out in the pipeline. You know new C++ standard. Then we're going to have to implement these new features in the debugger. That's a lot of engineering efforts and it's very difficult.
+
+So we can do better but how is LDB different? How is it implementing the same feature you know better? Well first, we know LDB is leveraging the LVM technologies; it's leveraging the Clang front end for parsing, semantic analysis. It's using LVM's code generator in interesting ways we're going to get to in a bit.
+
+It's also using its LVM disassembler you know that's just sort of the obvious you know by-product leveraging existing technology. LVM based expression printing is very, very different. We have a lot of strong goals for it. We want high fidelity. We want it to be always correct, always precise. The last thing you want is the debugger lying to you or being incorrect.
+
+We want to support all the features. Think about auto pointer. Think about calling a function. Think about anything involving in multiple inheritance, template instantiation. GDB if you try to debug anything you know evaluate expression involving anything like that in GDB it's likely you're not getting a very accurate result or sometimes it doesn't work at all. We also want debugger to have a lot less platform specific technology. Let's get to that a little bit later.
+
+So expression printing is sort of a work using both LDB client parsing to provide parsing and submitting information. It is also relying on LDB to kind of examine the program it's currently running. The first thing when we try to do this expressing evaluation is look up My Shape. What is My Shape? Is it variable or is it type? What kind of type is it? What kind of variable is it? Step one is just name look up.
+
+So name look up relies on the LDB's knowledge of the current program that's being run. Clang will actually talk to the LDB core say hey what's My Shape? Please tell me. LDB say let me go look up the debug information on the disk. So debug information is encoding this thing somewhat politically incorrect term dwarf as a debug format that's great for debugger to understand.
+
+Debugger is the standard, every debugger understand dwarf. However, this is not a format that Clang understands so LDB actually have to do some work here to convert dwarf to the Clang AST tree. It's going to tell it ok yes My Shape is a variable decoration so this type of shape. So where's the AST information being passed back to Clang?
+
+We can now continue as processing. The parser will finish and create an actual syntax tree that tells exactly about all the semantic information you need about the expression you're evaluating. If it's simple, for example, if you're evaluating looking up a value or variable or you've been doing simple arithmetics the debugger can just simply go interpret the information and get you the result. In this particular case this is actually a C++ method call. This is a lot more complicated. Turns out the only way to evaluate a call is actually to make the call. Well so this gets complicated.
+
+If you're debugging on your Mac and your program is a Mac applicationthen you know you can say 66, 32 bits you may say ok the argument for has to be passed on the stack. If it's 64 then you'd know ok it has to be passed in registers. You know if it's more complicated than that there are all kinds of ABI tools. However if you're debugging on your Mac or you're debugging iPhone application, iOS application then it needs to know about the arm ABI and calling conventions.
+
+So the debugger needs to know a lot about the platforms, the application you know about the application and about the platform. Again this is asking the debugger to be too much like a compiler and if the compiler and debugger have a different understanding about the ABI calling convention you get incorrect results in the debugger.
+
+Fortunately, LVM will help with this problem. LVM has adjusting time compilation technology so all that LDB has to do is feed the AST tree to the front end and goes through code generation then goes through the LVN jig compiler and out comes machine code then LDV can actually download the machine code onto the device and actually just make the call and get the accurate results. So the benefits I hope you can appreciate the benefits. We're going to have really high fidelity for expression parsing in variation because it's leveraging the compiler technology. It's going to support all the language features because it's using the compiler for expression parsing and the type system.
+
+We're going to evaluate all the complex language constructs and we can get all the language new features for free. When the compiler implemented debugger gets it for free. Also we talk about platform specific knowledge. Debugger needs to know a lot less about all the different platforms because the compiler is there to provide information. And you can think about all the other benefits wouldn't you love to have Fix It or code completion in your debugger?
+
+[ applause ]
+
+So let's move onto the next low level tool. Assemble it: Well here's a simplified view of the stage of compilation. You have source code coming in the front end and the code comes out the backend, very simple. Well in fact that's not quite so simple.
+
+Even disregard all the passes inside your compiler, one thing you have to understand is the compiler's actually outputting the assembly file, a big assembly file then feed the assembly file back into the assembler, then that converted into binary code. This is true with LVM compiler 1.5, LVM GCC, GCC 4-2.
+
+This makes no sense. We just talked about LVM has jig compiling technology. LVM knows how to convert code directly into binary code. Why do we need to output a big text file you know formatted perfectly and parse it back? This is taking up time. So with LVM 2.0 we now have an integrated assembler.
+
+[ applause ]
+
+This is the pure LVM compiler that does everything with LVM technology from source code to a dot O file. The benefit of this approach should be well there's several benefits. The first one you may not realize but if you have ever written inline assembly you might know. If you write inline assembly you know it's one of the most well documented features in GCC, it's complicated.
+
+I know I can't do it right. The first time I tried to write inline assembly of anything I get it wrong and this is what GCC will tell me. It's going to tell me you have incorrect code and it's going to point to a file that has already been deleted [laughter].
+
+So then I have to say ok where is this exactly, let me try to figure it out. You probably do some kind of binary research, trial by error until you figure out ah ha this is where it goes wrong. Well with Clang because we integrated the assembler into the compiler, Clang is actually going to tell you this is incorrect inline assembly and it's going to tell you where you should fix it. So this is better error message for your inline assembly. So the other benefit [applause] thank you.
+
+So the other benefit well I don't know about you I love reading assembly code. It has so much information, so for those of you who look at assembly code to try to get the last 10% of the performance out of your application, you may want some help because the assembly just lots of lots of instructions, it doesn't tell you anything about the structure of your code. Well now that we have taken the assembly time from you know assembly time no longer matters.
+
+We can actually provide you with better assembly, richer assembly when you need it, so in this case you can see that in the assembly output we have some comments, tell you you know what's this bits that you're looking at. Where is the loop? Where is the starting point of your loop?
+
+How come my loop is not performing as well as I thought would be because you know in this case it's additional loads and stores in your loop. You know this allow you to go tune your code to the you know the highest possible performance by providing you with more information. So LVM now has integrated assembler. It has several benefits. It's fast because we no longer need to do more text printing and parsing.
+
+It's roughly about 10% for your debug builds. We have tested this on a variety of applications internally, that's roughly what we're getting, depending not for Hello World anything that's kind of sizeable application. We're going to give you a better error message. If you write inline assembly you really shouldn't be doing that but if you do you're going to appreciate this and we're going to give you better, more useful assembly output if you need it.
+
+So we're very, very confident about this new assembler so in the LVM compiler 2.0 this is enabled by default. In case you run into any problems please let us know, we like to get it perfectly right by the time it GM's. but you're not going to run into too many problems. If you run into problem you can work around the problem by this option -nointegrated-AS.
+
+So that's sum up what we have talked about today. So LVM is enabling technology. We're really really excited about it in case you haven't noticed already. We are really using it a lot inside Apple universe. You know we're enabling new exciting technology in Mac OS X. You know OpenCL, OpenGL, Mac Ruby you know they all use LVM. There are many other things probably coming later who knows.
+
+In Clang I mean in Xcode 4 we have integrated the Clang parser into the Xcode ID so that allow us to do a better job with co-completion, give you new features such as Fix It, give you much, much better indexing support and added in scope. So we also look at several other clients at LVM, LDB being this exciting new debugger we're building and we talk about the integrated assembler.
+
+So LVM really is a very exciting technology and it's open source so if you want more information, you want to participate in the LVM development by all means please go to the LVM project website and sign up and look up what we're doing every day. Or if you want to talk to Apple you can talk to our Developer Tools Evangelist Michael Jurewitz or talk to us about you know LVM in the Apple Developer Forum. If you want to learn more about LDB tomorrow 9:00 there's a session Debugging with Xcode 4 and LDB.

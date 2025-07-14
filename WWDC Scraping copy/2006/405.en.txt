@@ -1,0 +1,187 @@
+---
+Title:  64-bit I/O Kit Drivers for Large-Memory Systems
+Year:   2006
+Web:    https://nonstrict.eu/wwdcindex/wwdc2006/405/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Hi, I'm Simon Douglas here to talk about 64-bit I/O Kit Drivers for Large-Memory Systems. There's actually two very independent parts to 64-bit support in I/O Kit. The first part is 64-bit physical address support for I/O, and that's being added with the Mac Pro hardware and 10.4.7 software, which just got announced.
+
+The second part is 64-bit virtual address support, and that's for I/O Kit client applications, and that's shipping with Leopard. So on to part one, which is 64-bit physical addressing. As I said, that's shipping with the Mac Pro just announced and in 10.4.7, but it's not supported by any earlier release.
+
+So up until this point, we have supported machines that have greater than 4GB of memory. And the G5 desktop machines were the first Apple machines that we shipped that way. However, the situation on the G5 hardware was that all I/O went through some onboard hardware that remapped it into the target address space.
+
+And so that meant that a driver could address all of memory in the machine with only 32 bits of addressing capability. And because of that, there are very few software changes needed in the drivers to support the G5 desktops. It was pretty invisible to them since they could continue to use 32-bit addresses to get to all of memory.
+
+With the new Mac Pro hardware, though, we don't have this remapping capability on the onboard hardware. So that means that any I/O devices that do DMA and the drivers that drive those devices need to be able to address memory that's above the 4-gig 32-bit limit. And if you have a driver that uses physical addresses, which usually means that you're a device that does DMAs to system memory, you must make changes to be compatible with the large memory Mac Pro configurations.
+
+And to make sure that any device that does do 32-bit I/O doesn't corrupt physical memory due to address truncation, we've made the 32-bit physical address APIs panic the system on a large-memory Mac Pro system. There is one caveat here and that's that all the network mBufs are allocated in the low memory which is accessible to 32-bit hardware.
+
+To support the Mac Pro, we've added a new API, a new class called IODMA Command. And this is a new interface for obtaining physical addresses. It's designed to work transparently on all the architectures, so it works the same on G5, desktop machines, portables, PowerPC and Intel machines. And that's important because the hardware that's coming in the future may operate differently from how the Mac Pro works today, and we may have the capability to remap I/O addresses again. So it's very important that you use IODMA command to obtain your physical addresses to be compatible with future hardware.
+
+So what is an I/O DMA command? It's an object that represents an instance of an I/O DMA request. And that means that the instance has to exist for the entire duration that the I/O is in flight. As far as the software goes, the API replaces I/O Memory Cursor and the API I/O Memory Descriptor Get Physical Segment, which were the old 32-bit APIs for obtaining physical addresses. And what I/O DMA command adds to those older interfaces is a specification of what your capabilities are as far as addressing memory. So that's basically a specification of the limitations of your hardware.
+
+And if your hardware does have some limited addressing, IODMA command adds support for doing the necessary buffering and copying. That allows your hardware to access memory that's out of its addressing limits. The advantage to doing it in the system is that we can do it only for the pages that need to be copied, and we can also share any buffers that are needed across the entire system.
+
+So as I said, when you create an I/O DMA client, you have to give it a specification of exactly the kind of memory that your particular hardware can get access to. And usually the most important number is the number of address bits your hardware can support. 32 and 64 are common. There's also some graphics devices, for example, that have settled on 39 and 40 bits of addressing, and that's all fine.
+
+Obviously the optimal situation is that your device can get access to all of the memory in the system. And usually that means you have 64 bits of addressing. That's obviously going to be the best performing solution because we'll never have to copy or double buff the memory and it's highly encouraged.
+
+There are some other parameters that you pass to the IID make-and-find when you create it that also specify the limits of your hardware. The first one is the max segment size. That sets a limit on the physically contiguous chunk that your hardware can do I/O in. Another one is that you can now pass an alignment restriction. For example, it's quite common for hardware to only be able to DMA directly to a 4-byte aligned buffer. If you're in that situation, then you can use the alignment restriction to let I/O DMA command take care of doing any double buffering necessary.
+
+Another one is the Max Transfer Size and that just simply sets the largest size of any I/O that will be allowed to your driver. And then the final one is you can set the format of the physical addresses that I/O DMA client will be returning to you. And most importantly you can decide whether or not to use 32 or 64-bit addresses and they can be in big, little or high standardness.
+
+So how do you go about using an IIDMA command? As I said, you have to have an IIDMA command object instance per I/O. So you may create one per I/O, or you could have a command pool that's created when the driver starts up. And then when an I/O request comes in, you need to point the IODMA command at the memory descriptor of the I/O. And there's an API called setMemoryDescriptor to do that. You also have to call an API called IODMA command prepare.
+
+The IODMA Command Prepare and Complete APIs are low-level DMA start and end bracketing APIs. They're actually completely distinct from the old IMMJscriptor Prepare and Complete, and they do very different things. That means that IMMJscriptor Prepare and Complete should still be called in exactly the same places that it was called before.
+
+Once you've got your DMA command pointed at the memory descriptor, you can use the APIs to generate either 64-bit physical addresses and lengths or 32-bit physical addresses and lengths. You use those addresses to build your DMA command list and kick off the hardware I/O. And then when the I/O completes, you need to call those bracketing methods in IDMA commands complete and clear memory descriptor to mark that the I/O has been completed.
+
+So as I said, the best situation to be in is obviously if your hardware can address all of the memory in the system, in which case IDMA kind will usually never have to copy or double-buffer memory. So for example, the Mac Pro hardware supports up to 64 gigabytes of RAM, so that means if your hardware has at least 36 bits of addressing, I/O DMA command will never have to copy memory.
+
+If your driver wants to make sure that I/O DMA command is never used and it's buffering in copy mode, there's an option you can pass to enforce this, and this is called Kiterate only. When you use IODMA command in this mode, you're basically just using it as an iterator over the memory descriptor's physical addresses.
+
+If IEDMA command is being used in this mode and it ever does hit a physical address that would be outside of your hardware's addressing restrictions, it will just fail to return any such physical address and give you an error. The advantage to using it, if you're in the situation where you expect to have direct access to all of memory, you can use a single IADMA command instance in this mode simply as an iterator over the memory descriptor, in which case you're basically just using it to generate 64-bit physical addresses and it's a direct replacement for IAMemoryCursor and the IAMemoryDescriptorGetPhysicalSegment APIs, which were the older 32-bit APIs.
+
+However, if you're using I/O DMA command in the general case where it could have some extra buffers that have been associated with the DMA, these buffers have to be synchronized with the original data. This buffering scheme is often called "bounce buffering". The synchronization happens when I/O DMA Command Prepare is called.
+
+And when Prepare is called, the bounce buffers are brought in sync with the original data. And when Complete is called on I/O DMA Command, the DMA data in the bounce buffer is copied back to the original client buffer. And both of those copies will depend on how the memory descriptor was prepared, in particular the direction of the prepared memory descriptor.
+
+If your driver knows that the data in the original buffer has been changed since the DMA command was created for it, there's an explicit API called Synchronize, and you can use that to copy data backwards and forwards between the bounce buffers and the original data. Obviously, if there is no bounce buffer or there's no synchronization needed, then Synchronize will just be a no-op. So often you'll use this if you know that the memory descriptor has changed out from underneath the DMA. An example might be if memory descriptor read or write bytes was called, or the CPU itself actually changed the data in the buffer.
+
+That covers I/O DMA command. There's another class of problem where your hardware may need to have a buffer that's been allocated once and shared with the hardware and software. And this is often used for a DMA program list, for example. When you're in this case, you know that you need to allocate the buffer in a certain address range in memory so that the hardware always has access to it. And as I said earlier, network MBUS are actually always allocated by default in 32-bit addressable memory. So you don't have to worry about that case.
+
+So to cover this, we've got a new API and I/O buffer memory descriptor called InTaskWithPhysicalMask. And the main addition is a 64-bit address mask, and that basically sets the allowable physical address bits that your hardware is prepared to support. So most commonly, you would pass a number like, you know, Fox, Fox, Fox, Fox, 0000 for 32-bit addressable page-aligned memory. and you'll quite often want that memory to be physically contiguous, which is an option.
+
+So quite often today when you've been allocating your DMA program lists, you've been using an API called IML at Contiguous. And for compatibility with the current software, that will always return a 32-bit accessible memory. There's another case where buffers need to be allocated with certain restrictions, and that's for USB and FireWire clients, where they're allocating buffers to be used for Isochronous I/O. And because of the performance restrictions on that kind of I/O, USB and FireWire will require their clients to allocate buffers with a certain restriction. And that's covered in their session tomorrow, which is tomorrow morning at 10:30, the I/O Technologies Overview session.
+
+So that covers the Mac Pro 10.4.7 changes. The second part to 64-bit address support in I/O Kit is support for virtual addresses greater than 32-bit, which is being added in Leopard. And as you know, Leopard is adding broader support for tasks running with 64-bit address spaces. But even in Leopard and even on 64-bit hardware, the kernel is going to remain a 32-bit task. And that means that KEXs continue to be compiled as 32-bit code. So you don't have to go out and recompile all of your kegs to run on a 64-bit system.
+
+So very often there'll be absolutely no driver changes needed for 64-bit for virtual address support because most often the family will take care of creating the memory descriptor that represents the client buffer before your driver sees it. So for example, if you're writing a storage driver and you're just generating a DMA list for a buffer that's being passed to you, you never see the virtual address in the client, so you don't really care if they're a 64-bit or 32-bit task.
+
+However, there is one class of driver that will have to change to support 64-bit clients, and that's if you've implemented an I/O User-Client subclass. Because most often they will deal directly with client virtual addresses. So if you do want your driver to support 64-bit tasks, in other words 64-bit applications, and you implement an I/O User-Client subclass, then it's very likely you'll have to make changes for Leopard.
+
+To support this, we've added some APIs in I/O Memory Descriptor. Basically, everywhere a virtual address "The first version of the I/O Kit was passed into I/O Memory Descriptor. There is now a 64-bit version of that API. So, for example, we have an API I/O Memory Descriptor with address and that takes a vm_address_t address and that's got a new version now called I/O Memory Descriptor with address range and that takes a mach_vm_address_t type.
+
+The types are mach_vm_address_t and mach_vm_size_t, and the kernel defines these to be always 64-bit quantities, regardless of whether or not the task is 32- or 64-bit. Whereas the older types, vm_address_t and vm_size_t, the kernel defines those types to be the size of the compiled code that's running. So since the kernel is only a 32-bit task, that means that vm_address_t and vm_size_t We're running 32-bit quantities, so obviously they can't be used to represent an address in a client application because he could be 64-bit. And very much the same way I/O Memory Map has any API that returns a virtual address, now has a 64-bit version.
+
+So the behavior of the current 32-bit APIs, number one is obviously if you're using the current 32-bit APIs on a 32-bit task, there is no change at all. There are changes when you attempt to use the 32-bit APIs on a 64-bit client task. The first one is that an API such as I/O Memory Descriptor with Address, which is attempting to create an I/O Memory Descriptor for a range of memory in a task, if that task is 64-bit will actually fail outright and not create an I/O Memory Descriptor for you in that situation.
+
+If you do manage to get by that call and manage to get an I/O memory mapping created and then call the old 32-bit version of the API, which is get virtual address, we can't actually fail that call, but we will warn you that there's an address truncation taking place.
+
+Net Warning is logged to the system log and there's some text information logged there as well so you get a backtrace to try and track down the call. But generally the first failure will mean that you can't create a memory descriptor, so therefore you can't create a mapping.
+
+When you're going through your I/O User Client subclass for Leopard to support 64-bit, What we recommend doing is just replacing all of the parameter in-calls with a simple structure-in, structure-out style of call. We still have the scalar-based calls and we do have 64 versions of those scalar calls, but they're generally being quite confusing for developers and most people are used to an ICTL kind of interface and so the simple structure-in and structure-out calls seem to be the most popular. What you have to do is basically go through any of your parameters and make sure that any of the parameters that refer to client virtual addresses need to be converted to the 64-bit types.
+
+And generally what you want to do is for both 32 and 64-bit clients is just settle on a 64-bit type for all of your parameters. And when you do that the kernel can then treat all of the clients the same because all of the addresses coming in are 64-bit. And then you take those parameters and pass them to the new 64-bit versions of the I/O Memory Descriptor APIs whenever you're dealing with the client virtual addresses and mapping client memory.
+
+Another thing to watch out for when implementing an I/O user client, because the kernel has been compiled for 32-bit and the client could potentially have been compiled for 64-bit, that means that C-compile code has very different structure alignment by default. So you have to make sure that when you define your structures, they're defined in such a way that they will be aligned identically between 32-bit and 64-bit. This is actually documented quite well in this tech note that I'm pointing out here, and that's been around since Tiger supported 64-bit for Darwin clients.
+
+And we have some sample code on the seed CD, and that's in developer examples I/O Kit. And that is a sample of a KEXT that uses IODMA command. to iterate over an I/O memory descriptor and get the physical addresses in a 64-bit and 32-bit form. And it also has an I/O user client implementation That works the same on both 32 and 64-bit Intel and PPC. So it's quite a small sample and pretty easy to understand. I'm going to pass over now to Curtis Gallowaay who's going to give us an update on EFI.
+
+[Transcript missing]
+
+I'll give you an overview of what EFI is, why you should care about EFI, if you should care about EFI, how EFI is different from open firmware, how EFI works on a Mac, and writing EFI device drivers and applications. So first of all, EFI, maybe you've heard of it. I don't know. How many of you out here have written I/O Kit drivers before?
+
+Yeah. How many of you are actually writing drivers during the session? So maybe you're familiar with EFI then. EFI is the Extensible Firmware Interface, which is the firmware that's used on Intel-based Macs. It's extensible because it's easy for Apple to extend it in the firmware and for developers to write drivers that actually extend EFI's functionality. It's firmware, so it actually lives in the machine. It's built into the hardware. And it's a well-defined interface that has published specification that you can download and read and hopefully understand.
+
+Should you care about EFI? Well, it depends. Maybe you shouldn't care about EFI. If you don't write any device drivers and you don't make any hardware, then you probably shouldn't care about it all that much. If you do make a boot device, like for example a RAID device or some other piece of hardware that's required during the boot process that doesn't follow a standard interface like ATA or something that's already built in, then maybe you do care.
+
+If you want to run a pre-boot application such as a hardware test or some kind of repair utility, then maybe you do care. You want to write something that doesn't actually use the OS. But in general, if you can do something in the OS, then you should not do it in EFI.
+
+Let me just give you a brief history of personal computer firmware. Apple, up until recently, has used Open Firmware, which was invented by Sun as Open Boot way back in 1988. It was adopted by Apple for our first generation of PCI machines and was actually standardized by the IEEE.
+
+The PC industry has traditionally used BIOS, which is the basic input/output system which goes all the way back to 1980 and the original IBM PC. It was sort of a hack they came up with. They decided they needed something, "Oh, let's do this," and it's kind of persisted for all these years. The history of BIOS is kind of checkered. It's industry standard, but that doesn't mean that there's really a standard in the industry for how it works. It's generally written entirely in assembly code.
+
+It runs in 16-bit mode, which is really old. It's not standardized at all, and generally it's kind of a mess. On the other hand, EFI was conceived by some really smart people at Intel to replace BIOS and was intended to be kind of a well-thought-out alternative to the agglomeration of random things that BIOS had turned into. It has more modern features like Unicode, strings, 64-bit physical addressing, and it's now turned over to the unified EFI forum, which is a group of companies that are interested in promoting EFI, which Apple is a member of.
+
+EFI has many benefits both for Apple and for developers. Unlike BIOS, there's very little assembly code in it, so it's possible for normal people to understand it and write code for it. It has good debugging tools, so you can actually run a debugger and find out what's going on. It's easy to extend both inside EFI and with drivers and applications.
+
+It allows us to leverage our existing device driver writing expertise so that someone, for example, who's written an I/O Kit driver for the Bluetooth family could easily go and write EFI driver for Bluetooth without having to learn some strange backwards language like fourth. Not that I'm down on fourth, but people seem to be kind of allergic to it, so that's sort of a problem.
+
+It has very good performance compared to OpenFirmware, which is not so much a knock on OpenFirmware's implementation as the design of it, as I'll explain a little bit more in a moment. And there's third party support. You can go buy an implementation of EFI for your machine from multiple vendors. You can buy tools from multiple vendors for developing and debugging EFI drivers and applications. So that's already a plus.
+
+[Transcript missing]
+
+I just explained that. OpenFirmware does have human-readable device paths, which are real Unix-y looking things like, you know, slash PCI, blah, blah, blah. EFI does not have the idea of human-readable device paths by default. An EFI device path is a binary structure, which is flexible so that you can have it describe any kind of device by just extending it with a new kind of structure, but it makes it a little bit more difficult to look at a path and see what it is.
+
+There is a standard in the new EFI spec for how to translate that into something that you can see, but it's a little bit less straightforward. OpenFirmware device drivers are written in fourth, and even though there's an F in EFI, they're written in C, so maybe, I don't know, they should change the acronym. OpenFirmware does not use a runtime component in Apple computers.
+
+There is a definition in the standard for a runtime component that can live on into the OS, but we don't actually use that. But in EFI, there is a runtime service that the operating system can take advantage of for things like getting the time, resetting the system, using NVRAM variables, and we do take advantage of that in our operating system.
+
+So starting up your Mac with EFI, how is that different? Well, it's pretty much exactly like starting up your Mac with Open Firmware, which is kind of what our customers expect. Not too many changes. Under the covers, really, it's doing a similar set of things, initializing the hardware.
+
+But there are a few UI differences that I can show you. If you want to get into-- The EFI Boot Picker on your Intel based Mac, just hold down the Option key when you're starting up. So in that sense, it's just like an Open Firmware based machine. I've got a little Mac Mini here, which has one volume on it, which shows up.
+
+So if I had multiple partitions, those would show up in the Boot Picker. But I can also take a USB device like my iPod here and plug it in. And the Boot Picker will notice that I plugged in a new device. And in fact, it even knows what kind it is, because it stored the volume icon on the device.
+
+Or I can take a shuffle or some other USB thumb drive and plug that in, or just a random SanDisk cruiser. And EFI will notice all of those devices and let me pick from them. And in fact, I can even use the remote control to navigate back and forth.
+
+Because, you know, we're Apple and we're cool. So if you want to boot the EFI shell, you just put that on your thumb drive. You can download the shell from tianocore.org, which I'll talk about later, and just run the EFI shell, which should make you feel a lot like it's 1980 and you're running DOS. It's kind of exciting. Or if you are creative and do a little bit more work, you can actually write your own EFI application, which I'll show you here.
+
+Which it is possible to do. We wrote a little demo application here in EFI just to prove that it is in fact possible to draw some graphics. You have support for timers, dual animation, get the system time. So it is possible to do reasonably complicated things in EFI. Hopefully your application will be a little bit more technically functional than this one. But thanks to Ronnie and Josh for helping out with that. That's our big demo.
+
+And just one last thing to show on the UI front. It's really hard to demo things with something like EFI. You do all this work and all you have to show for it is, "Look, the machine turned on." So, you know, the machine turned on. So the real eye candy is stuff like the poof. When you show it to the executives, that's the kind of stuff that they get all excited about. So for all you hardware developers out there, make sure you put some kind of slick UI that you can show off because that'll get you promoted faster.
+
+So, back to the world of slides. As you can see, starting up, it's a little fancier, but in general, most people will probably never see that, which is kind of too bad. So you can show that to your grandma or whoever when you're installing her Mac. So what EFI does under the covers is when you turn on the machine, there's a little bit of assembly that runs to set up kind of the pre-execution environment, and then you get into basically looks like device drivers that initialize a minimal set of hardware in the machine. It sets up the memory and the PCI bus and a few other things. And then its real job is to load and execute the bootloader for the system.
+
+So if you've told it through an NVRAM where that is, it will find it directly and load it and run it. Otherwise, it will go search for it. And the bootloader then uses the EFI services just like it would the operating system if it were a regular operating system program to find and load the kernel device drivers. And then the kernel takes over and terminates. EFI is terminated, and the operating system owns the whole system, except for a little bit of EFI that lingers around as a runtime service.
+
+So again, the boot program draws the Apple logo. So if you're debugging a system, you see the Apple logo, you know the boot loader loaded. It loads the OS and drivers, either the caches or the individual drivers, into memory. It leaves behind some information that it got from EFI that it constructs in a device tree format that it can pass off to I/O Kit.
+
+So in that sense, it's similar to how Open Firmware does it. It basically simulates an Open Firmware device tree just for convenience. And then it terminates EFI except for the runtime services and starts the kernel. So again, when you're debugging, if you see the little spinning gear, that means the kernel has started. And you know that the booter is done, and you've gone into kernel space.
+
+So for configuring EFI's behavior, NVRAM variables are used to control some aspects of how EFI works. In EFI terminology, they're just called EFI variables. They don't have to be in NVRAM. They can be stored somewhere else, but our implementation uses NVRAM for that. In Apple terminology, it's NVRAM variables. That's what you use for writing from the operating system. Non-volatile RAM, it's actually stored in Flash in hardware.
+
+EFI variables are named by a 128-bit GUID for the vendor and a Unicode 16-bit wide string as the name of it. So in theory, an Apple variable won't conflict if you install Linux or some other operating system on there and they use EFI variables. The GUIDs will make sure that your variable names don't ever conflict. And if you are a developer who's writing an EFI device driver, you can set your own variables with your own GUID that you make up. And you don't have to worry about prefixing them with anything. Just name them whatever you like.
+
+The NVRAM variables used by the operating system are implemented as EFI variables. So if you get into the EFI shell and you know the GUID that we use, you can look at all of those, set them in the shell, and examine them that way. They are set using different vendor GUIDs for different purposes of things. For example, internally within our firmware, there are some settings that are stored in NVRAM that use a different GUID than the ones that the OS variables use so they don't conflict.
+
+Any variables that are set by third-party drivers could again use their own GUID. The NVRAM command in the OS can be used to set NVRAM variables that persist across an OS boot. So that's your standard interface that you would use from the operating system for NVRAM variables. Just like in the old days, it works exactly the same way.
+
+There's an extension to that that lets you prefix a GUID to the name of the variable so that you can actually read and write other variables that are set either in the firmware or by drivers or anyone else. So that's one difference from open firmware that you might notice. It's documented in the man page.
+
+Behavior that's controlled by NVRAM variables includes target disk mode. So when you start up the machine, hold down the T key and it turns into a big FireWire disk drive. That's actually initiated by a variable that the firmware looks at. The firmware updater, if you run that, basically just the application sets a path to launch the firmware updater once only, which is a real nice convenience. If you set a firmware password, that's stored in NVRAM as well. And BootCamp uses NVRAM to configure some of its behavior for booting into a legacy operating system.
+
+The booter actually interprets one NVRAM variable, boot args, to look at some of its aspects of how it works. For instance, if you want to get a text console to see what the booter is doing for debugging, you can set -v in the boot args and the booter will look at that.
+
+Also, you can set the root partition or where it looks for various things that it loads. You can also set boot variables in a plist file that's read by the booter, which is stored on disk, or if you're netbooting, it's actually read from the same location as the booter.
+
+And this is a big convenience for debugging and for netbooting. And it might be mysterious if you set something in there and forget about it and clear out your NVRAM and wonder, "Why is it still verbose booting?" Well, you might have set something in your plist file that the booter is looking at.
+
+So, EFI device drivers. Let's say you are a hardware vendor and you think that you might want to write an EFI device driver. Well, are you really sure you want to do that? If you have a device that is a boot device that is not standard, as I said before, then maybe you do need to do that. So, the best practice is to actually build that into the ROM on your system.
+
+And we provide standard EFI interfaces according to the EFI spec, which you can download from Intel's website for the 1.1 or from the UEFI website for the latest one. And we have a few extensions that we use to do our whizzy stuff like the icons and making the screen look beautiful, but those are not required for a device driver that just controls a device that the operating system wants to boot from.
+
+EFI applications. You can do that, as we saw. It's possible to do that with a computer. It's also possible to write, you know, whizzy little EFI applications. It's not easy. You don't get a whole lot of help from EFI for doing stuff like drawing lines or anything. You get blit pixels to the screen.
+
+And the rest is up to you. So, you know, it's not easy. You can get basic console support if you just want to do a textual application for doing something like, you know, printing out some stuff about your device. That's pretty easy. You can do that from the EFI shell.
+
+So in the spirit of 64-bit, all of our current Apple systems use a 32-bit EFI ROM. But our latest machines, the Mac Pro, do have a 64-bit processor in them. And UEFI 2.0, the specification, does have a spec for a 64-bit ABI for a version of EFI that basically has all the same interfaces but has a different ABI for running in 64-bit mode.
+
+So what that means to you is you should be prepared for the future and make sure that your device drivers on any devices that you make and sell should support both 32-bit and 64-bit so they're compatible with both today's machines and any machines in the future which either Apple or anyone might ship that work with, that have a 64-bit EFI ROM in them.
+
+So how do you do that? Well, you can build natively, which means you build once on a 32-bit system and once on a 64-bit system. The EFI build environment lets you build one at a time, which then you can build separately into your ROM. That's one way to do it. That's not a bad way to do it. You can have them live in different areas in your ROM.
+
+That might be bigger than you want. Another solution is EBC, EFI Bytecode, which is an interpreted bytecode kind of like Java. I don't really want to say the word Java, but in principle it's similar to that, where your code gets compiled down into bytecode that's interpreted by the ROM. It requires a compiler that Intel will sell you, and it's interpreted like Java. There's that word again. It will run on both 32- and 64-bit systems as is, so you don't need to do anything to make your bytecode work on either kind of system.
+
+So that's the advantage. It should be a comparable speed, unless you're doing matrix transforms or something insane like that, which you probably shouldn't do in your device driver. And it's only about 50% larger than just the one-way native binary, so there's some size savings there, which might be important to you if size is a limitation in your firmware. which it probably is.
+
+The build environment, you can build on Windows, which you may like or you may not like. A lot of device driver vendors actually like building on Windows, so more power to you. You can use Visual Studio plus some freely available pieces that you can download. Intel explains how to do that in the EFI training documentation on the Tiano Core website, which is the open source website for EFI development. The EBC compiler is available for sale from our friends at Intel. And it is possible to build with Xcode on Mac OS X. We hope to release that environment as open source really soon.
+
+And you should check out the Apple open source website for more information on that. That's how we build the OS loader. We came up with a way of doing that. And in fact, Intel is working on a next generation of the EFI development kit that will be available for the Mac OS X.
+
+And we have a new version of the EFI development kit that will be much easier to use on multiple platforms on Linux on OS X. So that will be good. Keep your eyes peeled for that. There are open source examples available on Intel's website and we will have some as well when we release our open source version of these tools.
+
+Just to give you an example of what an EFI program looks like, this is Hello World using the EFI development kit, the driver development kit. So you include some headers. You have a main, an entry point that looks a lot like main. You get a handle to your image, which is your program. And then the system table, which has pointers to various services that you can use. And then there's a driver library that includes a bunch of useful functions that will take those handles and squirrel them away for you to use later.
+
+And then you can print. You notice the L indicating that it's a driver. And then the C indicating that it's a 16-bit Unicode character. So all strings that are used are generally Unicode. So that's a good thing. But it might take some getting used to if you're not used to that.
+
+A protocol is the basic unit of interface in EFI. That's how you find stuff, how you find interfaces for doing things like reading or writing or anything. A protocol is just a structure that has pointers to functions and it's named by a GUID. So the next version of the protocol will just have a different GUID so you can have as many protocols as you want.
+
+There's functions to look them up and associate them with handles in the system. And this is a standard disk I/O protocol that lets you read and write blocks. And one of those functions for reading would look like this. You pass in a pointer to the structure that is the protocol and some arguments and get a return value that tells you whether it worked or not. Pretty standard.
+
+You can find a lot more information about EFI at the TianoCore website, which is the open source effort started by Intel that has actually source code for complete sample implementation of EFI, as well as the libraries and headers that you would need to get started with that. The specification is available either on Intel's website for the 1.1 or the new UEFI 2 spec, which is followed by our new Mac Pro hardware, is available at UEFI.org. You do have to register to get it, but it's free. It doesn't cost anything. You don't have to join or sign any massive paperwork. You just have to say that you're not going to sue them, I think.
+
+And for more information, here are some contacts here at Apple that you can contact for more information about UEFI, EFI development at Apple, or I/O Kit in general. It's all available here. There's on your seed DVD, there's a bunch of sample documentation not about EFI but about I/O Kit in general.

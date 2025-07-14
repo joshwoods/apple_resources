@@ -1,0 +1,2993 @@
+WEBVTT
+
+00:00:10.300 --> 00:00:12.300
+- Okay, good morning everyone.
+
+00:00:12.300 --> 00:00:15.930
+Yes, thank you.
+
+00:00:16.860 --> 00:00:21.640
+And it is still wonderful to see
+you all here to talk about all the
+
+00:00:21.640 --> 00:00:23.080
+changes we've made in Mac OS X Lion.
+
+00:00:23.080 --> 00:00:25.250
+And it's good to be
+back in San Francisco.
+
+00:00:25.260 --> 00:00:27.360
+My name is Ben Trumbull.
+
+00:00:27.360 --> 00:00:28.920
+I'm the engineering
+manager for Core Data.
+
+00:00:28.920 --> 00:00:30.850
+And we have a lot to go through today.
+
+00:00:30.860 --> 00:00:34.140
+Talk about some of the
+highlights that we've added in
+
+00:00:34.140 --> 00:00:36.130
+the last year and a half or so.
+
+00:00:36.140 --> 00:00:38.600
+And we're going to talk about
+some concurrency changes
+
+00:00:38.720 --> 00:00:39.980
+we've made to Core Data.
+
+00:00:39.980 --> 00:00:42.480
+Our integration with
+Lion's autosave feature.
+
+00:00:42.480 --> 00:00:43.880
+Ordered relationships.
+
+00:00:43.880 --> 00:00:46.420
+Some integration support with iCloud.
+
+00:00:46.420 --> 00:00:50.390
+A new incremental store API to
+do custom incremental stores with
+
+00:00:50.540 --> 00:00:52.800
+your own persistence mechanism.
+
+00:00:52.800 --> 00:00:55.780
+And then we're going to run
+through some highlights of
+
+00:00:55.780 --> 00:00:57.900
+developer tools changes in Xcode.
+
+00:00:58.180 --> 00:01:01.180
+So first up, concurrency.
+
+00:01:03.520 --> 00:01:09.090
+So the NSManageObjectContext is sort of
+the root part of the concurrency policy
+
+00:01:09.090 --> 00:01:10.780
+that Core Data has been providing.
+
+00:01:10.810 --> 00:01:16.070
+And we've added some new types of
+concurrency using NSManageObjectContext.
+
+00:01:16.160 --> 00:01:19.630
+There's some block-based methods,
+and we've also added nested context
+
+00:01:19.630 --> 00:01:22.570
+support to move changes around.
+
+00:01:25.150 --> 00:01:28.310
+So to just take a quick step back,
+I'd like to talk about a
+
+00:01:28.310 --> 00:01:29.360
+little bit where we were.
+
+00:01:29.500 --> 00:01:35.500
+So earlier, in 10.4, 10.5, and 10.6,
+we really strongly encouraged
+
+00:01:35.500 --> 00:01:39.140
+you stick to a thread confinement
+model with NSManageObjects.
+
+00:01:39.170 --> 00:01:41.930
+And here we have a little
+diagram where we have a number
+
+00:01:41.930 --> 00:01:44.880
+of different queue types,
+and different blocks running on
+
+00:01:44.880 --> 00:01:48.620
+those queues are using either
+the same ManageObject context,
+
+00:01:48.620 --> 00:01:51.540
+if they're all on a serial queue,
+or between different serial queues,
+
+00:01:51.540 --> 00:01:53.420
+they're going to have to use a
+different ManageObject context.
+
+00:01:53.430 --> 00:01:55.640
+And if you wanted to use
+it with a concurrent queue,
+
+00:01:55.650 --> 00:01:59.780
+then you're going to have to have
+a separate context per block.
+
+00:02:00.940 --> 00:02:04.950
+So thread confinement,
+separate contexts for each thread,
+
+00:02:04.960 --> 00:02:07.600
+manage objects are all owned
+by the thread that owns
+
+00:02:07.600 --> 00:02:09.060
+their managed object context.
+
+00:02:09.060 --> 00:02:11.580
+And really the only thing
+that was safe to pass around
+
+00:02:11.580 --> 00:02:13.950
+were the managed object IDs.
+
+00:02:14.510 --> 00:02:16.870
+So this served us pretty well.
+
+00:02:16.930 --> 00:02:19.870
+It's a very easy to understand model.
+
+00:02:20.040 --> 00:02:23.580
+Developers can make it happen
+without too much trouble.
+
+00:02:23.580 --> 00:02:25.920
+It's safe and it's very
+efficient for transactions.
+
+00:02:25.980 --> 00:02:29.380
+We don't get bogged down
+in excessively fine-grained
+
+00:02:29.380 --> 00:02:31.490
+locking or anything like that.
+
+00:02:31.820 --> 00:02:35.740
+But in response to feedback
+from you and our own experience,
+
+00:02:35.820 --> 00:02:36.880
+it does have some issues, right?
+
+00:02:36.960 --> 00:02:41.000
+The coordination is left as an exercise
+to the client of the framework.
+
+00:02:41.000 --> 00:02:44.620
+The developer needs to track which
+context is associated with which thread,
+
+00:02:44.620 --> 00:02:46.560
+which thread created which context.
+
+00:02:46.600 --> 00:02:50.360
+And it does get a little cumbersome
+to pass extensive amounts of
+
+00:02:50.360 --> 00:02:53.310
+unsaved changes between threads.
+
+00:02:53.640 --> 00:02:56.880
+So,
+we spent some time thinking about this,
+
+00:02:56.940 --> 00:03:00.820
+and thankfully a bunch of other
+Mac OS X technologies evolved,
+
+00:03:00.820 --> 00:03:03.450
+including LibDispatch,
+since we first came around.
+
+00:03:03.500 --> 00:03:09.720
+And so, we made this move to make a
+more formal concurrency policy,
+
+00:03:09.720 --> 00:03:12.140
+where in the Manage
+Object Context Initializer,
+
+00:03:12.140 --> 00:03:14.830
+you declare what kind of concurrency
+policy you would like to use
+
+00:03:14.830 --> 00:03:16.300
+with that particular context.
+
+00:03:16.300 --> 00:03:18.700
+And so, the new initializer is
+init with concurrency type,
+
+00:03:18.700 --> 00:03:20.380
+and there are three different types.
+
+00:03:20.380 --> 00:03:24.230
+There's a confinement concurrency type,
+a private queue, and a main queue.
+
+00:03:25.760 --> 00:03:29.750
+So the NSConfinement concurrency
+type is really just the name of
+
+00:03:29.820 --> 00:03:31.300
+what you've been using in the past.
+
+00:03:31.300 --> 00:03:34.940
+This is what worked from 10.4 to 10.6.
+
+00:03:35.160 --> 00:03:36.640
+It's just thread confinement.
+
+00:03:36.830 --> 00:03:41.340
+Managed objects are owned by the
+thread or the queue that created them.
+
+00:03:41.350 --> 00:03:46.240
+And this is the default behavior
+if you called the old initializer.
+
+00:03:46.960 --> 00:03:53.110
+So the private queue concurrency
+type is new in 10.7 and iOS 5.
+
+00:03:53.400 --> 00:03:58.250
+And here, it's basically an inversion of
+the thread confinement model.
+
+00:03:58.260 --> 00:04:01.180
+You can only call the
+Managed Object Context
+
+00:04:01.540 --> 00:04:04.120
+API on its own private queue,
+and the way you do that is by
+
+00:04:04.120 --> 00:04:08.430
+passing a block to the context with
+a new method called performBlock.
+
+00:04:08.580 --> 00:04:11.980
+And within this block,
+you just use the Managed Object Context.
+
+00:04:13.180 --> 00:04:15.720
+and then there's a main
+queue concurrency type,
+
+00:04:15.720 --> 00:04:18.910
+which has got a very similar requirement,
+except the queue is
+
+00:04:18.910 --> 00:04:20.100
+always the main queue.
+
+00:04:20.130 --> 00:04:23.890
+And what this allows to happen
+is the UI and controller classes
+
+00:04:23.900 --> 00:04:26.780
+are all bound to the main thread,
+like all of Cocoa bindings,
+
+00:04:26.820 --> 00:04:28.780
+can work with the managed
+object context directly.
+
+00:04:28.820 --> 00:04:31.040
+They don't have to worry
+about new API issues.
+
+00:04:31.090 --> 00:04:34.020
+But other threads in the background
+can easily pass results to
+
+00:04:34.020 --> 00:04:36.840
+these managed object contexts,
+just as if they were using the
+
+00:04:36.850 --> 00:04:38.430
+private queue concurrency type.
+
+00:04:38.560 --> 00:04:42.080
+They'd call perform block,
+and that ends up on the main queue.
+
+00:04:42.120 --> 00:04:44.230
+And this is very convenient
+for receiving results from
+
+00:04:44.290 --> 00:04:46.370
+background fetching and saving.
+
+00:04:47.870 --> 00:04:52.370
+So the queue-based concurrency type,
+there's the main queue concurrency type,
+
+00:04:52.370 --> 00:04:54.450
+primarily for integration
+controllers in the UI,
+
+00:04:54.460 --> 00:04:57.930
+and the private queue concurrency type,
+which is a little more of an
+
+00:04:57.930 --> 00:05:02.290
+actor-style inversion of a thread
+confinement where the managed object
+
+00:05:02.290 --> 00:05:06.020
+context owns its own queue and
+it handles the scheduling for you.
+
+00:05:06.090 --> 00:05:10.320
+And then there are two API methods,
+performBlock and performBlockInWait.
+
+00:05:10.870 --> 00:05:14.060
+So, Perform Block is asynchronous.
+
+00:05:14.260 --> 00:05:16.890
+Core Data considers it to be sort
+of the scope of a user event,
+
+00:05:16.900 --> 00:05:19.410
+a more substantial operation,
+and I'll define that
+
+00:05:19.410 --> 00:05:20.440
+in a couple of slides.
+
+00:05:20.650 --> 00:05:23.130
+And it includes an auto-release pool.
+
+00:05:23.140 --> 00:05:27.230
+It doesn't support API reentrancy,
+so if you call Perform Block from
+
+00:05:27.300 --> 00:05:29.010
+within a block,
+running on the managed
+
+00:05:29.010 --> 00:05:31.060
+average of context,
+it'll just get added to
+
+00:05:31.060 --> 00:05:33.670
+the end of the queue,
+very similar to the other
+
+00:05:33.670 --> 00:05:34.860
+queue APIs in Mac OS X.
+
+00:05:35.000 --> 00:05:37.560
+And it is important to note
+that please do not ever throw an
+
+00:05:37.560 --> 00:05:40.300
+exception outside of Perform Block.
+
+00:05:40.890 --> 00:05:43.700
+Perform Block and Wait,
+as you might imagine, is synchronous.
+
+00:05:43.700 --> 00:05:46.400
+And it's intended to be a
+little lighter-weight operation,
+
+00:05:46.400 --> 00:05:49.000
+so we don't consider
+it to be a full event.
+
+00:05:49.000 --> 00:05:50.580
+There's no auto-release pool.
+
+00:05:50.580 --> 00:05:53.140
+And it does support API re-entrancy.
+
+00:05:53.140 --> 00:05:56.580
+So if you call Perform Block and
+Wait from within a block,
+
+00:05:56.600 --> 00:05:59.580
+running on the managed object context,
+it'll execute immediately.
+
+00:05:59.580 --> 00:06:02.750
+And also, please don't throw exceptions.
+
+00:06:02.920 --> 00:06:04.730
+So this user event notion.
+
+00:06:04.820 --> 00:06:07.140
+So Core Data,
+particularly for Managed Object Context
+
+00:06:07.180 --> 00:06:10.240
+running on the main thread,
+has a lot of integration with the
+
+00:06:10.430 --> 00:06:14.790
+main event loop of that application in
+response to what the user's been doing.
+
+00:06:14.880 --> 00:06:17.830
+And this is the part where Core Data's
+providing change coalescing,
+
+00:06:17.870 --> 00:06:21.060
+delete propagation,
+integration with the NSUndoManager,
+
+00:06:21.180 --> 00:06:23.680
+and posting a lot of
+the NS notifications,
+
+00:06:23.720 --> 00:06:28.620
+like NSManageObjectContext
+objects did change at the end
+
+00:06:28.620 --> 00:06:31.250
+of every substantial operation.
+
+00:06:31.470 --> 00:06:33.560
+So from Core Data's perspective,
+technically,
+
+00:06:33.570 --> 00:06:37.550
+this is in between the time that you
+make calls to process pending changes.
+
+00:06:37.620 --> 00:06:41.440
+And it just so happens that
+the main thread has a little
+
+00:06:41.460 --> 00:06:45.560
+run loop action to always call
+process pending changes for you.
+
+00:06:45.590 --> 00:06:48.950
+But when you call perform block,
+we're going to consider that
+
+00:06:48.950 --> 00:06:53.110
+discrete block to be basically
+an event in which you want at the
+
+00:06:53.110 --> 00:06:57.510
+end to get these notifications and
+to get change coalescing to occur.
+
+00:06:59.440 --> 00:07:01.840
+Just to emphasize,
+when you use the private
+
+00:07:01.840 --> 00:07:04.590
+queue concurrency type,
+we really mean it.
+
+00:07:04.650 --> 00:07:05.350
+The queue is very private.
+
+00:07:05.380 --> 00:07:08.680
+So please don't grope for the queue.
+
+00:07:08.680 --> 00:07:12.970
+And if you want to then take results
+out of the blocks that you're
+
+00:07:13.050 --> 00:07:17.990
+executing from within perform block,
+you can just call into a dispatch
+
+00:07:17.990 --> 00:07:22.250
+sync or dispatch async or NS operation
+queue at the end of your block and
+
+00:07:22.250 --> 00:07:25.610
+just capture references to a queue
+that you actually own yourself.
+
+00:07:26.640 --> 00:07:29.690
+Now, you might think that's a little
+inconvenient if you're trying
+
+00:07:29.730 --> 00:07:32.900
+to coordinate a large set of
+operations across multiple queues.
+
+00:07:32.900 --> 00:07:36.780
+But in fact,
+there's a nifty little operation that
+
+00:07:36.850 --> 00:07:39.430
+you can use called dispatch group.
+
+00:07:39.440 --> 00:07:45.180
+And what this lets you do is coordinate
+blocks across multiple different queues.
+
+00:07:45.180 --> 00:07:48.480
+And the nice thing about this
+API is you can actually tell it to
+
+00:07:48.480 --> 00:07:52.750
+coordinate external events that it
+doesn't even necessarily know about.
+
+00:07:52.840 --> 00:07:56.050
+So you do that by using the dispatch
+group enter and dispatch group leave.
+
+00:07:56.110 --> 00:07:59.510
+And so with perform block,
+you can create a dispatch group
+
+00:07:59.510 --> 00:08:03.720
+and call dispatch group enter for
+every block that you want to track.
+
+00:08:03.720 --> 00:08:06.460
+And then at the end of your worker
+block in the managed object context,
+
+00:08:06.560 --> 00:08:07.990
+you call dispatch group leave.
+
+00:08:08.020 --> 00:08:11.310
+And then at the end of that,
+you've sort of set up the
+
+00:08:11.310 --> 00:08:13.660
+counting semaphore properly.
+
+00:08:13.660 --> 00:08:17.660
+And you can just use dispatch group wait
+and dispatch group notify to coordinate
+
+00:08:17.720 --> 00:08:20.020
+across many different queues and blocks.
+
+00:08:23.280 --> 00:08:27.790
+So once we have all these
+different concurrency policies,
+
+00:08:27.790 --> 00:08:31.090
+we decided to add on
+some additional work,
+
+00:08:31.320 --> 00:08:33.900
+a nested NSManage object context.
+
+00:08:34.150 --> 00:08:38.480
+And this is to help pass changes
+between different contexts.
+
+00:08:38.550 --> 00:08:42.130
+So you just create a new
+context and set its parent,
+
+00:08:42.250 --> 00:08:46.110
+and the parent can
+have multiple children.
+
+00:08:46.770 --> 00:08:49.570
+And you can do things with them like
+you can push changes to the parent and
+
+00:08:49.600 --> 00:08:51.940
+then have the child context continue on.
+
+00:08:51.940 --> 00:08:55.120
+So you can do an asynchronous save
+in that fashion where the in-memory
+
+00:08:55.120 --> 00:08:59.700
+changes just get pushed up and then
+the child continues on its way.
+
+00:08:59.710 --> 00:09:03.450
+And the parent context
+can save asynchronously.
+
+00:09:03.460 --> 00:09:07.980
+You can share unsaved changes between
+child contexts with the same parent.
+
+00:09:07.980 --> 00:09:12.300
+So you could do something like
+inheriting changes in a detail inspector.
+
+00:09:12.310 --> 00:09:15.680
+And you can also use it as a
+convenience to implement background
+
+00:09:15.740 --> 00:09:17.800
+fetching and some other tasks.
+
+00:09:18.770 --> 00:09:21.700
+So the asynchronous save operation
+is pretty straightforward.
+
+00:09:21.700 --> 00:09:26.660
+You just save the child and then ask the
+parent context to save asynchronously.
+
+00:09:26.660 --> 00:09:32.920
+And this is what the UI Manage document
+in iOS 5 is actually doing right now
+
+00:09:32.920 --> 00:09:35.080
+to implement asynchronous saving.
+
+00:09:35.080 --> 00:09:36.920
+And the code looks kind of like this.
+
+00:09:36.920 --> 00:09:39.260
+The parent context has
+to adopt a queue type,
+
+00:09:39.260 --> 00:09:41.700
+and then the child
+context sets its parent.
+
+00:09:41.700 --> 00:09:44.720
+The child saves synchronously,
+and that will push its changes
+
+00:09:44.720 --> 00:09:46.530
+up in memory one level.
+
+00:09:46.540 --> 00:09:49.970
+And then you ask the parent context
+to perform a block asynchronously to
+
+00:09:49.970 --> 00:09:54.210
+save the changes out to your store.
+
+00:09:55.150 --> 00:09:57.360
+And then sharing unsaved
+changes is pretty trivial.
+
+00:09:57.450 --> 00:10:00.320
+You basically push those
+changes up into the parent.
+
+00:10:00.360 --> 00:10:01.080
+They're in memory.
+
+00:10:01.190 --> 00:10:04.080
+They don't do I/O to save
+that out to the store.
+
+00:10:04.100 --> 00:10:08.630
+And you pull the changes
+down in another peer context.
+
+00:10:09.700 --> 00:10:13.310
+And for inheriting changes,
+this just works naturally for all
+
+00:10:13.310 --> 00:10:14.940
+the child contexts you create.
+
+00:10:14.940 --> 00:10:17.740
+They always inherit the
+changes from their parents.
+
+00:10:17.740 --> 00:10:22.180
+So any saves are gonna push those
+changes up one level into the parent,
+
+00:10:22.180 --> 00:10:26.020
+and fetching will incorporate all
+the unsaved changes in that parent.
+
+00:10:26.020 --> 00:10:29.060
+And then you can do some things like,
+in your detail inspector,
+
+00:10:29.060 --> 00:10:31.980
+if you have a cancel model,
+you can just throw away the
+
+00:10:32.000 --> 00:10:35.680
+child context because its changes
+never actually got committed.
+
+00:10:36.130 --> 00:10:37.880
+And some important things to remember.
+
+00:10:38.030 --> 00:10:41.150
+Saving is only going to push
+changes up one level if you
+
+00:10:41.150 --> 00:10:44.000
+create a very deeply nested tree.
+
+00:10:44.160 --> 00:10:47.520
+And fetching is going to pull all
+the data down from the database to
+
+00:10:47.520 --> 00:10:51.110
+make sure that the child sees the
+latest changes from everywhere.
+
+00:10:51.430 --> 00:10:54.970
+And then object with ID and the
+other faulting methods are going to
+
+00:10:54.980 --> 00:10:58.740
+pull in the fewest levels necessary,
+so they'll stop as soon
+
+00:10:58.860 --> 00:11:00.240
+as they find cached data.
+
+00:11:00.390 --> 00:11:03.200
+And parent contexts must always
+adopt one of the queue types.
+
+00:11:03.200 --> 00:11:06.240
+They can't use thread confinement
+since we kind of expect that
+
+00:11:06.240 --> 00:11:09.400
+they're going to be called from
+multiple different threads.
+
+00:11:11.100 --> 00:11:14.650
+So that kind of wraps up the concurrency,
+and we'll talk a little more now
+
+00:11:14.710 --> 00:11:16.870
+about our autosave integration.
+
+00:11:17.010 --> 00:11:19.500
+There have been a lot of changes
+to the NSPERS system document.
+
+00:11:19.550 --> 00:11:24.180
+And so for Lion's autosave,
+just a quick overview
+
+00:11:24.180 --> 00:11:27.490
+of why we're doing this,
+users had to explicitly
+
+00:11:27.700 --> 00:11:29.580
+save and save regularly,
+and not necessarily save
+
+00:11:29.630 --> 00:11:33.780
+at very convenient times,
+titling their documents and such.
+
+00:11:34.040 --> 00:11:37.750
+So these documents save
+automatically in place,
+
+00:11:37.750 --> 00:11:43.590
+and there's UI to lock versions
+and browse versions and a bunch of
+
+00:11:43.710 --> 00:11:45.740
+different support on NSDocument.
+
+00:11:45.790 --> 00:11:51.570
+And so what we've done in Core Data is
+improve NSPersistentDocument
+
+00:11:51.570 --> 00:11:54.250
+to play with these new APIs.
+
+00:11:54.860 --> 00:11:58.070
+So even untitled documents
+are going to get saved,
+
+00:11:58.070 --> 00:12:02.060
+and these save in place,
+so incremental operations
+
+00:12:02.070 --> 00:12:05.190
+against the SQLite store will
+behave kind of as you'd expect.
+
+00:12:05.200 --> 00:12:09.140
+So we're not creating a whole
+new document every time you save,
+
+00:12:09.140 --> 00:12:10.920
+just as we did in the past.
+
+00:12:13.900 --> 00:12:15.080
+It is opt-in.
+
+00:12:15.080 --> 00:12:17.540
+So on your NS persistent
+document subclass,
+
+00:12:17.540 --> 00:12:20.760
+you'll need to implement
+autosaves in place.
+
+00:12:20.760 --> 00:12:24.650
+And this is the same
+as the NS document API.
+
+00:12:26.630 --> 00:12:30.700
+So to clarify the different
+types of autosaving,
+
+00:12:30.700 --> 00:12:34.600
+because in the past NSPersistent
+Document didn't support autosave on 10.6.
+
+00:12:34.600 --> 00:12:39.080
+NSPersistent Document still doesn't
+support the old-style autosave operation,
+
+00:12:39.080 --> 00:12:42.210
+and perhaps the easiest way to
+think about it is the current
+
+00:12:42.210 --> 00:12:46.600
+Lion autosaving is autosaving in place,
+and the old-style autosaving is
+
+00:12:46.610 --> 00:12:51.160
+creating sort of automatic backup files,
+sort of a little more along the lines of
+
+00:12:51.170 --> 00:12:53.180
+Emacs tilde files and stuff like that.
+
+00:12:53.260 --> 00:12:56.280
+And so NSPersistent Document will
+only autosave in place.
+
+00:12:59.960 --> 00:13:04.860
+And if you decide to override the
+right methods declared on NSDocument,
+
+00:13:04.890 --> 00:13:08.650
+on your NSPerson document subclass,
+then we do encourage you
+
+00:13:08.720 --> 00:13:09.900
+to always call super.
+
+00:13:09.900 --> 00:13:15.270
+There's quite a bit of tricky handling
+to get autosaving to work with
+
+00:13:15.270 --> 00:13:20.900
+SQLite and all those different moving
+pieces with the versions browser.
+
+00:13:20.990 --> 00:13:23.880
+So we do recommend you start
+considering document file wrappers.
+
+00:13:23.900 --> 00:13:27.130
+There are a couple of
+known issues with this,
+
+00:13:27.130 --> 00:13:30.900
+but by and large,
+going forward for iCloud syncing
+
+00:13:30.900 --> 00:13:36.290
+and external binary data,
+and just in general for yourselves,
+
+00:13:36.470 --> 00:13:41.970
+to put in caches for QuickLooks
+or Spotlight or anything else,
+
+00:13:42.080 --> 00:13:45.140
+the document file wrapper
+is really quite handy.
+
+00:13:46.510 --> 00:13:50.610
+So there's sample code for using file
+wrappers with Core Data documents,
+
+00:13:50.630 --> 00:13:54.040
+and it overrides the read and write
+methods on its persistent document.
+
+00:13:54.070 --> 00:13:57.210
+There is a new Lion autosave
+example coming very soon now.
+
+00:13:57.270 --> 00:13:58.880
+Unfortunately,
+that wasn't quite finished yet,
+
+00:13:58.880 --> 00:14:03.130
+but we should expect to be publishing
+that in the next week or two.
+
+00:14:04.300 --> 00:14:07.280
+So the NS persistent documents now,
+if you override the method,
+
+00:14:07.280 --> 00:14:10.620
+will automatically save in place,
+and they support the versions
+
+00:14:10.620 --> 00:14:12.900
+browser that NS documents providing.
+
+00:14:12.900 --> 00:14:16.800
+So pretty simple to enable,
+and we are encouraging people to consider
+
+00:14:16.800 --> 00:14:20.420
+using file wrappers in the future.
+
+00:14:20.440 --> 00:14:23.370
+So next up, ordered relationships.
+
+00:14:29.000 --> 00:14:32.800
+So before we get into talking too
+much about ordered relationships,
+
+00:14:32.810 --> 00:14:35.380
+we would like to highlight
+sort of two different patterns
+
+00:14:35.420 --> 00:14:36.440
+that we've seen developers use.
+
+00:14:36.440 --> 00:14:38.650
+There's a sorting pattern,
+and then there's an
+
+00:14:38.660 --> 00:14:40.070
+actual ordering pattern.
+
+00:14:40.080 --> 00:14:43.200
+So the sorting pattern,
+you have a bunch of data,
+
+00:14:43.200 --> 00:14:48.140
+and you typically show it to the user
+sorted by different attribute values.
+
+00:14:48.190 --> 00:14:51.450
+And there's not necessarily any
+intrinsic ordering in the data itself.
+
+00:14:51.500 --> 00:14:56.200
+So this here is the view is imposing sort
+of a user preference on the ordering,
+
+00:14:56.200 --> 00:14:58.700
+and you can change it pretty easily.
+
+00:14:59.000 --> 00:15:01.350
+On the other hand,
+you can also have arbitrary
+
+00:15:01.350 --> 00:15:05.110
+ordering for lists,
+like a shopping list, a recipe, steps,
+
+00:15:05.200 --> 00:15:09.590
+or even a list in a build inspector
+in Xcode or something like that.
+
+00:15:09.720 --> 00:15:11.730
+And here the ordering
+is actually important.
+
+00:15:11.740 --> 00:15:14.960
+You can't just resort things and
+end up with something sensible.
+
+00:15:14.960 --> 00:15:17.380
+And it's typically
+controlled by the user.
+
+00:15:17.380 --> 00:15:19.840
+So the user is changing
+the positions of things.
+
+00:15:21.980 --> 00:15:24.550
+So ordered relationships are really
+intended to solve the second problem
+
+00:15:25.030 --> 00:15:28.460
+for sort of user-imposed ordering.
+
+00:15:28.460 --> 00:15:31.900
+And it assigns positions in
+the too many relationships.
+
+00:15:32.140 --> 00:15:35.700
+It's providing back an NSOrderedSet,
+which is a new collection
+
+00:15:35.880 --> 00:15:38.530
+class in Foundation.
+
+00:15:39.700 --> 00:15:43.970
+So the NSOrderedSet behaves
+a lot like an array.
+
+00:15:44.040 --> 00:15:46.000
+It is, however,
+not a subclass of an array,
+
+00:15:46.000 --> 00:15:48.830
+and this is important because
+it does not allow duplicates.
+
+00:15:48.840 --> 00:15:52.980
+So NSArrays can have duplicated elements,
+and NSOrderedSets,
+
+00:15:52.980 --> 00:15:56.670
+while they have positions,
+each item is only going
+
+00:15:56.670 --> 00:15:58.220
+to be in the set once.
+
+00:15:58.230 --> 00:16:02.510
+And we'd like to call out that
+the order relationships are more
+
+00:16:02.560 --> 00:16:06.670
+expensive for maintaining both
+the positioning and the unicking.
+
+00:16:07.660 --> 00:16:11.350
+So here in Xcode,
+it's pretty simple to enable
+
+00:16:11.350 --> 00:16:14.550
+them in the Xcode 4 inspector.
+
+00:16:14.910 --> 00:16:17.680
+Once you have selected a relationship
+property and you go into the detail
+
+00:16:17.680 --> 00:16:25.190
+inspector with a little cylinder cut out,
+you just select arrange.
+
+00:16:25.930 --> 00:16:27.250
+So that's pretty easy.
+
+00:16:27.370 --> 00:16:29.600
+So working with the
+ordered relationships,
+
+00:16:29.600 --> 00:16:32.100
+you can generate accessors
+for them in Xcode 4.
+
+00:16:32.100 --> 00:16:35.360
+And there's also the immutable ordered
+set value for key method you can do
+
+00:16:35.410 --> 00:16:40.390
+to get back a mutable proxy that's
+KBO compliant to make mutations
+
+00:16:40.440 --> 00:16:41.890
+to your ordered relationships.
+
+00:16:43.370 --> 00:16:47.250
+and in a moment, currently,
+the dynamically generated KVC accessors
+
+00:16:47.260 --> 00:16:51.870
+on this managed object are not quite
+available yet for ordered relationships.
+
+00:16:52.930 --> 00:16:55.770
+So for observing changes,
+we'd just like to call out that
+
+00:16:55.890 --> 00:16:59.880
+NSOrderedSet is a little bit
+different from both NSArray and NSSet.
+
+00:17:00.210 --> 00:17:03.600
+So what you're going to see is
+you're going to get back the
+
+00:17:03.600 --> 00:17:07.050
+same KVO observing method call,
+but you're going to get back different
+
+00:17:07.050 --> 00:17:11.740
+change kinds than you would from
+either an NSSet or an NSArray.
+
+00:17:11.980 --> 00:17:17.910
+So there'll be insertions and removals
+as opposed to unions and minuses.
+
+00:17:18.550 --> 00:17:21.060
+And while you don't necessarily
+have to worry too much about this,
+
+00:17:21.060 --> 00:17:24.070
+we would like to highlight sort
+of one of the reasons why if you
+
+00:17:24.080 --> 00:17:28.260
+have sorted data as opposed to
+arbitrarily user-ordered data,
+
+00:17:28.350 --> 00:17:32.700
+that you'd probably be better off using
+an unordered set where it makes sense.
+
+00:17:32.700 --> 00:17:36.100
+And that's because we actually have to
+do quite a bit of work to do merging
+
+00:17:36.100 --> 00:17:39.890
+between changes in different contexts
+for these ordered relationships.
+
+00:17:39.920 --> 00:17:43.300
+So we do our best to preserve
+the relative ordering,
+
+00:17:43.300 --> 00:17:47.680
+but that can be pretty difficult
+to divine the user's intention.
+
+00:17:48.400 --> 00:17:54.230
+So the merging of positions
+is particularly expensive.
+
+00:17:54.900 --> 00:17:57.290
+Migration,
+so you can migrate back using lightweight
+
+00:17:57.290 --> 00:17:59.490
+migration between ordered and unordered.
+
+00:17:59.500 --> 00:18:02.440
+Lightweight migration will just
+assign an ordering initially,
+
+00:18:02.440 --> 00:18:03.870
+that's arbitrary.
+
+00:18:03.900 --> 00:18:07.090
+So if you do want to upgrade
+to using ordered relationships,
+
+00:18:07.130 --> 00:18:10.790
+you can just impose a post-processing
+step after you've added the store with a
+
+00:18:10.790 --> 00:18:15.980
+lightweight migration phase to assign an
+ordering based on some other criteria.
+
+00:18:18.470 --> 00:18:21.670
+So in summary,
+these are new ordered relationships,
+
+00:18:21.670 --> 00:18:24.010
+and we encourage them
+from arbitrary ordering,
+
+00:18:24.060 --> 00:18:26.330
+particularly if you are going
+to be managing an ordering
+
+00:18:26.400 --> 00:18:27.790
+column yourself anyway.
+
+00:18:27.810 --> 00:18:29.280
+So that's a great place to use them.
+
+00:18:29.380 --> 00:18:33.350
+And they're using a new
+NSOrderedSet collection from Foundation.
+
+00:18:33.400 --> 00:18:36.450
+And just keep in mind that the
+position merging is going to be a
+
+00:18:36.460 --> 00:18:40.470
+little more expensive than the regular
+unordered too many relationships.
+
+00:18:40.530 --> 00:18:43.940
+So you should use sorted
+unordered relationships where
+
+00:18:43.940 --> 00:18:45.590
+it makes sense in the UI.
+
+00:18:46.360 --> 00:18:49.300
+And now I'd like to bring up
+Melissa Turner to talk about our iCloud
+
+00:18:49.300 --> 00:18:52.150
+integration and the rest of the session.
+
+00:18:57.800 --> 00:19:58.600
+[Transcript missing]
+
+00:19:59.040 --> 00:20:02.890
+You'll get per-conflict record,
+per-record conflict resolution,
+
+00:20:02.890 --> 00:20:06.020
+the same as you would using two
+parallel managed object contexts
+
+00:20:06.040 --> 00:20:07.600
+and stacks in a single process.
+
+00:20:07.600 --> 00:20:11.840
+We only sync deltas over the network,
+so you don't have to worry about the
+
+00:20:11.840 --> 00:20:15.380
+bandwidth imposition your application
+is putting on your customers.
+
+00:20:15.380 --> 00:20:19.150
+We do asynchronous imports,
+so your application is going to continue
+
+00:20:19.150 --> 00:20:22.350
+to be responsive while your user,
+while data is being
+
+00:20:22.970 --> 00:20:24.440
+imported in the background.
+
+00:20:25.370 --> 00:20:29.270
+And we provide a three-way merge that
+tries to preserve the intent of changes
+
+00:20:29.270 --> 00:20:34.410
+that were made on different devices,
+so that your final object
+
+00:20:34.600 --> 00:20:36.910
+The final truth of the object
+living in the cloud is what your
+
+00:20:36.910 --> 00:20:41.520
+user will expect rather than
+what they most recently changed.
+
+00:20:41.520 --> 00:20:42.440
+What does that really mean?
+
+00:20:42.570 --> 00:20:45.400
+Well, say I have a record.
+
+00:20:45.450 --> 00:20:49.520
+For the sake of easy slide reading,
+it's a contact named John Doe with an
+
+00:20:49.520 --> 00:20:52.320
+address john@somestrangesymbol.com.
+
+00:20:52.410 --> 00:20:56.240
+And I go off on vacation and I talk to
+somebody who knows John and he says,
+
+00:20:56.250 --> 00:20:58.360
+"Well, did you know he's decided
+to change his name?
+
+00:20:58.430 --> 00:21:02.340
+He's now Johnny." You go in
+and change that on your device.
+
+00:21:02.780 --> 00:21:04.200
+You talk to somebody
+else later and they say,
+
+00:21:04.200 --> 00:21:05.620
+oh yeah,
+he didn't just change his first name,
+
+00:21:05.660 --> 00:21:06.460
+he changed his last name.
+
+00:21:06.460 --> 00:21:07.490
+He's now Johnny Appleseed.
+
+00:21:07.500 --> 00:21:13.430
+And at the same time, back at home,
+my partner is off, and they're talking to
+
+00:21:13.460 --> 00:21:15.400
+somebody about the same person.
+
+00:21:15.400 --> 00:21:17.310
+And they get told, oh yeah,
+did you hear he changed
+
+00:21:17.310 --> 00:21:18.160
+his email address?
+
+00:21:18.160 --> 00:21:19.970
+It's now johnny at
+strange symbol dot com.
+
+00:21:19.980 --> 00:21:23.170
+What you might expect is that when
+you're trying to merge all of these
+
+00:21:23.170 --> 00:21:25.910
+things together through the cloud,
+you're actually going to
+
+00:21:26.010 --> 00:21:28.530
+end up with either John Doe,
+johnny at strange symbol dot com,
+
+00:21:28.530 --> 00:21:31.390
+or Johnny Appleseed,
+john at strange symbol dot com.
+
+00:21:31.460 --> 00:21:32.330
+But that's not what we do.
+
+00:21:32.340 --> 00:21:36.360
+We actually look at each of the
+chain sets in chronological order,
+
+00:21:36.360 --> 00:21:39.640
+and we apply just the diffs
+to the previous object so that
+
+00:21:39.640 --> 00:21:42.580
+we'll actually combine those,
+and in the end you'll end
+
+00:21:42.580 --> 00:21:45.390
+up with Johnny Appleseed,
+johnny at strange symbol dot com.
+
+00:21:49.320 --> 00:21:51.040
+What do you have to do to get all this?
+
+00:21:51.100 --> 00:21:51.840
+Not a lot.
+
+00:21:51.840 --> 00:21:54.810
+You have to add some options to
+the options dictionary when you're
+
+00:21:54.810 --> 00:21:57.040
+adding your persistent store to
+the persistent store coordinator.
+
+00:21:57.040 --> 00:21:59.830
+And you need to respond to an
+import notification when we
+
+00:21:59.830 --> 00:22:01.290
+pull data out of the cloud.
+
+00:22:01.300 --> 00:22:02.270
+What do we do?
+
+00:22:02.400 --> 00:22:04.360
+Well, we do a lot, actually.
+
+00:22:04.360 --> 00:22:07.820
+If you've heard the class
+names NSFileCoordinator,
+
+00:22:07.820 --> 00:22:11.820
+NSFilePresenter, or NSMetadataQuery,
+we take care of all of the
+
+00:22:11.830 --> 00:22:13.610
+integration with those for you.
+
+00:22:13.620 --> 00:22:16.900
+We also take care of exporting
+changes when they're made in your
+
+00:22:16.900 --> 00:22:19.590
+application and importing changes
+that have been made in other
+
+00:22:19.590 --> 00:22:21.120
+devices that are part of your cloud.
+
+00:22:21.140 --> 00:22:24.600
+And at this point,
+I'm going to try and do a demo and
+
+00:22:24.600 --> 00:22:26.940
+hope the demo gods smile on me.
+
+00:22:33.280 --> 00:22:35.480
+So I have here an application.
+
+00:22:35.530 --> 00:22:37.580
+It's a little users and groups thing.
+
+00:22:37.600 --> 00:22:40.680
+And I'm going to come over
+here and create a user.
+
+00:22:41.930 --> 00:22:47.380
+Call it Beach Ball,
+because I'm not creative on stage.
+
+00:22:47.420 --> 00:22:50.100
+And I'm going to give it a picture.
+
+00:22:50.100 --> 00:22:53.020
+I'm going to add it to the water group.
+
+00:22:53.050 --> 00:22:55.980
+And then I'm going to save.
+
+00:22:55.980 --> 00:22:59.110
+And I'm going to come over
+to my other computer here.
+
+00:23:02.400 --> 00:23:04.500
+I'm going to launch the application.
+
+00:23:04.500 --> 00:23:08.040
+And we can see that that
+new user was created.
+
+00:23:08.040 --> 00:23:10.530
+And at this point, you're probably going,
+yeah, you faked that.
+
+00:23:10.620 --> 00:23:16.790
+And a week ago,
+you might have been right.
+
+00:23:24.680 --> 00:23:26.520
+But instead,
+I'm actually going to come over here
+
+00:23:26.520 --> 00:23:29.010
+and I'm going to add a new group.
+
+00:23:29.020 --> 00:23:33.300
+I'm going to call it Gingerbread now.
+
+00:23:33.320 --> 00:23:34.480
+I'm going to call it green.
+
+00:23:34.480 --> 00:23:37.020
+I think I'm going to
+give it the color green.
+
+00:23:40.500 --> 00:23:44.840
+I'm going to move flippers
+into the green group.
+
+00:23:44.840 --> 00:23:46.940
+And I'm going to save.
+
+00:23:46.980 --> 00:23:50.350
+Then I'm going to come
+back to my first computer.
+
+00:23:51.900 --> 00:23:55.230
+And we can see that Flippers,
+I now have a green group,
+
+00:23:55.230 --> 00:23:57.280
+and that Flippers is
+actually in that green group.
+
+00:23:57.340 --> 00:23:59.060
+It all worked.
+
+00:23:59.250 --> 00:24:00.140
+The demo gods liked me.
+
+00:24:08.900 --> 00:24:11.060
+There's something about building
+applications and doing demos
+
+00:24:11.060 --> 00:24:13.860
+on stage that just guarantees
+that everything will go wrong.
+
+00:24:13.860 --> 00:24:15.930
+But what just happened there?
+
+00:24:16.370 --> 00:24:20.420
+So I had one computer and I created
+some data on it and I saved my
+
+00:24:20.520 --> 00:24:24.140
+application and that data was
+exported and pushed into the cloud.
+
+00:24:24.200 --> 00:24:27.550
+My other application came
+up and asked the cloud,
+
+00:24:27.600 --> 00:24:30.300
+is there any new data
+that I need to know about?
+
+00:24:30.350 --> 00:24:33.150
+And there was,
+so it was pulled down and integrated
+
+00:24:33.150 --> 00:24:35.340
+into the store on that local system.
+
+00:24:35.430 --> 00:24:37.800
+And then I made some more changes.
+
+00:24:38.190 --> 00:24:42.220
+and saved, and those were pushed
+back into the cloud.
+
+00:24:42.300 --> 00:24:43.940
+And the other computer was notified that,
+hey,
+
+00:24:43.940 --> 00:24:47.890
+there's new changes for that application,
+and pulled them down.
+
+00:24:50.610 --> 00:24:53.200
+And we did all this with
+three pieces of API,
+
+00:24:53.200 --> 00:24:56.760
+as far as you're concerned.
+
+00:24:56.760 --> 00:24:59.950
+Two store options,
+NSPersistentStoreUbiquitousContentNameKey
+
+00:25:00.090 --> 00:25:02.940
+and
+NSPersistentStoreUbiquitousContentURLKey,
+
+00:25:02.940 --> 00:25:05.850
+and one notification telling
+the application that it's time
+
+00:25:05.850 --> 00:25:07.430
+to update the user interface.
+
+00:25:08.640 --> 00:25:11.750
+And as persistent store ubiquitous
+content name key is kind of
+
+00:25:11.750 --> 00:25:14.780
+the identifier for your store.
+
+00:25:14.780 --> 00:25:17.910
+Many of you know that a
+Core Data application can often have
+
+00:25:17.910 --> 00:25:20.160
+multiple stores for many reasons.
+
+00:25:20.160 --> 00:25:23.160
+I mean, often there'll be a set of
+data that was shipped with
+
+00:25:23.260 --> 00:25:26.570
+the application in one store,
+and then all of the user data
+
+00:25:26.570 --> 00:25:28.150
+was created in a separate store.
+
+00:25:28.230 --> 00:25:30.360
+And there's no really good way
+of identifying these stores.
+
+00:25:30.360 --> 00:25:33.680
+I mean, the name can be, well,
+a file can be a file name.
+
+00:25:33.680 --> 00:25:36.130
+Many different applications
+can use the same file name.
+
+00:25:36.300 --> 00:25:40.280
+Paths differ between Mac OS and iOS.
+
+00:25:40.300 --> 00:25:43.700
+So we need a way to allow you
+to specify that the data in this
+
+00:25:43.700 --> 00:25:48.060
+store is from my application,
+and it should be in all instances
+
+00:25:48.070 --> 00:25:49.430
+of my application everywhere.
+
+00:25:49.560 --> 00:25:53.170
+And that's the persistent store
+ubiquitous content name key.
+
+00:25:53.330 --> 00:25:56.320
+can set any value you'd like as
+long as it's file system compatible,
+
+00:25:56.330 --> 00:25:59.240
+no slashes or colons.
+
+00:25:59.250 --> 00:26:03.270
+And that's all you need to do to say
+this store is this store everywhere.
+
+00:26:04.540 --> 00:26:07.490
+You can also set an NS Persistent
+Store ubiquitous content URL key.
+
+00:26:07.560 --> 00:26:08.840
+This is optional.
+
+00:26:08.900 --> 00:26:13.040
+By default,
+if you've got a single store in your
+
+00:26:13.140 --> 00:26:16.310
+application and you have the same
+bundle identifier on all platforms
+
+00:26:16.380 --> 00:26:19.880
+that you want to sync data between,
+you can just use the default.
+
+00:26:19.930 --> 00:26:23.300
+If you've got a different bundle
+identifier between Mac and iOS,
+
+00:26:23.390 --> 00:26:26.310
+then you'll need to provide your own
+identifier that we can use to say,
+
+00:26:26.310 --> 00:26:29.960
+OK, this iPhone app and this
+Mac app are really talking to
+
+00:26:29.960 --> 00:26:31.560
+the same data off in the cloud.
+
+00:26:31.600 --> 00:26:34.560
+And this is where you'll find it.
+
+00:26:34.610 --> 00:26:37.670
+You'll also need to set a
+ubiquitous content URL key if
+
+00:26:37.670 --> 00:26:39.910
+you're doing document syncing.
+
+00:26:40.280 --> 00:26:42.000
+This should be treated
+as an opaque package.
+
+00:26:42.120 --> 00:26:43.700
+We put stuff in there.
+
+00:26:44.030 --> 00:26:44.630
+Don't poke at it.
+
+00:26:44.710 --> 00:26:45.840
+You're likely to break something.
+
+00:26:45.840 --> 00:26:49.280
+And we reserve the right to
+change it at any future point.
+
+00:26:49.870 --> 00:26:51.910
+How do we get,
+how do you get a persistent
+
+00:26:51.910 --> 00:26:53.640
+store ubiquitous content URL key?
+
+00:26:53.650 --> 00:26:56.840
+Like I said, it defaults to the
+main bundle identifier.
+
+00:26:56.870 --> 00:27:00.840
+And if you ask NS file manager
+for the URL for ubiquity container
+
+00:27:00.840 --> 00:27:04.280
+ID for your bundle identifier,
+it will provide you for URL.
+
+00:27:04.280 --> 00:27:07.080
+And if you want to provide
+a custom persistent store
+
+00:27:07.160 --> 00:27:10.350
+ubiquitous content URL key,
+you'll simply append stuff onto the end
+
+00:27:10.350 --> 00:27:15.480
+of that URL according to the rules that
+are set out by the document syncing APIs,
+
+00:27:15.540 --> 00:27:18.270
+the document in the cloud APIs.
+
+00:27:19.220 --> 00:27:23.600
+The NS Persistent Store did import
+Ubiquitous Content Changes notification.
+
+00:27:23.630 --> 00:27:27.260
+This is very much like the NS Persistent
+Store did save notification.
+
+00:27:27.450 --> 00:27:29.420
+It has an object,
+which is the persistent store
+
+00:27:29.420 --> 00:27:32.200
+coordinator that has the store mounted.
+
+00:27:32.200 --> 00:27:35.700
+If you have multiple persistent store
+coordinators in your application,
+
+00:27:35.700 --> 00:27:38.870
+which have the same store mounted,
+you'll get a notification for
+
+00:27:38.870 --> 00:27:41.110
+each persistent store coordinator.
+
+00:27:41.470 --> 00:27:45.100
+User info for that persistent
+store coordinator has a dictionary
+
+00:27:45.110 --> 00:27:49.370
+containing the collections of inserted,
+updated, and deleted objects that
+
+00:27:49.370 --> 00:27:50.630
+you need to know about.
+
+00:27:50.740 --> 00:27:54.970
+Unlike the NS Persistent
+Store did save notification,
+
+00:27:55.120 --> 00:27:57.730
+these are collections of
+managed object IDs instead of
+
+00:27:57.730 --> 00:27:59.570
+collections of managed objects.
+
+00:28:01.710 --> 00:28:02.830
+How do you respond to an import?
+
+00:28:02.960 --> 00:28:05.420
+Well,
+in pretty much the same way as you do,
+
+00:28:05.420 --> 00:28:07.860
+and as Managed Object Context
+did save notification.
+
+00:28:07.970 --> 00:28:10.210
+You'll refresh your unchanged
+objects so that the next time
+
+00:28:10.210 --> 00:28:13.160
+the user tries to access them,
+they'll pull the new data from the store.
+
+00:28:13.230 --> 00:28:16.900
+And you'll merge in changes for
+all of the objects that have been
+
+00:28:16.900 --> 00:28:18.940
+changed in the local context.
+
+00:28:19.920 --> 00:28:22.420
+Well, this is really great for
+shoebox applications,
+
+00:28:22.490 --> 00:28:25.180
+but what about NS-Persistent
+Document-based applications?
+
+00:28:25.390 --> 00:28:29.620
+Well, it's going to be easiest if you
+sync documents as file wrappers
+
+00:28:29.720 --> 00:28:33.580
+rather than as single files.
+
+00:28:33.640 --> 00:28:36.270
+There's lots of reasons for
+that that I won't get into here.
+
+00:28:36.350 --> 00:28:39.420
+You'll use the ubiquitous store
+options when you add the store
+
+00:28:39.420 --> 00:28:40.940
+for the persistent document.
+
+00:28:40.960 --> 00:28:44.920
+And one thing you should consider is
+you don't want to sync the SQLite file.
+
+00:28:45.110 --> 00:28:48.490
+You'll provide us with a ubiquitous
+URL path pointing to a location
+
+00:28:48.490 --> 00:28:52.370
+inside the document file wrapper,
+and we'll pull all of the stuff that
+
+00:28:52.370 --> 00:28:54.130
+needs to go into the cloud there.
+
+00:28:54.240 --> 00:28:57.240
+But the SQLite file itself
+doesn't need to go in the cloud,
+
+00:28:57.240 --> 00:29:00.700
+because we'll simply apply the
+diffs that have been made on other
+
+00:29:00.700 --> 00:29:02.540
+devices to the existing store.
+
+00:29:02.560 --> 00:29:04.560
+So you can tell us that you
+don't want the store in the cloud
+
+00:29:04.880 --> 00:29:10.610
+by including .nosync somewhere
+in the SQLite store file path.
+
+00:29:12.850 --> 00:29:15.060
+If you don't want to use
+NS-Persistent Document but you
+
+00:29:15.060 --> 00:29:18.520
+still want to use Core Data,
+well, there's a couple of alternatives.
+
+00:29:18.520 --> 00:29:21.110
+Atomic stores can actually
+be synced as whole files.
+
+00:29:21.330 --> 00:29:23.510
+SQLite shouldn't be,
+but the atomic stores, well,
+
+00:29:23.700 --> 00:29:26.120
+they have always been last-writer wins.
+
+00:29:26.140 --> 00:29:28.550
+And that would be no
+different in the iCloud case.
+
+00:29:28.610 --> 00:29:30.530
+In this case,
+you'll want to use the NS-FileVersion
+
+00:29:30.530 --> 00:29:34.680
+APIs for resolving conflicts between
+changes made on different devices.
+
+00:29:36.310 --> 00:29:37.050
+Some good ideas?
+
+00:29:37.140 --> 00:29:39.800
+Well, remember to respond to
+the import notification.
+
+00:29:39.800 --> 00:29:42.180
+This is the only way you're
+going to get your UI updates.
+
+00:29:42.180 --> 00:29:45.970
+Remember to use an appropriate merge
+policy in your context to make sure
+
+00:29:45.970 --> 00:29:49.370
+that data that your user is editing
+locally is merged in correctly with
+
+00:29:49.440 --> 00:29:51.780
+data that was changed in the cloud.
+
+00:29:51.780 --> 00:29:53.180
+Anticipate bandwidth constraints.
+
+00:29:53.180 --> 00:29:54.620
+Try not to thrash too hard.
+
+00:29:54.620 --> 00:29:57.660
+Don't save every time somebody
+changes a character and a string.
+
+00:29:57.660 --> 00:29:59.020
+Wait until they're done.
+
+00:29:59.020 --> 00:30:02.700
+And use no sync for all of the files
+that you're saving that you don't
+
+00:30:02.700 --> 00:30:04.900
+actually want to push into the cloud.
+
+00:30:06.850 --> 00:30:09.560
+And now I'm on to NS Incremental Store.
+
+00:30:09.560 --> 00:30:11.420
+So, why do you care?
+
+00:30:11.420 --> 00:30:15.970
+I suspect some of you don't,
+but a lot of you, since we first shipped,
+
+00:30:18.940 --> 00:30:24.580
+Core Data in Mac OS X Tiger, 10.4 Tiger,
+have been saying, "Well,
+
+00:30:24.580 --> 00:30:26.620
+all of the store types
+you're providing are great,
+
+00:30:26.730 --> 00:30:31.350
+but I want to talk to something
+else." And that set of something
+
+00:30:31.360 --> 00:30:33.290
+else has grown over time.
+
+00:30:34.900 --> 00:30:37.760
+And it's really hard for
+us to decide which ones are
+
+00:30:37.760 --> 00:30:40.870
+worth expending resources on,
+and what's better for us to spend
+
+00:30:40.870 --> 00:30:43.680
+time doing iCloud integration,
+because that's something
+
+00:30:43.680 --> 00:30:45.070
+that's a lot harder to do.
+
+00:30:46.110 --> 00:30:49.550
+So we're giving you an incremental
+store API that lets you talk
+
+00:30:49.630 --> 00:30:52.560
+to your data source in whatever
+language you would like to talk,
+
+00:30:52.630 --> 00:30:55.390
+in its own language.
+
+00:30:55.530 --> 00:30:58.840
+It's very much like the SQL store.
+
+00:30:58.870 --> 00:31:01.860
+It allows you to only load the
+data that you actually need.
+
+00:31:01.990 --> 00:31:05.410
+It supports faulting,
+so you can only load the data
+
+00:31:05.410 --> 00:31:07.420
+you need when you need it.
+
+00:31:07.430 --> 00:31:13.540
+And it supports flushing unused
+data once your user's done with it.
+
+00:31:14.870 --> 00:31:16.440
+How does it work?
+
+00:31:16.470 --> 00:31:20.200
+For those of you who are interested
+in implementing a incremental store,
+
+00:31:20.230 --> 00:31:22.340
+you want to remember this slide,
+because it covers everything
+
+00:31:22.340 --> 00:31:24.040
+you're going to need to know
+about implementing a store,
+
+00:31:24.040 --> 00:31:27.340
+what methods are called,
+in what order they're called.
+
+00:31:27.700 --> 00:31:29.950
+So in the beginning,
+your application launches and a
+
+00:31:29.970 --> 00:31:32.060
+persistent store coordinator is created.
+
+00:31:32.210 --> 00:31:36.400
+And you tell it to add a persistent store
+of type your incremental store type.
+
+00:31:36.510 --> 00:31:39.270
+The store goes off,
+the coordinator goes off and creates
+
+00:31:39.270 --> 00:31:43.400
+an instance of that store and tells it,
+load your metadata.
+
+00:31:44.600 --> 00:31:47.380
+And the store hands the metadata back
+to the persistent store coordinator,
+
+00:31:47.380 --> 00:31:50.990
+which looks at it and determines
+whether or not the contents of
+
+00:31:50.990 --> 00:31:54.250
+that store are compatible with the
+model that was used to initialize
+
+00:31:54.250 --> 00:31:55.620
+the persistent store coordinator.
+
+00:31:55.800 --> 00:31:58.700
+This is just like adding any other store.
+
+00:31:58.810 --> 00:32:02.760
+And if that's okay, the model,
+the entity version hashes
+
+00:32:02.760 --> 00:32:06.380
+in both places match,
+the coordinator mounts the store.
+
+00:32:06.750 --> 00:32:10.150
+At some point, somebody adds a context,
+and now you have a full
+
+00:32:10.150 --> 00:32:12.140
+usable Core Data stack.
+
+00:32:12.250 --> 00:32:14.740
+And now your user is going
+to want to look at data.
+
+00:32:14.830 --> 00:32:19.220
+So your application will
+create an NSFetchRequest.
+
+00:32:19.310 --> 00:32:23.720
+And at that point,
+an executeFetchRequest is called
+
+00:32:23.740 --> 00:32:26.530
+on the managed object context.
+
+00:32:27.140 --> 00:32:31.520
+and that gets sent down to your store
+as execute request with context error.
+
+00:32:31.650 --> 00:32:35.090
+This is your store's cue to go
+off and figure out which objects
+
+00:32:35.190 --> 00:32:37.100
+the user is actually requesting.
+
+00:32:37.120 --> 00:32:42.200
+And you'll create shells for those
+objects and return them to the context.
+
+00:32:43.010 --> 00:32:45.810
+As I said,
+these are likely to come back as faults,
+
+00:32:45.850 --> 00:32:47.620
+or they can come back
+as faults if you choose,
+
+00:32:47.620 --> 00:32:49.480
+and at some point,
+value for key is going to be
+
+00:32:49.540 --> 00:32:51.250
+called on one of those faults.
+
+00:32:51.320 --> 00:32:56.500
+At this point, Core Data will send your
+store a new message,
+
+00:32:56.530 --> 00:32:59.330
+new values for object with
+ID with context error.
+
+00:32:59.340 --> 00:33:03.260
+And this is essentially saying, "Okay,
+store, user's interested in this object.
+
+00:33:03.290 --> 00:33:07.060
+Go off and get me the property
+values for it." If what you're trying
+
+00:33:07.060 --> 00:33:09.920
+to fire is a relationship fault,
+we'll actually send new values
+
+00:33:09.920 --> 00:33:13.220
+for relationship for object
+with ID with context error.
+
+00:33:13.250 --> 00:33:15.580
+It says, "The user's trying to
+follow this relationship.
+
+00:33:15.620 --> 00:33:19.690
+Get me the object or objects
+that are at the other end."
+
+00:33:20.920 --> 00:33:23.850
+So your user goes off and edits things,
+inserts a few objects,
+
+00:33:23.910 --> 00:33:26.600
+deletes a few objects,
+changes some stuff,
+
+00:33:26.600 --> 00:33:28.800
+and then they want to save.
+
+00:33:28.810 --> 00:33:30.490
+And at this point,
+
+00:33:30.700 --> 00:33:35.260
+Your application will call save
+on the managed object context,
+
+00:33:35.260 --> 00:33:38.430
+and the managed object context will
+create a save request and pass that
+
+00:33:38.430 --> 00:33:40.710
+down to the store in two stages.
+
+00:33:40.910 --> 00:33:43.860
+First, we'll go through and look
+at all the inserted objects,
+
+00:33:43.860 --> 00:33:46.590
+and we'll tell your store to
+obtain permanent IDs for the
+
+00:33:46.590 --> 00:33:48.700
+objects that have been created.
+
+00:33:48.710 --> 00:33:50.540
+At this point,
+your store needs to figure out what
+
+00:33:50.650 --> 00:33:53.630
+permanent keys are going to be assigned
+to those objects and send them back
+
+00:33:53.630 --> 00:33:58.600
+to Core Data so we can actually connect
+all the relationships appropriately.
+
+00:33:59.110 --> 00:34:02.320
+We then tell your store to execute
+requests with context error,
+
+00:34:02.320 --> 00:34:04.600
+and in this case, it's a save request.
+
+00:34:04.660 --> 00:34:07.550
+And the save request contains collections
+of objects that were inserted,
+
+00:34:07.550 --> 00:34:10.390
+updated, and deleted,
+and you'll need to take those objects
+
+00:34:10.390 --> 00:34:13.920
+and push them to your store in whatever
+language your store likes to talk,
+
+00:34:13.920 --> 00:34:16.420
+or your data source likes to talk.
+
+00:34:16.700 --> 00:34:20.370
+There is one other piece,
+and that's the NSIncrementalStore node.
+
+00:34:20.750 --> 00:34:23.850
+Your store may talk JSON,
+it may talk SQL,
+
+00:34:23.930 --> 00:34:25.340
+it may talk something else.
+
+00:34:25.350 --> 00:34:27.260
+And Core Data can't understand
+all of those things,
+
+00:34:27.260 --> 00:34:29.510
+so you'll need to put the data
+in a format that Core Data can
+
+00:34:29.510 --> 00:34:31.040
+actually understand.
+
+00:34:31.130 --> 00:34:35.180
+And this is done by creating an
+instance of NSIncrementalStoreNode.
+
+00:34:35.240 --> 00:34:39.520
+You initialize it with the object ID for
+the object that this data represents,
+
+00:34:39.580 --> 00:34:44.300
+and with a dictionary containing
+key to property value mappings.
+
+00:34:44.370 --> 00:34:45.820
+And at this point, it's a black box.
+
+00:34:45.910 --> 00:34:50.260
+You can ask it for its object ID and for
+the value for the property description,
+
+00:34:50.320 --> 00:34:54.200
+but your data is now in a format
+that Core Data can understand.
+
+00:34:54.290 --> 00:34:57.000
+And that's all there is to it.
+
+00:34:57.060 --> 00:34:59.190
+Sounds so easy, doesn't it?
+
+00:35:01.640 --> 00:35:05.440
+I talked about method execute
+request with context error,
+
+00:35:05.450 --> 00:35:07.940
+which leads me into talking
+about NSPersistentStoreRequest.
+
+00:35:08.030 --> 00:35:14.050
+This is a new base class we've added
+that basically uses the command pattern
+
+00:35:14.400 --> 00:35:16.710
+for Core Data to talk to your store.
+
+00:35:16.820 --> 00:35:19.600
+We've added a new class,
+NSSaveChangesRequest.
+
+00:35:19.790 --> 00:35:21.960
+This contains all of the
+information about objects that
+
+00:35:21.960 --> 00:35:24.770
+have changes in the context that
+need to be pushed to your store.
+
+00:35:24.850 --> 00:35:28.040
+We reparented NSFetchRequest,
+so it's now a subclass of
+
+00:35:28.040 --> 00:35:30.110
+NSPersistentStoreRequest.
+
+00:35:30.910 --> 00:35:33.880
+Your execute request method
+will need to switch on these.
+
+00:35:33.920 --> 00:35:36.910
+And if it's a fetch request, well,
+you'll need to figure out
+
+00:35:36.960 --> 00:35:38.510
+what data your user wants.
+
+00:35:38.630 --> 00:35:41.140
+There's two types of
+flags on NSFetchRequest.
+
+00:35:41.210 --> 00:35:45.680
+There's flags that affect the content
+of the array that's being returned.
+
+00:35:45.750 --> 00:35:49.140
+Flags that determine whether what
+you're returning is an NSManagedObject,
+
+00:35:49.160 --> 00:35:52.440
+whether it's NSManagedObjectID,
+or whether it's a dictionary.
+
+00:35:52.480 --> 00:35:54.530
+Or whether it's just the number
+of objects that are being
+
+00:35:54.530 --> 00:35:56.240
+returned for account request.
+
+00:35:56.350 --> 00:35:57.780
+There's flags that affect performance.
+
+00:35:57.840 --> 00:36:00.110
+This is stuff like whether you
+should return faults or fully
+
+00:36:00.110 --> 00:36:02.760
+populated managed objects,
+whether relationship
+
+00:36:02.820 --> 00:36:04.520
+prefetching should be done.
+
+00:36:05.020 --> 00:36:08.080
+If you're providing a store that
+you expect other people to use,
+
+00:36:08.080 --> 00:36:10.690
+you're providing a store to clients,
+
+00:36:10.760 --> 00:36:14.840
+You must implement all of the
+flags that affect the results of.
+
+00:36:16.400 --> 00:36:20.580
+and I are going to talk about the new
+features of the new Mac OS X Lion.
+
+00:36:20.580 --> 00:36:22.060
+So, let's get started.
+
+00:36:22.080 --> 00:36:25.080
+So, let's talk about the new features
+of the new Mac OS X Lion.
+
+00:36:25.080 --> 00:36:30.240
+So, let's talk about the new features
+of the new Mac OS X Lion.
+
+00:36:31.510 --> 00:36:35.710
+We provide an API that allows you to
+map between primary keys and object IDs.
+
+00:36:35.890 --> 00:36:39.290
+It's the same API that we
+shipped with NS Atomic Store.
+
+00:36:39.370 --> 00:36:42.500
+And when you're returning
+values for fetch request,
+
+00:36:42.550 --> 00:36:45.100
+you should get the object,
+the managed objects,
+
+00:36:45.100 --> 00:36:48.710
+by asking the context that was passed
+to the second parameter with context
+
+00:36:49.320 --> 00:36:51.340
+for an object with a given ID.
+
+00:36:51.380 --> 00:36:53.570
+That will return a fault.
+
+00:36:55.480 --> 00:36:58.160
+There is no SQL generator
+included in this.
+
+00:36:58.160 --> 00:36:59.740
+We're targeting this
+more at web services,
+
+00:36:59.760 --> 00:37:01.620
+but you can use it to
+build anything you'd like.
+
+00:37:01.630 --> 00:37:03.880
+And feel free to send us pointers,
+because we're really interested
+
+00:37:03.880 --> 00:37:06.200
+in seeing what you do with this.
+
+00:37:07.780 --> 00:37:10.740
+We suggest, and this is just because
+we've gone through it,
+
+00:37:10.790 --> 00:37:14.170
+that you consider supporting
+only a set of canned queries.
+
+00:37:14.280 --> 00:37:18.100
+Pick a defined set of predicates
+that can be used to access the data
+
+00:37:18.100 --> 00:37:22.930
+you think your user is going to be
+interested in and support those rather
+
+00:37:22.930 --> 00:37:25.930
+than trying to build something that can
+
+00:37:26.310 --> 00:37:37.330
+and I are here to share a few tips on
+how to use the latest version of the NAS.
+
+00:37:37.330 --> 00:37:37.330
+We will
+
+00:37:39.710 --> 00:37:40.970
+Some general design tips.
+
+00:37:41.080 --> 00:37:44.400
+In much the same way we
+suggest you use canned queries,
+
+00:37:44.530 --> 00:37:48.640
+we suggest that you design your
+store to talk to a specific schema.
+
+00:37:48.650 --> 00:37:50.060
+When you sit down and
+start doing a design,
+
+00:37:50.100 --> 00:37:52.610
+it's really easy to say, "Well,
+I want to build a store that
+
+00:37:52.610 --> 00:37:56.710
+will talk to my data source,
+but all possible versions of my
+
+00:37:56.710 --> 00:37:59.200
+data source." Therein lies madness.
+
+00:37:59.230 --> 00:38:04.060
+Design your store to talk to the specific
+current version of your schema and worry
+
+00:38:04.060 --> 00:38:05.360
+about the future when it gets there.
+
+00:38:05.360 --> 00:38:08.560
+Make it a decent design
+that's reasonably flexible,
+
+00:38:08.560 --> 00:38:12.750
+but it's going to be a lot easier
+to concentrate on deciphering
+
+00:38:12.750 --> 00:38:16.280
+the data you have rather than
+any possible future set of data.
+
+00:38:16.330 --> 00:38:18.940
+Try and remember to
+balance I/O and memory.
+
+00:38:18.950 --> 00:38:21.780
+You're going to have real problems
+if you're on an I/OS device,
+
+00:38:21.780 --> 00:38:24.480
+and every time you fire a fault,
+you hit the network.
+
+00:38:24.480 --> 00:38:25.370
+That's really expensive.
+
+00:38:25.440 --> 00:38:27.880
+People are going to be upset because
+there's going to be a lot of delay.
+
+00:38:27.880 --> 00:38:31.560
+Consider pulling data in in
+batches and caching it locally.
+
+00:38:31.560 --> 00:38:33.110
+And as I said,
+this is sort of really designed
+
+00:38:33.120 --> 00:38:35.360
+for talking to web services,
+although you can use it for everything.
+
+00:38:35.360 --> 00:38:37.840
+Even if you're talking
+to an Oracle database,
+
+00:38:37.890 --> 00:38:40.800
+it's usually best to go
+through a web service first.
+
+00:38:41.950 --> 00:38:43.160
+And now I'm on to the developer tools.
+
+00:38:43.280 --> 00:38:46.410
+You've probably seen at this point
+that we've got a new version of Xcode.
+
+00:38:46.500 --> 00:38:49.100
+It's got a lot of nifty features,
+particularly in the Core Data world.
+
+00:38:49.310 --> 00:38:50.220
+There's a new UI.
+
+00:38:50.440 --> 00:38:54.360
+We have support for optimized models,
+readable diffable models,
+
+00:38:54.390 --> 00:38:56.700
+and scalar accessors.
+
+00:38:56.740 --> 00:38:58.780
+For those of you who are
+familiar with the diagram view,
+
+00:38:58.800 --> 00:39:01.900
+it's still there,
+but we've also added a new table view.
+
+00:39:02.050 --> 00:39:05.170
+And this allows you to edit your model,
+your entities in a
+
+00:39:05.170 --> 00:39:07.170
+slightly different way.
+
+00:39:07.480 --> 00:39:10.260
+On the top left, you can see,
+in the center you'll see the table
+
+00:39:10.560 --> 00:39:13.420
+that contains all of the properties
+that are on a given entity.
+
+00:39:13.500 --> 00:39:15.510
+The top left,
+you'll see the list of entities,
+
+00:39:15.660 --> 00:39:18.980
+fetch requests, and configurations that
+appear in your model.
+
+00:39:18.980 --> 00:39:21.190
+On the bottom left,
+you'll see the button that
+
+00:39:21.190 --> 00:39:25.040
+allows you to add entities,
+fetch requests, and configurations.
+
+00:39:25.050 --> 00:39:28.120
+On the bottom right,
+you can switch between editor
+
+00:39:28.130 --> 00:39:30.500
+styles between the table
+view and the diagram view.
+
+00:39:30.520 --> 00:39:33.680
+This is where you add attributes,
+relationships, and fetch properties.
+
+00:39:33.680 --> 00:39:37.080
+And on the top left,
+we've got the detail inspector.
+
+00:39:37.080 --> 00:39:40.140
+This is pretty much the same
+thing you had in the top right on,
+
+00:39:40.700 --> 00:39:42.500
+Xcode 3.
+
+00:39:44.140 --> 00:39:46.140
+Optimized models, what are they?
+
+00:39:46.180 --> 00:39:48.450
+Well,
+they're a way that Core Data encodes
+
+00:39:48.460 --> 00:39:54.120
+your model format that's smaller and
+faster loading than the previous version.
+
+00:39:54.220 --> 00:39:57.710
+You'll get this automatically if you're
+using versioned models in Xcode 4.
+
+00:39:57.770 --> 00:39:59.520
+It lives in parallel with
+the versioned models.
+
+00:39:59.520 --> 00:40:03.480
+You don't need to do
+anything to pick it up.
+
+00:40:04.400 --> 00:40:06.810
+We've also added
+human-readable Xcode 4 models.
+
+00:40:06.830 --> 00:40:10.890
+I won't say user-readable because
+no user should have to read these.
+
+00:40:12.140 --> 00:40:15.100
+This is also automatic in Xcode 4
+and will be a transparent upgrade
+
+00:40:15.100 --> 00:40:19.180
+from the old format if you decide
+that you want to use Xcode 4 models.
+
+00:40:19.210 --> 00:40:23.740
+They're XML based and they're perfectly
+compatible with your favorite diff tool.
+
+00:40:24.840 --> 00:40:25.830
+How do you get them?
+
+00:40:25.950 --> 00:40:30.780
+You go in and set in the Core Data model
+inspector in its file inspector the
+
+00:40:30.780 --> 00:40:33.910
+minimum supported version to Xcode 4.1.
+
+00:40:35.500 --> 00:40:38.040
+We've added support for
+scalar accessors in Core Data,
+
+00:40:38.040 --> 00:40:40.230
+and this is accessed, again,
+through Xcode.
+
+00:40:40.390 --> 00:40:45.470
+When you're creating your accessors,
+there's a checkbox on the wizard
+
+00:40:45.530 --> 00:40:48.780
+that walks you through it that
+lets you specify that you want
+
+00:40:48.830 --> 00:40:53.380
+your accessor methods to return
+scalars instead of NSValue classes.
+
+00:40:54.660 --> 00:40:56.340
+We've added support for Arc.
+
+00:40:56.370 --> 00:40:59.840
+This makes memory management
+easier by avoiding the need to
+
+00:40:59.840 --> 00:41:02.020
+implement or call retain or release.
+
+00:41:02.080 --> 00:41:04.790
+It's opt-in per project,
+and new project templates
+
+00:41:04.790 --> 00:41:06.070
+enable it by default.
+
+00:41:06.180 --> 00:41:09.000
+It's opt-out per file,
+and if you're interested,
+
+00:41:09.060 --> 00:41:13.280
+we highly recommend you go see
+the session or watch it on iTunes.
+
+00:41:16.010 --> 00:41:17.700
+We've added external binary data.
+
+00:41:17.800 --> 00:41:20.030
+For many years,
+we've gotten up on stage and told
+
+00:41:20.030 --> 00:41:22.980
+you that you really should consider
+storing things like movies or large
+
+00:41:23.060 --> 00:41:24.720
+pictures outside the database.
+
+00:41:25.040 --> 00:41:27.760
+We keep saying this,
+and we finally decided to
+
+00:41:27.760 --> 00:41:29.530
+make it easy for you to do.
+
+00:41:29.780 --> 00:41:32.360
+So if you've got a binary attribute
+that you know is going to be
+
+00:41:32.360 --> 00:41:35.960
+storing large pieces of data,
+you can go into the property
+
+00:41:36.040 --> 00:41:39.600
+inspector for that attribute,
+and you can select
+
+00:41:39.600 --> 00:41:41.260
+allows external storage.
+
+00:41:41.330 --> 00:41:43.340
+And what this will do is
+tell Core Data that this
+
+00:41:43.340 --> 00:41:45.440
+is a really big thing,
+maybe you should consider
+
+00:41:45.440 --> 00:41:46.700
+putting it outside the store.
+
+00:41:46.710 --> 00:41:49.790
+For stores that support it,
+and the SQLite store does,
+
+00:41:49.870 --> 00:41:53.350
+we will look at your data blob,
+and if it's over a certain size,
+
+00:41:53.430 --> 00:41:56.490
+we'll store it out beside
+the store instead of storing
+
+00:41:56.880 --> 00:41:58.500
+it inside the SQL store.
+
+00:41:58.500 --> 00:42:03.140
+And this really helps search performance,
+because it helps localize the references
+
+00:42:03.140 --> 00:42:05.020
+when you're doing a table scan.
+
+00:42:05.750 --> 00:42:07.540
+Vetted support for compound indices.
+
+00:42:07.540 --> 00:42:11.840
+This is an index across multiple
+columns in a SQLite database.
+
+00:42:12.950 --> 00:42:13.530
+Why do you care?
+
+00:42:13.590 --> 00:42:15.870
+This helps, again, speed up searching.
+
+00:42:15.960 --> 00:42:19.680
+How do you add them?
+
+00:42:19.680 --> 00:42:19.680
+Well,
+
+00:42:19.880 --> 00:42:23.430
+On the Entity Inspector,
+we have a new field that allows
+
+00:42:23.480 --> 00:42:26.800
+you to enter comma-separated
+lists of property names.
+
+00:42:26.890 --> 00:42:29.780
+We'll turn those into compound indices.
+
+00:42:32.100 --> 00:42:34.610
+So we've added a whole bunch of new
+features that we hope will make your life
+
+00:42:34.640 --> 00:42:36.500
+developing with Core Data a lot easier.
+
+00:42:36.500 --> 00:42:38.690
+We've added concurrency.
+
+00:42:39.200 --> 00:42:42.010
+New block-based concurrency models,
+block-based,
+
+00:42:42.010 --> 00:42:46.370
+queue-based concurrency models,
+and nested managed object context
+
+00:42:46.430 --> 00:42:49.440
+to help you push and pull data
+that you only want to edit locally.
+
+00:42:49.440 --> 00:42:51.490
+We've added support for autosave.
+
+00:42:51.560 --> 00:42:52.980
+We've added ordered relationships.
+
+00:42:52.980 --> 00:42:54.940
+I know you've been asking
+for those since Tiger.
+
+00:42:54.940 --> 00:42:57.170
+I've been dealing with bugs since Tiger.
+
+00:42:57.180 --> 00:43:00.920
+We've added support for iCloud,
+and we really hope that you
+
+00:43:00.920 --> 00:43:05.440
+can use this to make your
+application data appear everywhere.
+
+00:43:05.440 --> 00:43:07.440
+This is something that is so exciting.
+
+00:43:07.440 --> 00:43:08.900
+It's really cool.
+
+00:43:08.900 --> 00:43:10.980
+We've added support
+for incremental stores.
+
+00:43:10.980 --> 00:43:14.290
+Talk to your data store in
+whatever language you'd like.
+
+00:43:16.140 --> 00:43:18.060
+and use Core Data to manage it.
+
+00:43:18.080 --> 00:43:21.560
+And we took you on a quick trip
+through what's been added to
+
+00:43:21.560 --> 00:43:24.650
+the developer tools in Xcode 4.
+
+00:43:24.710 --> 00:43:27.060
+And this is where I show you the same
+slide I show you every year that says
+
+00:43:27.230 --> 00:43:31.380
+if you find a problem with Core Data,
+if you find a bug or there's something
+
+00:43:31.380 --> 00:43:35.450
+you wish it would do or there's
+a performance issue or whatever,
+
+00:43:35.480 --> 00:43:38.740
+we can't read your minds,
+please file bugs, let us know.
+
+00:43:38.810 --> 00:43:41.620
+We'll fix bugs faster if there's steps
+to reproduce in a sample project,
+
+00:43:41.620 --> 00:43:45.090
+but sometimes just knowing that there's
+a problem out there is good enough.
+
+00:43:47.190 --> 00:43:48.620
+For more information,
+you can always email
+
+00:43:48.780 --> 00:43:51.000
+Mike Jurowicz with feedback.
+
+00:43:51.040 --> 00:43:51.940
+He listens.
+
+00:43:51.980 --> 00:43:54.540
+There's a lot of documentation out there
+if you're trying to learn Core Data,
+
+00:43:54.540 --> 00:43:56.400
+and there's more all the time.
+
+00:43:56.410 --> 00:43:58.600
+And we do lurk on the
+Apple Developer Forums,
+
+00:43:58.600 --> 00:44:02.070
+so that's another good
+way of providing feedback.
+
+00:44:02.300 --> 00:44:03.630
+This is a list of related sessions.
+
+00:44:03.640 --> 00:44:06.700
+Unfortunately, they're all in the past,
+so you'll have to catch them
+
+00:44:06.700 --> 00:44:08.190
+when they show up on iTunes.
+
+00:44:08.300 --> 00:44:11.880
+This is the iCloud Storage overview,
+the autosave inversions overview,
+
+00:44:11.960 --> 00:44:15.340
+taking advantage of file coordination
+to understand just how much
+
+00:44:15.340 --> 00:44:19.180
+Core Data saves you work when
+you're using our iCloud integration,
+
+00:44:19.370 --> 00:44:22.940
+and the introduction to Arc.
+
+00:44:23.000 --> 00:44:23.540
+And we're done.
+
+00:44:23.570 --> 00:44:25.810
+Thank you very much for coming.

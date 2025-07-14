@@ -1,0 +1,271 @@
+---
+Title:  The Darwin Kernel
+Year:   2001
+Web:    https://nonstrict.eu/wwdcindex/wwdc2001/140/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Surprised more people than I thought would survive till this time on Friday. Thanks to the Marquis de Sade, we're here to talk about the kernel at 3:30 on Friday. No exciting demos to give. It's just me, you, and hopefully we can cover some topics that you guys are really concerned about. So, let's get this thing going here.
+
+Where is it? Oh, there it is. Okay. It's over here. So what are you going to learn today? Well, the main thing you're going to learn is what the basic kernel services are that are available to you as programmers. You're also going to learn some of the layering that goes on above those services inside of our system.
+
+One of the things that we've been able to talk about for the last few years here at WWDC is this really cool kernel technology we have. This year part of the message is, yeah, we have really cool technology. Don't use it. So how are you going to use it? Well, you're going to use the layers that are built above it.
+
+You're going to mostly be writing Carbon applications or Cocoa applications. Some of you are going to be writing BSD applications and wrapping them as you just saw to give them the user experience of a higher level application. We want to show you how some of those services are layered above ours.
+
+What you're going to learn is when it's safe to directly call some of our services and when it's not safe to call some of our services, what those higher level services are that are available to you through the higher frameworks to use those instead. right? And one of the key things that this session is going to teach you is, although you're not going to be directly programming to very many of our services in the kernel, when it comes time to do debugging, you're going to have to know what's happening at those lower levels of the system, because the debuggers tend to jump you in at some of the lowest levels, and you have to work your way back up. And so if you don't know how a thread is tied to some of the higher level services, then you're going to be in trouble.
+
+Again, the same thing when you're trying to tune your application. You have to understand how everything is put together, how the low-level services are used by the frameworks that you're writing to in order to get the correct performance characteristics that you're looking for. What you're not going to learn here, we're not going to talk about how to build file system kecks. There was another session, a lot of people come to the kernel session saying, great, I'm going to learn all about how to program in the kernel.
+
+Well, you're going to learn about the services we provide, and some of those are available to kecks writers as well, but then they're wrapped in a whole different set of services, obscuring some of ours, promoting some of their own. We're not here to specifically talk about how to write one of those. Right, nor are we here to talk about how to write a network kernel extension. The networking sessions covered most of that.
+
+And in general, we're not here to talk about how to write in the kernel. While a lot of this applies, the same services are available in the kernel, again, you're going to tend to be in one of those specialized environments, either an IOCit extension or a file system extension or potentially a network text.
+
+And when you're in each of those environments, the view on these services is different. You can do some of these things, you can't do some of these things that we're going to talk about, and some of the in-kernel programming environment access to these services are spelled a little bit differently or take a few different parameters. We're not going to get into those. All right, so who would this book be for then, this session? And it's for all those people who are out there writing applications today, right, that they need to understand.
+
+And the kernel services that it's using will tell you how to get the best performance and how to understand all of that is what we're here for. Same thing, text developers, you may learn a little bit, but you're not going to learn the details of how to do your work.
+
+And power users, I mean, when you run some of the performance tools, hopefully some of you made it to the performance section, performance tool section, you're going to see a lot of things going on in the system, right? It helps to understand how they're put together with the lower level services. Where Darwin is the lowest level of Mac OS X, everything that happens in Mac OS X, to some extent or another, is mitigated, managed, controlled by the Darwin layer.
+
+And in the Darwin layer, right, the kernel part is the most critical part. Okay, so some of the general truths about being in a Mac OS X application. Okay, so some of the general truths about being in a Mac OS X application. One of the first things that every application that's a native application in Mac OS X is a BSD process.
+
+All right, it's not that some of them are, some of them aren't. If you can see them, if they're an application, you can see them and manage them and control them as BSD processes. And because of the way we implemented our kernel, all processes are actually Mach tasks as well. So inside of the Darwin Kernel there's a layering of Mach and BSD. And so every process is a Mach task. It owns and controls a Mach task.
+
+One of the things you're also going to notice and be very tempted by is the fact that the APIs for all of these different layers tend to be available everywhere. If you happen to be writing Carbon's EFM application, well, then maybe not everywhere. But other than that, you look at the headers and you look at the frameworks and there's a lot of APIs available to you.
+
+And one of the things you have to do is try to stick to the highest level service that you can for what programming environment you're in. Use the services available there. They tend to map onto the lower level services. And if you stick to those, you're going to be much better off.
+
+What you've seen probably a few times already today is this picture of the Darwin Kernel where it talks about file systems and networking and the IOCit drivers that are available and that you can write. We're not really here to talk about those bubbles that are there. We're here to talk about the background. Everything else. The services that the kernel provides that lets those things and all the applications do what they have to do.
+
+Again, you've traditionally seen this division of the Mach kernel versus the BSD part of the kernel. We tend to think of those as, while there is a distinction and we try to keep the formal layering there, what we're concerned about is the services that the kernel provides to you as developers and how to make those services the best matching to the semantics of the higher level applications that we can. We tend to say, "Well, we don't have these distinctions. What we have is one kernel that provides these services in a layered fashion."
+
+And the basic services are process management, threading, scheduler, file management, not necessarily the file systems itself but everything that the file systems use in order to interact with the rest of the system in managing files, virtual memory, inter-process communication and security. So why don't we start digging through some of these things.
+
+Oh, wait, first, that's right, I forgot. Where do all these things come from? Right. Well, the kernel is actually a collection of technologies from essentially three groups of places. The Mach 3.0 provides the foundation for a lot of what goes on in the kernel, especially virtual memory, scheduling, and IPC. The BSD portion, the main BSD portion of our code, was picked up from the 4.4 Lights project, right, and that gives us a process model of our scheduling, our file access, and then we picked up most of the networking code from various flavors of free BSD.
+
+Right, so let's dig in and start talking about process management in Darwin. At the very fundamental level, every process is a Mach task and every application is a process. At the very lowest level you have a Mach task. A Mach task is the unit of resource ownership as far as Mach is concerned. Every task owns threads, it controls them, it has virtual memory space and is managed through that Mach task, and it has a port name space to collect all the IPC rights that are usable by that task.
+
+All right, and so traditionally you can create tasks, you can spend them, resume them, and create new threads in them and get all kinds of information about them. You can also, one of the things people tend to do is create exception handlers for them, all right, so that you can catch exceptions that happen in a task and process those. And you can also get death notification and be told when certain tasks that you have to handle to go away.
+
+Well, that's a nice set of services, right, but typically you won't be able to use those directly. I mean, you actually can create a Mach task all by itself in the system, but you can't manage it, right. It's just this free-floating entity that no one else can see, use, manipulate, so it's highly discouraged to ever create a Mach task all by itself, right. Instead, you would tend to create a BSD process, right, and you do that through the standard.
+
+BSD APIs, you know, VFork, Exec, right, create them and destroy them, and you go ahead and exit. But the BSD process gives you these additional resources to go along with your task besides giving you the ability to manage them and name them, right. They give you the signal handlers, they give you file descriptors, they give you a whole collection of resources. And what happens is when you have a BSD process, right, and you go look at the BSD process, you can see that there's a lot of resources that you can use to manage them. So you can look at the Mach task APIs that are available, right.
+
+A whole bunch of them go away. If you try to terminate a Mach task that actually is part of a BSD process, that'll just return you an error because the BSD part of the system doesn't have a chance to clean up and do the management that it would do, right. And so we don't allow that to happen.
+
+of similarly creating new ones. We don't allow you to do that or we prefer you not do that. Everything else is risky. You can go ahead and create exception handlers. You can go ahead and get info on the process itself or the task itself or get a list of threads or control threads, create threads, but you shouldn't do anything else with the task.
+
+But again, a lot of you will not be programming BSD processes. You're actually going to be programming applications out at the higher level. Either Carbon, Cocoa, Java, whatever. And they add additional set of resources and additional set of APIs for managing them. Actually many sets of APIs for managing them.
+
+One of the things that happens when you create those higher level applications is they all talk to a common process management service that's a part of the core service. Core services in the system. And it does all of the management for you. And so you tend, that's how you get things that pop up in, actually.
+
+When you're looking at the tools that are available at that level, you have the dock and you have force quit and all those things. CPS, the core process service, is the thing that lets you manage processes and the larger applications all register with that. Process viewer will actually let you view and introspect just any BSD process in the system. The same with top and PS.
+
+And if you really want to see what's going on down at the lower levels, you can use Zprint, which is a tool that talks to the kernel's zone management system. And will basically print out statistics on how many of every kind of resource that the kernel has. And in those lists is all of the Mach services and the Mach resources that are available. So you'll see how many Mach tasks, how many Mach threads are being managed as well. And so you can actually see and inspect some of the Mach level resources.
+
+With that tool. So this is how you manage processes and handle exceptions and all of that is all at this level. One of the things you have to be very careful about is although BSD processes have limits on the number of open files and a lot of the other resources that are available to you. One of the things that's not implemented in the kernel that shipped was 10.0. Is any ability to limit the resource allocations at the bottom. And that's what we're going to be looking at in the Mach level.
+
+So any thread can go ahead and allocate these resources. Right. And we don't have any limits on the amount of those resources you can go ahead and allocate. And so if you have a runaway process. Right. That's just leaking a port or leaking some kernel resource over and over and over and over again. Right. Over time, the application may die. That's certainly one outcome that might come from this. But another outcome from that particular problem. Is that.
+
+It may actually just lock up the system and eventually panic the system because you've ran out of kernel resources. In order to provide that. So what you have to do is even though you are writing a Carbon application or a Cocoa application. You need to take some of these tools. Top and PS. In this case, top. If you were looking for leaks. Right. And just watch your application running. And if you happen to see something leaking away. You need to address that.
+
+Within a process, you obviously have threads. At the lowest level, you have a Mach thread. Mach does all the scheduling in the system. Mach threads are the primary threading resource in the system. One really interesting thing about Mach threads that confuses a lot of people is that they actually have no resources other than scheduling attributes and a register state. That's it. That is what a Mach thread is. Everything else you think about a thread, stacks and per-thread data and things like that, Mach doesn't know anything about those. It's all expected to be wrapped by some higher level service.
+
+And again, at the Mach level, and an interesting thing is you can actually register for exception handling and death notification at the thread level. And those kind of APIs still are usable even when you look at it in the context of a BSD thread or a P thread. BOSX threads are the thing that provides the resources at the user level for a thread. They provide the stack for a thread. They provide the thread-specific data implementation.
+
+Those are the APIs you can use to create them and manage them. But again, you may or may not just be stopping at a BSD process. You may be writing a Carbon or a Cocoa application. And in those cases, you tend to not write to Pthreads. You're going to write to create an NS thread inside of Cocoa or you're going to create an NP task in a Carbon application. Well, those are BSD. They are Pthreads. Each and every one of those is a Pthread.
+
+And so you can have the breadth of services available to you from each of those layers. Again, at the thread level, if you tried to destroy a Mach thread right out from underneath of a Pthread, you can do it. Your application is free to do that. It can do that to its own threads.
+
+You're going to leave the Pthread code implementation in a lurch. So you better not do that. But you could. One nice thing about Pthreads, the way the higher level application services, threading services, wrap around the Pthread level, is that almost everything you can do to a Pthread you can do on those higher level services and they tend to work well with each other.
+
+Right, and so, well, how do I view threads in my system? How do I tune for it? How do I take care of the threading in my system? And here's some tools you can do it. ThreadViewer, if anyone was at the performance tools meeting, session yesterday, you saw them going and actually showing ThreadViewer as an application that they were debugging during that process. Well, at the end of that meeting, the end of that session, they decided that they were going to release that ThreadViewer to people as soon as possible.
+
+So that's going to be a really nice application for viewing threads in the system in a graphical way at a higher level. Because up until that point, well, you could sample threads with the sample app, but that's kind of not something you would do ongoing and just watch your application go. It's typically you've noticed a problem, right, and you would fire up Sampler and go off and do what you needed to do, right?
+
+And TopMPS, I know I've had Top running on the side of my system forever, right? But it's a lot. It's like drinking from a fire hose. That's a lot of information. It doesn't give you a graphical bang. There's something going on there that I really need to worry about.
+
+some of the tips. Well, in Mac OS X, we promote people to lazy init as much as possible in their system, right? If you have a framework or anything else in your system, you really want to delay initializing it. One of the problems with the big bounces, the bounce marks when you're launching an application in X, is that a lot of the code brought over from IX basically had this model, initialize everything once up front, right, as much as you can, and then we'll use it later, right, almost for free. Well, in X, what you're doing is initializing it all up front once each time each application launches, right?
+
+And so one of the services you can use to get around that problem is this pthreadonce facility, which basically, at the front of each major access point into your service, right, you can put a pthreadonce, call the initialization routine at the front of that, right? And the pthreads code will guarantee that the very first time you call one of your functions that has this in it, it'll go call the initialization routine, but it won't ever allow it to be called again from that code. So that way you can delay your initialization until the very first time you're called.
+
+Also, a lot of people like to create their own debuggers or their own debugging environment. They tend to want to get the exceptions from an application as it's running, filter them through their own set of interfaces, and decide whether or not to let the system see the rest of them later.
+
+You can catch exceptions at any one of three places in Mac. You can catch exceptions at the thread level, at the task level, and you can actually catch them at the widest level, the host level. BSD tends to hook itself at the host level. When a process or a thread runs along and executes an invalid instruction, it's going to send an exception down this chain. It's going to first send the exception message.
+
+It's going to send it out to the thread level handler. If the thread level handler says he handled it, then fine. We'll just let the thread continue and we'll go on from there. If he didn't, then we're going to send it on to the next level, to the process level, the task level. There's another handler sitting there. If there is one, then we'll send it to him. Then same thing down below.
+
+Well, BSD tends to be at the task level. You're going to see debuggers like GDB and things like that are going to be sitting at the task level. BSD is at the host. GDB is at the task. If you want to be able to intercept and get in there and do something on your own, then you would tend to do it at the thread level.
+
+So now that we have threads, we obviously have to schedule them. And how do we schedule them? Well, this has been somewhat of a mystery inside of Mac OS X. There's obviously something going on with this banding. You can see different threads being assigned different priorities, but we've been messing with this, tuning it, and so we've been kind of adverse to putting out exactly what the banding is that we have in the system.
+
+But now that you're trying to write real applications, you're going to need to know. Some of you are writing multimedia applications, and you really need to know how to get to be a fixed priority process, how to set your priority. Well, these are actually the bands that we have.
+
+At the very highest, so we have a range from 0 to 127. The very highest level are what we call time-constrained threads. And so any thread that's registered as a time-constrained thread, and you don't have to be privileged. You don't have to be privileged to say you want a time-constrained thread. They will run up in that highest band somewhere, and that we won't tell you.
+
+But it's based on the time constraints that you provide, and then we marry that with a bunch of other information and decide what priority you actually get within that band. But they tend to run at a fixed priority in that band. So they'll just run, run, run, run, run, run, run if they have things to do. And since they're a much higher band than most other applications, obviously we're going to schedule those first.
+
+We're also going to preemptively schedule those. And so even if something else lowers, running along in the kernel, doing a kernel service, if one of these comes along, we're going to schedule it. Well, that leads into a concern, obviously, is that if any application can do this, and can set one of these threads up really high, then obviously any application can kill the system, and there's no way you'd get it back if it just runs up there forever and ever.
+
+Well, we actually have limits to what can happen in a time-constrained thread. And so if you're running for too long in a time-constrained thread, then you get bumped back into the normal application band for a while, and then if you settle down, then we'll put you back into the time-constrained band.
+
+If you don't ever settle down, then you just stay down there in the normal application band. And actually when you're in the application in the time constraint band you're actually scheduled above the kernel threads. Above I.O. threads. So your stuff will happen before we'll handle disk activity. It will be the first thing the kernel will go and run.
+
+And then below the kernel and I/O is the core services threads, things like the GUI managers. So if you're running a time-constrained thread and it's just chewing away, guess what? You might even have trouble moving that mouse around. You might have trouble selecting that application to kill it if it runs away. That's why if it's run away, it will get bumped down so that the core service threads have a chance to run and go ahead and get you.
+
+For the rest of the threads, they tend to be grouped into two categories. It's GUI-based threads and regular kind of background activity, regular BSD process kind of threads. And the GUI ones tend to be a little bit higher in the bands than the default ones. But all of these threads are priority adjusted. So as they run and take time, they tend to start at their base and work their way down as they go. They consume CPU under contention. So if they're consuming CPU and nobody else is contending for the CPU, they're fine.
+
+They'll just stay, stay, stay, stay, stay. As soon as they start contending for the CPU with other threads and other things want to run, they get nicked a little bit each time this happens until those other threads get a chance to run. And then as a few quantums expire and they've been nicked, then they drift back up and drift down. So every thread tends to balance itself in this group. And that's the standard. policy in the system is to timeshare and adjust.
+
+One of the things you can do in that category is assign precedence to your threads. So if I have two priority, two normal application threads, but I always want this one to have precedence over this one within my application, then you can use the precedence policy setting to give an ordering to those.
+
+And like I said, we have, we can take those threads and schedule them fully preemptively, both kernel and user. So we have a fully preemptive kernel. If you're a time-constrained thread, you will interrupt things right out of the kernel and we'll switch to you immediately. And we can obviously balance those across multiple CPUs.
+
+When you're at the BSD process level, well, you have a few more things that come out for you. You have the ability to set nice and if you've noticed in Mac OS X, that actually doesn't do anything. But the later versions, soon you will see a version that has that fixed. At the Pthread level, you can set your own scheduling attributes. Those will feed into the precedence and into the timeshare and standard policy constraints.
+
+and Alan at the higher level, right, you have management going on even beyond what the Mach level manages. So if you're writing cooperative threads or you have deferred threads inside of your Carbon application, Carbon is actually getting involved there and trying to make sure that those things run even though they're each a Mach thread.
+
+He's trying to make sure they run in the right order. Again, some of the standard tools to look at things. But the big tip here is don't use the old APIs for setting things as round robin or timeshare that are still available in the Mach kernel you have. Use the new get policy, set policy APIs that take the precedence and the time constraint.
+
+So now that we've got scheduling enabled to run, let's see what we can do with anything outside of ourselves. And for that we need to access files typically. Inside of the file management system of the whole kernel, Mach task actually has no concept of file. So you would think that Mach is really not involved in this discussion, but that's not true. Every file in the system really is managed and controlled. The cache for the data of that application is managed and controlled. By Mach through what's called VM objects. So Mach manages the cache in the system, the VM page cache, and all of our file system activity.
+
+goes through the VM page cache to do what it needs to do. So as you're reading from files, reading files off a desk, those files are stored in the regular VM cache. We don't have a file system cache and a VM cache for things that are, you know, applications that are mapped into your program. We have one cache. Read, read, read, read, read. It all goes into one pile and it pushes things off the end of the pile.
+
+[Transcript missing]
+
+Some really good tools to tune your use of files is FS Usage. It's a tool that will basically, as you're accessing a file, it will spew out what's going on, every access, every read, write, open, close, either by a particular application or by any application overall.
+
+And so you can get basically a real-time view of everything that's going on file activity-wise. Also, there's another tool, LSOF. It's another command line tool. Both of these are command line. And it will basically list every open file in the system. And who has it open, what file descriptor number it is within that process. It's a very useful tool.
+
+Big tip, because we have this one cache that handles all mapped files, all your libraries, all your frameworks, all your executables, it's also the cache where you handle all the reading of files, reading and writing of files. If you happen to be reading something once and only once, spewing in a big image file or something like that that you're going to process once, you don't need that file in the cache anymore.
+
+You've got it in your application. Having a copy of it in your application and having the original one in the cache just means we are taking up double the space in VM, at least temporarily, for that data. Whenever you can, use the no cache options. At the Carbon level, you have no cache reads and writes.
+
+At the BSD level, we actually have an F control that you can specify to say these are no cache operations. You really need to use the no cache operations. Otherwise, as you run through memory with big files, you can push really important pieces of the system, like the system framework and everything that you use, and your own code, right out of memory. Thank you.
+
+One thing that also gets people every once in a while is that while you typically were able to open in a Carbon application as many files as you wanted until you hit the system limit, in BSD there's a soft limit for the number of open per process and that's 256.
+
+And so as you open FSRefs inside of Carbon applications, you may end up running into this limit. Typically it's a bug. Typically it's because you're forgetting to close them and you just open, open, open, open, open, and eventually you'll hit the 256 limit. We basically, you have that limit now. You can change it with an assist control, or sorry, a Yeah, there's an API at the BSD level to basically up the limit for you, right?
+
+The same thing can happen at a system-wide level. We have a system-wide level of number of V nodes which are the open file descriptors up there, the open file handles, right? And those are, you know, there's a system-wide limit determined at boot time based on the amount of memory in the system and essentially, you know, some other tunable parameters. Well, you can tune those up as well with assist control.
+
+Now we have files and we talked a little bit about VM. But we need to talk about the rest of what happens with VM. The Mach VM pretty much controls the virtual memory in all of Mac OS X. BSD provides some wrapper services to that but it's mostly managed by Mach.
+
+Right. Mach provides the protected address spaces that Mac OS X, you know, is promoted. Here we have protected address spaces. Right. One nice thing about the way Mach does it is you have basically extreme flexibility in how you want to assemble an address space. Right. You can put stuff here, there, everywhere.
+
+It's really wonderful when you're trying to emulate an old system. Well, guess what? That's exactly what we're trying to do. It's one of the key benefits of using Mach VM. Is that you can put, if stuff had to be up there, you can put it up there. there.
+
+It also provides controlled sharing of resources so you can map things in exclusively into one application. You can map them in, copy on right into one but read right into the other so you can write into your piece of memory and the other guy can see it but can't modify it. Or you can map things in, read right into both. So it's a really flexible way of putting systems together.
+
+What does it look like? In the picture before, we showed a VM object and we showed cache pages sitting off of it. We showed this thing called a VNode. The VNode from the Mach view of things is just an abstract memory manager. It doesn't understand what that is. It just has a protocol to talk to it.
+
+Anybody can be one of those and provide services. As long as you do, we'll do the right thing. Here you have two address spaces. Each one of which has some portion of an object mapped in. In this case, they have the same object mapped in, the same part of the same object, but they have it mapped at two different addresses. One's up at zero and the other one's somewhere down inside. You're running along and all of a sudden one of the guys takes a fault because the page isn't existing.
+
+So we send a message, basically, not send a message, but the address space queries the virtual memory object and says, do I have this page cached? Well, guess what? No, I don't have this page cached, so let me put a placeholder in case somebody else comes along and tries to do the same thing. I won't do this again, which is sending a request to the memory object, and the memory object sends back a data page, and then we make that data page available in the application.
+
+So now all of a sudden, you can go on and run. But look what happened. Over in the other address space, the guy with the same area mapped in, but in a different part of his address space, well, we have the page cached now. He doesn't have the page available to him.
+
+250 objects that these guys share in common, each one would have to have 250 entries pointing at, you know, each of the individual objects. Well, if you're absolutely sure that you're going to have a whole bunch of them, objects that are in common between two applications, you can set up what's called a shared region, which basically is a recursive address space. You can have an address space entry that points at another address space for any portion of it.
+
+Right? And we tend to use this in our system, and I'll show you what for in a second. Right? But we have two of them that we put into place, one that tends to be sitting at 7 bazillion and the other one that's sitting at 8 bazillion. Right? One is directly mapped shared by each of the applications, and another is mapped copy on write by each of the applications. And so let's get rid of that copy on write one because it's a little confusing right for the moment. Right? And what's backing that shared address space?
+
+Well, the same stuff that was backing the other address space. Right? A reference to a memory object, which has some cached pages associated with it, and a reference off to some manager that knows how to fill in the data that it doesn't already have cached. So now you come along and you take a fault on that address. Right? It queries the shared address space, and the shared address space then doesn't have the page either, so it basically queries the object itself.
+
+And we go, "Nope, we don't have it, so let's put a placeholder in place." And we put the placeholder in the shared region. Well, guess what? Because it's truly shared by the other guys, the placeholder actually shows up in everybody at the same time. Right, we sent the request onto the pager, and when he sends the data back, wham, the data shows up in every address space at the same time.
+
+What do we use that for? Well, if you take a dump of a typical Mac OS application, this is the layout you're going to see. Down at zero, we tend to have a guard page that will catch zero faults, zero references, and raise an exception for you. If you don't like that idea, you can go ahead and put another page there. It's fine. Just replace that. But that's the typical behavior.
+
+Starting on the first page on up to the first gigabyte is typically your application where the application itself is mapped, where the heaps and stuff tend to come. But heaps can be there and you can fill up basically any of the space, any of the holes in here with memory that you like.
+
+So if you have a heap manager like ours that basically says, get me hunks, and then I'll subdivide them. Right. Once you run out of space between the application and one gig, if you have more than that, in heaps it'll go and find spots. Basically the first fit for another chunk going on up the line.
+
+But if you notice it's seven and eight bazillion respectively. There's a read-only section and a copy-on-write section. Well this is where all the frameworks tend to fall that your applications use. So we have 70 some odd frameworks that are a standard part of Mac OS X. If we had to map those into each application separately and manage them separately and relocate them separately, we would do a lot of extra overhead as each application launched.
+
+So what we do instead is have a shared region that points off at all the shared text of an application. We relocate it once if it has to be relocated, but typically it doesn't because a lot of our system is pre-bound, our libraries, and they sit and point off in that one area. And then we map the data part of that, add another 256 meg off of that and copy-on-write into each application. So as each one takes a, writes particular parts of the data, they get their own copy.
+
+By doing this at 256 meg offsets, we actually get to take advantage of something that happens in the PowerPC, which is that you can actually truly share TLB entries and everything like that on a 256 meg boundary with people. So at the 7 bazillion where all the frameworks are, we're actually sharing TLB entries and everything between every application.
+
+Unless that application goes in and replaces a library or overloads a library or says, use a different library for me, then we have to relocate the other parts of that collection of libraries, at which point you get your own private copy and it behaves like a traditional old-fashioned application.
+
+So how do you go ahead and debug the VM services you have? Well, one of the best tools you've got available to you if you are watching at the tool session yesterday is malloc-debug. It's a wonderful thing to see individual parts of your heap being leaked away and whether or not you're actually using them anymore and whether they could be reclaimed.
+
+But that doesn't catch memory allocations that happen outside of the heap manager. And there's lots of reasons why memory would be allocated outside the heap manager and directly fill up your address space. And there's this tool called VM Map which will actually just give you a dump of all the, it's a command line tool, sorry, that will give you a dump of all the mappings in your system, in your application, and you can find the ones that you don't seem to realize, you don't remember having, right, and start investigating those.
+
+And what you'll tend to find is that something sent you a piece of memory and you just forgot about it, right? Something in the system sent it to you out of line in a message or some other way. Or you allocated a hunk directly with VM allocate, right, instead of using the malloc tools, and you just let it dangle, all right?
+
+and that will show you those. You can also see those in top. The place you go first is top. You watch your application running. If you see the number of memory entries going up and up and up and up and up, you're probably forgetting to deallocate something that you really needed to deallocate.
+
+One of the things that happens is when you do one of those VM allocates, they tend to start at zero and find the first fit. When you're looking through your address map and you see a bunch of entries up by zero, these are probably pieces of memory that were allocated with VM allocate and you might want to look at those. Another really important tip goes along with the no cache option is if you map things into your address space or you malloc a big hunk of memory or you allocate it and you use it and now you're done with it.
+
+But you really don't want to keep allocating it and deallocating it because maybe it's expensive. You want to kill it. Kill it out of the cache. There's a couple of ways you can do that. There's an msync option at the POSIX level that lets you kill pages. There's another one at the Mach level called vmmsync.
+
+They're really usable interchangeably. It depends on what API set you want. want to stick to. But you'd need to kill them. Okay. So we talked about all these things. We've got, you know, tasks and threads and address spaces and they're all protected, but when you have a protected address space in a protected environment, you need to communicate somehow. And so that brings us to the IPC services.
+
+And again, Mach plays a big part in the IPC services of Mac OS X. Not so much in what happens at the BSD level, so in a BSD process it might not be that important. But in Mac OS X in general, it actually becomes very important. So, an address, sorry, the basic idea of IPC service in Mac OS X is Mach IPC. Mach IPC manages rights in port namespaces associated with each task. You have rights to ports.
+
+It's kind of like an open file descriptor inside of BSD, but instead it's a communications channel, a small one, called a Mach port. So, here I have a Mach port in this second task that gives me the right to send a message to the front end of the Mac OS X.
+
+What's really nice about Mac OS X, or about Mach IPC, is that if you have memory and you have other port rights, you can collect those together and send them in messages over to the other task. And so you can do really flexible communication. So I've got a piece of memory in my address space in task two, and I've got another port right in task two, one that I own the receive right for.
+
+And what I do is I build a little message that basically contains, you know, some general description of what I'm sending. But I don't have to send it to the front end of the Mac OS X. But it also contains a reference to each of these things. And I send it over to the port that I have, and when it's received over in task one, guess what? Now he has new virtual memory, and he has new port rights.
+
+He can use the port right I just gave him to send a message back to me saying I'm done what I'm doing. All the RPC and the interaction that goes on inside of Mac OS X or a large portion of it happens via this mechanism. When you want to open a window in a GUI application, well, the frameworks inside of your application talk to the core graphics server, the Windows server, by sending a message, a Mach message over there saying we need to do something. And what they do is they arrange to have a piece of shared memory in common to do most of the communication, but then they are constantly sending messages back and forth to each other about what the state of that is.
+
+So again, you have this inside of each task. You have a collection of these ports, right? And they can represent, you know, just a basic message queue. There's also variants that are like semaphores, lock sets, right? They're handles to things that the kernel implements. And they can be collected in sets. And that collection in sets is really important.
+
+Because if you look inside of an application, a GUI application in Mac OS X, you're going to see at least one of these CF run loop things, right, which is the basic primitive of the event mechanism inside of Mac OS X. And a CF run loop is actually just a wrapper around a Mach port set, right, or a collection of Mach port sets. So you may have many port sets and the CF run loops own some of them and put some port rights into them. And each of those port rights represents something that can drive events. a source of events that your application may need to deal with.
+
+So he's already got a bunch in this port set, but as time goes on, he adds more and more and more. And what you realize is while you're talking to a lot of things inside of Mac OS X via ports, every once in a while you're talking to a traditional BSD application or you're talking to a traditional, you know, who knows, right?
+
+There's lots of other ways you can communicate with things, but you need to somehow, you know, most applications feed that back into the run loop so that your application can see the events driven by these other sources. While you can't be sitting at a single wait, right, when you do a CF run loop wait, right, it sits on a port set waiting for a message, right? If that isn't coming in via a port set, that thread isn't going to see it.
+
+Or through a port, it's not going to see it. So that thread can act, that run loop can actually create worker threads for the kinds of IPC that he doesn't, that isn't port-based receives the, in this case, off of a socket, receives the message off a socket or the data off a socket and tickles another port inside the port set to wake the run loop up.
+
+Some of those other sources that you can get things on. At the BSD level you have sockets and POSIX semaphores and you have Pthread synchronizers. Right now the Pthread synchronizers are intratask only, but as time goes on they'll become intertask as POSIX says they're allowed to be. And then they're going to have to feed into this mechanism as well if you want to be able to receive them in a single place.
+
+And then what happens at the outer level again is you have a port set that's wrapped by a run loop that becomes the foundation of your event queue inside of your application. And so as you're watching your applications, your main thread is going to be calling wait next event. Hopefully not. Hopefully it's using Carbon events. But if it is calling wait next event, that's going to be calling CF run loop run.
+
+We'll see if run loop actually built up one of these port sets of all the things that can drive events into it. And then that's calling Mach message trap, typically Mach message override trap, doing a receive waiting for stuff to come in. So you're going to see that over and over and over and over again in each of your applications.
+
+Again, when you're looking in Sampler, you're going to see that kind of thing. You're also going to see it in SC usage. If you run SC usage at the bottom, it tends to list all the threads and what they're doing, what they're currently waiting on. And you're going to see Mach message over write trap, Mach message over write trap, Mach message over write trap, Mach message over write trap. They're all coming in on run loops of some sort or another or directly receiving on a Mach message.
+
+Ports represent almost everything in Mac or in Mac OS X, a large portion of things. So again, if you have a window open, the handle for the window is a port. So when you look at the CG debug stuff, it has a list down the side of the ports that it has open to represent each one of those windows.
+
+And if you're tempted to use the IPC directly, the Mach IPC, we prefer you not. There's a tool called MIG. It's Mach interface generator. And it's basically an IDL compiler that wraps around Mach messaging and you can specify routines that go both directions or one-way messages and it generates wrapper routines that generate those messages for you and receive those messages for you so you don't have to understand and manipulate the low-level messaging. It's just a nice convenience.
+
+Okay, so now we have the ability to communicate but we're supposed to have a secure system here. How do we do that? Well, again, a lot comes back to those ports. Ports are restricted. You can't just invent a port name inside of Mac and say I want to send a message to that port.
+
+Somebody has to give you that port, a send write to that port in the first place. Some of them are registered globally where you can just look them up and get them. So you can send some common service a message saying I want to do something and it'll respond to that.
+
+But in a lot of ways, a lot of cases, they aren't registered globally. So maybe you'll talk to a service through a global port and it will send you back a port that only you can talk to it to directly manipulate your Windows. That's why inside of the Windows server communication, you get a new port per window because it only wants you and only you to be able to manipulate that window. And the port write mechanism allows that to happen without him doing anything on his side.
+
+I received a message on that port. It must be him or somebody he delegated to send this message. I'll do it. So they're pre-authorized. And in fact, Mach part of Mac OS X has no authorization facility at all. It basically says if you've got that port and you send a message on it, we'll do what that message says to do.
+
+Those ports represent things inside of the kernel as well. If you have a task or a thread or any of those other kernel resources, they're represented by unique ports. You get a hold of one of those ports, a thread port, you send a message to it saying terminate. Guess what? It'll terminate.
+
+You've got to be careful about sending your ports out, but it's also a really nice mechanism to say we're not going to just say that APIs are available and usable by the application themselves like threading APIs. If that application wants to send its thread port over to a friend, that friend can issue all the threading APIs itself directly on that port and will treat it at the kernel level just like the application had done it itself. The same thing with managing the port space. The port space is represented by the task.
+
+Getting things in and out of your own port space is done with that same thing. The only nod to authorization that the mock-level services provide is that each message that's sent is sent with a tag, some kind of security tag on it that basically says, I don't know what this is, but somebody said five was associated with the guy who sent this message, so I'm going to send five along. Well, what happens? What happens is the BSD layer is the guy who says what five means.
+
+He provides the identification and authorization in the system. Identification is UIDs inside the BSD world. user IDs. You have user IDs and effective user IDs and you have group IDs and effective group IDs and you have, you know, correct collection of groups that you're allowed to be in.
+
+Right, and whatever BSD says, this task has as a security token is what gets sent along. Well, BSD is also the guy who maintains permissions at the file level, makes sense because he's the guy who implements the file systems at his level. All the authorization to gain access to files is done by the BSD layer. He does somewhat similar to what Mac does. Once he has given access to something through the file system, he has a file descriptor which is basically the access point, the restricted access point, and permissions are associated with that file descriptor. It's pre-cached authorizations.
+
+But BSD semantics and Mach semantics alone aren't enough for Mac OS X in general. You have applications that want to run as a general user, a regular old user that need to do privileged things. Sometimes we have a privileged server that's just sitting over there waiting to do that thing for you.
+
+And other times we have a server that is privileged to do specific things and will authorize you each time to do that one particular thing through the new authorization API that happens as a core service API. Also at that level you have keychains and keychain management and all that stuff is done up above the basic primitives of the BSD file and UID stuff and the Mach port stuff.
+
+Again, FS usage is nice because it shows you what kind of access you're doing to a file. LSOF will tell you what kind of accesses you have to a file. VM map will tell you what kind of permissions you have on certain memory. So if you have read, write, or read, write, copy on write so that when you actually touch the thing you get a unique copy instead of being able to write to the actual main store. So you can get a feel for what's going on in the system that way.
+
+One thing to do is take a nod from the Mach part and the BSD part which is to cache authorizations. If you have to do some of your own work, well yes you could set up a server that receives messages and just constantly looks at the security token on the bottom of a message and says well am I allowed to take this from this guy because he says he's five. Do I allow five to do this or do I say no? That's kind of awkward to keep in mind.
+
+You keep doing that over and over and over again. You would prefer to establish a unique connection with each of your clients in that situation and receive only and pass out the send write on the other side only to that one guy and then every time a message comes in on that you allow him to go ahead and access it.
+
+Alright, so those were the basic services inside the kernel. Where can you get more information about how this stuff all really works because this was far too much and far too quick to get too much of anything totally useful out of it? Well, there's a good resource right on the developer CD and if you've installed that, now it's right on the disk of your system and most people don't even realize it's there. Under the developer section there's a documentation section. Under that there's a kernel section.
+
+And there's descriptions, there's a basic description of the kernel services again, some more details about how they're managed, what the APIs are. And especially on this particular part, there's a reference to something called the OSF documentation. Well, our Mach kernel is the OSF Mach kernel and so if you click through that link, you're going to go ahead and find the documentation for the Mach APIs that we have in our system. They're not 100% accurate. They're quite a few years old. And we've made some changes internally, but they're pretty good and it gives you a really good idea of how the Mach part of the system works.
+
+There's obviously the Darwin open source pages. You can go to those. And the Mac OS X homepage. And our tech writers have renamed the book on me. It's the design and implementation of the 4.4 BSD operating system by McKusick. It's great for the BSD side of things. All right. Where can you learn more here today?
+
+Sorry. But for those of people who are watching via the DVD later on, you can go look up these sessions. The performance tool session was really good. It shows you how to see the effects of all of these interactions inside of an application that you're writing. The same thing with the debugging stuff. So when you get your CD later, go look at the debugging and the performance stuff. They're really important. You just saw the leveraging the BSD more than likely if you were here. And in a few minutes you'll get to do feedback.

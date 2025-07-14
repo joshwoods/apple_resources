@@ -1,0 +1,277 @@
+---
+Title:  Tuning OpenGL Applications for the Mac
+Year:   2008
+Web:    https://nonstrict.eu/wwdcindex/wwdc2008/723/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Hello, everyone. I'm Chris Niederauer. I'm on the GPU software team. I'm a senior engineer there, senior software engineer. And I'm going to be presenting on tuning your applications for OpenGL on the Macintosh platform. So, the summary of what we're going to be doing today is I'm going to go over the tools that you can use on our platform, some of the Mac OS X-specific tools that make it really easy to debug and help with performance in your OpenGL applications. And then we're going to talk a little bit about basically building a good foundation for your applications and a lot about the OpenGL pipeline bottlenecks.
+
+And special this year, which we haven't really done in the past, is we're actually inviting... We're actually inviting up people who work on the NVIDIA and the Intel GPUs, and they're going to be giving hints on how to use their GPUs in particular as efficiently as possible. But everything that they're going to be saying is good for everybody. So, it's a lot of good information.
+
+So the tools on our platform that we have. We have, first of all, the OpenGL Profiler, which is basically an application-level debugger performance tuning application. And I'll go over these in a little bit. And then the OpenGL Driver Monitor, which, unlike OpenGL Profiler, it's looking at the driver side of things, so sort of the information that's reported by the driver and potentially even some things reported by the video card, as you'll see in NVIDIA slides.
+
+And then new in the seed that you have is a new version of OpenGL Shader Builder, which I'll show you in a second. And then finally, our good old buddies, Shark and Instruments. So let's go over OpenGL Profiler. So I was saying it's an application-level debugger, so it lets you do things like set breakpoints on all of your GL function calls. So if you want to set a breakpoint on CGL flush drawable, you can basically see each frame as it happens and look at things like resources and state.
+
+And then there's also special breakpoints like software fallback. So like here, I set it to break on software fallback. And then also thread conflicts and geo errors. So you don't have to stick a geo get error in your code to check for errors if you -- you know, for performance reasons, you don't need to stick that geo get error in your code.
+
+You can just run it with OpenGL Profiler, say break on geo error, and it will tell you exactly when you get an error and what kind of type of error it is. And then also here in the upper right-hand corner, I'm showing the trace view, which is showing all the OpenGL calls that are happening and what context they're coming from and the timing that the application is spending while waiting for that function to return.
+
+So OpenGL Driver Monitor, I'll just go over this really quickly. Eric Klein from NVIDIA is going to go over it a little bit more in depth. But here we're seeing it show, for instance, the CPU wait time for the GPU. And it also can show you things like the amount of free video memory, number of textures, things like that.
+
+[Transcript missing]
+
+Shark. So everyone's probably really familiar with this. Hopefully they are. But I just wanted-- I'm not going to go over this in depth, but it basically gives a CPU overview of what's happening on the CPU. And I just want to throw out a few symbols that you should be on the lookout for.
+
+So for our software render library, there's do render float. So you'd see that in the library column. And if you see that, that means you're basically somehow using a software render, potentially for fallback. That's not something that you want to be doing. Also, there's a synchronization command with the multi-threaded OpenGL engine, which is gle-finish-command-buffer. And this is when you are synchronizing, like you're trying to get information from the OpenGL thread.
+
+And it has to basically cause a pipeline stall at this point to get everything through to that point to get some information. And then finally, LLVM symbols. We used to have C functions, like GLG process pixels, whenever you'd have a texture conversion from, say, one format to another format. But now, for the software render and also for pixel format conversions, that sort of stuff now shows up in SHARC as LLVM symbols. Like here, we have an address. And it says unknown after it. So here we see the geo render float. library as well.
+
+And then instruments. Hopefully everyone's pretty familiar with instruments. It's recently just added the ability to have the exact same statistics you have in driver monitor are integrated into instruments. And so you can basically look at those side by side, you know, look at how the CPU usage is compared to exactly what the driver is doing at any And so I'm going to hand it off to Eric Klein from NVIDIA to go over optimizing applications for NVIDIA hardware. Thanks, Chris.
+
+All right, my name's Eric Klein. I'm a senior engineer, senior software engineer with NVIDIA on the Apple OpenGL team. Today, the things that I really want to talk about are understanding how the driver works with modern GPU hardware. Specifically, I want to talk about the fast paths through the driver and how to avoid falling off the fast paths, performance cliffs. One example of that that I want to mention is old optimizations.
+
+Things that might have been really smart to do in 2003 aren't smart necessarily to do today on modern hardware. And we'll talk more about that later, what that means. But I also want to note the people this is really geared for are Mac OpenGL developers who might not be perfectly familiar with NVIDIA hardware and NVIDIA drivers and how we work. Also any Windows developers who are new to the Mac who might be familiar with NVIDIA stuff but not particular to the NVIDIA driver on the Mac. And the difference is there. Because it's not completely there. the same.
+
+From a high level, the two things that I want to cover are NVIDIA-specific strategies for optimization, and I'm really focusing on the latest hardware here, GeForce 8 and beyond. A lot of this applies to previous hardware, but it's really tailored to GeForce 8. And I'll be talking, too, about some of the real-world cases we've seen, do's and don'ts, things that we've seen matter in the field performance-wise. I'll follow that up with some profiling techniques that we're actually using internally. You know, when we get an application and we find that there's a performance bug, I'll be talking about the things that we sit down and do first.
+
+So first, optimizations. Top five performance issues we see. Number one, poor memory usage. This is huge. On modern hardware, a lot of the work we do in the driver is actually managing the memory and trying to do it as efficiently as possible. There's actually a lot that you can do in your code to use the memory either efficiently or inefficiently, and it can make a huge difference in performance.
+
+When I say huge, to give you an idea, it can be between good and bad. It can be an order of magnitude in your application, depending on what you're doing. I think in the worst case I've ever seen, we might have seen two orders of magnitude for good memory usage versus bad memory usage. So we'll talk a lot about ways that you can avoid falling off the fast path here, but this is the number one thing. Number two and three? Thank you.
+
+Well, yeah, you get the idea. Obviously, you know, there's other things wrong, but if you don't get this right, the other things almost don't matter. Excessive state changes. This can be very expensive. There's a lot of reasons why it's expensive, but this is something you really want to avoid and we'll talk about why it's expensive and how to avoid it. And lastly, poor use of shaders. Modern hardware, everything runs in shaders. You know, vertex, geometry, fragment. And if you're not using shaders or you're not using them appropriately, you're going to get hurt performance-wise.
+
+All right, so memory usage. When I talk about memory, I'm really talking about three things primarily. Textures, vertex data, and shaders. Shaders I'll talk more about later, so I'm mostly going to ignore them at this point. This is really focused on textures and vertex data, but it applies to, you know, any buffer object. VBO, PBO, FBO, transform feedback, you know, whatever you're using, it applies to this.
+
+So the things that are extremely expensive for us, and this applies whether you're talking about VRAM or SRAM. Is creating and destroying texture resou-- or, well, memory resources and mapping and unmapping. When I talk about create and destroy, that's pretty easy. That's something that you see in your application. You know, when you create a texture, you call-- Well, whether it's a texture or vertex or whatever, when you create it, when you destroy it, you have good visibility over that. That's expensive.
+
+You want to do as little of that as possible. You want to set that up up front in your application and not touch it again. Mapping and unmapping, that's a little less expensive. That's something that is--you have some control over. The last presentation, if you were here for that, you saw some of the mapping and unmapping.
+
+But there's more than just that. There's a lot that goes on behind the scenes in the driver. And with modern graphics hardware, that can actually be somewhat expensive. So you want to reduce things that are going to cause map and unmap. And we'll talk in a little bit about how to do that. But it's very important to keep in mind that map and unmap are not free and that they're to be avoided.
+
+So the big things to avoid--or not to avoid, but the big things to avoid-- or the big solutions to this, ways to get around these, number one, reuse memory objects. Make sure that you're very stingy about them. Create as few as you can get away with and reuse them as much as possible. So we'll talk about pooling quite a bit.
+
+If you find that you're using a lot of different textures and any given texture you might only use for a little bit, pool the textures. Don't create them when you need them, destroy them when you're done with them. Put them into a pool, release them when you're done, and pull something out of the pool when you're done. Obviously, that's not going to work if you have-- wildly different texture sizes.
+
+You know, if you're using one moment, you know, 1920 by 1080, and the next moment you're using 256 by 256, that doesn't make sense to pool if you have really strange situations like that. But in general, pool if you can. Keep data on the GPU. This is kind of a no-brainer. Any time that you can avoid transferring things over the bus, that's going to save you pretty good-- well, that's going to save you a pretty good performance hit if you can keep it on the GPU.
+
+It's also going to reduce map speed and it's going to reduce mapping and unmapping. The longer something stays on the GPU and the less it transfers back and forth, the less mapping and unmapping cost you're going to have. And FBO, VBO, PBO, transform feedback, geometry shader, these are all great ways to keep things on the GPU. Dynamically generated data, great.
+
+The last thing is, if you absolutely have to create things per frame, Do it at the start of the frame. Do everything together. The reason why is that allows the driver to essentially batch everything up. And we can kind of amortize the cost of all of these things. If we can put them together, it's going to reduce the cost a lot. So if you do have to do things somewhat frequently, batch them.
+
+All right, note on texture formats. We talked a little bit in the last presentation about recommended texture formats. Here's a really quick list looking through our driver of hardware-supported formats. There's a lot more than is on this list, but these are kind of the most common ones. One thing I want to point out, too, just as a quick note, you'll notice on the depth components, I didn't list depth 16.
+
+16-bit depth components or 16-bit depth on modern hardware isn't supported in the hardware. That means that if you are trying to use 16-bit depth as a way to avoid on space, as a way to avoid costs on space, that's not going to help you because we actually use a 24-bit depth on the hardware and we have to do conversion, which is going to cost you.
+
+All right, here's the big one, locality. People talk about locality to mean a lot of different things. They could mean spatial locality, temporal locality, lots of things like that. I'm not talking about that here. This is really locality about where this lives. Is it in the VRAM? Is it in the SRAM? And so on like that. And how it's moved back and forth, how it's stored. You have a couple options for controlling locality. We recommend that you use VBOs and PBOs.
+
+And if you are, the usage controls the locality. So for example, if you call GL buffer data, the usage argument that you pass in there is going to control that. Also, you can use the Apple Client Storage and the Texture Range extensions. Those also give you storage hints to specify where this is going to be stored. So the three locality types, and I'll talk about these right away, are default, cached, and shared.
+
+Default's exactly what you would expect. If you don't do anything, if you have just a plain, normal texture, it gets a default format or default locality. You can see the--I've got kind of icons next to each of the different layers, a little silver icon. That shows you each layer that can keep a copy of the data around. So right away, you can see that in system memory, we can potentially keep three copies of the data around for default locality.
+
+That's kind of inefficient, right? I mean... Potentially, if you have a texture that's 10 megs, we're going to take up 30 megs just in system memory for that. Potentially. And then in VRAM, of course, you'll have another 10 megs. Also, we'll have to do copies. The client's going to have potentially its own copy. When it tells the driver about this, we copy it to the driver, and then we have to upload it to the GPU, so that's another copy. So that's not the best in certain circumstances. Where this really shines, however, is static data.
+
+If you have data that you only are going to send to the GPU once and then use over and over again, or if you have dynamically modified data that the GPU is going to be updating over and over again, this is great. This is actually pretty good. We're fairly efficient about this.
+
+And the one thing I do want to point out is that with this locality type, there's no pointers from the driver back to the client's application space, which allows the driver to optimize in certain ways. It's possible, and this isn't something the driver does right now, but it's something that we're talking about for the future, it's possible the driver could actually automatically pull these resources for you, so that if you're doing a lot of create and destroy, we might be able to cut out that cost for you if you use this locality type. The other locality types, you don't have that option, and I'll tell you why in a minute.
+
+Alright, next one is cached. Cached is very similar to the default. It's got a lot of the same use cases. You want to use it for fairly static data or GPU modified data. The way this helps is we only keep a copy of the data, and the application space, essentially. There's some caveats to that, but basically we keep one system memory copy of the data, and one VRAM copy of the data.
+
+The only copy that ever happens in this case is from system RAM to video RAM. It's very efficient, and it can make a big difference for applications that are significantly memory bound. Specifically, we've seen a problem with 32-bit applications. We've seen some 32-bit applications that will use, um, up their entire 4-gig memory range just with textures, and if you go to this, you can cut that out significantly. There are some limitations, though. First of all, the driver has a pointer going back, potentially, to the client's memory space, so we can't automatically pool these for you. If you're going to use a lot of these, you need to pool them yourself.
+
+Also, limitations. You have to use a hardware-supported texture format. If we have to convert from your texture format to a texture format the GPU supports, we can't use this. We have to fall back to a standard type, or the default type. No MIP maps, no cube maps. Those are the big points for this one. Finally, shared locality.
+
+No VRAM. This is entirely in system memory. There's a couple implications of that. First of all, this is only highly dynamic data. This is stuff that you're basically going to modify in the CPU, use in the GPU, discard. Modify in the CPU, use in the GPU, discard. Or at least not--if not discard, then update in the CPU again.
+
+Again, if you're going to use these, pool these. Only use these for highly dynamic, and they have the same limitations as previously mentioned. Hardware supported format, no mipmap, no kubemaps. And I'll talk a little bit more about one of the implications of this in a little bit. Pagey Unlocking. So if you've coded for OpenGL on other systems like Linux or XP, we don't have a virtual VRAM system on those. Whereas with OS X, we do.
+
+What that means is if your card only has 64 megs of VRAM or 128 or 1.5 gigs, whatever it is, your application essentially thinks it's got an unlimited amount of VRAM. That's great if you need to do something that's more than your card can support in terms of total overall VRAM.
+
+The problem is this leads to paging. Paging is essentially if we need more VRAM than we've got, we've got to save off some of the data that we have in VRAM, back to system RAM, reallocate. This gets very expensive quickly because we're doing a lot of allocations, we're doing a lot of mapping and unmapping, we're doing a lot of bus transfers. So although this allows things that are never possible before, this also gives you performance penalties that never rose their heads before.
+
+So you want to avoid paging as much as possible. You want to live within your means essentially for VRAM. A lot of games go to great pains to make sure that they live within the VRAM on the card, and they get very good performance because of that. Because if you can avoid paging, you'll avoid most of the mapping and unmapping activity that we see in a lot of cases.
+
+The other point I want to make here is that for shared allocations, allocations that have no VRAM, those need to be mapped into the GPU's address space before the GPU can use that. If you're not using these continually, you know, update on CPU, use on GPU right away, update immediately again, back and forth, in a very quick manner, the driver is aggressive about unmapping these because all of these, when they're mapped, essentially wire down system memory.
+
+Wired system memory is basically bad. I won't go into a lot of details on that, but we do. We try and limit wired memory as much as possible. So if you are going to use shared allocations, make sure that you're continually using them as much as possible. Otherwise, you're going to have a lot of mapping and unmapping activity, and that's going to cost you.
+
+All right, state optimization. The bottom line with this is don't change state any more than you need to. You want to organize your code so that chunks of primitives that use the same state render together. If you're changing state a lot, that's going to cause a lot of extra activity in the driver, what we call validation.
+
+Validation is basically code that the driver runs before it can send commands to the GPU that makes sure that all of the state is consistent and in a format that the GPU can use. That includes things like compiling shaders, making sure that the textures are completely consistent and so forth like that. It's definitely not free, so any time you can avoid validation, that's good.
+
+Another thing is GL flush and GL finish. These are extremely costly. You shouldn't use them unless you really have to. And GL finish, there are very, very few good reasons to ever use GL finish. If you find that you need to do that, you can use the Apple Fence extension. I'll talk about that in a moment. The reason these are so costly is because we build up a command buffer in the driver and it gets longer and longer and longer the longer you go without a flush or a finish or a swap.
+
+And as soon as you call flush, finish or swap, we have to send that command buffer down to the driver. Every new command buffer that we get has a certain amount of overhead that's pretty much constant. That's a context switch. And that's expensive for us. It's not hugely expensive, but it's something you want to avoid if you can. The Apple Fence extension lets you essentially insert a marker and say, all right, at this point, I'm going to check later and see if we've finished to this point. And it's actually fairly effective and very efficient.
+
+The one caveat I would say to that is avoid calling GL finish, Fence Apple before you've called flush or swap. If you do that, that's essentially going to force a flush and you've lost your benefit unless you really need to do it. Again, all these things, if you really need to do something, do it, but be careful about it.
+
+Textures. We talked a little bit about textures with memory, but there's some other things that are also worth thinking about. In the past, it was most efficient to use Power of Two and non-rectangle formats because of certain spatial locality tricks that we could do in the hardware. Today, with modern hardware, this isn't true so much anymore. You don't need to stick to Power of Two. You don't need to stick to rectangle. We're very efficient about how we use things spatial locality-wise in the driver.
+
+And also, it's perfectly efficient these days to render to an FBO. It used to be that with an FBO, it wasn't as efficient to render to as, for example, a normal drawable. That's not the case anymore. Rendering to an FBO today is pretty much the same cost as a drawable. So don't be shy about that if that was a concern. Float formats?
+
+Use them if you need them. Floats are great, but if you don't need floats, if you don't need that level of precision, don't use it. It's going to cost you more in the shader and also the cache. Float formats are great, but if you don't need floats, if you don't need that level of precision, don't use it. The float formats are just larger, and so you're going to fit a lot less of the texture in the cache.
+
+A couple obvious things. Textures. Anytime you change the size, the format, number of MIP levels, things like that with the texture, that triggers a lot of work. So with textures, set them up the way you need them and leave them alone. Do all that sort of stuff at the start of your application.
+
+Also, when you're copying things, if you need to use copy text image, text image, anything like that, use the subversion. If you can stick to small regions, that's obviously going to be a better win than doing the whole thing. Fairly obvious. Programmability. This is a basic point. Everything in the hardware today is shaders. The hardware natively uses microcode for vertex, geometry, fragment, anything like that.
+
+If you're still using fixed function for any reason, you're taking a perf hit. You might think that, well, it's really simple, it's really straightforward, obviously that's going to be efficient. It's not, because the driver actually has to create a fixed function shader and compile it for you. If you change that fixed function state, it's very expensive. That means texture environment, register combiner, texture shader, materials, fog, hardware fog type things, all that, that's not a fixed function thing anymore, so you don't want to use it.
+
+And by the way, that's true for GeForce 6 and beyond, not just GeForce 8 and beyond. Lastly, for programmability and validation, this is kind of an obvious point, but change your shaders as little as possible. Every time you change the shader, that causes a recompile. A little bit less obviously, some kinds of state, when you change state, also causes the shader recompile. Certain texture features, things like that, if you change, it causes the shader recompile. So really the big point is set everything up in the beginning and leave it alone.
+
+I know I keep saying that, but that's huge. One last minor, minor point is priming GLBGN. When you set up a lot of state, including your shaders, we don't necessarily do a lot of work in the driver at that point. A lot of the work in the driver happens when you go to do the first rendering command that uses that state.
+
+We've seen actually in some real world cases that if you wait until your application's actually running to use this stuff, you can get a stutter on your first frame or the first frame that uses this. So if you want to avoid that, you can send down just a bogus little GLBGN to draw some minor quad that's going to force this state to be validated and the shader to be compiled. For most people it doesn't matter, but it might matter for your application.
+
+Last couple general optimizations. We talked about context switching. Context switching is very expensive and you want to avoid it. Well, one really simple way to avoid that is don't use more contexts than you need. We've seen some real-world examples of apps using a lot of contexts. I mean, in some cases, we've seen one context per frame. The idea is trying to isolate state from one frame to another, but that's a huge performance cliff. I mean, it's really massive. So don't do that.
+
+That thrashes memory, that thrashes state, that thrashes all kinds of things and you're going to hurt. Another thing, this is kind of a favor to some people internally on our driver team. This is a pet peeve that we get all the time. GL renderer string. Don't use that to check for functionality. We see people saying, "Oh, you know, is this G46?" Because I know G46 has this particular feature.
+
+And then when they get to G48, their code is suddenly saying, "Oh, wait, it's not G46. It doesn't have that feature." And they fall back to some old code. That's not the way to do things. If you absolutely have to check for a particular card, use the render ID. That's not going to change over time or driver to driver.
+
+But the recommended thing to do, check for extensions. Look at the extension string. That's really going to tell you what you need to know. So learn to rely on that. And lastly, if you're writing a game, this is pretty obvious, but use full screen. At least as the default thing. Full screen is a lot more efficient because you're going to be the only context on the system probably.
+
+You're not going to be fighting with the Windows Server, or any other applications for resources. So it's going to run faster. And then, of course, full screen, we're actually going to be using flipping with the frame buffer and not blitting. And so that's kind of like the difference between changing pointers and copying a whole array. Much more efficient. All right, that's it for optimizations.
+
+Now, bottleneck identification. These are the techniques that we're actually using internally. So I'm not going to go really in-depth on the basic methodology. This is really well covered elsewhere. But this is just kind of a high-level view, the first things to look at. You know, open up Activity Monitor. See what Activity Monitor tells you. If your CPU seems to not be doing very much, then there's a lot of things it could be. You could be GPU-bound, you could be bus-bound, you could be memory system-bound.
+
+Next thing to open up at that point is OpenGL Driver Monitor and look at the activity on the GPU. If the GPU is also not using, you know, very high utilization, you're probably bus or memory-bound. But either way, at this point, you move on to fine bottleneck identification. The fine bottleneck identification can seem pretty blunt force in some ways. The reason I say that is because you're basically turning things on and off, scaling things up and down, and seeing when your performance changes.
+
+So, for example, simplify your shaders. You may have some really fancy shader that does all sorts of complex math. Well, do something really simple. Make it output red. You know, whatever it is, dumb it down and see if your performance changes. If suddenly your frame rate jumps way up when you dumbed your shader down, well, your shader limited.
+
+Alter your geometry complexity. If you're using some sort of model that's got, you know, 10 million vertices, drop it down to a much lower level of detail, you know, maybe 1,000 vertices. See if your frame rate goes up. If it does, you're geometry-bound. Modern hardware, it's very hard to get geometry. You can't get geometry-bound, but it's possible. What's much more likely is that you're fragment-bound. So alter your resolution. If you're running at 1920x1080, scale back to 640x480.
+
+That's where a lot of things you're going to see, you're suddenly going to get much better perf. That means probably that you need to change your pixel shader. You need to change textures you're using. You get the idea. There's a lot of things that you can change and tweak within your system to get better perf or to figure out where your bottleneck is. I'm not going to go into a lot more detail on this, but see the "NVIDIA Practical Performance Analysis Guide." We've got a really good tutorial on how to go through and find your bottlenecks using this sort of methodology.
+
+So when it comes down to actually profiling on the system, with OS X, there are certain things you need to keep in mind. And these kind of hold true for any operating system, but these things are what we look at first. First of all, any periodic tasks that you've got in the OS system, in the OS, dial this back as much as possible. Power management, screen saver, software update, any applications you've got running in the background, turn these things off.
+
+Dial them down. I'm not saying turn these off forever, just while you're profiling. Now, obviously, you want these things on in general. And also, keep in mind that your user is going to have these things on. So it's no good if your app runs really great with power management turned off, because your users are going to have that turned on. But for profiling, it's useful.
+
+Also, if you have the luxury of running in full screen for profiling, do it. That eliminates a lot of noise. You're not going to be competing with the Windows server. You're not going to be competing with any other OpenGL apps. You're going to be the only app on the system graphics-wise.
+
+And that's going to help you with profiling. If you're not a full screen app, if you can't do that, here's an NVIDIA-specific trick you can do. If you look in system library extensions, there's a file called gforcega.plugin. That basically, the presence of that turns on Windows server acceleration.
+
+That does a bunch of other things, but if you rename that just temporarily and reboot or restart the Windows server, your app will be the only thing using OpenGL on the system. You'll be the only graphics context, and that'll help you isolate. Obviously, when you're done, you want to rename that back.
+
+The last thing to mention is power management. There's a periodic, well not periodic, there's a continual background process in the OS that looks at the busyness of the GPU. It looks at how much activity is going on in the GPU and if the GPU isn't very busy, it throttles it back. The reason I mention that is because you can see weird kind of spiky perf over time. One run will show 130 frames a second, the next run will show 110.
+
+And it'll be really hard to figure out why if you don't keep in mind that this could be an issue. It's not usually a big issue. The main time it can be an issue is if your app doesn't always use the GPU to its fullest. For example, if you're CPU bound, this could be raising its head, so it's something to keep in mind.
+
+All right, OpenGL Driver Monitor. This is a very, very valuable tool. This is one of your best ways to get an idea of what's going on inside the GPU. It doesn't tell you what the GPU is doing, however. It only tells you how hard the GPU is doing whatever it's doing. That can still be very useful, though, to identify whether you're CPU-bound or GPU-bound and a lot of other things. OpenGL Driver Monitor also you can access through Instruments, so if you like Instruments, it's available there.
+
+These are kind of just a quick list of the things that I find most useful when I need to go in and profile something. The top three that I've listed here are ones that are actually NVIDIA-specific. They're in the snow leopard seed, if you have that, and they'll be in drivers that are going to be coming out in the future. These three basically give you core utilization on the GPU. This is the core number that you want to look at that says, how busy is the GPU? It's a percentage. Next down is memory utilization. This is basically how busy is the memory system on the GPU?
+
+You know, how much VRAM activity is going on? And then finally, video engine utilization. You know, if you're working on a video app that's using QuickTime or anything that's using the GPU's video engines, like VP1, VP3, anything like that, this will give you an idea of how hard that's working and can help you figure out bottlenecks for underutilization there. A couple other quick things, textures, surfaces, you can get counts of all of that. Here's where you can find out how much paging you're doing. You can look at page on, page off for textures and surfaces.
+
+That'll give you a very good idea. If you see that number really high, well, you've probably fallen off a minor perf cliff, or potentially a very big perf cliff, depending on what your usage pattern is. You can see how much AGP memory, which really translates in this case to system memory, is mapped into the GPU.
+
+That'll help figure out if you're using a lot of that, and that could also be a mapping and unmapping issue. There's a lot of things I would really just strongly encourage you to play with this. This is a very simple thing. This is a very powerful tool. And as time goes by, we'll be adding more statistics, and so it'll be even more powerful over time.
+
+OpenGL Driver Monitor Example. The main reason I include this, most of you are probably familiar with it. In the lower right-hand corner, you'll notice a little button that says Parameters. If I've been away from this for four or five months and I come back, I always forget how to open the tray on the right.
+
+I'm like, "Oh man, how do I get that thing open?" Click that button. Sorry, it's, yeah. All right, Shark. If you're CPU bound, if you're trying to figure out what's going on in the CPU, Shark is the very best tool you have. Shark is amazingly awesome. Go kiss the Shark team when you see them.
+
+However, there are a couple things in Shark that are maybe not standard for most developers that I want to recommend. If you're profiling OpenGL stuff, the standard time profile is cool. That will help a lot. But all thread states is awesome. All thread states, basically, the difference between that and normal time profile is normal time profile and the rest of the team.
+
+It's a very complex and powerful tool, so I'm not going to get into it here. Mostly I want you to know that it exists. And if you're curious, go explore. Window Time Facility is also useful. Again, I'm not going to go into a lot of detail. I mostly want you to know that this exists.
+
+To use these modes, you actually have to do a lot more data mining to make use of it than with just standard time profile, but the payoff is huge. It's something that if you have a spare hour, go do it. If you've got a spare day, even better. Get very familiar with it. I'm going to go ahead and do this because the more familiar you are with this, the easier your profiling will get.
+
+and Data Mining. I just wanted to show the Data Mining tab over on the side here. The Data Mining is absolutely essential for all thread states. So experiment with the Data Mining in particular. There are a lot of things that I turn on. One of my favorite things is actually color by library, so I can just tell really quickly at a glance which library is causing me pain. Show all branches is also very powerful. Again, I can't cover everything, but experiment.
+
+All right, finishing up, most important things I want you to take home. Shaders, textures and contexts are very heavyweight. Set these up in the beginning, leave them alone as much as you can. Every time you have to touch these, you're hurting your performance. Reuse. Anything you can do to reuse these are going to be huge for you.
+
+Some apps, I can guarantee you will see a 10-time improvement just by reuse. Not every app. I mean, a lot of games already use things very efficiently, but look at your own situation and see. You might be able to help. And finally, keeping data on the GPU. You know, the last talk we talked about transform feedback and geometry shaders. Those are great ways to dynamically generate data. The more you can keep it on the GPU, the better you're going to be in terms of performance.
+
+A couple resources that you might want to look at later. I talked a little bit about the Practical Performance Analysis Guide from NVIDIA, also the GPU Programming Guide. Those are very useful. Apple has a lot of documentation up online for optimizing OpenGL and the tools that are Apple-specific. Very helpful documents, so I suggest you go look. All right, I'm going to hand back to Chris.
+
+Thanks, Eric. So that was a lot of great information that helps both with NVIDIA as well as everything else. But that's a lot of great info for tuning your apps. So we already went over bottlenecks, but I'm going to go a little bit more over it. The major bottlenecks tend to be the CPU, the bus bandwidth, traffic back and forth talking to the GPU.
+
+And then there's also pipeline and data stalls, basically, where you can have bubbles in one of your threads or on the GPU and the CPU. And then also, as Eric already went over, the GPU has vertex processing and then the fill rate. And you can basically see if you're one of those two. You want to experiment to see if you're one of those, bound by one of those two. And then also, Srinivas, who works on the Intel graphics.
+
+He's going to give a lot more hints on fill rate. So for CPU, I just wanted to give some hints in addition to what's already been said. Other than using Shark, what you find out, you attack with Shark, if you see that you're CPU bound, there's some other helpful hints here. And so one thing is using a 64-bit application, actually compiling your application to 64-bit.
+
+So why build 64-bit? What's it going to do to speed you up? Well, obviously, there's the fact that you can use much bigger data sets. So if you are using a large data set that's more than the 2 gigs or 4 gigs that you're able to fit into RAM, you can use a 64-bit and it will actually help, you know, you won't have to be doing any paging at that point.
+
+And then also, something that's a little bit less known is that it actually, when you're using x86-64, the Intel chip has more optimal instructions for larger data, you know, 64-bit. And also, in addition to that, it has more registers available on the CPU. So basically, code goes a little bit faster just by compiling in 64-bit. And in addition to your application being 64-bit, the OpenGL engine and also the graphics drivers below that are also going to be running on the 64-bit versions, which in hand have the exact same performance benefits.
+
+[Transcript missing]
+
+I'm going to go over in a second, basically, avoiding stalls with data synchronization and basically by double buffering objects. And I just wanted to reiterate that this is sort of, you know, it's a balancing act, trying to make sure that the CPU and the GPU, they're both very capable things, so you want to be using them as much as possible.
+
+Not causing stalls on one or the other. So here we have an example of a texture object that we're modifying a texture on the CPU and then using that texture to draw with on the GPU. And we see here that we're actually getting some bubbles in the pipeline. So the CPU doesn't have anything to do while the GPU is drawing with that texture.
+
+And meanwhile, when we get that texture, when we're able to write into that texture again, the GPU is then waiting for us to upload that second texture. So a trick to do -- you know, this is what -- basically what double buffering is, is you can add a second object in here to fill in those pipeline stalls.
+
+And so what you're doing here is it's -- while the GPU is working on one texture, the CPU gets to work on the other texture. And you basically flip-flop the two between each other. And doing this allows you to much more easily -- more efficiently basically get rid of those pipeline stalls that are existing for, you know, texture objects, even vertex objects, vertex buffer objects, that sort of thing.
+
+And so bandwidth-wise, I wanted to reiterate what's been said a lot, you know, in every single OpenGL session that we've had. And that is do not use immediate mode vertex submission. Geo begin, geo end is basically, it's a very inefficient way to do things. And what it's doing is basically every single time you call geo vertex, we're sending this call, we're sending the data associated with that vertex over the bus to the vertex processing unit, where then it's going to be using those, that data to process. And that's just not an efficient way to get the data to the GPU.
+
+So instead, we're obviously recommending vertex buffer objects for pretty much everything. So here we see in the VRAM on the GPU, In the video memory, we have a buffer object that we've created or buffer objects that we've created. And so similar to like a texture, we have this buffer object with vertex data in it.
+
+And so we can just literally, it will just put it over the extremely fast bus that's on the GPU. There's no bus traffic between the CPU and the GPU being used here. And the vertex processor is able to basically, you know, get that data as fast as possible.
+
+And so also with dynamic vertex data, you can create vertex buffer objects that are dynamic or streaming. And so what happens in these situations is that you have your CPU copy, but only when you update things, it's able to actually blip the entire, it's able to copy all of your vertex data at once into the GPU's video memory, as opposed to with the media mode where we're putting one vertex on the GPU at a time. This basically does a mem copy straight onto the GPU.
+
+And then I wanted to talk a little bit about flush buffer range, how that works. So in general, so when you're trying to get your vertex data, when you're going to modify it, if it's dirty on the video card, it's going to be read back to the CPU at that point. But after this happens, I have the objects. And say I want to, without Apple flush buffer range, say I want to modify one of my objects. So I'll modify that object.
+
+And After I'm done modifying that object, it then copies the entire buffer object back up there. But I was only modifying a small amount of it. So, What Apple Flush Buffer Range allows me to do is I'm modifying two small parts here, for instance, and I call flush mapped buffer range on both of those sub ranges of that object, un-map my object, and then at that point, only those two small sub ranges would have been modified. So it's a much more efficient way to, if you are only modifying small sub ranges of your buffer objects, you can just use this extension to easily speed that up.
+
+[Transcript missing]
+
+Hi, everybody. My name is Srinivas Dasari. I work in the GPU software team at Apple. Today I want to go through some tips for getting better performance on X3100. This is the integrated graphics from Intel that is used in MacBook and MacBook Air product lines. Today I want to give you a brief overview of X3100 and its architecture. I want to go through state management and why it is actually crucial for getting performance on X3100.
+
+Eric Klein from NVIDIA already gave you a lot of details on state management and how state changes can affect GPU performance. I'm going to reiterate those points some more, but within the context of X3100 and its architecture. This hardware is especially tend to be fill rate limited. So I'm going to go through some tips for getting better fill rates. Also, we support some API features that can help you with performance. So I'm going to go through those features. And then finally, I'm going to cover some general hints for do's and don'ts that help you with performance in general on this hardware.
+
+So X3100 is what is known as unified memory architecture. There is no dedicated video memory like it exists for other GPUs. A portion of the system memory is allocated as video memory for graphics purposes.
+
+[Transcript missing]
+
+So, state management. So, because the driver has to generate and compile these kernel programs for each stage of the pipeline, state management becomes very crucial for performance on this hardware. So, it's very important to avoid state thrashing.
+
+By thrashing, I mean toggling state back and forth. Because transitions are very expensive on this hardware, they can force kernel program recompiles on the driver, which is an expensive operation. But the driver does have a number of optimizations to cache the kernel programs and the state to avoid and reduce the recompiles.
+
+But the amount of checking the driver has to do to make sure if a particular kernel program needs to be compiled or not can really add up and become a bottleneck. And also, there is a limit to the amount of caching we can do. And also, too many state transitions can result in too many state vectors. So, hardware requires the driver to maintain a state vector heap.
+
+Basically, the state heap contains all the required state as well as kernel programs that are required to finish a particular draw operation. So, if there are too many state transitions, it can result in too many state vectors. That means we may have to grow the state heap at some point. And we have to, at some point, we run out of state heaps. So, we have to reallocate heaps.
+
+So, that will result in full pipeline flushes in the hardware. Which are very important. So, we have to reallocate heaps. So, that will result in full pipeline flushes in the hardware. And these are very expensive. So, it's very important to be efficient in doing state transitions and state management. If you can sort your state to reduce transitions, that is actually a great win for performance on this hardware.
+
+This hardware, especially because of its hybrid architecture, tend to be field rate limited. There are some obvious things you can do. Minimize the resolution of the textures, reducing the size of your render targets. That way you are filling up fewer number of pixels. That helps. Also, if you can get away with 16-bit bits per pixel as opposed to 24- and 32-bit, that helps with memory bandwidth. So are the compressed textures, which are currently supported on this hardware.
+
+You can do other things like using the LOD bias controls, for example. Choose a smaller size MIP map. This helps you with the better texture cache reuse. Of course, if you are using a smaller size MIP map, then you are actually increasing the blurring in your scene. So if you can get away with some blurring, maybe you can go for a smaller size MIP map. That helps. Another important thing is to simplify the shaders. The simpler the shaders, the better it is, especially on this hardware.
+
+Because it's going to keep your compute time within reason. And also it is going to free up the cores for other threads to run. So it helps. In particular, if possible, if you can avoid these complex math instructions that I just listed here, that is actually very helpful on this hardware. Because there is only one math box unit that is there to do these math instructions. And that math box unit is actually shared by all cores.
+
+And also almost all these instructions take multiple rounds. So you need to compute multiple rounds to the math box unit to compute. So the more of these instructions you use, the more likelihood of introducing stalls. So this is something to keep in mind when you are programming to this hardware.
+
+Also, this hardware supports what is called the early-Z feature. That is, the hardware is capable of rejecting pixels that fail the depth test before running a frame rate shader. This can actually give you substantial gain in performance, especially if depth complexity in your scene is high. Usually, I mean, this feature automatically kicks in whenever possible, but there are certain OpenGL states that can actually disable this LDZ testing. For example, one such case is if the fragment shader manipulates Z. Basically, what that means is instead of using the interpolated depth, you are actually calculating your own depth in the fragment shader. That is, you are doing your own Z testing in the fragment shader.
+
+Then, obviously, the hardware doesn't know, have access to the source depth, so it can't do the early Z test before the fragment shader is run. So, it has to disable the early Z testing. Another condition is if you have stencil writes enabled and also your stencil G fail operation is not set to GL keep, meaning that whenever a pixel fails the depth test, you want to update the stencil buffer. Now, the hardware is actually capable of doing that.
+
+That is, as soon as a pixel fails the early Z test, it can update the stencil buffer. But if you have alpha testing enabled, or if you are killing pixels in the fragment shader, So in these conditions, even though the pixel fails the early-Z test, the hardware can't immediately update the stencil buffer because it doesn't know if the pixel is going to get killed by the alpha test or in the fragment shader. So it has to run the fragment shader and go through the pipeline. So you won't get benefit out of this hardware feature. So if you can avoid these two conditions, actually you can take advantage of this early-Z hardware.
+
+Also, there are some common ways in which actually you can take advantage of early-Z hardware. One is to draw the scene front to back. So if you can sort your scene and draw the objects that are on the front first, that will help you initialize the depth buffer with the Z values of all visible pixels. And then you draw the objects that are in the back, then they get early rejected because they're going to fail the early-Z test.
+
+For example, I have a case here. The red triangle is in the front, the blue is in the back, and it's occluded by the red. So if I draw the red first, it's going to update the depth buffer with the Z values of the red triangle. And then I go draw the blue triangle next, it's going to get early rejected because it's going to fail the early-Z test. So this is one way to take advantage of it. There's another common way is to do a multi-pass approach. Do a depth-only pass first, and then follow by the color pass.
+
+So with the depth pass, you disable the color rights. You just draw the whole scene. That way you are populating the depth buffer with the Z values of all visible pixels. And then you could do a color pass, then all the pixels that are occluded, they get early rejected. So this technique can bring the depth complexity in your scene to almost one.
+
+So it can give you substantial gain in fill rates. But how much gain you actually get out of these techniques, it depends on what kind of overhead is involved in doing these techniques. And what kind of overhead is involved in doing these techniques. And what kind of performance you get out of early-Z hardware.
+
+For example, if your fragment share is simple, then you may not get any benefit or much benefit out of early-Z hardware. In those cases, if you do these techniques, then the overhead itself can become a bottleneck. So you need to balance the overhead with the kind of performance you get with early-Z hardware.
+
+We currently support occlusion queries. This is one good way extension to use. You can follow the normal bounding box techniques to only draw those portions of the scene that are visible. This definitely helps you with frame rates because you are not drawing certain parts of the scene that are not visible, which is good.
+
+Also, there's one tidbit. If you can combine the color depth stencil clears into one GL clear call, that helps because the driver can just do all of these in one operation. If you separate them out, then it results in three different operations in the driver. Something to keep in mind.
+
+[Transcript missing]
+
+So finally, whatever I explained so far is pretty general. So most of it applies to any GPU. But it's even more helpful on this particular hardware because of its unique architecture. Thank you. Thank you for listening.
+
+I'm back with Chris, I guess. Thank you. So that's great, Srinivas. So... Let's see. So we've talked a lot about general optimizations and even got NVIDIA and Intel-specific hints. They're great to use in general. So for any more information, Alan Schaefer is our evangelist for graphics technology. His email is here, aschaefer at apple.com. And also, documentation. We've got a lot of documentation at developer.apple.com/opengl. And so I recommend that everyone takes a look there, especially like at the Mac OS X OpenGL Programming Guide, especially if you're new to Mac OS X.
+
+So some related sessions. There aren't really-- this is the last OpenGL session. Hopefully you saw the earlier two OpenGL sessions. But tomorrow, there's introducing OpenCL and Advanced OpenCL both in Russian Hill at 9:00 and 10:15 AM. So if you are interested in doing computation-type stuff on the GPU and seeing potentially how to also integrate that with OpenGL, those should be shown at those sessions tomorrow.
+
+And then we have a lab tomorrow as well for the OpenGL on the Mac. And that is at the same time, I think, as an OpenCL lab as well that's across from it. I'm not exactly sure where it is right now. But it's at the same time, 2:00 to like 6:15, something like that. And if you have a question that's too complex or not enough time to get the question today, you can always meet us tomorrow then.

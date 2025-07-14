@@ -1,0 +1,223 @@
+---
+Title:  MIDI in Mac OS X
+Year:   2001
+Web:    https://nonstrict.eu/wwdcindex/wwdc2001/210/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Well, last year I got up here, I was across the street, and showed you what I'd been working on for the last few months on OS X. And it all was kind of basically working, but there were a lot of underlying things that we were kind of unsure about in the kernel scheduling and all that. And I'm really happy now because not only did we finish everything that we were showing last year, but it's really performing well. And towards the end of the session, I'll have some demos that show you exactly how well MIDI is performing for us on OS X.
+
+So before I get there, I'm just going to give you some introduction to the system services for MIDI, some of our design thoughts and challenges that we had in getting MIDI running. I'm going to go through the basic concepts of the API and some of the objects you'll use in that API, along with a lot of examples as I go through the API. And at the end, I'll have some demos.
+
+So in the large picture of things, MIDI's a fairly low level service. It's not in the kernel like I/O Kit is. MIDI through its drivers talks to I/O Kit. to do MIDI.io. But as we saw in the previous session, there are some higher level services like the audio toolbox, which gives you ways to send MIDI sequences, edit MIDI sequences and send them through to the MIDI hardware layer.
+
+QuickTime is another example of a higher level service that on OS 9 is layered on top of MIDI. And we've done some work to get it layered on top of MIDI on 10. And I'm not sure if it actually works. There's a component in the current build of OS 10. And I'm not sure if it actually works, but it will at some point.
+
+So some examples of the kinds of MIDI hardware that we expect to be seeing drivers for. People are mostly using USB MIDI interfaces these days. We're also seeing some USB synthesizers like this Roland device I have here. It's connected directly to my PowerBook with USB. We're still seeing PCI cards that do MIDI. And we're starting to see with devices from Yamaha and others some MIDI FireWire devices.
+
+For the purposes of the MIDI API, we don't really concern ourselves with things that connect to MIDI interfaces, like traditional MIDI devices, drum machines, keyboards, samplers, things that have traditional MIDI cables on them. So when I talk about a MIDI device in the API, I'm talking about one of these things that connects directly to the computer and is controlled by a driver on the computer. So when I talk about an external MIDI device, that's a traditional MIDI device with a five pin connector on it.
+
+So here are the goals that went into our design for the MIDI services. On Mac OS 9, we started to see these trends towards hardware and software developers kind of doing their own thing to make their own products work together in a kind of closed system way. And while that's okay, I mean, there's some innovation that goes on when people do that.
+
+It's also a bit antithetical to the spirit of MIDI in the first place, which was that you could take a bunch of gear from different manufacturers, plug it in together, and it would all work. So what we want to do on 10 is try to support this kind of interoperability that we've had in the past with support for things like timestamped MIDI interfaces.
+
+And to get people to actually use our services instead of trying to hack down to the lowest levels of the hardware or the OS like we've had to as MIDI developers in the past. Our goals are to really get performance where it needs to be with good, highly accurate timing, both on recording of input and performing outgoing MIDI. Our goals are to have really low latency with three times of under a millisecond and low jitter in the hundreds of microseconds range. And I think we're pretty close to those numbers, as I'll show you at the end of the session.
+
+We want to present to the user a single system-wide state. We don't necessarily want to dictate the user interface because MIDI users might be using a fairly simple program. They don't want a user interface designed for helping him name his 55 synthesizers. But then again, there are people with 55 synthesizers and they want to name them all.
+
+And so we've taken the middle path by providing a central system database but not imposing a user interface on the way. Sorry about that. Skipping ahead rather quickly here. A single system-wide state so that all your MIDI programs will see the same devices with the same properties. And developers can add their own properties to the devices to make the system extensible.
+
+So towards those goals, we have a driver model so that the hardware manufacturers can write drivers. The MIDI server, which we'll get to in a moment, loads those drivers. And then all the applications can share their access to that hardware. Everybody can send to that same destination at once. Everybody can receive from a source at once.
+
+And like I just mentioned, we have a central device database. And we provide for time-stamped input and scheduled MIDI output. And we also have some features for inter-process communication. So if you have, for instance, a software synthesizer, you could create it as a virtual MIDI destination and have it show up to other applications as something you could send MIDI to. Some other uses of that might be MIDI effects. And so I'll get to that. And then we'll get to the rest of the talk. So those are the major features.
+
+Here's a picture that gives you an overview of how things are actually implemented. The horizontal gray lines are address space boundaries, which are kind of challenges for the implementation. That's where we have to move data between address spaces in a really efficient manner. And I'm happy to say I think we're doing that really well right now. At the lower level, we've got the kernel with I/O Kit. Above that, we've got MIDI drivers, which are typically I/O Kit user clients. And they're loaded and managed by a MIDI server process.
+
+which gets loaded automatically by the core MIDI framework which your applications link with in their own address spaces. On the right, I've got QuickTime here linking with core MIDI just as an example of how QuickTime is just another application in this model. So yeah, the core MIDI framework is the purple boxes there. And that manages communication with the MIDI server using Mach messaging to very efficiently move your data back and forth between your application and the server.
+
+So those MIDI frameworks such as CoreMIDI, there's actually two of them. They're implemented as Mac OS libraries. There's the CoreMIDI framework, which is what applications link with. And as I just mentioned, that framework allows your clients, it implements the API to the MIDI server using Mac messaging to the server process.
+
+There's also a second framework called CoreMIDI Server, which is for the benefit of driver writers. This framework actually contains the entire implementation of the MIDI server. The MIDI server itself is a main function that jumps into this framework. And the framework loads drivers, and then the drivers can link to the framework to make callbacks into it. So that way drivers have access to almost the entire API.
+
+I'm not going to go deeply into the process of how to create a driver. It's a little more esoteric. There aren't as many of you who are going to be interested in writing drivers, but it's helpful for application writers to know what the MIDI drivers are doing because they kind of show -- they kind of set up all the information that you end up seeing in your application and you'll have to figure out about installing them and that kind of stuff as you start developing. Apple is going to provide and does provide in 10.0 a MIDI driver for the USB MIDI class standard.
+
+That's in the build now. Unfortunately, no devices that I know of are shipping that use it, but someone's got to do something first, so we're providing that driver. For other pieces of MIDI hardware, We expect manufacturers to be creating drivers. I know that several of you hardware manufacturers are doing that. And I would ask you application developers who are eager for drivers to get in touch with the people who make hardware and ask them to please give you a beta driver or something so you can develop and then you'll buy their hardware.
+
+So, any case, drivers get installed into the system library extensions folder. They're managed by the MIDI servers I mentioned. They use the CFPlugin mechanism, which is a little daunting at first, but we've got some example code that makes it fairly easy to get your first driver up and running. And for most drivers, no kernel extensions are necessary. A USB MIDI driver, for instance, works entirely as a USB user client, so there's no kernel extension needed there.
+
+The basic functions of the MIDI driver, there aren't very many. All it really has to do is look for hardware and once it's found it, send and receive many messages, typically using I/O Kit. When it finds hardware, it creates these objects called the MIDI device, the MIDI entity, and MIDI endpoint objects, and it sets their properties. And those are objects that you'll see in your application.
+
+So let's look at what those look like. From the bottom up, there's a MIDI endpoint, and it's simply a MIDI source or destination. It's a single 16-channel stream, so you don't have to worry about channel 72 on something. You basically speak the standard MIDI protocol over that stream.
+
+The next layer up is the MIDI entity, which groups endpoints together. This is useful when applications want to get an idea of which endpoints go with each other. From the point of view of, for instance, a patch librarian program, it's nice to be able to send messages to a device and get messages back.
+
+In a totally flexible world, you could have the user say, yeah, the out goes out port one, but I'm getting the in back in on port eight. To provide useful defaults for people, it's nice to be able to group the endpoints like that so that an application can make reasonable default assumptions about how to talk bidirectionally to a device.
+
+So an entity, and this is a term borrowed from the USB MIDI class spec, an entity is really just one subcomponent of a device. So some examples of that would be, for instance, an 8-in, 8-out multiport interface like eMagix Uniter 8 could be seen as having eight entities, each with one source endpoint and one destination endpoint. Another example would be a hypothetical device that had a pair of MIDI ports in it and it had a general MIDI synth in it. And conceptually, those are two distinct entities and your software might want to present them as such.
+
+So the next level in the hierarchy above the entity is the device, which is something that you would represent by an icon if you were going to try to draw a graphical view of what's there. Devices are created and controlled by drivers and they contain the entity objects.
+
+So now that we've seen those basic objects that the driver populates the system with, we can start to look at how you begin to sign into the system and build the objects through which you communicate with the MIDI sources and destinations in the system. So with OMS and MIDI Manager, actually you had to say OMS sign in or MIDI sign in before anything else would work. That's not totally true here.
+
+You can actually interrogate the system before making these calls, but pretty early on in your program, because you won't be able to do any I.O. until you've done this, you'll want to call a MIDI client create, passing it a name and a function pointer. In this case, it's called my notify proc, and this function will be called back to tell you about when things change in the system. The last argument to MIDI client create is the client ref, which you'll store somewhere in your program and use in other calls.
+
+Once you've, oh, sorry, I'm skipping ahead of myself. A little more about the notify proc that you passed to MIDI client create. It gets called back in the same thread which called MIDI client create, which should ideally be your program's main thread. We may have some more fine-grained notifications in the future, but right now there's only one which says something changed. And that may be a device arrived, a device disappeared, some endpoints on a device disappeared or appeared, or the name of something changed.
+
+That's what this message here is, KMIDI message setup change. Something about the system has changed. So if you're caching in your program's variables a picture of what's in the MIDI system, this is your message to say, okay, it's time for you to resynchronize your variables with what's in the MIDI system.
+
+Once you've created your MIDI client, then you create MIDI port objects. And these are objects through which your client actually sends and receives MIDI. Not to be confused with MIDI hardware ports, like you would see on a MIDI interface. These are more like, if you remember MIDI Manager, the little virtual triangles on the ins and outs of your program. Another analogy is Mach ports. Those are your program's communication receptacles, you can think of them as.
+
+To create an output port, before I mention that, one thing to know about output ports is you only need one to be able to send to all of the MIDI destinations in the system. One port can send to seven different destinations. One of the arguments when you send is which destination you're sending to. The only time you need to create multiple ports is if you have a kind of component-oriented program.
+
+Maybe you've got five different separately coded parts of your program, and they're all acting very independently of each other. You would, in that case, perhaps have five output ports, each sending in a separate thread, even. And what would happen is that the MIDI server... would then merge the output of those five ports.
+
+So, in any cases where you're sending in multiple threads, especially where system-exclusive messages are involved, you need to be using separate ports. As a really common example, you might have a MIDI-through process in your program that's taking everything that's coming in and sending it right back out. And elsewhere in your program, you might have...
+
+[Transcript missing]
+
+Similarly, MIDI input ports may receive input from all of the sources in the system.
+
+A port is basically a binding, well it's an object that contains a connection point for input and it gets bound to something called a MIDI read proc, which is a function that will get called when input arrives at that port. So the arguments to MIDI input port create are a name, a function pointer called myreadproc in this case, a null refcon or user client data pointer, and then you get back the MIDI port ref, which is your input port, and you would save that away for use in other calls.
+
+Okay, before we look at how to actually perform MIDI I/O, let's look at the data structures in which MIDI messages are sent and received. We have this thing called a MIDI packet list, which provides a list of time stamped packets to or from one endpoint. You'll use this both in receiving MIDI and sending MIDI. It's a variable length structure, which in turn contains multiple variable length structures. The first argument is simply the number of packets, and then it's followed by MIDI packet structures, which are variable length. There can be any number of those.
+
+The MIDI packet structure contains one or more simultaneous MIDI events.
+
+[Transcript missing]
+
+There's a limitation that we don't want you to mix system-exclusive messages with other MIDI messages within a packet. About the variable length nature of these packets. The first half of the slide shows an incorrect example of how to read through a MIDI packet list.
+
+And what's incorrect about it is that it's treating that packet member of the structure as a fixed length object. It's just, you know, it's treating the packet list as an array of packets, but that doesn't work because the packets are variable length. So the right way to do it is to first get a pointer to the first packet in the packet list, walk through each of the packets in the list, and then you use a very efficient helper macro called MIDI packet next to get to the next packet in the list.
+
+and because these variable length structures are a little annoying to deal with, we've also provided some convenience functions for when you're building them up. There's MIDI packet list init and MIDI packet list add. The way they work in this example, We're creating a 1K buffer on the stack and casting it to a MIDI packet list.
+
+So basically we're saying, here's a MIDI packet list that can be up to 1K in size. Then with MIDI packet list in it, we're setting it up so that it contains no packets. We're getting back a pointer to the first empty packet in the list. Then when we call MIDI packet list add to add a node on event, that node on event with its timestamp gets appended to the packet list.
+
+And if we have an array or if we have a list of 50 nodes that we want to add or other events, 50 events that we want to add to this packet list, we can successfully attempt to call MIDI packet list add until it returns null in curr packet. And that's our clue that the packet has become full and it's time to send it. So that's a useful way to build up a packet dynamically with correct syntax. And this is just a summary of the last two slides, the convenience functions.
+
+Okay, now that we've looked at the actual format of our MIDI data and we know about the MIDI endpoints and sources and destinations that we see in the system, we can look at the functions for getting information about those sources and destinations and actually communicating with them. This example here shows the two functions for iterating through all of the MIDI destinations in the system. There's MIDI_GET_NUMBER_OF_DESTINATIONS and MIDI_GET_DESTINATION, which just takes an index as its argument, a zero-based index.
+
+And in this example, we're calling MIDI send, which is the basic I want to send MIDI function, obviously. It's MIDI sends first argument is the output port that you created at the beginning of your program. The second argument is a destination. And the third argument is a MIDI packet list. So in this example, we're sending some arbitrary MIDI packet list to all of the destinations in the system.
+
+And here's a pretty parallel example of how to find all the MIDI sources in the system and establish input connections to them. The calls to iterate through the sources are MIDI get number of sources and MIDI get source. And input's a little different from output in that we can always send to any destination. There's no big deal about that.
+
+But when we want to get input from a source, we have to tell the system, I want to listen to that source. Because otherwise, we might have a situation where three or four MIDI programs are running, and there are five MIDI controllers connected, and someone's banging on all those controllers, and yet each program only wants to be listening to one of them.
+
+And it's best for system overhead if clients are only delivered messages from the sources that they're actually interested in listening to. So we require, before a client gets any input, that it will explicitly ask for input from that source. So that's what that call MIDI port connect source does. There's a parallel call MIDI port disconnect source. The last argument to MIDI port connect source is, a reference constant, which will come back to your read proc. And if you'll recall, the read proc was an argument when you set up your input port.
+
+So at the bottom there's the prototype for the MIDI read proc, which is your callback function to receive MIDI. It gets called back in a very high priority thread that gets created on your behalf by the core MIDI framework. You need to be aware of any possible synchronization issues with the data that you're accessing in that thread.
+
+Okay, so we've looked at how to walk through the sources and destinations in the system and send and receive MIDI to them. We can also look at the higher level structures in the system, which are the devices and entities that the drivers created. Using MIDI get number of devices, MIDI get device, MIDI get number of entities, and MIDI get entity. That's all really pretty straightforward.
+
+So why would you want to do that? There are times when you want to walk through the endpoints, the actual MIDI sources and destinations, and those will exclude the endpoints of any device which is temporarily absent from the system, which is good. It will include virtual endpoints created by other applications, which is good. And that's what you want to do when you're trying to figure out what sources and destinations you can talk to.
+
+Now, there are other times when you might want to draw the user a picture of what's out there. You know, I see this device, I see that device, it's got these entities in it, and so forth. And that's when you would walk through the devices and entities in the system. You will see the devices which might be temporarily absent. You won't see any virtual endpoints because they're not really associated with any devices at all. And so again, that's useful if you want to present some sort of configuration. configuration view of the system.
+
+So speaking of devices, entities, and endpoints, they all have these properties. The core audio framework has properties on devices. As we saw, the audio units have properties. This is a concept that we've used rather pervasively as a way to extensively add information about the objects in the system. Typically, drivers will set attributes or properties on their objects when they create them. And typically, applications will just read these attributes. But the system is extensible in that applications can add their own custom properties to devices if they want to do that.
+
+An important feature of the property system is that properties are inherited down the hierarchy from devices to entities to endpoints. So in this example, you can see that the device, the entity, and the endpoint all have different names. The device's name is X999. The entity's name is port1, and the endpoint's name is port1n.
+
+But you can see that the manufacturer and model name are defined by the device, and neither the entity nor the endpoint override those properties. And so you could ask the endpoint, what is your manufacturer? And it would say, well, I don't know, but I know that my device's manufacturer is XCorp, so I guess that's mine. and similarly the endpoint is inheriting the SysX ID of 17 from the entity.
+
+So some of the common properties that we define are obviously the name of the entity or object. Devices have manufacturer and model names and SysX IDs, as I just mentioned in the previous example. Some other slightly obscure but actually kind of important properties that I'll get into a little later are the maximum transmission speed to a device.
+
+And this is important when you're sending SysEx because MIDI is a one-way protocol in a lot of cases. In a lot of cases, there are devices that you send, you know, 100K of samples to, and you just expect it to catch them all. And you're not going to have any way of knowing from the sending end whether it actually got it or not.
+
+Before we had high-speed transport media other than the MIDI cable, this wasn't really an issue because the MIDI cable could only go at its speed. But now that we have things like USB devices in between our computer and our MIDI cables, it's important that the computer not send more than 31,250 bytes per second, the speed of MIDI, to an old MIDI device.
+
+So that's a property of a device that we can interrogate, and I'll show you some examples of using that a bit later. Another property that you may see... on some devices is a request from its driver that you schedule its events a little bit ahead of time for it. And that's something else I'll get into in a moment.
+
+So continuing just on properties in general, here's an example of how to get a string property of a device. We use MIDI object get string property, and that works for any of the objects in the hierarchy, devices, endpoints, or entities. We're passing the K MIDI property name constant to say which property we want. We're getting back a core foundation string, CF name in this example, converting it to a C string and using printf to put it on the console.
+
+One important thing that's illustrated here is that a number of the MIDI calls, I think it's all in the property world, will return core foundation objects. And when you get a core foundation object back from a MIDI API, it's your responsibility to release it because you're being given a new reference to it.
+
+But fortunately, things are a little easier with numeric properties because we just simply return a signed integer for things like this property here, which is the advanced scheduling time in microseconds for a device. And this is what I referred to a moment ago about how some drivers wish, when possible, for you to schedule their output a little bit into the future.
+
+I will talk about that in a moment, but first we have to understand how the MIDI system expresses time. We have a type called a MIDI timestamp, which is simply an unsigned 64-bit integer. It's equivalent to host time, I'm sorry, uptime, except that uptime returns a structure containing two 32-bit values that you have to... We've chosen to use 64-bit integers because you end up doing a lot of math with these numbers and it's no fun converting them to structures in Mac.
+
+So we've got our own versions of these calls that used to be in driver services to get the current host time and to convert it back and forth to nanoseconds. And again, the host time is what in the old days we called uptime. I guess you can still call it uptime, but we call it the host time. That's the basic timestamp that we use everywhere in the MIDI services.
+
+So when we schedule our MIDI output, we can either say send it right now by passing a timestamp of zero, or you can say I want to schedule this at some time in the future using a MIDI timestamp. And what that will do is in the server process, it will add the event or events to a schedule. This schedule runs in a Mach real-time priority thread, which means it wakes up really darn close to when it's supposed to and will propagate your outgoing MIDI message to the driver to be sent.
+
+One thing to be aware of is that you shouldn't schedule further in advance than you're willing to really commit to, because at the moment there isn't a way to unschedule anything. So if the user clicks stop and you've scheduled two minutes of MIDI to be played into the future, it's going to play unless you shut the whole system down. This is intended just to give you a tiny bit of breathing room. I would say 100 milliseconds is the outer bound of how far ahead you'd want to schedule.
+
+I'm aware of developers scheduling at smaller intervals. Anything over a couple of milliseconds will take a little bit of strain off the system and is helpful. It's not essential to do, but this is all in the interests of getting really highly precise timing out of MIDI hardware that supports scheduling in advance.
+
+and such devices that do have that feature of being able to accept scheduled output in advance will put that property for a minimum advance scheduling time on their devices. So you as an application writer can check that property and say, oh, okay, this guy wants his MIDI, you know, 1,500 microseconds in advance or whatever his number is.
+
+And that's your hint that you can make that piece of hardware perform better by giving it its data that much further in advance. Similarly, our incoming messages get time stamped with the same host clock time, audio get current hardware time. If you want to schedule your own timing tasks, you can use the multiprocessing services in Carbon.
+
+And I touched on this a couple slides ago. It's best to schedule your output a few milliseconds in advance and combine your multiple MIDI events that happen fairly close together in time with a single call to MIDI send. You don't have to do this. You're still going to be able to get pretty good performance without doing this.
+
+But when you do do this, you are reducing the system load and there's yet more CPU time available for other things like, you know, intense DSP operations. We are getting really good latencies, as I'm going to show you later on, in moving the data around from place to place. But it is more efficient when you can bunch up your messages just the tiniest bit.
+
+And these are some of the figures we're starting to see in some of our tests. Just in the software stack, the MIDI through time is usually well under one millisecond. And our scheduler wake up jitter is in the realm of 100 microseconds. So if you say I want the scheduler to wake up at such and such a time, these are tests I've run on my titanium power book here. That's around the time I'm seeing right now.
+
+Before I actually show you some demos that illustrate some of our timing, I'd like to touch on a couple of other things here. We have some inter-process communication features so that your app can create virtual sources and destinations which other apps, including your own, will see just as if they were regular sources and destinations.
+
+Here's an example of how to create a virtual source. You need to have that client ref that you created at the beginning of the program, my client. You give your source a name. You get back an endpoint reference to it. And when you want to emanate data from your virtual source, you make a call called MIDI received, which might seem like a strange name at first, but if you realize, okay, I'm mimicking what happens in a driver when it receives data from a real source, you can do that. You're saying, okay, I'm pretending I'm receiving data, but I'm a virtual source. So that's why it's called MIDI received. It's the same function a driver calls when it gets data from a real source.
+
+So you just pass out the virtual source endpoint and the packet list of data you want to send. And any clients who are listening to that virtual source will receive that data. Virtual destinations are the same but backwards. You create a virtual destination, pass it to your client, give it a name, and then you create a virtual destination. You pass it a read proc, which will get called when other clients send data to your virtual destination. We saw earlier in the talk how a read proc looks and how it gets called.
+
+And the other slightly obscure but kind of important thing to go over here is what happens when you need to send large system exclusive messages, as is common in patch librarian and sample transfer applications. You basically need to slow down how fast you're sending the data from the computer.
+
+And there's two ways to do that. One is to check that property on the device, KMIDI property max SysX speed, and do your own math to break up the message into chunks so that over time you say, okay, every second I'm not going to send more than 3,125 bytes. That's one way to do it. Another way to do it is to call MIDI send SysX, which runs its own little thread and does that for you. Here's a brief example of how to do that.
+
+This function is an example of how to call MIDI Send SysX. You fill out a MIDI Send SysX request structure with your destination, a pointer to your system exclusive message, its length, and a pointer to a completion function that will get called when the last bit of that message has been sent.
+
+Then you call midi send sysx, passing it your request, and it will go off and asynchronously go send that data. As with all asynchronous functions like this, and those of you who've been programming Macintosh for a long time all know about the problems of param blocks with asynchronous calls, you want to keep around that sysx send request until it's completed.
+
+You know, this was a bad example in that it's a local variable and I'm only vindicated by the fact that I'm actually pulling at the end of the function to see if the request is complete before I'm allowing that request to fall off the stack. More typically you might put the send request in a global variable or somewhere else it's going to persist beyond the function in which you call midi send sysx.
+
+As you saw when I was polling at the end of the function on the complete member of that structure, You can look at that to tell when the function is complete. You can also look at the number of bytes to send because if you initially said I want to send 1,000 bytes, as those bytes actually get sent, that number in the structure will decrement. So you can watch the progress if you want to put up a progress bar.
+
+and David But going back to the complete flag, you can set that to true and the system will say, "Okay, I'm not going to send any more of this." You can abort the request. And the core MIDI framework will implement this by running a medium priority thread within your app. It's a little higher priority than your user interface, but it's not a Mach real-time thread by any means. Okay, let's go over to the demo machine, please. I have two or three things I'd like to show you here.
+
+This is a program that will play audio. If I just say... And I can have it play just directly to the audio how. Using the hardware timing characteristics and play that sound file as it really should be. But I can also play this audio file synchronized to MIDI timecode in this example program.
+
+Since I don't have a MIDI timecode source piece of hardware that was easy to carry here, this is the least gear I've ever taken to a gig. And so we have in this window here, and David A virtual source, which is a MIDI timecode generator. And as we see here in the video, Playback Controller, we have two choices of sync source.
+
+We have the SK500, which won't send us any MIDI timecode and won't let us sync. But we also have this virtual destination sync source. So this is stopped. I can start the file player and it's not going to start playing because I haven't started the MIDI timecode yet. This is unplugged. I'm going to plug it in right now, OK? Got it now? So that's playing back synchronized to the MIDI timecode. I can very speed it. I can slow down the rate.
+
+[Transcript missing]
+
+and Bobby Tavanian's keynote. I've been adding features to it since then. We've got several components here. At the top, we just have a simple MIDI through generator. Here we have a MIDI file player. It can send through to the Mac OS X music synth, which is the DLS, the downloadable sample synth that Chris mentioned in his talk. So let's just open a MIDI file and send it to the internal synth.
+
+What's interesting about this is that this MIDI file player was designed for playing to external hardware. So it's waking up and saying, "Play this now!" And the software synth is responding that quickly. We've got it programmed to be processing in 64 sample frame chunks, which is every one and a half milliseconds. Another little thing I'd like to show you is that this is my new feature in the program. I wrote a little MIDI arpeggiator.
+
+[Transcript missing]
+
+The impressive thing about this to me is that if I set it up with some drum sounds, we can start to get a sense of how precisely the Mac is spitting out the sound. I don't know if I want to have fun with that. Thank you.
+
+So here I'd like to trigger some sounds being locally played here. Let me make sure I have local control on. Can you tell me for sure that both the computer and the keyboard are getting level right now? Okay, here we go. Now this is the computer alone. Pretty similar on both of them and is really percussive. Okay, this is the Macintosh alone.
+
+[Transcript missing]
+
+On this test, I'm playing a sound on the piano keyboard. The lower graph is the note just being triggered from the keyboard. The upper graph, That note is traveling over USB from the keyboard to the computer, into I/O Kit, up to the MIDI server process, up to a MIDI through application, back down to the MIDI server, back down through I/O Kit in the kernel, back over USB to the keyboard. And we're getting one to two milliseconds of delay between those two notes.
+
+This is the one I meant to show you first. Here I was triggering-- actually, this is a slightly different test. I lied. This is a different test I did yesterday. But here I'm triggering both a square wave being synthesized through the audio HAL. The Roland keyboard playing a rim shot. And I'm taking excruciating steps to make sure that they're being triggered at the exact same time.
+
+So from that time, We're only hearing one millisecond of difference between when the sound comes out of the Macintosh and when the sound comes out of the synthesizer. The synthesizer being triggered by MIDI is getting it first and, you know, it's optimized for this kind of thing. But it's still only in the realm of under two milliseconds between the time we're telling the computer, play this bit of audio, and the time it comes out the speaker. I think that's pretty impressive. I think it's a testimony to the guys in the kernel and the IOCit team. It's just an amazing system and I'm really proud of what they've done. It's made it all possible for us.
+
+So to sum up here, the MIDI services are available in system 10.0.x. There is some existing documentation in the framework header files. I believe one of them is currently HeaderDoc'd. The application one, the driver one, is a little sketchier. But all that's about to change. At least on the application side, we're going to have some really extensive documentation.
+
+Those of you who are working on hardware, there's an example driver. And you can get in touch with developer relations and us, and we can help you with problems if you have questions about driver documentation. There are some examples in developer examples, core audio MIDI. As Bill has been mentioning, we are getting an SDK out soon. We're hoping to improve our documentation. There should be some more out really soon now. Thank you very much.
+
+If we can have the slides machine up, that would be good. I have just a brief walkthrough of some of the Java code that does a similar thing to what Doug's demo did, just to sort of see the MIDI side of what I showed last session, and then we'll do some Q&A.
+
+It'll
+
+[Transcript missing]
+
+Then I'm going to look to see if there's a note on or a note off command, and basically just send that to the synth. If it's not a note on or note off command, then I'm going to do some parsing based on the MIDI spec of whether it's going to have a two- or three-byte data segment to it, and then just send that. Then all I do is send that MIDI event to the music synth. It's a fairly simple code to just pull the MIDI data out of that packet.
+
+There could be more than one MIDI message in that packet, so there's a little bit of work you have to do to just parse it. Then I just send that MIDI data. If you look at the interface of the program, it lets you do some alternate stuff on channels. It lets you do some stuff with transposing the data and all that kind of stuff.
+
+This example is a little bit revised from what's available in your developer section of your CD, and we'll put this up on the website as part of the SDM. You can go to the CDK next week to help you along with the Java stuff. It's actually pretty similar to the C stuff anyway. If we could just go back to slides very quickly.
+
+So that's just the same thing as I went through last session. There's Java doc available for this as well. And it's really architectural rather than language sort of specific documentation that we're generating that will be available on the website. And the Java API presents the same functionality as the C API.
+
+Resources, we've got a mailing list, list.apple.com, and there's also developer website, developer.apple.com/audio. We're still in the process of getting that website up, so if you look at it today or over the weekend, it may not be the same as what it will be next week. So you might want to check next week as well.
+
+And we'll be getting stuff out. There's some related session information, and as with the end of Friday, DVD people, you should look at it. Freeze, pause that frame. If you're doing any hardware development, FireWire USB, if you're doing any sort of PCI development that's got to do with audio, you can contact Craig Keithley. He's the developer relations person for that. If you're interested in getting access for seeding, you can contact us at audio@apple.com. And I'd like to thank you all very much for coming, especially late Friday afternoon.

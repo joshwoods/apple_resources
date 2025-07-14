@@ -1,0 +1,243 @@
+---
+Title:  WebObjects EOF - Advanced Topics
+Year:   2003
+Web:    https://nonstrict.eu/wwdcindex/wwdc2003/616/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+My name is Ben Trumbull and I'm a senior engineer with the Development Technologies Group here at Apple and Steve Minehr is going to be assisting us with some demos and he's one of our fellow engineers. So this year we're going to try to do something a little bit different. We're going to try to provide a brief overview of a variety of topics, some topics that have challenged you in the past. So last year we talked about some things with validation and key value coding, and we're going to try to just skip over all that stuff.
+
+So basically this session isn't about anything. You can find the documentation for the most part. And the documentation of particular relevance to this particular topic, EOF, is going to be the 5.2 Delta documentation, and I believe they call it What's New in 5.2 on the website, and the EOF Developer Guide. So can I have a show of hands of who's actually read the republished EOF Developer Guide? It was redone, rewritten this February? So Brent Shank and all the people in TechPubs did a fantastic job rewriting this. It includes most of the material.
+
+It includes most of the material from last year's advanced session, so we're going to have to keep pushing further. So when I said a brief overview, we've got about five slides for all the multithraded programming. This is going to go pretty quick. It's really more about identifying obstacles and getting you to ask the right questions. And then you can go back to documentation or community resource, one of the mailing lists, to get more information. So first on our agenda is memory management in EOF.
+
+We're going to assume you know something about how garbage collection works in Java and the difference between strong and weak references. Some interesting point is you can create your own subclass for weak reference, and EOF does this. It's a handy little trick. EOF also uses a mechanism called faults, and faults are Enterprise Objects that have not been initialized yet.
+
+So they're lazy initialization at work, and they provide assistance in memory management as the boundary for the active object graph. So everything beyond the fault is not fetched from the database. Deferred faults are a special kind of fault used in too many relationships, and they're significantly more memory efficient because until you touch them the first time, they are empty. They don't have anything. They're just a little fault.
+
+And then they grow to expand to include one fault for each object in the too many relationship. And finally, shared ending contexts, another mechanism you can use to reduce your memory. And it's probably best to think of these as read-only object stores, and we'll talk more about that later.
+
+So a lot of changes went into 5.2 sort of under the hood, so hopefully not too much API impact on you, but a lot of things did happen. And the first is a lot of complaints about editing contexts using strong references to their Enterprise Objects. This has been changed. Enterprise Objects are now held with weak references, so the garbage collector can come along and just start pruning the object graph of things that you're no longer accessing directly. Only modified objects, so things that are inserted, deleted, or updated are still retained.
+
+And Enterprise Objects have a reference back to their editing context now and it will hold the editing context in memory until it's done using it. So you have to be careful not to have any Enterprise Objects floating around, but this is better than previous years where if the editing context got garbage collected first, the Enterprise Object was no longer very useful.
+
+Consequence of these changes is that the registered objects method is not really useful. Since these objects are going to be pruned just sort of randomly by the garbage collecting thread, you can't account on anything still being there. I know people in the past have bound their woke components to this method to just grab everything in the editing context. You really are never going to know what you get.
+
+If you want to lock an object graph into memory, you can use set retains registered objects on an editing context. And you can only do this when the editing context doesn't have any objects in it, but that will change the way it works and it will hold everything with strong reference. And shared editing contexts always use strong references, otherwise they wouldn't be very useful.
+
+So a bit about faulting. Something many people don't realize is that the size of your fault is the same as the size of the Enterprise Object that it represents. Deferred faults, as I mentioned earlier, are significantly more memory efficient than the too many relationships they represent. And Enterprise Objects can extend EO Generic Record to transparently inherit the deferred faulting feature. If you subclass directly from EO Custom Object, you're not going to get deferred faulting by default.
+
+And Awake from Fetch and Awake from Insertion. So this is on the faulting page because faults are constructed the same way Enterprise Objects are. And this is due to strong typing in Java. So we've got to create a new Enterprise Object when we're creating a fault and vice versa.
+
+This means that if you have a constructor on your Enterprise Object, you're going to start doing things while we're faulting. This is bad. It defeats the purpose of lazy initialization. In addition, when the fault gets fired, that's when EOF thinks that it's going to finish the initialization. So it's going to overwrite stuff and it might just ignore things completely.
+
+And typically, at the time that the constructor in an Enterprise Object is invoked by the VM, that object is not inserted into the editing context. So that means any changes you make in there aren't going to get noticed by the editing context. And that breaks pretty much everything. So you really, really have to use Awake from Fetch and Awake from Insertion.
+
+So some basic memory optimizations. Blobs and clobs should be factored into their own tables and accessed through a relationship. And then the relationship can be faulted and keep the in-memory object graph as small as possible. Some other things that some people do, you know, you don't want to over-optimize too early, but having too many relationships not be a class property can be very helpful. So there's a lot of overhead in managing a relationship, or there can be, particularly for a very large too many. So if you don't need both sides of the relationship between two related EOs, you can have it be a unidirectional relationship instead of bidirectional.
+
+And you can put rarely used attributes across the relationship the same way you would with a blob or a clob. And you can replace the too many entirely with a fetch. And one of the nice things about this is it can be vended as a Java method. And to key value coding and the rest of EOF, it looks exactly like a property on your Enterprise Object. But instead, it can be a hand-coded fetch that's doing something special. Thank you.
+
+So shared editing context. I like to think of this as probably one of the most badly named classes in EOF. And it's not that it's too long or too short, and it's not that technically it's not a shared editing context. It is. Unfortunately, The best behavior is a read-only object store.
+
+It's not really an editing context, and if you try to use it just like an editing context, you're going to run into some problems. And if you try to use it as a shared area of read/write EOs, you're also going to run into some problems. It's best is using read-only EOs in here, and then you can modify other EOs related to them in your regular editing contexts. The main advantage of this, despite those complications, is you get to reuse the memory for the entire Enterprise Object instead of just the row-level snapshots, which is what normally happens between editing contexts.
+
+And it's very important not to have outgoing relationships. So if you have a relationship coming from a shared EO going into an EO in a regular editing context, EOF will be very unhappy with you. And shared editing contexts and regular editing contexts should all use the same object store coordinator. So we'll touch more on that in a sec.
+
+So you've got a million EOs. The most important advice I can give you is to divide the operations into batches. Most users are not going to interact with a million EOs at the same time anyway, and if they're browsing through a result set, they're probably only going to browse the first few sets before they get bored.
+
+So that's the best advice. You can use raw rows, and you can fetch back just the primary keys or some other subset of the EO so you don't have to bring the full EO into memory. And Project Wonder already has some of this stuff done for you, so you can use their fetch specification batch iterator to do batching, and it basically actually incorporates all these ideas, and it gives tons of stuff in Project Wonder.
+
+So a more advanced technique that you can use is you can intercept the rows as they're being fetched at the adapter level. And you can use a custom JDBC channel subclass. You can override fetchRow, and as you're going through, you can use a row and then throw it away.
+
+And in this way, EOF will not keep all of the results set in memory. And Dave Newman, who was one of the speakers for the previous session, actually has done this and got an order of magnitude improvement in peak memory use for one of his reporting tools. So it works.
+
+Okay, so next on our agenda is data freshness. EOF is a big cache, and it's caching the rows from your database. And editing contexts build an object graph mapping on top of this cache. So data freshness is about when and how to refresh those cache lines, and in EOF we call them snapshots.
+
+Refaulting is about taking an Enterprise Object and turning it back into an uninitialized fault. This is an important mechanism for saving memory as it prunes entire branches out of the object graph. Invalidating is a little bit like refaulting, and a lot of people get the two mixed up.
+
+The main difference is unlike gently shearing the object graph, you're using a chainsaw. Fetch timestamps measure staleness for those snapshots, and the EO database object is the cache object that you can work with, and you can get at it through the EO database context through your object store coordinator.
+
+So just to really kind of home in on why refaulting is much better than invalidation, refaulting affects only one editing context. There are no notifications, no effect on other editing contexts or other user sessions. The existing snapshot gets reused if it's fresh enough, and there's no trip back to the database. So it's much more gentle on your performance. Now, if the snapshot's too stale, then it will have to go back to the database, refetch that row, and get you something that's fresh enough for your configuration. and that will post a notification.
+
+Invalidating affects the whole stack. It affects everyone using that object store coordinator. Editing context can lose changes for that object because you've just smashed it, and the snapshot will be discarded, and the next time any editing context touches that object, which is now a fault, a round trip to the database will occur.
+
+Now, sometimes you do have to invalidate, so some things to keep in mind. You really don't want to end up in a position where you've basically invalidated a lot of objects. They're now faults, and you're going through and you're telling EOF one at a time and firing those faults to go back to the database, because that's going to cause thousands of round trips to the database. That's something you want to avoid.
+
+Batch faulting in your relationship can help immorality some of this, but really a manual fetch with an object to fetch specification is probably the best way to go. You invalidate a set of objects that you know about, and then you go and you do a fetch for the working set that you expect to be using next. And this way, you're going to minimize faulting. And prefetch and keypass are extremely useful for doing this and grabbing a whole lot of data at once.
+
+So Refresh Object, I believe this is introduced in 5.1. It's a smarter refault object. It merges changes back into the Enterprise Object in that editing context. So it'll pick up any changes that occurred to the snapshot. It skips over inserts, which can't be refaulted, and it reuses the existing row snapshot unless it's too stale.
+
+So the most important thing to understand about fetch timestamps is they just don't work the way you want them to. Fetch timestamp lag is relative, and it defaults to one hour. And you're not really going to have a whole lot of interaction with this. But what this means is when a new edit context gets created, its fetch timestamp gets set to one hour ago. And that's all the data it considers fresh enough. So those fetch timestamps are always absolute, like June 25th, 4.15 p.m., if we created an edit context right about now.
+
+And no matter how long the edit context stays around, say three days in your application, it's going to consider all the data since June 25th, 4.15 p.m., to be fresh enough. Most people don't want that. And right now, you're going to have to work around it by periodically resetting the fetch timestamp.
+
+A good place to do that is in session awake. That's a great time, a callback. You know the user is now interacting with that default session editing context again. You can also refresh rows with a fetch specification and setting the setRefreshedObject flag. And did I mention prefetching? It's a great way to get lots of data at once.
+
+So another advanced technique, and I haven't seen very many people do this. The EOF database is your snapshot cache, and EOF is a big cache. So by directly manipulating this object, you can do some pretty cool things and really improve performance. You can cheat at faulting. If you've gotten a row back from the database using raw rows or one customer used some custom JDBC code, writing raw JDBC code, he implemented a cursor, pulled that stuff back, and now he sets those rows into EOF. He records the snapshot, calls fault for global ID, and he's good to go. You can also preflight a too-many relationship.
+
+This is particularly useful for inserted EOs. So inserted EOs begin life with a too-many fault, and most of the time, that fault, when it goes to the database, there aren't going to be any records there because it's a brand-new EO. Sometimes it could be if you've got multiple writers, but for the most part, those relationships tend to be empty.
+
+But EOF doesn't know that. So the first time you touch that fault, you modify that newly saved object. It's going to fire. It's going to go to the database, and it could be -- there could be a lot of records there, so you might want to just skip that. And you can use record snapshot for source global ID to do that.
+
+And to refresh a too-many snapshot, a lot of people ask questions about this, so pass in null, and that will blow away the snapshot for that too-many relationship, and then it will be refetched. And you have to remember to lock and unlock the object store coordinator, and that's the one that's associated with the database context that's using this EO database object. Okay, so we're going to spend some time with optimistic locking now. There's an entire chapter on optimistic locking in the new EOF Developer Guide, Update Strategies, and mostly the subject is about dealing with multiple writers affecting the same data.
+
+Basically, it's about cache validity and what to do when multiple people change the same thing. And this can happen when you've got deployments with multiple WebObjects instances. If you're using a single application, you've got multiple EO Objects or coordinators, they're going to have their own channels to the database, and they can make changes that interact with each other. Or you have external writers, someone who's got an admin app that's doing raw SQL or something outside your control.
+
+So the material we just talked about in data freshness is pretty important in avoiding this problem. Obviously, if you don't ever modify stale data, you're going to be much better off. So you can tweak your fetch timestamps to keep the data fresh enough. If you keep the data too fresh, then you have performance problems as you're always going back to the database.
+
+And you can also implement code to propagate a distributed notification. However, EOF does not at this time implement distributed notifications itself. There are a variety of third-party solutions, and here are two, one from Wirehose and one from Project Wonder, and they're both free, so you can check those out.
+
+Recovering from this problem, basically you have to catch an EO General Adapter exception. We're going to have a demo and I'll show you where that is. It's also in the developer guide. But basically that's your hook for implementing a recovery specific to your application because EOF doesn't know if you want to have the first save win, the last save win, you want to do a merge. It's really specific to what you're doing.
+
+The EO adapter operation in the User Info Dictionary, that exception, is one of the most important parts. It's got the attempted row changes and operation type code, so inserted, updated, deleted, or locked. And then the EO database operation has a reference to the Enterprise Object as well as the out-of-sync stale snapshot.
+
+And as you're recovering from an optimistic locking exception, keep in mind that refaulting is going to remove that EO from the updated lists. So if it's a deleted or updated object, it's just going to get refaulted and the editing context is going to forget about that. And you can't refault a newly inserted Enterprise Object. So it's best to basically pull out the deltas from the Enterprise Object, refault it, and then apply those deltas again. And in the process of applying those deltas again, the editing context will notice that the object has changed again.
+
+So we're going to go to demo two now. And something new in WebObjects 5.2 is multiple channels to the database. You can do simultaneous operations. We're going to talk a little bit more about this later. But basically, you're just creating your own object store coordinator, and we've got a new thread here.
+
+And I'm doing something pretty simple just to show you how to recover from an optimistic locking exception. And in my application constructor, I just create this new thread. So first you're going to want to do the save and catch the general adapter exception. And then you're going to have to check the user info dictionary to find out whether or not it's actually an optimistic locking exception or something else entirely.
+
+So you can do that by getting this key out of the dictionary and then checking. Handy little method. This is documented, but it is a little obtuse, so I'll go through all of it. When you handle all of this, you want to get the adapter operation out of that user info dictionary, which has got everything just sort of jumbled together. And from that adapter operation, you get the operation type code, which you can use to decide what you want to do, as well as the database operation here. And the database operation has your failed EO.
+
+You can get a delta dictionary from the adapter operation and the current snapshot from the database operation. And I believe in this example I just assume I'm using the session's default editing context, but you can pull the editing context off of the Enterprise Object itself if you want to.
+
+And our recovery mechanism is just last write wins. What you see here, we grabbed the delta above from the adapter operation, we refault the object, and this line we just used for our component, we reapply the changes, and we'll go back and save again because it's in a little loop.
+
+So this is just using the real estate example framework. And housing prices aren't really going up very much anymore. They used to be going up more. And so these are a whole bunch of things that our background thread decided to change while we were working at it. That's pretty much it. So we're going to go back to slides.
+
+Next we're going to talk about multithreading in EOF. So there are a variety of good books available about multithreading in Java and we can't really go into just general multithreading in Java because that's a pretty big topic. Concurrent Programming in Java by Doug Lees in my library. It's a pretty good book and there are just a zillion of them.
+
+You probably want to pick up several. So some necessary concepts that we're just going to skip over: synchronized methods and synchronized blocks, try-finally blocks, and the wait and notify methods on object. And then the WebObjects 5.2 Delta doc on the What's New area has more information about locking issues specific to EOF.
+
+and David are all involved in the process. Java applications are always multithreaded, whether you like it or not. The object finalization thread, so this has nothing to do with WebObjects. The object finalization occurs in a separate thread. So if you have a finalizer, those finalizer methods are going to get executed in another thread. That's just the way it is. With WebObjects applications, there's also the session timeout thread, and that's also going to be doing EOF operations. And then there are timers, notifications, So here's proper use of try finally.
+
+You just want to lock the resource, do the try, use it. You really never want to mess with the lock object itself. It's extraordinarily difficult to do properly. It usually involves having another lock object just to manage it. It's kind of Heisenberg effect. So you pretty much want to leave those alone.
+
+So EOF's contract with you, and this is again talked more about in the Delta doc, is that you have to lock everything that you access directly. It's just the way it is. The locking, in addition to everything else it does, helps keep EOF informed about what resources you're using at any given time. The NSLocking interface is for all the objects that support thread-safe use. Objects that don't implement NSLocking, like NSRays and NSDictionary's, you're going to have to protect yourself, so you can just create an NSRecursiveLock to do that.
+
+Trylock is amazingly useful, and it's supported by NSRecursiveLock and EOEditingContext, two of the main interactions with locking. And what this lets you do is execute an operation only if you're certain you won't block. So that's great. You can queue up an operation, happen later if you think you will block, and it's used in the notification delivery mechanism.
+
+Control slash or kill dash quit to the process ID produces a stack trace of every thread in the JVM and I can't recommend this too highly. It's a phenomenal debugging aid. You get to see what all the threads are doing. The JVM will tell you which locks they're waiting on. It's really the only reason I'm still here. Optimize It and JProbe are both commercial products. They can help you debug multithreading issues and they also support memory performance and CPU performance profiling. So they're really great products. You can check them out.
+
+The main lock you're going to interact with in EOF is on the editing context. This controls all kinds of things. Now, it's true that nested editing contexts share the same lock as their parent. However, you still have to lock it. This is the contract that you have with EOF and EOF has with you.
+
+Basically, the only consequence of this that you can depend on is multiple threads can't come in and use the same hierarchy of nested editing contexts at the same time. You can't cheat at locking this way. Well, you can try, but... Shared Edit Context Lock themselves, and they're the only objects in EOF to do so.
+
+Otherwise, it just gets to be a nightmare to maintain them. But basically, they're the only object in EOF to do this, and it's really important to lock everything else. You always have to lock the editing context before you access any of its Enterprise Objects. So even operations you think would be read-only or sort of intrinsically thread-safe, they're not. There's faulting going on behind your back.
+
+There's a lot of caching in the frameworks themselves that's going on, a lot of transparent operations to keep the object graph maintained, to keep memory down. You just have to lock everything. And the EO Object Store Coordinators will lock all of their cooperating object stores if you ask them to lock directly, and those are usually your database contexts.
+
+So what you see here is a threads view of the EOF stack. The EO Object Store Coordinator is the focal point. It's sort of the center of mass for EOF. And it serves as a mediator between the EO control and the EO access layers. This diagram is a little oversimplified. There are callbacks and delegates and stuff. But this is your basic idea of how threading works in EOF. And the Object Store Coordinator is the center of it all.
+
+So multithreading in EOF, there are a couple remaining bottlenecks. The critical sections in these classes tend to be very small, but if you're doing something that does a lot of models or entity work, you're parsing models or you're creating your own models on the fly, you should be aware that there are some concurrency implications there. And the allows concurrent request handling flag only affects WebObjects, the WebObjects Framework, not WebObjects and EOF. This affects how requests are dispatched to both sessions and direct actions and any other request handlers you have. And it has no effect on EOF.
+
+So like I said, both the Object Finalizer thread and the Session Timeout thread are going to be doing EOF operations whether you like it or not, and this is to deal with memory management and snapshots and a bunch of other things. So it's really important to keep the editing context locked properly.
+
+One thing I have seen some customers do is they lock an editing context, they use it to do one little thing and then they unlock it. You can lock it for as long as you need to. If you're not going to share that editing context with another thread, you can just keep it locked. You don't have to make the locks really fine-grained. That's the point of implementing these locks on these objects is to allow you the flexibility to control the grain of the locking.
+
+So my life might have purpose. Some stuff that I learned painfully while working on EOF. Non-parallel locks are like debts. If you've got more than three locks and they're all somehow related, you will regret it. Intersecting locks increase the probability of deadlock. So the more locks that any thread needs to acquire to get its work done, the greater likelihood some bug is going to come along and cause your application to deadlock.
+
+Because some threads will have some of the locks and some threads will have other locks. And this is a permutation that increases combinatorially. It's ugly. And unfortunately, these apps tend to work very well in development and not so well in deployment under high stress after many days. So those are kinds of bugs I like to avoid.
+
+Something that a lot of people don't realize is the synchronized method and the synchronized block, these are their own implicit lock object. And it's on either that Java lang object or the Java class that you're working on, depending on the kind of synchronized statement. So you can deadlock with these and you can crosslock with the synchronized statement and an actual lock object.
+
+And if you come in and you block inside a synchronized block, you do some I/O or you try to grab a different lock, no other thread is going to be able to do anything involving that object with that synchronized. So it's not going to be able to execute any synchronized methods, not even the little one-line setters and getters. And that's usually not what people intend to have happen. So if you're going to lock for something that you expect might block, like either acquiring a new lock, doing some I/O, something expensive, you should do it outside a synchronized scope.
+
+And you can use the NS recursive lock. I prefer that because it allows you to use the try finally syntax regardless of what the call stack looks like. So you can just keep invoking methods recursively or not. Or you can use Java's wait notify protocol if you feel comfortable with that.
+
+Okay, so we're going to talk about a new feature in WebObjects 5.2, and this is concurrent database access. and that's putting all those new threads that you've learned how to create to use and to do a bunch of things simultaneously with your database. As the diagram showed, the EO Object Store Coordinator is the root of everything in the EOF in terms of threading. So each EO Object Store Coordinator has its own stack underneath it, its own set of locks, its own database channels, and its own snapshot cache.
+
+So they're extremely independent. Notifications between them don't -- well, there are no notifications in between them, so they're very independent. It's pretty easy to do. Just create a new one, pass it on to the constructor for your editing context. You can also change the default object store coordinator.
+
+and I believe in Project Wonder there's now an object store coordinator pool you can use. So you can use these independent stacks any way you'd like, but there are some benefits to using raw row operations with these stacks. And that's there's no overhead from duplicated snapshots so there's less memory use. And you're not worried about propagating notifications. The actual concurrency is throttled by your database, so you have to make sure that your database is set up to keep adding more channels.
+
+All right. And we're on to raw rows. So these are the lowest level operations you can use in EOF. And they allow you to bypass the entire EOF control layer. They'll return a result set in NSArray of NSDictionary's. And each raw row is itself an NSDictionary. There's no object graph management, no undo/redo, no relationships, no faulting, which may be good. And there's no row caching. And you can use hand-coded SQL.
+
+So the EOF fetch specification, you can just take a fetch specification, you set this flag, and you'll get back raw rows instead of Enterprise Objects. Really easy to do, probably the best way to get started. You can also pass in the custom SQL hint, and this will allow you to pass in optimized SQL, something specific to your database, or you can do something that EOF won't generate automatically for you. My other favorite is raw rows for SQL, really easy to use, and there are a bunch of other areas in EOF where you can interact at this level.
+
+So some things to keep in mind while you're using raw rows is that both Enterprise Objects and Dictionaries implement NSKeyValue coding. So you can make instance variables type to NSKeyValue coding the interface, and then as you're processing the results from either an Enterprise Objects request, a fetch, or a raw row fetch, those results can be displayed in the same code. So the same code path can reuse them. That's really useful with both components or UI layer work.
+
+You can promote raw rows into full EOs as long as you fetch the primary key attributes. And you can demote EOs back into their primary keys if you want to return to bare metal work. And the Think Movies example that ships with Valve Objects demonstrates these ideas. So it uses the primary key to do direct action-based work and there's no sessions.
+
+So there are a couple of features that EOF doesn't provide at this time, and you can use raw SQL to get these features. They're pretty handy. So there's in-qualification and null relationship qualification or sub-queries. And again, Project Wonder has got some of these things built in for you, so they're query operators for you, and it's a good reason to go check it out. And now Steve Mine is going to come up and give you a demonstration.
+
+Hi, thanks Ben. Alright, I have a demonstration here for how to execute SQL using the EOF stack. I've written a little SQL tool that just is similar to any command line tool that you might get from your database vendor. The advantage to my tool is I can use it with any model and if I don't have a local database vendor's SQL tool, I can use this to make changes to my database or just to explore a little bit on the data. Before I get into that, I want to show you the code. It's very easy to execute.
+
+[Transcript missing]
+
+You can add that model to a group, the EO Model Group. Take a look at that. That's just a way of grouping multiple models. You probably use that when you're developing your applications. The Model Group knows about all your entities across the set of models. You have to make sure you don't have any entity name conflicts within your group.
+
+So the next thing you have to do is collect an adapter. Given a model, you can always say adapter with model. That will instantiate the adapter and that allows you to make your connection to the database. The adapter context is your scope for your transactions. You don't have to interact too much with your adapter context, but the adapter context also allows you to create a channel. And a channel at the adapter level is the entity that, or the object that knows how to actually do a query to the database.
+
+So with that, just a few lines of code, you can get set up so you've opened a channel, now you have a way of talking directly to your database. I'm going to show you how the SQL command actually executes the SQL. and I will just slide down a bit.
+
+So given an adapter channel, There's just one line here that's going to execute SQL. Your SQL string is just a regular Java string. We have to convert that into an expression that an adapter channel knows how to use. So we ask the adapter for its expression factory, and the expression factory has a method called expression for string.
+
+That expression converts it into an expression that we just call evaluate expression on the adapter channel. That sends a SQL to the database. We get back a result set. Our results are going to be an array of dictionaries. So you can see here what we do is set up a mutable array.
+
+We have to tell the adapter channel what the result set is going to look like. I want to take a minute to show you how we specify that. I'll come back to that in a second. Once we've told the adapter channel what the result set will look like, we call fetchRow multiple times until we get back a null. Each of those rows is a dictionary. We're holding on to our own result set this way.
+
+When we're setting up the result set, there's one method in the adapter channel called describeResults. After you've made a query to the database, the database knows what the result set will look like. The adapter channel has a method called describeResults that's specialized for whatever adapter you happen to be using. It will create an NSArray of EO attributes. So, if you're doing raw SQL, the adapter channel doesn't know anything about any particular attributes. We have to synthesize, make new attributes on the fly to describe each of those result columns that are coming back.
+
+Now, one thing in normal EOF operations, we never have any name conflicts, but when you're doing raw SQL, your result dictionaries are going to use the column labels that the database gives us. In SQL, there's... the results are returned by position, so there's not any problem with name conflicts.
+
+But if you're doing some complicated join, and two of those columns happen to have the same name, when we turn that into a dictionary, we're going to smash some values, because we're going to be using the same keys. So, I have a few lines of code here just to walk through the result set and change the attribute names if there's any conflicts. We can also use that a bit later to manipulate the result set so it's more convenient to use when you want to turn things back into real EOs.
+
+All right, so that's enough code to look at. Let's, what is that again? So now back to the demo. This command line tool, you can just type SQL to it, it executes it. There's a few other commands it knows about in dealing with your model. For the demo purposes, there's a command that I call demo that's going to load the commands from a text file so that way you won't have to watch me make any mistypes.
+
+So one reason you might want to use SQL is if you're generating some kind of report, you're doing something with SQL aggregate functions, or you're doing a complicated query that EOF doesn't have a facility or a way of expressing. If you're doing, in this case, we want to get the minimum value for revenue, the maximum value, and the average out of the movie table. So we execute that. We got back just a raw row that's a dictionary, and then you can see each of the labels and each of the results. For display purposes, I'm just running down the dictionary showing you the keys and the values.
+
+Another common thing is to ask for a count. Count* is kind of a special aggregate function in SQL. In this case, we want to take a look and find all the movies that start with the letter C. So we're going to get back just a result, a single dictionary, or a dictionary with a single entry, that's the count.
+
+You might do something like this if you want to customize your user interface according to how big the result set is. If you just have a few objects, you might display it one way. If you have millions of objects, you might want to do something different. We're going to come back to this a little bit later. I want to show you a bit of a trick, a way to do this by staying in the normal object world, using objects with fetch specification. This is how you do it in straight SQL.
+
+All right, so now we figured out what our count was. Now we want to actually go out and get some bits of those movie rows. In this case, I'm asking for the movie ID and for the title. That's useful if you're doing some kind of display list. We're getting back these dictionaries. They're not full EOs. We're not keeping any snapshots here, but you can put up a display of all the, say, titles. And because you're saving also the movie ID, you can convert those back into EOs later.
+
+Okay, so those were pretty simple SQL examples. You probably wouldn't need to execute straight SQL to do that. But a more complicated query in the EOF world is, in this case, find all the movies that have no director. I want to take a second, go back to EOModeler, and just remind you what the model looks like for movies.
+
+This is our basic example. We have a movie table, and it has basically a many-to-many relationship with the talent table. So any movie could have multiple directors, and of course any director could direct multiple movies. So when you're modeling that in a SQL relational database, you need a correlation table. In this case, we called it Director. So a director is just a pair of the movie ID and the talent ID. That allows us to form the many-to-many relationship.
+
+Back to our SQL. So the question is how do we find all the movies that have no director? If we were doing that with a normal fetch specification, well, we'd have to write some code actually in EOF. We'd have to get all the movies, check each of their directors' too many relationships, find all those with a count of zero.
+
+And that's perfectly easy to do, but if you have a large data set, that's going to do a bit of work in fetching all that information from the database. And in SQL, you can pretty much do that sort of thing in just one query. Here I'm doing a subquery and using the SQL in operator.
+
+So we want to find out all the movies that have a movie ID where that movie ID does not exist in the director table. That's the same thing as saying it has no directors. So we can just execute that directly. And again, I'm getting the title back just for display purposes. The main thing if you're doing something else with an EO is to get back that primary key, which is the movie ID here.
+
+Alright, so that was a fairly simple query. A little more complicated query: you want to find all the movies that have more than one director. Okay, this is a good one for all you sequel experts out there. You can think about this a bit. I came up with this line of sequel. What I'm doing here is joining the director table and the movie table.
+
+That basically kind of gives me all the director-movie pairs. Then I'm, for each of those directors that have directed a movie, I'm looking in the director table for anyone else who's directed that same movie. Okay, and I'm taking account of all those talent IDs where those movie IDs match.
+
+And that's in a subquery that I'm comparing that, so I'm saying greater than one, because I want to find all the movies that have more than one director. Okay, this would be, take the same kind of loop if you're just writing regular EOF code. You'd have to go fetch all the movies, fetch all the directors. And check their counts. So here we have six results. Again, I just fetched the titles and the movie IDs.
+
+Now, given any primary key, of course you can go select the right row. Here I want to select the movie given my primary key, so 111. Let's see what I get. This is a raw row now. I said select star. So when I say select star, I don't really have much control over the label in that dictionary. The database is then going to decide what labels to use. We're translating those labels into the keys for the result dictionary. Now you may notice that it's using all capital letters. That's typical for SQL. The labels are all caps.
+
+When I want to turn this back into a movie EO, I need to have a dictionary, a primary key dictionary, that matches the name of my attribute that was used in the primary key. So I need to change the key. And what I've done here in my little application, I've kept a small dictionary where I can do key mapping. So I'm going to say, okay, whenever you give me a result set, and I map that uppercase movie_id into movie_id, that'll give me a good result.
+
+All right, so I'm just going to execute that again. And you'll see the only difference here that matters, right, is I have a key here, the underscore movie ID. Now, another way to do this, often in SQL, if you're specifying your whole select list, you can say what label to use for any particular column that's coming back. And so you might just put a label there, call it movie ID, put it in double quotes so you control the case that way.
+
+But people have had a problem when they're doing raw rows for SQL. Sometimes they're doing a join, they get either name collisions or they get the wrong case on something. So in an upcoming update, there's going to be a new version of raw rows with SQL that gives you an extra parameter where you can specify the mapping for all those column names. That might make it a little easier to use.
+
+So, we said before we can select with SQL to get things, but you can also do a lot of this kind of stuff just in regular EOF using fetch specifications. So I want to show you here how to fetch an object using a primary key. Let me go back to the model and show you a fetch specification.
+
+So, in DeepFetch 1 Movie, this is used in the Think Movies example, we're doing a qualifier that's based on the movie ID and we have a qualifier variable, in this case $MYMOVIE. So when you use this fetch specification, you need to have a binding for that qualifier variable. You can think of this fetch specification as kind of a template.
+
+So when you bind something to it, you create a new fetch specification. We're using movie ID. Now if you remember, movie ID is the primary key for the movie entity, but it, let me go back and show you the movie entity. Movie ID is not marked as a class property. Okay, so that's maybe not obvious to everyone, but you can qualify over attributes that are not class properties. As long as they're in your model, we know how to map things with your entity.
+
+All right. So we have a simple fetch here. We're fetching all Enterprise Objects. Let me execute this command. EO is a command that's built into my little tool. It basically just calls an object with primary key value and does a real fetch. In the display here, I have a real movie and we're showing the primary key and I'm showing all the attributes.
+
+Of course, the advantage to getting real EOs is you can use key value coding. Here I'm going to fetch that same movie and then apply the key value coding studio.name. It executed that, got that EO, found the studio, which is another EO, and then went and got the name out of it. That's much easier than writing all the SQL to go get that particular name. I want to show you another fetch with a qualifier variable.
+
+Okay, so this one is just the explicit with the deep fetch. The deep fetch is doing the same thing as my other command did. Coming back here, I have another fetch specification. This one is a raw fetch specification, so I'm getting an attribute called ZCount. I'm going to take a look at that in a second in how that was modeled. Qualifier is checking the title, so it's title-like, my title, my title is going to be some pattern that we have to bind to.
+
+Now remember, we're fetching ZCount, we're doing a raw fetch, so we're not getting back folios, we're just getting back a value for ZCount. And if you look at movie, ZCount is an attribute that's not a class property, so it's not part of your EO's class, but it's defined in the entity, and our definition for that is count*. So we're going to use that SQL expression count* in the fetch specification when we execute it.
+
+So this is an alternative to using raw SQL and it keeps you in the normal EOF fetch specification world. It's a little bit easier to maintain than executing your own SQL. So I'm binding C* to my title. Now I'm going to fetch using that count for title like. So I found out that there's five movies on that count. And again, this is a way if you have to adjust your interface to how big your result set is, it might make sense you want to go find a count first.
+
+and just to show you, if we can fetch those same movies once we have them, we know how big it is. I'm doing a raw fetch here just to get the movie IDs and displaying it. So that's the end of my demo here. What I want to do is give you a feel for the fact that you can execute any SQL you want. It's good for generating some kind of reports or complicated queries. But for other things you want to take a look and try to use Objects with Fetch Specification when you can.
+
+Thank you, Steve. So today we reviewed memory management, data freshness, optimistic locking, multithreading in EOF, concurrent database access, and raw row operations. I note about the forthcoming WebObjects 5.2.2 update. The main focus of this update is on Mac OS X server and J2E integration, particularly with JBoss. But there's some EOF impact, some goodies here like log4j support, and some JNDI lookup for your application properties, as well as assorted bug fixing.
+
+So the Apple Technical Publications Group has got tons of documentation and this is the stuff that I use. and particularly the EOF Developer Developer Guide and the 5.2 Delta doc are both very important and the API reference. Reporting bugs, bugreport.apple.com. If you don't file it, we won't know about it. Probably.
+
+Project Wonder - lots of interesting extensions to EOF as well as just some general idioms already implemented for you for Java programming and EOF programming. And some third party sites, the Omni Group and Stepwise sites, they've got mailing lists, community resources, and technical articles both on WebObjects and on EOF. Who to contact? webobjects@apple.com goes to a bunch of people. You can also use bugreport.apple.com. And there's enterprise-level services and consulting support if you want to hire an Apple consultant. And here's some stuff that somebody else thought you should know about.

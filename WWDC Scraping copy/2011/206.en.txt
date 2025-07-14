@@ -1,0 +1,201 @@
+---
+Title:  Introducing XPC
+Year:   2011
+Web:    https://nonstrict.eu/wwdcindex/wwdc2011/206/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Morning. Welcome to introducing XPC here at WWDC 2011. My name is Damien Sorresso. I'm responsible for XPC, LaunchD, and the associated technologies here at Apple. XPC is Apple's new inter-process communication solution specifically geared toward application developers. So what we're going to do today and what we're going to cover is a bit of background on IPC.
+
+And then we're going to use that and go right into how we take concepts that have existed for IPC for all these years and apply them in a new way using XPC. Then we're going to cover the actual API calls you guys are going to use in your code and peppered throughout, we're going to have some examples.
+
+So let's start with inter-process communication. According to the canonical source of all knowledge, inter-process communication is a set of techniques for the exchange of data among multiple threads in one or more processes. So what is this useful for? Well, on modern operating systems, we have address space separation. So if you can get another address space to do some work for you, then if that address space happens to crash, you are unaffected.
+
+In terms that impact app development, you can factor out small tasks into small helper tools that if they crash, let's say because they decoded a bad JPEG, then instead of the entire application coming down with it, you instead just get a crash and say, "Well, I couldn't decode this JPEG, but feel free to continue on." And it results in a much better user experience.
+
+Also, with Mac OS X Lion and the Mac App Store, we're living in a brave new App Sandboxing world. So we really want to take applications and split them up into little pieces, each of which has the least privileges necessary to do its job. This way, if you're, again, doing some sort of operation that is, say, prone to buffer overflows or something along those lines, if there is an exploit in that operation, then the exploit is localized to a very small helper tool that doesn't necessarily have all the privileges that would let an attacker get all the information they might want, like, say, access to your user's address book or mail.
+
+So over the years, there have been a lot of different frameworks, APIs, and solutions for inter-process communication. When we started out with POSIX, we had kill, signaling, and then we had the file descriptor based ones. So you'd either use Schmatt or Socket or a pipe, and then you'd use read and write to sling bytes all throughout file descriptors. Then we came into the 80s and we had Mach, which introduced a message based API.
+
+So instead of just sending raw bytes and forcing the other side to reconstruct the message that you sent, perhaps from multiple reads, you could just send the entire message in one go. And the Mach guys developed a technology called MIG to wrap around this and make it more or less like a transparent function call.
+
+And then as we got into Next Step and Mac OS X as it exists today, we have things like NS Connection, NS Proxy, which are used... which are used to implement distributed objects, and we have the CF stuff at the CF layer, CF message port, CF Mach port. So there's a lot, and this is barely scratching the surface of what exists for IPC today. So we've got all these things. How happy are we with them?
+
+It's still pretty bad. And... The industry has kind of been struggling with this about, you know, we've been coming up with new ways to sling bytes back and forth. But that's only one dimension of IPC. You'll notice that in 2004, the amount of misery dropped just a little bit. What happened there? Well, LaunchD happened. And how does LaunchD help make IPC easier?
+
+Well, LaunchD introduced the concept of on-demand services. So prior to LaunchD, you had to have a client and a server negotiate their lifetime with each other. So if the server was not running, the client had to make sure to start it. The server had to put a PID file somewhere. The client had to recognize the PID file was there.
+
+And then it would go from there and find some socket on disk. And then it would connect to that. And if anything bad happened throughout this whole process, you had to go back to the beginning and start over. So we want to build on this experience we've gained with LaunchD and introduce a more complete solution.
+
+So the '70s, they gave us the ability to set up a pipeline and send bytes. LaunchD gave us On Demand, but there's still a couple things missing. And those are what XPC provides. We need to provide automated bootstrapping and structured messages and wrap all of this up in a nice API that's very app centric.
+
+So how are we going to do this? Well, we're taking a familiar concept, Model View Controller, and applying a little twist to it. So let's talk a little bit about Model View Controller first. I'm sure a lot of you, if not all of you, are familiar with this already.
+
+Model View Controller is a very popular design pattern to separate your app into three basic units of functionality. And it's designed to encourage modularity. Because if you logically group functionality, it makes changes less risky, and it makes your code much easier to maintain. So with Model View Controller, as you may have guessed, the three things are your data model. This is the stuff that the user interacts with only in an abstract way. This is how you're going to model the underlying parts of the data your code operates on.
+
+And then we have the UI presentation layer. This is all the code that's responsible for doing all the great animations that you guys have seen in various WWC demos. And then we have the business logic. This is typically the code that glues the data model and the presentation layer together. So it's more of the mundane stuff, but absolutely necessary.
+
+Now I said we're going to apply a twist to this. And to understand what that twist is, you need to understand what Model-V Controller offers. It encourages modularization at the source code level. So your files are factored out and everything's separate. And you can even use it to encourage modularization at the project level by making your app able to load third party plug-ins.
+
+But it still only applies to one address space. When you compile it all together, all the Dottos get linked together, they're all the same thing. The operating system does not know the difference and it does not know about all the hard work you've done to separate these things from each other. So a fault at any one of those layers has the exact same effect.
+
+So the twist we're going to have is that we want to apply Model View Controller to address spaces. And the most useful thing to isolate from your app is usually the data model. So if you're going to do things like decompress a JPEG, deal with a PNG, parse an H.264 movie, apply a GZIP filter, whatever, we can take that and move it off into a separate address space and apply the principle of least privileges to each of these parts.
+
+And because they're in separate address spaces, the OS enforces the strict separation of all the functionality of your application. And so what we have is basically a fundamental redefinition of what an app is. It is not one big monolithic chunk of code. It's many pieces of code working together to present a consistent and robust user experience.
+
+And we've taken, we've used this new model to great success within Apple. So we've got two examples we'd like to talk about. The first is QuickTime Player and the second is Preview. Now what QuickTime Player does is it takes any video you feed it, like an H.264 stream, and decodes it in an XPC service. And this service is sandboxed and isolated and it basically can't do anything except run code on the CPU.
+
+There's really no I.O. that it can do. And this is efficient because we use I.O. surface so that the separate process, the service, can draw directly. And then we can also use the I.O. to create a new application that's going to be able to run the same process. So we've got a lot of different ways to do this.
+
+And since the service is doing all the hard work of parsing H.264, the stuff that's really easy to get wrong and sometimes introduces crashes or security vulnerabilities, crashes in that service don't affect QuickTime Player. So the user doesn't have all the other movies they have open taken down.
+
+And if a crash in the service turns out to be exploitable, well, there's little to nothing that that code can do because they can't read anything. So they can't harvest the user's address book, they can't harvest mail, and they certainly can't elevate privileges and run arbitrary code at a privilege level that's anything useful.
+
+So that's one example. Our second example, preview, is a sandboxed app. Now sandboxed apps live inside a little container, and they have no access to anything beyond that container by default. This is very much how it works on iOS, and now we've taken that and put it on Mac OS X.
+
+But Preview has to be able to open separate documents sometimes. So if a user opens a PDF, that PDF may reference other PDF files. And Preview solves this problem by parsing the PDF that it's opened in a separate XPC service, because again, parsing can be dangerous work. And Preview only has access to what it actually needs and what the user has actually said that it should have access to. And this allows us to minimize the impact of any exploits that might exist in the PDF parsing code.
+
+So those are some examples of how we've used XPC. Let's talk about how you guys would want to use XPC. Well, first of all, XPC is new on Lion and it's only available on Mac OS X currently. And what we've done with XPC and services and these separate helpers is we've made them part of your app. They do not reside outside your app bundle in any way. They never get moved or copied from there. They are always in there and they are automatically bootstrapped. You guys do not have to call a single API to install these privileged helpers.
+
+The system just detects that they're there and does the right thing. And the helpers themselves have their process lifecycle controlled by a runtime behind the scenes. So you don't have to worry about lingering helpers taking up system resources when they're idle. We take care of all that for you.
+
+A little more in depth, we identify a service by its CFBundle identifier. We're big fans of reverse DNS. We use it all over the place, as you'll see. Your services are little bundles that will live in the content slash xpc services directory of your application. Services are meant to be purely on demand and stateless. So a service should have as little state as possible, and it's meant to do a little piece of work efficiently and then go away so it takes up as few resources as possible.
+
+And we will automatically track the activity of your service. We know when you're receiving a message, we know when you're processing a reply, and we know when you have no more outstanding work. So we can idle exit you when we know that you've gone idle. And on Mac OS X and Lion in the App Store, this is the only way to separate privileges in the App Sandboxing world. So if you have a piece of code that you want to run with, say, an entitlement that you don't necessarily want to put on your app, an XPC service is the way to do it. And for the entire shebang, code signing is required.
+
+So this is what the bundle structure looks like. As I said before, we have this contents XPC services directory. And we name our bundles with the reverse DNS style name. So that must be identical to the CFBundle identifier that's specified in your bundles Info.plist. So in this case, we have a photo uploader app. And it might want to have a separate service responsible for actually doing an upload. And it might have a service that's responsible for unzipping any, say, gzipped replies that the server might send back.
+
+Digging into one of those services, we have basically just the executable and an Info.plist and any associated resources that you want to include in your bundle. And notice that we name the executable com.mycompany.photouploader.service functionality. And again, we enforce that this must be the same as the bundle name in your CFBundle identifier. This is so that when you see this thing running an activity monitor, it's very clear what application it belongs to and what it's doing.
+
+The default environment of a service is very restrictive. As I said before, we really wanted these things to be small, stateless, and on demand. So think of them more as background agents, like let's say you set the LSUI element bit in your info P list for your app, rather than an actual app themselves.
+
+And by default, we will throw you into a GCD run loop by calling dispatch main. And each service runs in a separate security session from the app that hosts it. So the service does not have access to the keychain credentials or the keychain access that the app does by default.
+
+Now if you need these behaviors, or if you need to modify them slightly, we have a few bits in the info P list of your service that you can set. The first is the run loop. If you need to integrate with NS run loop transparently, you can set this run loop key to be the NS run loop string, and we will call NS run loop run instead of dispatch main to get things moving in your run loop.
+
+And if your service does need access to the host keychain entries, then you can set this join existing session bit, and we will put you in the same session that the host app is in. And we also have an environment variables dictionary so that you can specify any environment variables and key value form in a dictionary that your service may need.
+
+Now let's talk a little bit about the XPC API. We have two fundamental components at the lib system level. So you don't have to actually link against anything new. All you have to do is include a header and you're good to go. The first is the Object API. And this is the API that lets you construct, decompose, and generally handle an IPC request from another process. And the second is the Transport API, which is responsible for managing the communication pipeline between a server and its client.
+
+So we're going to start, well, sorry. These things are actually very closely tied together. Traditionally in IPC, the network, or the connection and object serialization parts have been separate. So the pipe that you're sending the bytes over doesn't actually know anything about the structure of those bytes. And we decided to take a different approach by letting the pipeline actually know something about the structure of the bytes that you were sending. So we've kind of unified the object and transport layers of IPC. And as a consequence of this, the fact that there's serialization going on behind the scenes is just an implementation detail. There's no public serialization format that we guarantee or expose to you.
+
+So let's talk a little bit about XPC objects. XPC objects are basically propertyless style objects. And we've taken them and really just distilled them down to what's fundamentally necessary to very quickly and very easily send a request, or construct a request, send it, and decompose it. And to this end, we've applied some constraints to the different kinds of objects. So any container class or collection is mutable. There's no immutable array variant, for example.
+
+But all the leaf nodes, that is the object types that cannot reference other objects, are immutable. So once you create them, they are freeze dried and locked in stone. And we've taken the API and we've made it, we've really optimized it for very easy message packing and unpacking, and all XPC objects are retainable and releasable. So they're even useful outside the context of sending messages.
+
+So collection wise, we have both kinds. We have arrays and we have dictionaries. And those are the two really, really fundamental kinds of collections that you want to send or that you want to structure in a message that you send to another process. And we have a very rich collection of just pure data representations. We have anything from a null to all the way to a string and a UUID. And again, these are all immutable. So once you create them from the raw data that you have, they're locked in stone.
+
+Now since we know something, since the transport layer knows something about the serialization and the object layer, we're also able to offer support for out of line types. So you can actually create a file descriptor, put it inside a dictionary or an array, send that message across to another party, and that party will get a file descriptor that is equivalent to the one you had. And we can also do this with shared memory, and there is also an IOSurface API that gives you an XPC object and then lets you construct an IOSurface from that object as well. So you can use this to very easily give your service an IOSurface.
+
+As I said, we took a lot of opportunities to optimize the collection classes for convenient packing and unpacking. And one of the things that has traditionally been kind of a pain that required a lot of code with respect to constructing an object graph has been wrapping primitive types up first, then inserting them into the dictionary, and then taking the boxed object back out of the dictionary, checking its type, and then getting at the underlying value.
+
+So what we've done for our collections, the dictionaries and the arrays, we've given them accessors that let you get directly at the underlying primitive value. So you don't have to do all the work of extracting a type or extracting a box object, checking its type, and then extracting the underlying value. We let you get directly at it. And this allows for very quick composition and decomposition of messages. And again, there's no type checking needed.
+
+Now because of this, we have to be able to return some sort of sensible default in the case that the type of the object you're trying to get at does not match what you expect or that is simply not present. So if you try to get a Boolean value out of a dictionary and the key you've asked for either is not present or the value for that key is not actually a bool, we will simply return false. And we have a set of sensible primitive types for all the other types we support or primitive returns for all the other types we support.
+
+And if it happens that the default value is in your, you know, set of expected values that you can get, then you actually do have to go down the slow path, extract the boxed object, do the type checking. But for the 80 or 90% use case, this will make your life a lot easier. So let's look at some code. The first thing you're going to do is include xpc/xpc.h.
+
+Then if you want to create a dictionary, we have the XPC dictionary create API. And all of our APIs follow the familiar create, get, and copy conventions that are enumerated in the core foundation API guidelines. Now we're going to create an N64. So 64-bit wide signed integer, and we're going to create it with a value of 640. And then to insert it, we just do xpc dictionary set value, and you're done. After, of course, you release it.
+
+But doing the release is a pain and making the boxed object is a pain. So let's just use the primitive setters. Well, we've got our same dictionary, but instead of creating the boxed object and then setting the value for that, all we're going to do is call xpc dictionary set int 64 and give it our key and give it the underlying primitive value that we want to set, and you're done. The value is now in the dictionary, and you can get at it with one of the primitive getters.
+
+So if we want to get back at that value, we do xpc dictionary get int 64, and then that will return directly to us the value that was boxed up for the key x. Now, we inserted a y in there as well, but we did not insert a z. So when we ask for z... Because it is not present in the dictionary, we'll get back a value of zero. And we'll also get back zero if we did insert z, but let's say we made it a string instead.
+
+Now let's talk about XPC connections. These are the fundamental primitives that you're going to use for sending messages back and forth between your application and your services. Connections are virtual. So the fact that you have a connection to a service implies nothing about whether that service is running.
+
+When you send a message over that connection, we'll launch the service on demand to process the message and that's it. You don't have to worry about negotiating PID files or anything weird like that. Connections are also bidirectional. So the same thing that you're going to send your message over is also the same primitive that's going to give you back the responses from the server.
+
+And all of it is asynchronous and non-blocking. So when you send a message over a connection, it returns immediately and we do not block. And we just take the message and we enqueue it behind the scenes and our runtime will transparently send the messages when we can. And we'll send all your messages in FIFO order.
+
+So, let's take a look at a little fun animation about how XPC connections work. So we're starting out, here's your app. Your app has a service and it's going to talk to it. The first thing the service sees is a peer connection. So it's a lot like the accept model where you're listening on a file descriptor and then you just get new file descriptors out of there and those represent independent connections.
+
+And then the app's going to send some messages. And the messages on the other end of the connection are dequeued in FIFO order. The service is going to do some work and then it's going to send responses back to the app. And then the service might go away or it might close the connection and then the app is actually notified that that event happened. So you know about the state of your connection in the same way that messages are delivered to your connection.
+
+Let's take a look at the client side of the code here. So as I said, we're going to create, the services are identified by their bundle identifier. So that is how we're going to create a connection to the service we want. And we're going to call xpcconnectioncreate to a service called com.apple.service. The second parameter is a dispatch queue that is the target queue that all of the events that fire on the connection will execute on.
+
+And you always need to set an event handler for a client. So if you're using a connection, we'll get a little bit deeper into event handlers later. But once you've done that, you resume the connection by calling xpcconnectionresume. That tells the runtime that you're happy with the state of the connection and that you want to start receiving messages on it.
+
+Now messages in XPC are always dictionaries. And so we're going to create a dictionary that's our message. We're going to set some UN64 in there. And then we're going to call xpc-connection-send-message. Once we did that, we're done. The runtime behind the scenes retains a reference to the message, so we can just release it. Sometime later, the message will be delivered.
+
+Now because we've enqueued a message to be sent, we're going to launch the service on demand. And because we've got our single connection object on the application side, there is also going to be a new peer connection object on the server side. So even if your app creates multiple connections to the same service, they all show up as multiple connections on that end. They're not all unified just because they happen to be from the same PID.
+
+So as I said before, message sends are non-blocking. And we maintain a queue of messages to send for you. So you can send as many as you want, and we will send them as fast as we possibly can. But if you need to know when a message was delivered-- let's say you had a really big chunk of data that you wanted to send, and you want to know when that data has left your address space so that you can start allocating more-- You can use this XPC connection send barrier API.
+
+And you just call this right after you've called XPC connection send message. And then we will invoke this block that you provide on the connections target queue after we have sent the message that you provided for us. And then again, release the message at the end when you're done.
+
+Looking at the server side, or the service side, an XPC service is going to call xpc_main with a single argument which is a function that is your event handler. And that event handler is going to receive new peer connections whenever there is a new connection to it. So, in the new connection handler, you can see that it accepts a single parameter that is of type XPC connection T.
+
+And then from there, we're going to, in the same fashion as we handle the connection that we got from XPC connection create, we have a similar set of responsibilities for the connections we get in this new connection handler. So, we're going to set an event handler and we're going to resume it.
+
+Now, because this came in as a parameter from a block, by convention, you do not have a reference to the connection that you get. So, if you want to keep a reference, you can call XPC retain on that peer connection. Now, we've got this little peer event handler thing inside our block.
+
+So let's take a look at what that looks like. So our pure event handler, we're going to check the type of the event that we got. If it's a dictionary, then we got a message. And so we should decompose the message, figure out what the request is, and then handle it.
+
+But we can also get different kinds of events, in this case, errors. So what happens if we get an error? What does it mean? Well, errors in XPC can be directly compared using pointer equality. So we're going to check if the event is equal to XPC error connection invalid. And what that means is that the remote side has closed down its connection. So this is your cue to tear down any data structures that you may have associated with this peer.
+
+We also have another type of error that connections can receive that indicates whether or not, or that indicates your service is about to go away, but you still have outstanding work to do. So this is your cue to flush all your buffers, write data to disk, etc. We'll get more into that later. And since we retained a reference to the peer when we got it, this is our cue to release that reference.
+
+So you can send and receive messages across a connection, but a very useful pattern in terms of dealing with a server is being able to get a single reply to a single request. So even if you receive a message over your connection, if you want to tie it to a specific action, it's up to you to track the state of it and demux the reply when it comes in to figure out what you have to do with it.
+
+So we let you do a one to one mapping of a message to a reply handler block. And this is independent of the connections event handler. So when we deliver messages to you, you'll get these FIFO stream of messages that go to the connection handler. And then you'll just get us, you know, each reply handler block will be invoked individually on its own.
+
+So the semantics of this reply handler are very similar to the semantics of the event handler of a connection. If you get a dictionary, that's your reply. Just deconstruct it and handle it however you want. Or else, if you get an error, that indicates that for some reason, the remote end will never reply. That could mean that the remote end crashed. It could mean that it chose not to reply to the message. It could mean that it simply closed its connection to you down.
+
+On the server side, it's up to you in your message schema and protocol to tell the server that I expect a reply to this message because the server has to do something a little bit special to get a reply sent back to you in a one-to-one fashion. So, otherwise, sending a reply message is very much the same as sending a normal one.
+
+The big difference is that we're going to call this xpc dictionary create reply API and it gets a single argument, which is the message that you want to reply to. And then it gives you back a dictionary that when you send it over a connection, we know to invoke the single reply handler block rather than the connections event handler block. But otherwise, it's exactly the same. You just call xpc connection send message. and then you release the message when you're done with it.
+
+So we covered errors a little bit before. Let's talk about them a little bit more in depth. We have three errors, which is a vast error space, I know. And the first is XPC error connection interrupted. This is your cue to re-sync any state to the other end.
+
+And what connection interrupted means is that something happened on the other end, but we can still get to the server. So the server may have crashed, for example. In this case, that just means that it's up to you to send a message back to the server saying, by the way, you were doing some work on behalf of me, and I'd like you to finish it, please.
+
+And this is something that we can do because services have names, and those names are always available, and we can always reconnect. Now, if you get the XPC error connection invalid, that means that the connection is just no longer usable. So in this case, it might be a PNN.
+
+It's a peer connection that you got from the XPC main event handler. And because if that connection goes away, it's not backed by a service name, so we cannot reconstruct it. And then the last one we have is the termination imminent error. And that is your signal that you should prepare to exit cleanly. So that means the app wants to go away for whatever reason, but you... you still have some outstanding work that we've detected. So we need you to finish that work in a timely fashion because we're going to send SIGKILL to your process very soon.
+
+So the errors that can be delivered to different types of connections, as I said before, connection interrupted can only be delivered to connections that you get back from XPC connection create, which are named connections. So then that just means remote end closed it, went away, did whatever, it was just a blip in the pipeline. The connection invalid error can only be delivered to peers received from the XPC main event handler.
+
+And this is because a named connection can always be reconstructed because the name is always there. A peer connection that the service receives can never be reconstructed. So, And the termination imminent error will again only be delivered to peer connections because it's only relevant to a service, because the service is the thing doing work.
+
+Now we have some other functionality in XPC that doesn't directly relate to application development, but is still very useful for anybody who's writing daemons. And so we've made LaunchD and XPC work together in some really nice ways that we think will be very beneficial to anybody writing a daemon on Mac OS X.
+
+And the first way we've done this is that we let you use XPC to communicate with launch to advertise services. So in a launch DP list, you can advertise a service. And that is called a Mach service. So we can use this XPC connection create Mach service API to create connections to services that are advertised in launch DP lists. So what this means is that you cannot dynamically register a name.
+
+It must be declared up front in a launch DP list, and then that P list should live in slash library launch agents or slash library launch daemons. Now, because we don't have the full XPC environment in a launch D job, you have to manually set up your listener so it's a little bit more complicated and the error cases are slightly more complicated as well.
+
+So how you would do this is that you put this Mach services key in your launch DP list. And we're just going to call it com.apple.xpc.example. And the value is just a Boolean saying true. And then when you want to connect to this service, it's actually on the client side very much the same as if you were connecting to one of your app's bundled services. So you just call xpc_connection create_mock_service with the name and then your target_queue parameter.
+
+And at the very end is a flags parameter that for now we're just going to pass 0 to. And then we're going to set the event handler very much the same way we did for an application service. And then we resume the connection. So very similar on this side. It's on the server side that things get slightly more complicated.
+
+So we're going to set up this listener connection. And we're going to do that by calling the same XPC service or XPC connection CreateMockService API. But instead of a 0 at the end, we're going to pass xpcConnection mockServiceListener. And the difference between this connection and, let's say, a peer connection that you get from the xpcMadeEventHandler is that the only kinds of objects this connection will get in its event handler are connections themselves. So you can take this event and safely cast it to an xpcConnectionT. Otherwise, the new peer event handler is effectively equivalent to the handler that you would pass to xpcMade. And again, we resume the connection to let the runtime know that we're ready to go.
+
+Our next feature that we've made LaunchD and XPC work together on is something we call XPC events. And these are basically for handling messages from the system. You don't necessarily have some client out there who's sending you messages, but there are some system events that you might be interested in.
+
+And what these basically are are alternate sources of demand for launching yourself on demand. And we've got an architecture that lets us support and implement arbitrary user space and kernel events through a very elegant event delivery API. And you enumerate the events that you're interested in in your LaunchDP list.
+
+So when I say events, I might be talking about I/O Kit, which has been one of our most long standing feature requests for LaunchD, is the ability to launch a job on demand when a certain I/O Kit event happens. And we've done that here. So the first thing you're going to do is make this new launch events dictionary in your LaunchDP list. And then in there is a sub-dictionary that says, these are the I/O Kit events I'm interested in. And that is just the signature, which is com.apple I/O Kit.matching. That itself is a dictionary of events that you're interested in.
+
+And so you might be a vendor distributing a device and so that is, let's just call it com.apple.deviceattach. And then you just specify your matching dictionary as you normally would. You put your product ID, your vendor ID, provider class, whatever I/O Kit event you want, you can match on and you'll be launched on demand when it happens. And there's one more thing you have to put in for I/O Kit support in your matching dictionary, which is this IOMatchStreamKey and you need to set it to true.
+
+We also support BSD notifications. So BSD notifications aren't quite as complex as I/O Kit. They're just names. So whenever somebody uses the notify APIs to post something, your LaunchD job might want to be launched on demand when that happens. So the event system that you're going to use instead is the com.apple.notifyD.matching system.
+
+And then all you do in your event dictionary is say, this is the notification name. And with this, you can very easily, very simply launch your job on demand when anybody posts a notification. And they don't even have to know who you are. You're just interested in some system event.
+
+So you also need to consume these notifications. So your LaunchD job needs to receive events through some handler. As I said before, if one of these events happens and you're interested in it and you're not running, LaunchD will launch you on demand. And as you're running, we will continue to feed you events.
+
+So we do that through this XPC set event stream handler. And this is a very simple API that just gives you the events that have happened. So because the events are queued up and you receive them through this handler, we guarantee that even if the event happened, let's say while your process was exiting and before LaunchD restarted you, that you will get that event and be relaunched to process it.
+
+So the first argument is the event system that you're interested in, the event stream. And so in this case, we're interested in com.apple I/O Kit.matching. The second parameter is a queue that you want to fire this event handler block on. And the third parameter is the actual event handler block itself. It's the same type as an event handler for a connection.
+
+In the case of an I/O Kit, so all events that you receive through this handler are guaranteed to have one key set, at least in a dictionary, and that is the xpc event key name. And that tells you what event actually fired. So in your LaunchDP list, you assigned a name to the event dictionary, com.apple. or com.vendor.deviceattach. That's what this API or that's what this key will give you back. So you can use it to distinguish among any interested events that you have.
+
+And in the case of I/O Kit, we actually give you the I/O registry entry ID of the node that caused this to fire. So if you know anything about I/O Kit, you can take this ID, pass it to the I/O Kit APIs, and then get directly an I/O Object T node that you can use to communicate with the registry. You don't have to reconstruct your matching dictionary in code to do it. We just tell you which node actually fired.
+
+So different event streams, you know, I/O Kit versus BSD notifications, will have different payloads. In the case of BSD notifications, there's nothing really to be a payload. The name that you provided is payload enough. Currently, we support launching on demand for I/O Kit and BSD notifications, but we fully intend to add more event streams as time goes on. But we think this is a really good starting set that will provide developers a lot of functionality to get their jobs running on demand.
+
+So that's the end of our session. We've got a few related sessions I'd encourage you to check out. Yesterday was Introducing App Sandbox, and just earlier today was the Blocks in Grand Central Dispatch in Practice session. Tomorrow, I very heavily encourage you to check out Mastering Grand Central Dispatch.
+
+It's going to be a great session. And for more conceptual overview about Launch on Demand, check out the Launch on Demand session from last year's WWDC. And documentation-wise, we fully intend to have man pages, but we do not have them yet. Instead, what we've got is a pretty good coverage in the header docs.
+
+So take a look at User Include XPC for any API-related questions, because what we talked about today for XPC was very much scratching the surface. There's a whole lot more stuff we couldn't cover. And of course, we're going to be talking about the XPC in a little bit. So if you're interested in learning more about XPC, please do so. Any questions you have, please post them on the dev forums. We check them regularly, and we'd be happy to answer your questions. So with that, thanks for coming.

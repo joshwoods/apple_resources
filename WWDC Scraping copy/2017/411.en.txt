@@ -1,0 +1,141 @@
+---
+Title:  What's New in LLVM
+Year:   2017
+Web:    https://nonstrict.eu/wwdcindex/wwdc2017/411/
+
+[!] This transcript has potential transcription errors.
+---
+
+Hello. Welcome to What's New in LLVM. I'm Devin, an engineer on the Program Analysis Team. We've got a lot of great, new features to tell you about today. We'll start by introducing you to availability checking for Objective-C. This will help you safely deploy your apps back to older OS's. Then, we'll describe new static analyzer checks and compiler warnings to help you find bugs. We'll dive into some fantastic, new features for C++ developers, including a tour of refactoring support for C++ in Xcode, and wrap up with an update on link-time optimization.
+
+Let's start with availability checking. Every major OS release comes with great, new features, and your customers expect you to adopt these APIs in your apps. But you still have to support your users on older OS's where those APIs aren't available. On our platforms, we support backwards deployment by separating the Base SDK version from the deployment target version. What this means is that you will always compile against the newest SDK, even when deploying back to older OS's. So for example, in Xcode 9, you use the iOS 11 SDK, and if your app only targets iOS 11, you'll use that as the deployment target as well.
+
+But I know a lot of you will want to support your users on iOS 10 to give them a chance to upgrade. To do that, you can go to your Build settings and select 10.0 for your deployment target. This is a promise on the part of your app that it will support all versions of iOS 10 and greater. Now, this can be tricky because it's only safe to call APIs that are actually available on the running OS.
+
+If you call in newer API on an older OS, then your app could crash or have other unexpected behavior. In the past, we've recommended querying the Objective-C runtime to determine whether an API is available. But this was easy to get wrong or even forget, and it was hard to test. Further, it required a different syntax for checking each of globals, functions, classes, instance methods, and class methods.
+
+Now, those of you using Swift may be wondering, what's the big deal here? Swift has a unified syntax, #available, for querying API availability at runtime, and the compiler can even catch missing availability checks at compile time. For more information on availability in Swift, you should check out the Swift in Practice talk from WWDC 2015. Today we brought Swift-style availability checking to Objective-C.
+
+[ Applause ]
+
+I would love to tell you about it. So suppose you have an app that you're deploying back to iOS 10 and you decide to take advantage of the fantastic, new face detection APIs from the Vision framework in iOS 11. When you add these APIs to your app and then build, you will now get a compiler warning telling you that these APIs are only available in iOS 11 or newer. You can address these warnings by using the new @available construct to query for API availability. This will return true when iOS 11 APIs are available. It's safe to call them. And if they're not, you can provide a fallback. Let's take a closer look at the query.
+
+As I mentioned, on iOS 11 or greater, this will return true. The star is required. It indicates that on all other platforms, the query always returns true. What this means is that if you decide to port your app to another platform -- say, macOS -- then by default it will take advantage of the new face detection APIs. Of course, the compiler will still warn you if your port to macOS supports an earlier deployment target where those APIs aren't available. So you'll need to add a check.
+
+Once you've been working with availability for a while, you will find that it's really useful to write entire methods that will only be called on iOS 11 or greater. You can annotate these methods with the new API availability macro. Then, inside that method, you don't need to use @available to check for availability, but anyone who calls the method will need to do so. Otherwise, they'll get a warning. You can similarly apply this to entire classes. Then, you don't need to use @available inside the class, but anyone who instantiates it will need to do so.
+
+Now, availability checking is not just for Objective-C. We also support C and C++ with the builtin available query. This acts exactly like @available. It has the same syntax. It just has a different name that's compatible with C and C++. You can also use the API availability macro in C, but you will need to include the os availability.h header to get access to it.
+
+And you can even annotate your C++ class definitions. All right, so how's this going to work in practice? For existing projects, we will warn starting with APIs introduced in iOS 11, tvOS 11, macOS 10.13, and watchOS 4. APIs from older SDKs will not be checked at compile time.
+
+This means that you won't need to change any existing code, but if you do decide to adopt the new APIs, you'll need to use @available to check for them. We think this is the best and safest way to check for availability, and so we highly encourage you to use it.
+
+For new projects, all APIs will be checked at compile time. This means you'll need to use @available for all APIs introduced after your deployment target. Existing projects can opt in to this all-API behavior by going to the Build settings and selecting Yes (All Versions) for the Unguarded availability setting. This is going to make it a lot easier to safely deploy your apps back to older OS's. So that's availability checking. You could say it's now @available for C, C++, and Objective-C.
+
+[ Applause ]
+
+All right, let's move on to the static analyzer. The analyzer is great at catching hard-to-reproduce edge-case bugs, and it can even show you the sequence of corner-case events that led to those bugs. Today I'm going to tell you about three new checks that we've added to the analyzer: a check for suspicious comparison of NSNumber, a check for use of dispatch once on instance variables, and a check for auto-synthesized copy properties of NSMutable type.
+
+A particularly pernicious bug is to mistakenly compare an NSNumber pointer value to the scalar zero because this actually compares to nil and not the zero NSNumber instance. Here's an example of how this can be a problem. In the hasPhotos method, the programmer intends to return no when the photo album is empty, but because they're comparing the photo count to nil, this will actually return yes, even when photo count holds the zero NSNumber instance. And so the analyzer will now warn about this. You can fix this error by instead calling the integerValue property to compare integers to integers. This is safe.
+
+There's a similar problem with implicit conversions to Booleans because these also check for nil and not the zero number. This method counts the number of faces in a photo, and since this is an expensive operation, it returns early if they've already been counted. But someone reading this code might find it ambiguous. Did the programmer intend to return early if face count was non-nil or non-zero? The analyzer will now warn about this kind of ambiguity.
+
+In this case, the programmer meant non-nil, and so she can express her intent directly in the code and silence the analyzer warning by adding the comparison explicitly. You can control the level of this check in your Build setting. If you choose Yes (Aggressive), then the analyzer will warn when it's not sure that you've made a mistake, but it does think your code is ambiguous.
+
+Let's move on to dispatch once. Grand Central Dispatch provides a fantastic API, dispatch once, that guarantees that a block is called once and only once. It is really useful for safely initializing shared global state. In this example, the programmer uses it to load and initialize a shared array of photos. The first argument to dispatch once is the address of a variable of a special type, dispatch once t. Grand Central Dispatch uses this to make sure that the block is only called once.
+
+Now, it's really important that this variable be either a static or a global variable. That's because if it's ever been the case that the variable held a non-zero value in the past, then Grand Central Dispatch might not be able to make the once and only once guarantee in multithreaded code.
+
+What this means is that it's not safe to use dispatch once t in instance variables or, indeed, in any other memory on the heap that might have been reused. And so the analyzer will now warn about this. To fix this, you can use your favorite non-recursive lock. Here I'll use NSLock, but you could use OSUnfairLock or a pthread mutex as well. After acquiring the lock, check to see whether the data's initialized, and if not, initialize it, and then don't forget to release the lock. This will guarantee that the data's initialized once and only once, exactly like you expect.
+
+Finally, I'm going to tell you about a check that we've added for auto-synthesized copy properties of NSMutable types. Copy properties call the copy method in their setter on the passed-in value to story a copy. But calling copy on a mutable array results in an immutable copy. Here's how this can be a problem. It, this method tries to reset the photos property by setting it to an empty mutable array and then adding in a single photo.
+
+Unfortunately, this will lead to a really nasty surprise at runtime because you can't add an object to an immutable array. You'll get an exception. The analyzer will now warn you about these kinds of properties to help you prevent this runtime exception. The fix here is simple. All you need to do is write the setter explicitly to have it call mutableCopy. This guarantees that your property always holds a mutable array.
+
+So those are just three of the new checks that we've added to the analyzer this year. You should run it on your code. It will help you find bugs. To do that, choose Analyze from Xcode's Product menu. You could even have Xcode run the analyzer on every compile by going to your Build settings and enabling Analyze During 'Build.'
+
+This will help you catch your bugs early and often. If you're interested in other tools to help you find bugs, I highly encourage you to check out finding bugs using Xcode runtime tools online. So that's what's new in the analyzer. I'm not going to hand it over to Duncan, who will tell us about new compiler warnings.
+
+[ Applause ]
+
+Thanks, Devin. Xcode 9 comes with over 100 new errors and warnings to help find bugs in your code. Let's talk about two warnings that are important for Objective-C. Under ARC, most parameters are safe to capture in blocks. In this example, the validateDictionary usingChecker method takes an NSDictionary and visits every entry by calling enumerateKeysAndObjects UsingBlock. Block captures the checker parameter. This is safe and works really well. Notice the checkObject forKey can fail. The block sets stop to yes to abort the enumeration early.
+
+Since this is a validation method, it should also return BOOL and create an NS error. Let's make that change. OK. Let's walk through the code. Before enumerating, isValid is set to yes. The block runs the checker and returns on success. If the checker fails, isValid is set to no and an NS error is created.
+
+After enumerating, isValid is returned, but there's a bug here. Out parameters like error are implicitly autoreleasing. Assigning to them is not safe in a block. enumerateKeysAndObjects UsingBlock calls the block inside an autorelease pool. When it returns, the NS error will get destroyed as well. It isn't safe to use.
+
+In Xcode 9, this unsafe capture will trigger a warning. The easiest fix is to make the out parameter a strong reference. This will keep the value alive across any autorelease pools. This works as long as all callers of validateDictionary usingChecker are using ARC. The other option is to use a local block variable. Here strongError is initialized to nil. If the enumeration stops early, strongError safely stores the NS error. Then, the out parameter is updated after the enumeration is complete.
+
+That's the first warning. Let's move on to the second. In this example, the function foo is declared without any parameters. In C and Objective-C, that means that foo can be called with any number or type of argument. A function with an empty parameter list is called a non-prototype declaration.
+
+This behavior dates from the early days of C where parameters were only listed at function definitions, but this declaration is not type safe. This is never really what you want. Calls that don't match the definition can crash at runtime. In Xcode 9, the compiler has a new warning that enforces strict prototypes.
+
+Usually, the fix is to add void. This specifies exactly zero parameters. Any calls with arguments will give an error. Since function pointers and blocks have a common declaration syntax with functions, you'll also see this if you have a function or method that takes a block as an argument.
+
+The fix is the same as with function declarations. Add void to specify exactly zero parameters. Then, you'll get an error if you pass in a block with the wrong type. Xcode's project modernization will turn these warnings on in your Build settings, or you can upgrade later by selecting your project and choosing Validate Settings from the Editor menu.
+
+You can also upgrade new warnings to errors by selecting Yes (Error) in the Build settings. That's it today for new warnings. Let's move on to C++. This year, we've put a lot of effort into improving the C++ experience in Xcode. That includes refactoring support. We support a lot of operations. I'd like to give a short tour of using Xcode to refactor LLVM. This is a large C++ code base that shows off the engine. But even if you're not a C++ developer, you could still get an idea of how refactoring in Xcode can improve your work flow.
+
+I started at a member function definition from the InstCombiner class. This is a utility for combining instructions. I never liked the Inst short form for instruction, so I Command-clicked in Xcode and selected Rename. This worked even though I wasn't at the class declaration. InstructionCombiner is more clear to me.
+
+Xcode updated the name in place. This saved me a lot of hunting around. I double-checked the class declaration. It was updated too. So was its use in the CRTP base class, InstVisitor. InstVisitor uses the same short form, and so does InstCombineWorklist. But I had better leave those for a separate commit. Since changing a class name from one of its member functions worked, I moved on to something even more complicated. I went to a template specialization for simplified type, a utility we use on smart pointers and custom iterators.
+
+I think the function getSimplifiedValue is named wrong. It should use STL naming conventions like its class name. I selected Rename again. Tying together template specializations from across the project is complicated, but Xcode can handle it. The specialization I was looking at was updated and so was the main template declaration. There's another specialization right below, and it was fixed too.
+
+Next, I moved to Constants.h, where we have a class called ConstantInt for representing constant integers. It has nice convenience functions for getting true and false values. I added declarations for a getMax function to get the maximum integer value. Then, I Command-clicked and generated the missing function definitions for each of them.
+
+Here they are in Constants.cpp. What I like about this is where the functions showed up in the file. My new definitions were generated after the last member functions defined for the same class, ConstantInt, but before the member functions for the next class. This is exactly where I want them.
+
+[ Applause ]
+
+LVM has lots of code for representing integers. I had a look at this greatest common divisor function, and I noticed a local variable, Pow2, that is complicated to calculate. Its computation really belongs in its own function. I selected the code and opened the contextual menu, where I clicked on Extract Function. I was a little sloppy with my selection, but Xcode is smart enough that it worked anyway.
+
+That entered me straight into rename at the bottom of the screen. I chose countCommonPowersOf2. Let's scroll up and look at the definition. The key thing here is that the arguments A and B were automatically captured by reference. That's important because they're being modified. Extract Function got it right. Extracting the function was a nice opportunity to clean up the code to use early returns.
+
+That got me bouncing around a little, and I found this code in the optimizer for unrolling loops. I noticed a call to getLoopFor and an if statement. The same function is called with the same argument again right below in a while loop. getLoopFor does a hash table lookup, which isn't free.
+
+Since the while loop doesn't change the hash table, I Command-clicked and selected Extract Repeated Expression. This stored the result of the function call in a local variable, so it was only called once, and then I immediately used Rename. I chose the name LoopLatch. That was easy. Extract and Rename work cleanly together.
+
+After all that refactoring, I thought I'd write some new code. ArrayRef is a generalized reference to contiguous values, whether they're in an STL vector or in one of LVM's custom data structures. Notice that ArrayRef is templated on the value type in the array. I thought it might be useful to compare two ArrayRefs.
+
+Why not implement a string like comparison? I need to loop from zero to the minimum size between left-hand side and right-hand side. When I hit the dot after left-hand side, code completion kicked in. Remember, left-hand side is templated on T here. That's pretty cool. Code completion works with templates, new in Xcode 9.
+
+[ Applause ]
+
+And that's C++ refactoring and code completion in Xcode. Let's talk about a few features from the C++17 standard. I'll start with STL's tuple, a useful type from C++11 that enables multiple return values. But decomposing it is awkward. Decomposition requires a tie around the variables, the types can't be inferred, and the variable names need to be duplicated.
+
+C++17 solves this with structured binding, which binds names directly to the returned tuple elements. This is a great feature. Now, it's much easier to work with tuples. Structured binding can be used anywhere get can be used. It also works out of the box with plain-old data types like Point. The syntax is exactly the same as with tuples.
+
+That's structured binding. The next feature is initializers in if statements. Here's an example. The initializer finds the last slash in a path string. The slash variable scope is limited to the if statement. Then, the condition checks whether slash was found. If so, then slash is used to split the path. The same feature works for switch statements. Minimizing the scope of the slash variable helps to prevent bugs. If this function continues, we'll get an error if we try to reuse the slash variable. This is good because the logic is unrelated.
+
+Let's move on to a feature for templated functions. Advance is a simple template algorithm for in advancing an iterator. It has been in the STL for a long time, but let's use it as an example. For n greater than 0, it moves the iterator forward, and for n less than 0, it moves the iterator backward. For example, you might want to look ahead five nodes in a linked list. Advance will count forward one by one.
+
+The same code works for getting the fifth character in a string. It's powerful to have the same interface for advancing in both data structures. But this code is really slow for strings. For strings in arrays, which have random access iterators, we don't need a loop. Operator + will jump ahead in concept time. But adding a simple if statement won't work because it's just a runtime check. Its body is required to compile for all template instantiations, but linked list iterators don't have operator +.
+
+We have a problem. Advance needs a common interface that compiles for linked lists and a fast path for strings and arrays. The classic solution is a technique called compile time dispatch, where the logic is split into overloaded helper functions and advance calls the right overload based on a compile time type trait. And compile time dispatch works. It's what C++ Library authors have been doing for decades. But it's an advanced technique, and what we're trying to do is pretty simple. The original not working code was easy to understand.
+
+In C++17, constexpr if allows you to express this logic naturally. constexpr if discards the not taken paths when instantiating temples, so the linked list code will still compile, but advance will use the fast path for strings and arrays. constexpr if makes reading and writing generic code much simpler.
+
+Let's finish with a new library facility for strings. The STL string class has a rich API, but it's not always the right tool. This example might look familiar. The function split searches for the last slash in the path argument. If it finds a slash, it splits the path into directory and filename. Without a slash, it returns the full path as the filename. Because of string's API, this code was easy to write, but there's a performance problem lurking. Split is returning copies of the string. Heavy use of functions like split can introduce expensive allocations.
+
+C++17 has a new facility for referencing strings. It's called string view. A string view encapsulates a raw const char [inaudible] and a size. It has a rich API, just like string, so it's convenient for string manipulation. And as the name suggests, it's just a view. It doesn't own any storage, and so it never makes a copy.
+
+String view is great for performance, but there is a caveat: String view isn't always safe. Because it doesn't own its storage, using a string view after the original string is destroyed or modified can cause a use after free. Referencing a raw string literal like resources/images is always safe because raw string literals have the lifetime of the program. Taking a string view as an argument is safe, but avoid storing a string view argument past the function return.
+
+Be careful of return values. If a string view is derived from an argument, it will be safe to use as long as the argument isn't changed or destroyed. In this example, directory and filename are safe to use as long as path remains constant and valid. But if we replace path with a computed string, then accessing either directory or filename will cause a use after free. The root cause is that split was passed a temporary. The temporary is destroyed after the call to split, and its references are invalidated.
+
+Accessing the temporary invokes undefined behavior. AddressSanitizer can catch this bug. Watch Understanding Undefined Behavior to learn more about this kind of bug and Finding Bugs Using Xcode Runtime Tools to learn about tools to combat them. String view is the last C++17 feature I'll show you today. To try out C++17, set the C++ language dialect in your Build settings. C++17 gives you the standardized language without extensions. GNU++17 adds the usual extensions.
+
+Now, I have a quick update on link-time optimization. Link-time optimization, or LTO, optimizes the executable at link time, blurring the line between source files and enabling powerful optimizations. Incremental LTO, which we introduced last year, is the state of the art. For more information, watch last year's talk, What's New in LLVM.
+
+In the past, when using LTO on large C++ programs, we've recommended changing the Debug Info Level Build setting to Line Tables Only. But in Xcode 9, we took incremental LTO to the next level. Let's look at the time to link the Apple LLVM compiler itself. In Xcode 8, a clean link with full debug info took almost six minutes. Line Tables Only was three-and-a-half minutes faster. We sped up incremental LTO with full debug info by 35% in Xcode 9. Line Tables Only is still faster, but the overhead is now only 90 seconds.
+
+That was a clean link. The true power of incremental LTO is its fast incremental builds. When only one file changes, the link doesn't repeat optimizations unnecessarily. In Xcode 8, an incremental link of the Apple LLVM compiler itself took 21 seconds with full debug info, more than two times longer than Line Tables Only.
+
+This is why we recommended changing the debug info level in the past. But in Xcode 9, the same incremental link is two-and-a-half times faster. At just over eight seconds, it's even faster than Line Tables Only mode was last year. If you looked at incremental LTO but didn't want to change your debug info level, it's time to look again.
+
+[ Applause ]
+
+We recommend turning on incremental LTO today, even if you're using full debug info. So that's what's new in LLVM. Use @available to safely use new APIs when supporting older OS's. Run the static analyzer while you build. Use Xcode to refactor your code. Try out the new features in C++17. And turn on incremental LTO to upgrade your performance without sacrificing incremental build time. For more information, see the website. I recommend you watch the related sessions. Thank you.
+
+[ Applause ]

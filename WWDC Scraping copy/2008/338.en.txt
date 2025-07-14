@@ -1,0 +1,177 @@
+---
+Title:  Mac OS X 64-bit Kernel: Architecture and Kernel Extension Transition
+Year:   2008
+Web:    https://nonstrict.eu/wwdcindex/wwdc2008/338/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Welcome. I'm Chris Peak. And I'm Shantonu Sen. And this afternoon we're going to be talking about the architecture of and the Keck's transition to the Mac OS X 64-bit kernel. So you might have heard that this disk contains a new exciting addition, a 64-bit kernel, which we call K64. And what's more, it's all here. You don't have to send away for a 64-bit addition.
+
+But I have to remind you, of course, that the Leopard kernel and indeed the default kernel for Snow Leopard is still 32-bit. Which may be confusing to some because we keep on saying that Mac OS X is 64-bit from top to bottom. And that's certainly true for the application stack, but the kernel has its own stack, as you know. And it's still 32-bit. OS X is unique amongst mainstream operating systems in providing 64-bit application support but retaining a 32-bit kernel and 32-bit drivers.
+
+So if that's all wonderful, why K64? Why 64-bit now? I'll be trying to explain that this afternoon. But perhaps the most pressing question that you might have is, how does this affect me? Well, I've got very good news if you develop applications. There is nothing to worry about. K64 is application transparent. Applications neither know nor care that they're running on K64.
+
+Applications, be they 32-bit or 64-bit, they run the same binary. They link against the same libraries. Nothing has changed. In fact, it's even better than that. They may actually run faster, particularly if they're 32-bit. If, however, you develop KEXTs, you must be aware that K64 requires 64-bit KEXTs.
+
+That is, if you have a KEXT, you have to port it to 64-bit. However, we at Apple have got a number of KEXTs that we develop, and we found that It's not as difficult as you might immediately think to port to 64-bit. And this afternoon, we hope to give you some insights and show you some tools and techniques so that the transition for your kecks can be as easy as it has been for us.
+
+So what are you going to learn this afternoon? Well, I'll point out the differences between the 32-bit kernel, which we call K32 these days, and K64, the 64-bit kernel. And we'll see how these two kernels coexist and how they're integrated into OS X in general. Shantonu will show you how to boot into K64. There's some sorcery involved here, so pay attention.
+
+And Shantonu will go through the whole development process to show you how to port your KEXTs to 64-bit. He'll go over some best coding practices which will allow you to prepare your KEXT For the transition, he will show you how to compile and link and show you which checkboxes to use. He'll show you how to load and run and test and debug all the familiar stuff because, say again, you have to port your kecks to 64-bit to run on K64.
+
+So why K64? Well, what I want to do to provide some context for this is to look back through Time Machine over the last few years, the development, and see what machines have been released and to look at the development of the kernel over that time so that you can see the direction that we're headed in.
+
+So let's go back first to WWDC three years ago and the Intel transition. We released the developer transition kit, which was a machine that outwardly was disguised as a G5 Mac, but inside it has a 3.6 gigahertz Pentium 4 Intel processor, the Prescott microarchitecture. It supported a gigabyte of RAM, and although it was 64-bit capable, ironically, We only ran it in 32-bit mode, and obviously its intention was for you to port your applications and your KEXTs from PPC to i386, which is the identification for the 32-bit Intel architecture that we use.
+
+So let's look internally at the virtual memory layout. With a 32-bit machine, as you're aware, you've got Four gigabytes to play with. And in the initial developer release, we adopted a 3-1 shared address split. 3 gigabytes for the user and just 2 gigs for kernel and kex combined. And being one shared space, it is convenient. It uses one set of page tables. And the transition from kernel to user, user to kernel, is relatively fast.
+
+If you're familiar with Linux, this is the default 32-bit configuration for most Linux distributions, probably all. If you're familiar with Windows, of course, it's not the default Windows configuration. Windows has a 2:2 split, although you may be aware of a slightly obscure 3GB boot option which allows you to get this configuration.
+
+[Transcript missing]
+
+The first Intel machines were released. At first, the iMac and MacBook Pro. and later the Mini and other machines. Initially, this was powered by a 2 gigahertz core duo, Yonah microarchitecture. It supported 2 gigabytes of RAM and was only 32 bits. Now at this time, we took the opportunity to align the memory layout to be consistent with PPC. And we adopted a 4:4 split. separate address spaces for kernel and user, which has the advantage that they each have four gigabytes to play with. But there's a slight penalty in transitioning between user and kernel on interrupt or system call.
+
+There is, in fact, a shared high area which is the portal between these spaces. It performs a kind of a high wire act. It's a delicate process to switch address spaces. Up there are positioned the trap handlers, the interrupt and exception routines, the trampolines. And they're responsible for switching between user and kernel, or back again, like that.
+
+Okay, moving ahead, WWDC two years ago, the Mac Pro was released. A fine 3 GHz Core 2 Duo, the Marone microarchitecture. This machine supported 16 gigs. and had 64 bits, which we identify as X86-64. There are other acronyms available from Intel, which we use occasionally. We don't, however, use the contraction X64. Neither do we use AMD64, and certainly not IA64, of course, which is Itanium.
+
+So this provided an extra long mode to give you the 64-bit. I prefer to think of it as width rather than length. You've got double the number of general purpose registers, double the number of XMM registers. Some new instructions, all sorts of goodies, some subtle and some not.
+
+But really, the key thing here, especially for those of you programming in a high-level language in C or C++ in the kernel, the important thing is the 64 bits. You don't see the extra registers. It's the LP64, the longs and pointers being 64, which is how it manifests itself.
+
+Now, in addition to the 64-bit capability, This architecture has a 32-bit compatibility mode, which is a sub-mode of 64-bit, which allows you to run 32-bit code at full native speed, although you only have the eight registers and 32 bits, and you can only run in the bottom four gigs of memory, of virtual memory.
+
+But the all-important factor here is the 64-bit memory management. Take a bit of a deep dive into what the 64-bit space gives us. Now, as programmers, we tend to have our own mental models of how address spaces work, and sometimes we draw diagrams, but they're rarely to scale, as I've already demonstrated. So let's just take this dull gray box, this 32-bit address space, and let's imagine it as a linear space, a single dimension, with 2 to the 32 points in it. And let's stretch this from the sun to the earth.
+
+Which is a long way. It's one astronomical unit, technically. But 2 to the 32 is also a big number. So it turns out that points in this space are separated by roughly 100 feet. Just over 100 feet. Or if you will, a bit every about 10 feet. So you can kind of visualize that, a bit every 10 feet from the sun to the earth.
+
+So how does this change when we go to 64-bit? Well, of course, that gets expanded to 2 to the 32 astronomical units. So how far is that? Outside the solar system? Easily. To the nearest star? Yup, easy too. Give you a clue. 2 to the 16 astronomical units is 65,000 astronomical units. That's one light year, almost exactly. It's quite surprising. So, 2 to the 32 astronomical units is 65,000 light years. And coincidentally, 65,000 light years is the radius of the Milky Way galaxy.
+
+So, the 64-bit address space may not be the final frontier. It may not be cosmic in scale. It may not even be universal, dare I say. But it's certainly galactic. So let's bring you back to Earth and talk about how the chip designers have implemented 64-bits. In its first implementation, we don't get to play with the full galactic space. We're left with only 48 bits of virtual space and less than that, 40 bits of physical space. So let's look at how the machine translates the virtual address to a physical address. This tends to make people's eyes glaze over, but I'll go briefly through this.
+
+Hardware Register CR3 points physically to the base page table. The top nine bits of our 48-bit usable virtual address space selects one of 512 entries in the first level page table, which provides the physical address of the next level, and so on down through the page tables. And finally, we add the 12-bit page offset to find the physical 40-bit address.
+
+Okay, I've left out lots of details there. The things to remember, there's just two things. Firstly, note there's four levels of page tables here, which is one more than the three-level page table that we used for 32-bit address translation. And the second thing to note is these top 16 bits play no part of that translation. But they're subject to a rule that the hardware enforces. All those bits must be identical, must be the same, and they must be equal to the 47th bit.
+
+You can't just have any old pattern there. In fact, if you do, the machine will throw an exception. The result is, rather curiously, that you get this hole, this region of invalid addresses, or non-canonical addresses as they're called, right in the middle of your address space. Now, of course, it's actually bigger than that.
+
+It's 2 to the 16 times. It's 65,000 times the size of the valid space. So the picture is more like that. So you're rather curiously left with these islands of valid space, 128 terabytes each, one at the bottom and one at the top of the address space. So our galactic scale has been reduced to two half light years.
+
+So bearing this in mind, the kernel that we implemented at Tiger 10.4.7, which we called the compatibility mode kernel, was a 32-bit kernel again, 32-bit KEXTs. If you boot them on a 32-bit machine, like the original iMac and MacBook Pro, We'd use the same 4/4 split. Everything would proceed as before.
+
+But if you boot on a machine with 64-bit capable, then we enable 64-bit mode. And at that point, we enter compatibility mode. We're running 32 bits in the bottom 4 gigs of address space. We install the four level page tables and 64-bit memory management. And then we map the entire kernel, double map it, up into the top region, based at 512 gigabytes down from the top.
+
+And we install new interrupt and exception handlers, 64-bit code, up in that region. So what happens when an interrupt or an exception occurs is if we happen to be in 32-bit user space, the machine automatically switches to 64-bits. And we vector into the small amount of 64-bit code up there in the top space.
+
+That switches address space, much like we did with the 4/4 split. jumps down into the lower portion of memory and back to compatibility mode. So at that point, the kernel is running 32-bit code. Kecks are running 32 bits. They know nothing about the 64-bit machine that they're running on.
+
+And at WWDC '06, we also added support for 64-bit users. That was the point. The way this works is at exact time, if the kernel spots a 64-bit slice, an x86-64 architecture as part of the Mac OS, then A 64-bit address space up to 128 terabytes is created, and 64-bit lib system is mapped there.
+
+And the entire space is loaded by default at 4 gigabytes. And below that, there's a 4-gigabyte page zero, which has two interesting properties. Number one, it allows us to trap truncated pointers. So if you've got a 64-bit pointer, which you've somehow derived from a 32-bit quantity, you'll have chopped off the top 32 bits, and you get left with a pointer into this bottom region, and that traps. So that's useful for application development. But we also have the ability to have the kernel mapped into that portion, so that once again, the kernel and 64-bit users are shared in a shared space. And that means faster kernel transitions to and from.
+
+But we retain 32-bit KEXTs, which do now need to be aware that their clients may be 64-bit entities, as indeed the kernel has to. OK, winding forward to last October and subsequently, Leopard provides all platform support. At the top end, we're now up to a 3.2 gigahertz Core 2 Duo pen/rim. The top of the line Mac Pro supports 32 gigs.
+
+And Leopardy is a universal install, PPC and i386. But still, there's a 32-bit Intel kernel support for 32-bit KECSTs. And through the method I've described, we support either 32-bit original machines or 64-bit newer machines. In user space, there's now 64-bit libraries for all frameworks. So nothing really changed architecturally for Leopard.
+
+So why 64-bit? So you might have seen what's been changing the most over this time. It's the amount of memory. We've gone from 1 gig to 32 gigs in the space of three years. Physical RAM has been increasing, but the kernel's 32-bit virtual address space, it's 4 gigabytes, hasn't been increasing. It's running out, running out fast.
+
+To give you an example, we need in the kernel 64 bytes or more to describe each 4K page of physical memory. So on a 64-gigabyte system, we'd need one gigabyte or more-- that's a quarter of the available space-- just to describe the memory in the system. That's let alone do anything with it. Before we have a process or a file or any networking, anything, and of course frame buffers, yeah.
+
+So there's no two ways about it. The kernel requires a 64-bit address space. And that will provide space for faster and more advanced devices. Graphics, as we know, has got a prodigious appetite for memory. Storage and networking as it gets faster. And this, of course, will mean performance scaling also.
+
+And this trend for memory to go on increasing is likely to accelerate because Intel's next generation platform, the Nehalem architecture, advertises scalable memory. Each processor has its own integrated memory controller. with multi-channel capability. And processors are interconnected by a high bandwidth, point-to-point, quick path interconnect. So memory scales with processors.
+
+So, this week, the Snow Leopard preview includes an extra slice, a 64-bit, The booter selects which slice. It defaults to 32 bits, but it can be requested to boot the 64-bit slice. Once booted, the KEXT management code will select KEXTs which have a matching slice. So only 64-bit KEXTs will load and run. There's user space transparency, so the entire application suite is unchanged. And you need to bear in mind, K64 is not a new kernel. It's a port of the existing kernel. It's built from the same source. It's bug-compatible with K32.
+
+We've ported most foundation kegs, that is the basic kegs, the disk drivers and families. And the preview allows you to boot between K32 and K64. So looking at the memory, the memory layout is-- A little different. We've used the LP64 model inside the kernel, of course. It's got 128 terabytes of virtual address space available to it. And we're back to a shared address space. And that means, again, faster transitions to and from the kernel. And there's no mode switching in and out of compatibility mode inside the kernel, only at kernel user boundary.
+
+The syscall interface is completely unchanged. Applications neither know nor care what kernel they're running on. Inside the kernel, the KPIs have been minimally changed, weasel words, but we've introduced 64-bit types only when necessary. There's actually, because of our 64-bit work on Tiger, most I/O Kit KPIs are already 64-bit clean. We've taken the opportunity to remove deprecated interfaces, but only 64-bit KEXTs. So now I'm going to hand over to Shantonu who's going to give you the practical details of developing your kecks for the new kernel.
+
+Thank you, Chris. Let's talk about how you actually port your kecks to K64. As Chris mentioned, for most users and most application developers, K64 is completely transparent. However, some of your products do rely on KEXT for proper operation, such as network adapters, file systems, mass storage devices, and other peripherals. It's essential that you port your KEXT to K64 so that the transition is as transparent as possible for your customers.
+
+Your text is probably already building universal for Leopard, both 32-bit PowerPC and Intel. At a fundamental level, for Snow Leopard, we're talking about moving to 32 64-bit universal to support the K64 kernel. We'll talk about some of these build settings in just a moment. The K64 development cycle can be broken down into a few phases: preparing, building, booting, debugging, and validating. You can iterate on this process as you make changes, and if you have additional kecks, you can start at preparing again. We'll also wrap up with a few notes on some of the porting issues you may run into and best practices for your K64 port.
+
+You can start today preparing your K64 port. First of all, start with the Snow Leopard preview. It has all of the developer tools you need to start building your text for 32-bit, definitely. You'll notice that GCC 4.2 is the default system compiler. It is stricter about certain C++ syntax, which may require some source change. It's also much better at flagging potential 64-bit incompatibilities. This is also a great opportunity to replace calls to deprecated APIs or classes because those APIs and classes are most likely not available for K64.
+
+You should also take the time to enable and resolve as many compiler warnings as you can. WL will add the most number of warnings and flag the most number of potential issues. We found that W-shorten-64-to-32 catches many types of pointer truncation issues, such as assigning a 64-bit pointer to a 32-bit variable.
+
+If you don't have prototypes in scope, you may run into a different kind of truncation because the compiler will truncate to an int type by default. W implicit function declaration will warn you of this. Finally, adding W format is important to make sure your logging code is logging what you expect it to, which can be important for resolving bugs.
+
+This is also a good opportunity to add 64-bit user space support to your existing 32-bit KEXT on Leopard. As Chris mentioned, in Leopard, most of the framework stack is 64-bit capable, and you may already need to handle 64-bit clients. We found that this is a great step in making your KEXT 64-bit safe because many of the code locations that require changes for 64-bit user space support are the same places where you need to make changes for your 64-bit kernel extension. Xcode does take care of passing off the appropriate compiler flags, but if you do have a very specialized product, make sure you're using fAppleText for C++ code and -mkernel for C code.
+
+So what do you do to build your kernel extension? Well, there's a few settings which are fundamental. Of course, you'll be adding x86-64 to your architectures list. Xcode has a shorthand for this called 32-64-bit Universal, which will add x86-64 for you. Your base SDK must be pointing to either the current Mac OS or to the 10.6 SDK.
+
+If you have a complex project where some targets must build 64-bit and others not, you may be taking advantage of the valid architecture setting. In this case, go ahead and add x86-64 to your kex targets. Finally, GCC 4.2 is required for K64. If you do need to support multiple OS revisions and multiple architectures, you can do that with Xcode and per-architecture build settings. This is discussed in more detail in the session Maximizing Platform Compatibility of I/O Kit Drivers on Friday. For now, we'll be talking just about K64 and Snow Leopard.
+
+Outside of your build settings inspector, make sure to update your Info.plist to only use com.apple.kpi-style dependencies. These were introduced in Tiger and should have everything you need to port your KEXT to K64. In the Snow Leopard preview, most I/O Kit families and most kernel KPIs are K64 safe, so most of you can start working on your ports immediately. The notable exceptions to this are the Audio family and 802.11 family.
+
+However, do note that this is a developer preview, and not all KPIs and families are finalized, so there may be some changes required. How do you boot K64? Well, for the seed, K64 is supported on two hardware platforms. There's the early 2008 MacBook Pro, including both the 15-inch and 17-inch models, and the early 2008 Mac Pro. These are the Penron-based models of each.
+
+As Chris mentioned, the booter is the actual piece of code that selects which slice of the universal kernel to load. It can be instructed to load the x86-64 slice. For the preview, you can hold down 6 and 4 during boot, and that will instruct the booter to load the x86-64 slice. If you'd like to make this persistent, you can set NVRAM and add the arch equals x86-64 setting. When you're done with this, you can unset it by holding down Command Option PR at boot to reset NVRAM.
+
+You can go ahead and do this if you have one of the supported configurations using your install DVD. You can boot the install DVD to K64. How can you tell if you're actually booted to K64? Well, that's a question I'll leave to you. We do have a lab following this session at 3:30. If you have creative answers to this, come by, and you will have the opportunity to win a prize. So creativity is rewarded in this case.
+
+Now that you've built your KEXT for K64, how do you start loading and debugging it? Well, it turns out that it's mostly the same as your 32-bit KEXT development process. Most of the logging APIs are available just like 32-bit, such as I/O log, printf, and firewire kprintf, if you have a second machine and a firewire cable.
+
+There's also interactive GDB debugging using either the Ethernet or FireWire transports, just like 32-bit. There's also the live kernel debugger for use, which was introduced at last year's WWDC. This allows you to do read-only introspection of your running kernel if you set the appropriate boot args, which is KM equals 1. Do note that GDB defaults to the x86-64 kernel when you invoke it with default options, so you may need to pass -ai-386 if you want to do standard 32-bit Intel kernel development.
+
+Another change in Snow Leopard is that there's a new tool for doing .Sim file generation called kextutil. This will be taking over much of the developer functionality of kextload from Leopard. For more information on this, there's a session on Friday called Kernel Extension Management, which discusses more of the changes in detail.
+
+You can do most of these today because the kernel development kit has been posted for the Snow Leopard preview. It's available at connect.apple.com. Here's an example of what you might see with the kernel debug kit. This is an example of the live kernel debugger. You'll notice that the kernel was built for the release configuration for x86-64, and also that all pointers have been increased to their 64-bit size.
+
+So now that you've gotten some basic operation out of your kecks, it's time to start validating more code paths. For Snow Leopard, this is the test matrix you'll need to validate. The kernel can be either 32-bit or 64-bit. Data coming in from user space can originate from either a 32-bit process or a 64-bit process. It can also come from a 32-bit PowerPC process via Rosetta. The distinction there is that data coming in may be Indian swapped.
+
+There's a few communication channels, which are the primary mechanisms of getting data into your kernel extension. If you're an I/O Kit KEXT and you use I/O User Client, you may be passing structures or scalers in and out of the kernel. That's one of the areas where you will need to validate your inputs.
+
+If you're more of a BSD-style KEXT and you publish syscadls or a custom DevFS node, you may also need to validate your structures that are coming in, especially if you have iOctls or for file system developers, you may support the fscuddle interface. Finally, if you're an I/O Kit KEXT and you use I/O Registry for getting and setting properties, there's good news for you. No work is required for you because the I/O Kit user space framework and kernel side do correctly marshal data in and out of the kernel.
+
+Let's talk about some of the porting best practices for minimizing the amount of effort for your K64 port. There's quite a bit of existing documentation available on developer.apple.com. Primarily, you'll be interested in the 64-bit transition guide, which was published a few years ago. When reading that document, any time you see a reference to file format compatibility, the issues that they're describing are basically the same as shared user space kernel structures.
+
+Some of the best practices, such as using XML as your file format, also apply to K64. For example, you can use the built-in libkern XML parser to pass plists in and out of the kernel. When reading that document, anytime you see a reference to IPC, it's very analogous to user space kernel communication.
+
+This is a good opportunity to define your structures using fixed-width C99 types. For instance, in 16T instead of the fundamental short type, UN32 instead of unsigned long, usually. This is actually a tricky case because your existing text may be using unsigned long as a shorthand for a 32-bit integer type.
+
+However, if it's using unsigned long to store a pointer, you may instead want to be using a UN64T type, which can hold pointers for both 32-bit and 64-bit tasks. This is also a good opportunity to reorder some of your structures to minimize implicit changes by the compiler. We'll give an in-depth example of this in just one second.
+
+Finally, make sure you use fields that are wide enough to hold any type of pointer. There is the Mach type available called mach_vm_address_t if you're an I/O Kit KEXT. You can also use the C99 type, uint64t. There's also the Universal Binary Programming Guidelines, which has a few tips for general code portability and specifically talks about issues such as ndns and alignment.
+
+Let's dive into one specific porting issue which we've run into frequently at Apple. Let's start with this C structure that's defined on the left. It's fairly straightforward how the 32-bit compiler will translate this into a memory layout. All of the fields are laid out contiguously in memory, and the sizes are what you'd expect based on the C definition. What does this look like for a 64-bit process? It's quite a bit more complicated. A tag starts out being the same.
+
+B pointer expands to an 8-byte field, which is what you would expect since we're using an LP64 data model. However, what's this pad field that's been added? It turns out that our system ABI requires that 8-byte values are aligned on an 8-byte boundary, which means that implicit padding must be added between the two fields. CLAN as much as you would expect. D flags remains an 8-byte field.
+
+E flags, too, is the same as before. But again, padding has been added at the end of the structure so that the overall structure is a multiple of 8 bytes. You can see that compared to the C structure at the left, the 64-bit layout has many unexpected things, such as implicit pad slots and fields that have grown in width. Well, the fields growing, you might expect, for a 64-bit.
+
+Can we improve on this? Certainly, because in the worst case, your kernel extension, your 32-bit extension and your 64-bit kernel extension, would need to interpret either of these structures. So you may have to maintain up to four code paths in your kernel extension. We're going to improve on this by reordering some of our structure fields. In this example, A tag is as before. However, we've moved up C LAN so that it occupies what would have been a pad slot otherwise.
+
+There's two new things about bpointer. It's unconditionally an 8-byte field so that it can hold pointers from either a 32-bit user space process or 64-bit. And since CLend was moved up, there's no implicit padding between a tag and bpointer. Dflags remains unchanged, and we've expanded Eflags2 to take up 64 bits so that there's no implicit padding at the end of our structure.
+
+Although this may waste a few bits that we might not be using, this drastically simplifies the amount of code you need to maintain in your kernel extension. Now there's only one code path in your kernel extension to support both K32, K64, and data coming in from 32-bit or 64-bit user processes.
+
+Another issue which you may run into has to do with types. The Uint32 type is an unsigned long for K32 but an unsigned int for K64. This is done for binary compatibility of C++ keks for K32. In both cases, the type is a 32-bit integer, but the fundamental C type has changed. This has a few implications. For example, when printing out variables of this type, it's not clear what format specifier to use.
+
+Our best recommendation for now is to stick to treating it as a lowercase uint32t type, the C99 type, and cast appropriately, which will both print out the right thing and cause no loss of precision. Most I/O Kit KPIs do use the capital Uint32 type, so you will see this quite frequently. Also, be sure to match the types of your superclasses methods when attempting to override them. For example, in this case, under K32, it may have worked accidentally because a UN32 wasn't unsigned long. Under K64, it won't work. So make sure you revisit what you are overriding.
+
+Another issue which causes the most number of panics has to do with pointer truncation. Make sure that when you use APIs, for instance, for mapping device memory, that you store the result of getVirtualAddress in an appropriately sized variable. W short 64 to 32 is very valuable to catch this type of thing and will flag this error.
+
+As Chris mentioned, the kernel is linked at a high address starting with six Fs and eight zero. So anytime you see a pattern like that, you know it's probably a kernel address. If you do get panic reports from your customers where CR2 register, which is the faulting address, looks like it's less than 4 gigabytes, it may be because of pointer truncation. However, that's not always the case because also, as Chris mentioned, we do use a shared virtual address space.
+
+So if you do have pointer truncation, you may dereference memory, which is valid in a 32-bit user process, which is mapped at the same time. You can turn off this optimization by using the -no-shared-cr3 boot argument. This effectively gives you a 128-terabyte page zero for your kernel extension, which will make sure you find and get reports on any potential truncation issues. One thing to note is that the kernel debug kit does ship with a debug configuration kernel. This defaults to having the no-shared CR3 flag set. So that debug kernel is obviously very helpful in debugging your kernel extension.
+
+Even though your device may only support 32 bits of physical addressing, your kernel extension must support a full 64-bit virtual address space. Finally, another case of pointer truncation may be because of either implicit prototypes which default to int in the compiler, or if you legitimately call APIs that only take ints.
+
+How much effort can you expect for your K64 port? Well, all projects are different, so we can only give some rough guidelines. K64 does use the standard I/O Kit architecture, same as K32, so your drivers will remain essentially unchanged. You will be doing this on stable hardware, and you can boot into K32 at any time for regression testing.
+
+We've seen some keks require minimal effort, such as cross-platform file systems, which were already using fixed-width data types for on-disk data structures and control messages. If you have an I/O Kit keks which uses proper family abstractions or ones where you already added 64-bit user space support for Leopard, we found that those usually require the least amount of effort. Typically, the changes only are to in-kernel data structures, for instance, those that reflect a piece of device memory. In those cases, it may be as easy as just pressing the checkbox.
+
+We've also seen some porting take a larger amount of effort. For instance, those that have complex iOctils, projects which have a large number of existing warnings, because it's difficult to tell what are the new warnings because of your K64 port. and KEX, which must support multiple OS versions. Again, there's a session on Friday dedicated to telling you the best way to do this.
+
+Let me describe the state of K64 in the Snow Leopard preview. Quite a bit works. These sections I described earlier on booting, developing, and debugging can all be done on a K64 system. Standard user applications like Safari, Mail, and Xcode do work properly under K64. You'll note that Mail and Xcode do default to 64-bit user space, so that is a well-exercised code path, and Safari can optionally be run as a 64-bit program. Most internal devices are supported. Most file systems are supported, such as ZFS for the Mac OS X server.
+
+There's also some things that don't work, such as there's no audio, as I mentioned, no wireless network, and currently no accelerated graphics. There's no sleep or hibernation support, so those code paths in your kernel extension cannot be currently exercised. And finally, there's no D-trace support, so some of the developer tools for profiling, such as instruments, and also some of the tools like Shark, do not currently work. With that, I'll hand it back to Chris.
+
+So related sessions have all been crowded together on Friday. There's the Getting Started with I/O Kit, and for advanced users, the Maximizing Platform Compatibility, which Shantonu has mentioned. And there will be some sample code, including an x86-64 KEXT. And finally, the new kernel extension framework will be explained in detail.
+
+And right after this session at 3:30 downstairs, we are having a 64-bit kernel lab. So you can come down and try out some ideas for the prize. So in summary. So RAM is ever increasing. And to cope with that, we need a 64-bit kernel address space. And a 64-bit kernel means 64-bit KEXTs.
+
+The development process is quite straightforward. As simple as just that checkbox, ideally, honestly. And the development process is completely unchanged. The KPIs have been minimally updated. There's some reference documentation on the developer site. and come to the lab and test drive K64 this afternoon. Or use your own current model laptop with the Preview DVD. And start porting your kegs tomorrow.

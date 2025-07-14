@@ -1,0 +1,1866 @@
+WEBVTT
+
+00:00:12.550 --> 00:00:17.960
+>> Welcome to the Designing for Launchd WWDC session.
+
+00:00:22.219 --> 00:00:26.369
+So I'm Damien Sorresso, I'm the
+Launchd Maintainer here at Apple.
+
+00:00:26.370 --> 00:00:28.700
+So let's just dive right in.
+
+00:00:28.699 --> 00:00:31.189
+So why launchd?
+
+00:00:31.190 --> 00:00:32.000
+What did it give us?
+
+00:00:32.000 --> 00:00:34.729
+We had inetd, we had cron.
+
+00:00:34.729 --> 00:00:37.899
+Launchd gives us centralized process management.
+
+00:00:37.899 --> 00:00:43.939
+There's 1 daemon on the system
+responsible for kicking off all processes.
+
+00:00:43.939 --> 00:00:49.199
+And we give all this to you in a data driven
+way, which means it's less code for you to write
+
+00:00:49.200 --> 00:00:52.060
+to get a daemon up and running on the system.
+
+00:00:52.060 --> 00:00:55.980
+And we've embraced an on-demand architecture.
+
+00:00:55.979 --> 00:01:03.640
+So what we'll cover in this session is the
+essentials, basic philosophies of launching on demand,
+
+00:01:03.640 --> 00:01:09.329
+our philosophy about process lifetimes,
+the best design practices
+
+00:01:09.329 --> 00:01:13.789
+that you guys should embrace when
+writing your daemons or agents.
+
+00:01:13.790 --> 00:01:20.490
+The grouping and logical organization of launchd
+jobs in 2 sessions, and we'll cover what's new
+
+00:01:20.489 --> 00:01:26.869
+in Snow Leopard as denoted by this cool graphic.
+
+00:01:26.870 --> 00:01:32.340
+So what is launchd?
+
+00:01:32.340 --> 00:01:33.700
+It's our PID 1.
+
+00:01:33.700 --> 00:01:37.200
+We launch the system, we get everything kicked off.
+
+00:01:37.200 --> 00:01:40.210
+So we are the system bootstrapper.
+
+00:01:40.209 --> 00:01:46.569
+We manage system jobs, which are
+daemons, and user jobs, which are agents.
+
+00:01:46.569 --> 00:01:52.819
+And launchd is the canonical way
+of launching processes on Mac OS X.
+
+00:01:52.819 --> 00:01:59.349
+We really encourage you to use launchd for your
+process creation needs rather than forking if you can.
+
+00:01:59.349 --> 00:02:04.869
+And if you can't, tell us why and we'll try and fix it.
+
+00:02:04.870 --> 00:02:13.439
+Launchd is also a virtual process manager,
+and this ties into our on-demand architecture.
+
+00:02:13.439 --> 00:02:16.030
+So let's talk a little bit about that.
+
+00:02:16.030 --> 00:02:21.500
+It all has to do with this quote, The Fundamental Theorem
+of Software Engineering, "All problems can be solved
+
+00:02:21.500 --> 00:02:24.629
+by introducing an extra level of indirection."
+
+00:02:24.629 --> 00:02:26.769
+So that's what we've done here.
+
+00:02:26.770 --> 00:02:34.219
+Jobs in launchd are like virtual memory
+pages, that they're virtual processes.
+
+00:02:34.219 --> 00:02:37.979
+So when you load a job, that's like mapping a page.
+
+00:02:37.979 --> 00:02:43.379
+Starting a job is faulting the page
+in, stopping it is evicting the page,
+
+00:02:43.379 --> 00:02:49.439
+unloading a job is like unmapping the
+page, and our demand comes through IPC,
+
+00:02:49.439 --> 00:02:57.729
+whereas for memory the demand is via
+read and write requests to a page.
+
+00:02:57.729 --> 00:03:05.149
+So your launchd job, if it exposes services,
+is virtually available as an IPC destination.
+
+00:03:05.150 --> 00:03:16.700
+Launchd monitors the IPC resources that your job uses,
+and when a request comes in, we kick it off for you.
+
+00:03:16.699 --> 00:03:22.159
+So there's no checking for a PID file to make
+sure the server's running, or anything like that.
+
+00:03:22.159 --> 00:03:26.460
+All you have to know is that your job
+will be available when it's needed.
+
+00:03:26.460 --> 00:03:31.580
+And we want all these IPC mechanics hidden behind API.
+
+00:03:31.580 --> 00:03:37.540
+You guys as developers call a lot of API that
+actually behind the scenes is messaging a daemon.
+
+00:03:37.539 --> 00:03:45.259
+So for example, the security framework, if you want to get
+an authorization reference, the security framework goes
+
+00:03:45.259 --> 00:03:53.389
+over to securityd and asks it "I need an off
+reference" and securityd does all the checking,
+
+00:03:53.389 --> 00:03:56.329
+and then returns something if the request was successful.
+
+00:03:56.330 --> 00:04:03.770
+And you had no idea that was going
+on, and that's the way we like it.
+
+00:04:03.770 --> 00:04:12.810
+So this on-demand architecture gets us 3 things: processes
+become more efficient, more flexible, and more reliable.
+
+00:04:12.810 --> 00:04:18.910
+And the best part about the on-demand architecture
+is that all 3 of these things just emerge
+
+00:04:18.910 --> 00:04:23.030
+when you design your daemon to be launch on demand.
+
+00:04:23.029 --> 00:04:31.309
+If your daemon can come and go as needed, it can just
+be killed or idle exit when it's not doing anything,
+
+00:04:31.310 --> 00:04:33.879
+and it doesn't have to take up system resources.
+
+00:04:33.879 --> 00:04:39.120
+It also lets you more dynamically
+respond to system state changes.
+
+00:04:39.120 --> 00:04:49.680
+So if an environment variable changes, you can simply kill
+yourself and then come back and pick up that new state.
+
+00:04:49.680 --> 00:04:59.120
+Because of this you also become more reliable, so a
+critical system daemon that before launchd might...
+
+00:04:59.120 --> 00:05:04.730
+it going down might have been the equivalent of a
+kernel panic, it's now just kind of a minor hiccup
+
+00:05:04.730 --> 00:05:09.520
+because we can just re-launch it and
+it can just keep servicing requests.
+
+00:05:09.519 --> 00:05:14.539
+So why does this make sense in the context of our industry?
+
+00:05:14.540 --> 00:05:19.439
+Our industry has a history of virtualizing
+resources to make them more...
+
+00:05:19.439 --> 00:05:22.230
+to make their availability more robust.
+
+00:05:22.230 --> 00:05:26.360
+The primary example we covered before was with main memory.
+
+00:05:26.360 --> 00:05:35.540
+So pages are backed by either physical memory or the hard
+drive, and when you request an allocation like a big one,
+
+00:05:35.540 --> 00:05:40.450
+10 meg allocation, the system doesn't
+give you 10 megabytes of physical memory.
+
+00:05:40.449 --> 00:05:46.310
+It gives you 10 megabytes of virtual memory,
+and says here's your buffer, and if you try
+
+00:05:46.310 --> 00:05:50.209
+and write to it we'll give you
+those resources when you need it.
+
+00:05:50.209 --> 00:05:53.629
+And we've also done the same thing
+with GPU memory on Mac OS X.
+
+00:05:53.629 --> 00:06:00.589
+So GPU memory can be backed by our virtual memory
+subsystem, we're doing the same thing with GPU resources.
+
+00:06:00.589 --> 00:06:09.310
+So when you submit a Shader job to using OpenCL
+or CoreImage, it does all the checking to see
+
+00:06:09.310 --> 00:06:12.060
+if the built-in graphics hardware can handle that request.
+
+00:06:12.060 --> 00:06:16.410
+And if not, the job is paged out to the CPU to be done.
+
+00:06:16.410 --> 00:06:21.290
+But you didn't know what happened;
+it was work that needed to be done.
+
+00:06:21.290 --> 00:06:25.379
+And in Grand Central Dispatch we're
+doing the same thing with threads.
+
+00:06:25.379 --> 00:06:32.629
+So you just submit a block of work, GCD takes care
+of all the thread managing behind the scenes for you,
+
+00:06:32.629 --> 00:06:38.769
+and you don't have to worry about the availability
+of a thread because GCD will page it in if needed.
+
+00:06:38.769 --> 00:06:45.959
+And all of this provides a standardized interface to
+multiple different implementations of the same technology.
+
+00:06:45.959 --> 00:06:50.930
+So what does this get you in terms of practice?
+
+00:06:50.930 --> 00:06:53.500
+What applications does this have?
+
+00:06:53.500 --> 00:06:57.019
+You can use this kind of philosophy
+in architecture to achieve things
+
+00:06:57.019 --> 00:07:01.299
+like privilege separation, or fault and resource isolation.
+
+00:07:01.300 --> 00:07:09.750
+So if you have a particularly crash-prone operation,
+or a dangerous operation like parsing something,
+
+00:07:09.750 --> 00:07:15.040
+you can factor it out into a separate
+process that's launched on demand by launchd.
+
+00:07:15.040 --> 00:07:22.780
+And if something goes wrong, it's just that process
+that crashes, not, say, a user-facing GUI app.
+
+00:07:22.779 --> 00:07:30.739
+And you can also, if the computation requires
+bringing in fairly large or extensive libraries,
+
+00:07:30.740 --> 00:07:36.800
+you don't have to bring those in if the daemon
+isn't running, and it can just come and go.
+
+00:07:36.800 --> 00:07:42.139
+And as we said before, you get more
+dynamic response to state changes.
+
+00:07:42.139 --> 00:07:46.349
+Something changes, you can just go away and
+come back and pick up where you left off.
+
+00:07:46.350 --> 00:07:51.860
+All the pending requests that you had when you
+exited will still be there when you come back,
+
+00:07:51.860 --> 00:07:56.210
+because launchd holds onto your
+resources while you're not running.
+
+00:07:56.209 --> 00:08:04.329
+And all this together creates, or exposes, kind of
+a model view controller paradigm for your processes
+
+00:08:04.329 --> 00:08:10.639
+where the model is a backing daemon, and the
+view and controller part is what the user sees.
+
+00:08:10.639 --> 00:08:15.939
+Let's talk a little bit about the basics of launchd jobs.
+
+00:08:15.939 --> 00:08:23.750
+Here we have 5 jobs that are on the system, and so
+the system boots up, none of these jobs are running.
+
+00:08:23.750 --> 00:08:25.730
+But then we kick off our...
+
+00:08:25.730 --> 00:08:30.030
+our demandd here.
+
+00:08:30.029 --> 00:08:32.139
+So it comes online.
+
+00:08:32.139 --> 00:08:35.360
+And let's say it wants to get information
+about its security session.
+
+00:08:35.360 --> 00:08:37.889
+So it calls API that messages securityd.
+
+00:08:37.889 --> 00:08:43.029
+Securityd wasn't running before but it
+comes online to service that request.
+
+00:08:43.029 --> 00:08:47.230
+And demandd did not have to do
+any sort of checking to make sure
+
+00:08:47.230 --> 00:08:52.250
+that the server was running before
+issuing its request, it just happened.
+
+00:08:52.250 --> 00:08:55.789
+Now let's say demandd wants to talk to coreservicesd.
+
+00:08:55.789 --> 00:08:58.309
+It wants to get information about a user session.
+
+00:08:58.309 --> 00:09:02.059
+Coreservicesd comes online, it services that request.
+
+00:09:02.059 --> 00:09:06.869
+Let's say securityd now wants to log a
+message to sislog, it says, "Hey, I'm alive."
+
+00:09:06.870 --> 00:09:10.129
+Sislog comes online and logs a message.
+
+00:09:10.129 --> 00:09:13.279
+Now securityd needs to get information about groups.
+
+00:09:13.279 --> 00:09:20.029
+DirectoryServices comes online, gives it the information
+it asks for, coreservicesd might want to do the same thing.
+
+00:09:20.029 --> 00:09:24.009
+After all this, we kind of get a
+nice little constellation of jobs.
+
+00:09:24.009 --> 00:09:31.559
+[ Silence ]
+
+00:09:31.559 --> 00:09:41.269
+So one of the things that separates launchd from classical
+system bootstrappers is our notion of dependencies.
+
+00:09:41.269 --> 00:09:46.689
+We don't actually have an explicit dependency graph.
+
+00:09:46.690 --> 00:09:52.790
+Since all of your jobs are loaded up front
+and they're available as virtual entities,
+
+00:09:52.789 --> 00:09:56.799
+all the dependencies are implied through IPC.
+
+00:09:56.799 --> 00:10:03.939
+Sending a message to a resource, or an advertised
+service, makes you dependent on that service.
+
+00:10:03.940 --> 00:10:08.130
+And this makes us a lot more flexible,
+because we don't have to find...
+
+00:10:08.129 --> 00:10:10.820
+you don't have to find your place in the dependency graph.
+
+00:10:10.820 --> 00:10:15.870
+It also lowers the barrier of entry
+for you guys writing daemons.
+
+00:10:15.870 --> 00:10:21.679
+You just drop a plist in the right location
+and you're done, you have a daemon that runs.
+
+00:10:21.679 --> 00:10:27.419
+This is like a plug-in architecture where the
+plug-ins all run in separate address spaces.
+
+00:10:27.419 --> 00:10:31.509
+So we mentioned property lists.
+
+00:10:31.509 --> 00:10:33.450
+What is the launchd plist like?
+
+00:10:33.450 --> 00:10:34.210
+What's its structure?
+
+00:10:34.210 --> 00:10:35.170
+What does it describe?
+
+00:10:35.169 --> 00:10:40.899
+It describes principally 3 things: it describes
+the environment that your job is going to run in,
+
+00:10:40.899 --> 00:10:48.659
+the services that your job advertises, if any, and the
+lifecycle of your job -- when and how it should run.
+
+00:10:48.659 --> 00:10:53.329
+It's a plist, I know it's tempting but please
+don't store application preferences in there.
+
+00:10:53.330 --> 00:11:01.670
+We want you to treat launchd plists as immutable
+entities, so once they're deployed, they don't change.
+
+00:11:01.669 --> 00:11:05.719
+To load a plist, you use our launchctl utility.
+
+00:11:05.720 --> 00:11:10.790
+That's the command line interface for launchd,
+and you simply use the load subcommand
+
+00:11:10.789 --> 00:11:14.199
+and point it to a plist, and the job gets loaded.
+
+00:11:14.200 --> 00:11:21.310
+And to unload, simple as calling unload on the plist.
+
+00:11:21.309 --> 00:11:25.109
+So there's some required keys that we need in our plist.
+
+00:11:25.110 --> 00:11:26.070
+The first is Label.
+
+00:11:26.070 --> 00:11:34.490
+This is just a string that uniquely identifies
+your job, and it can be anything you want,
+
+00:11:34.490 --> 00:11:40.190
+but we really like the reverse DNS style
+and it's becoming ever more popular,
+
+00:11:40.190 --> 00:11:45.990
+so com.yourcompany.yourproduct uniquely identifies your job.
+
+00:11:45.990 --> 00:11:47.799
+Then we have Program.
+
+00:11:47.799 --> 00:11:50.139
+This key is a string that points to the...
+
+00:11:50.139 --> 00:11:55.899
+is the path to the executable that
+you want launchd to kick off.
+
+00:11:55.899 --> 00:12:01.620
+It's basically the first argument to
+exec. And then there's ProgramArguments.
+
+00:12:01.620 --> 00:12:05.029
+This is the argument vector that the program
+will receive, so it's an array of strings
+
+00:12:05.029 --> 00:12:08.379
+that launchd gives the program when it gets kicked off.
+
+00:12:08.379 --> 00:12:14.220
+This is basically the second argument
+to exec. Another interesting key
+
+00:12:14.220 --> 00:12:18.970
+that we have in launchd is the KeepAlive key.
+
+00:12:18.970 --> 00:12:26.550
+We said that demand is principally based on IPC, but
+sometimes you just want something really simple like...
+
+00:12:26.549 --> 00:12:31.359
+maybe only run this job when this file is present on disk.
+
+00:12:31.360 --> 00:12:33.180
+Keep Alive lets you do that.
+
+00:12:33.179 --> 00:12:38.759
+It can be either a Boolean or a dictionary, and
+it lets you describe your job's lifecycle in terms
+
+00:12:38.759 --> 00:12:46.879
+of 3 things right now: we have file presence
+or absence, whether or not your job last exited
+
+00:12:46.879 --> 00:12:53.950
+with a successful exit status, and in our Unix world 0
+means success; and you can predicate your job's lifecycle
+
+00:12:53.950 --> 00:12:59.440
+on whether or not there is another job loaded into launchd.
+
+00:12:59.440 --> 00:13:01.920
+All these criteria are oared together.
+
+00:13:01.919 --> 00:13:05.709
+So if any one of them is true, launchd will launch the job.
+
+00:13:05.710 --> 00:13:11.820
+And every time the job exits, these criteria are
+re-evaluated to see if launchd should keep the job alive.
+
+00:13:11.820 --> 00:13:18.440
+And if you want more details, check out the
+launchd.plist man page that's in section 5.
+
+00:13:20.539 --> 00:13:22.069
+So let's write a simple daemon.
+
+00:13:22.070 --> 00:13:27.470
+So we have our property list, it's got the
+XML headers, let's first insert our label.
+
+00:13:27.470 --> 00:13:32.430
+We just have a simple string, com.apple.wwdc-sample.
+
+00:13:32.429 --> 00:13:38.149
+Then we want to insert our program, so this
+is the path to the binary that we're going
+
+00:13:38.149 --> 00:13:41.480
+to execute, and in this case we live in libexec.
+
+00:13:41.480 --> 00:13:49.789
+Now we insert program arguments, so when our program runs
+it will receive a vector containing these 3 arguments.
+
+00:13:49.789 --> 00:13:56.079
+And we're going to put in KeepAlive true, which is
+basically just saying I want this to always run.
+
+00:13:56.080 --> 00:14:00.520
+It's the equivalent of wiring your job into the working set.
+
+00:14:00.519 --> 00:14:06.509
+And let's add 1 more key that's new to
+Snow Leopard called EnableTransactions.
+
+00:14:06.509 --> 00:14:12.500
+So here's our plist, let's talk a little bit
+more about this EnableTransactions thing.
+
+00:14:13.539 --> 00:14:16.529
+This enables really fast shutdown.
+
+00:14:16.529 --> 00:14:23.100
+So if you've installed Snow Leopard on your Dev machines,
+we encourage you -- shut down your machine sometime.
+
+00:14:23.100 --> 00:14:26.190
+You might be surprised at how fast it goes.
+
+00:14:26.190 --> 00:14:30.840
+So this is all based on a transactional model.
+
+00:14:30.840 --> 00:14:38.139
+By putting that EnableTransactions key in your job, you
+are saying that whenever you're about to do an operation
+
+00:14:38.139 --> 00:14:43.009
+that can't be interrupted, you'll
+call this vproc_transaction_begin API;
+
+00:14:43.009 --> 00:14:44.960
+and that opens up a transaction.
+
+00:14:44.960 --> 00:14:50.580
+So when launchd goes to shut down the system, it
+checks to see how many transactions you have open.
+
+00:14:50.580 --> 00:14:55.200
+If you don't have any, we simply
+send you SIGKILL, because that's...
+
+00:14:55.200 --> 00:14:58.170
+it's terminate without warning.
+
+00:14:58.169 --> 00:15:05.029
+If you do have open transactions, we send you SIGTERM,
+and you're expected to catch SIGTERM and react to it.
+
+00:15:05.029 --> 00:15:10.139
+So what you should do when you get the
+SIGTERM is unwind your existing transactions,
+
+00:15:10.139 --> 00:15:13.870
+and also stop accepting new ones.
+
+00:15:13.870 --> 00:15:22.509
+So these 2 API's are documented in vproc.h, and we found
+that just by adding the EnableTransactions key to a lot
+
+00:15:22.509 --> 00:15:27.129
+of jobs, shutdown proceeded at a much quicker pace.
+
+00:15:27.129 --> 00:15:34.009
+So let's do a quick demo of KeepAlive, see what it's like.
+
+00:15:34.009 --> 00:15:40.819
+[ Silence ]
+
+00:15:40.820 --> 00:15:46.450
+So I've got a couple of plists here.
+
+00:15:46.450 --> 00:15:49.450
+Here's our KeepAlive demo plist.
+
+00:15:49.450 --> 00:15:53.220
+We've got our label, and here we have KeepAlive criteria.
+
+00:15:53.220 --> 00:15:59.980
+This says keep me alive as long as this file is present
+on disk, because we've got this Boolean here set to true.
+
+00:15:59.980 --> 00:16:08.070
+The other condition we have is keep me alive
+as long as this job is loaded into launchd.
+
+00:16:08.070 --> 00:16:13.510
+So we're in that working directory, let's
+touch the file Keep Me Alive and see what...
+
+00:16:13.509 --> 00:16:17.029
+oh, and there's also a standard outpath key.
+
+00:16:17.029 --> 00:16:22.769
+This will just have launchd redirect your
+standard out to the file you specify.
+
+00:16:22.769 --> 00:16:25.090
+So let's touch Keep Me Alive...
+
+00:16:25.090 --> 00:16:28.750
+and then Tail our log file.
+
+00:16:28.750 --> 00:16:34.990
+This daemon, when it comes online, just outputs a
+sislog message, or writes out to its standard app,
+
+00:16:34.990 --> 00:16:39.009
+so when it comes online we should see a message.
+
+00:16:39.009 --> 00:17:01.740
+[ Silence ]
+
+00:17:01.740 --> 00:17:04.009
+Oops... Oh, that's why.
+
+00:17:04.009 --> 00:17:09.549
+[ Silence ]
+
+00:17:09.549 --> 00:17:17.599
+OK, so now let's touch Keep Me
+Alive and Tail-F, our log file.
+
+00:17:17.599 --> 00:17:22.369
+And it's alive, hurray.
+
+00:17:22.369 --> 00:17:30.009
+So now when we remove that file, launchd
+will no longer keep the job alive.
+
+00:17:30.009 --> 00:17:34.539
+[ Silence ]
+
+00:17:34.539 --> 00:17:40.420
+So now let's load the other job, because that's
+also a condition for launchd to kick this job off.
+
+00:17:40.420 --> 00:17:47.490
+So we'll simply do a launchctl load in our plist.
+
+00:17:47.490 --> 00:17:50.009
+And again we'll Tail our log file.
+
+00:17:50.009 --> 00:17:55.109
+[ Silence ]
+
+00:17:55.109 --> 00:18:02.679
+And we've got a new Alive message, so in
+about 5 seconds we should see another one.
+
+00:18:04.220 --> 00:18:06.180
+And there it is.
+
+00:18:06.180 --> 00:18:11.860
+So that's KeepAlive, really simple
+descriptions of your job's lifecycle.
+
+00:18:15.960 --> 00:18:18.759
+So back to the presentation.
+
+00:18:18.759 --> 00:18:20.799
+Launchd is a system bootstrapper.
+
+00:18:20.799 --> 00:18:22.109
+How do we do this?
+
+00:18:22.109 --> 00:18:25.789
+Let's talk a little bit about it.
+
+00:18:25.789 --> 00:18:34.259
+This is an apropos quote, "It's not so hard to lift
+yourself up by your bootstraps once you're off the ground."
+
+00:18:34.259 --> 00:18:38.549
+So launchd does all that boring stuff for you.
+
+00:18:38.549 --> 00:18:43.039
+It gets your process running so that
+it can just do what it needs to do.
+
+00:18:43.039 --> 00:18:49.029
+There's less bootstrapping code for
+you to write as a daemon developer.
+
+00:18:49.029 --> 00:18:54.450
+So when the system comes online,
+launchd gets kicked off by the kernel.
+
+00:18:54.450 --> 00:18:57.759
+And then launchd spawns an instance of launchctl.
+
+00:18:57.759 --> 00:19:04.069
+Launchctl just goes through common directories
+and starts loading jobs into launchd,
+
+00:19:04.069 --> 00:19:08.809
+and once all those jobs are loaded, then
+launchd starts evaluating their launch criteria.
+
+00:19:08.809 --> 00:19:14.319
+So you don't have to worry about your job being
+kicked off before the sislog job is loaded.
+
+00:19:14.319 --> 00:19:17.809
+We do this in an atomic fashion.
+
+00:19:17.809 --> 00:19:24.480
+So when launchctl is going through all these property
+lists and loading them, it looks for this disabled key.
+
+00:19:24.480 --> 00:19:29.900
+This key tells launchctl to skip
+over the job, and just not load it.
+
+00:19:29.900 --> 00:19:33.030
+So this should be treated as a default value.
+
+00:19:33.029 --> 00:19:35.329
+We can override this elsewhere.
+
+00:19:35.329 --> 00:19:42.919
+Remember we said we wanted plist to be immutable,
+so we wanted to store some of this state elsewhere.
+
+00:19:42.920 --> 00:19:49.080
+So this is the default shipping value
+of the disabled property of your job.
+
+00:19:49.079 --> 00:19:56.639
+If you just want to load it regardless,
+use launchctl load with the -f flag passed.
+
+00:19:58.019 --> 00:20:03.900
+And if you want to disable a job, you
+use the -w flag to launchctl load.
+
+00:20:03.900 --> 00:20:07.650
+So doing launchctl load -w will enable a job.
+
+00:20:07.650 --> 00:20:10.690
+Unload -w will disable it.
+
+00:20:10.690 --> 00:20:15.860
+On Leopard this used to actually modify the plist,
+so it would actually write the key to the plist.
+
+00:20:15.859 --> 00:20:23.599
+But since we wanted to move toward making plist immutable,
+we now store this state elsewhere in a separate database.
+
+00:20:23.599 --> 00:20:29.599
+So daemons are loaded during system
+start up, and they're managed by PID 1.
+
+00:20:29.599 --> 00:20:34.899
+The environment they execute in is privileged and
+there's no GUI interaction from this environment,
+
+00:20:34.900 --> 00:20:42.140
+so it's not safe to call those API's that
+could end up interacting with the user.
+
+00:20:42.140 --> 00:20:46.259
+It's like LaunchServices for example,
+is not safe to call from a GUI.
+
+00:20:46.259 --> 00:20:50.220
+And the reason for this is that daemons are singletons.
+
+00:20:50.220 --> 00:20:55.380
+There's 1 instance of a daemon
+for all clients on the system.
+
+00:20:55.380 --> 00:21:01.880
+So when you're writing a daemon, always assume either
+a headless environment, so no display attached,
+
+00:21:01.880 --> 00:21:05.580
+or a multi-headed environment, because
+we support fast user switching.
+
+00:21:05.579 --> 00:21:08.449
+You can have many users logged in at 1 time.
+
+00:21:08.450 --> 00:21:13.490
+So if your daemon tries to draw GUI, it's
+like what session would you draw it in?
+
+00:21:13.490 --> 00:21:14.940
+So just don't do it.
+
+00:21:14.940 --> 00:21:22.450
+Daemons are service providers, and they're loaded from
+/Library/LaunchDaemons and /System/Library/LaunchDaemons.
+
+00:21:22.450 --> 00:21:24.090
+And this is the order of precedence.
+
+00:21:24.089 --> 00:21:30.009
+So if the same plist or a job with the same
+label exists in both of these locations,
+
+00:21:30.009 --> 00:21:31.990
+the one in /Library/LaunchDaemons wins
+
+00:21:31.990 --> 00:21:36.109
+and /System/Library/LaunchDaemons
+is just for daemons that we provide.
+
+00:21:36.109 --> 00:21:40.639
+All of your daemons should go in /Library/LaunchDaemons.
+
+00:21:40.640 --> 00:21:42.420
+Agents are per user jobs.
+
+00:21:42.420 --> 00:21:45.970
+This is where all of your GUI interactions
+should take place...
+
+00:21:45.970 --> 00:21:52.289
+and an agent executes as the user on our platform.
+
+00:21:52.289 --> 00:21:59.950
+So they're loaded from ~/Library/LaunchAgents, which
+contains launch agents that are just for that user.
+
+00:21:59.950 --> 00:22:05.380
+They're also loaded from /Library/LaunchAgents, which
+contains all of your agents that you want every user
+
+00:22:05.380 --> 00:22:10.670
+to have, and then there's our persistent
+provided ones in /System/Library/LaunchAgents.
+
+00:22:10.670 --> 00:22:13.170
+And again, the order of precedence is that anything
+
+00:22:13.170 --> 00:22:18.210
+in the user's home directory wins
+in the event of a naming conflict.
+
+00:22:19.400 --> 00:22:22.690
+So what if you want to take a look at some
+of the jobs that are running on your system?
+
+00:22:22.690 --> 00:22:29.799
+Launchctl has a convenient list subcommand, that just dumps
+all the jobs that exist in your current launchd session.
+
+00:22:29.799 --> 00:22:35.680
+If you want to get more information about a specific
+job, you can just follow launchctl list with label.
+
+00:22:38.160 --> 00:22:42.820
+And when you're doing this from a user session,
+you'll be talking to your per user session.
+
+00:22:42.819 --> 00:22:48.859
+If you want to talk to the daemon, or the system session
+that hosts all the daemons, you can just use sudo
+
+00:22:48.859 --> 00:22:52.359
+and that will have you communicating
+with the proper launchd.
+
+00:22:53.430 --> 00:22:55.740
+So there's some different job types.
+
+00:22:55.740 --> 00:23:02.680
+The normal one is managed by launchd, and it just
+appears with this label -- com.mycompany.myproduct.
+
+00:23:02.680 --> 00:23:08.630
+Then there's an anonymous job, and this appears
+with a hex value, just there to uniquify it,
+
+00:23:08.630 --> 00:23:13.050
+followed by .anonymous followed by the name of the program.
+
+00:23:13.049 --> 00:23:18.789
+And anonymous jobs are just, we just keep track of
+them because they try to talk to us at one point.
+
+00:23:18.789 --> 00:23:24.549
+So a process that was not created by launchd
+tried to talk to launchd to get some information,
+
+00:23:24.549 --> 00:23:29.220
+so we just created a little bookkeeping
+record for it and we show that to you.
+
+00:23:29.220 --> 00:23:36.480
+Then whenever you launch a GUI app, LaunchServices
+creates a job that is managed by launchd
+
+00:23:36.480 --> 00:23:43.930
+and it has this little range-looking hex value in
+front of it, followed by the bundle identifier.
+
+00:23:43.930 --> 00:23:47.240
+So whenever you launch a GUI app, you'll see one of these.
+
+00:23:47.240 --> 00:23:52.559
+Then there's mach_init, which is
+deprecated, please don't use it.
+
+00:23:54.470 --> 00:23:56.670
+So let's list some jobs.
+
+00:23:56.670 --> 00:23:58.410
+What does some output look like?
+
+00:23:58.410 --> 00:24:03.500
+Well we got 3 columns, we get the
+PID, the status, and the label.
+
+00:24:03.500 --> 00:24:09.369
+The PID, self-explanatory, if the job is
+running that's the PID it is running as.
+
+00:24:09.369 --> 00:24:14.329
+The status column is the last exit
+status that the job posted.
+
+00:24:14.329 --> 00:24:20.809
+So the last time it exited, if it's a positive
+number, if you see a positive number in this column,
+
+00:24:20.809 --> 00:24:23.259
+it means that the job exited with that status.
+
+00:24:23.259 --> 00:24:29.440
+A negative number indicates that the job received a signal,
+and the value of that number indicates the signal number.
+
+00:24:29.440 --> 00:24:38.080
+So here we see that Dock received signal 15, SIGTERM,
+the last time it exited but then it came back.
+
+00:24:38.079 --> 00:24:44.169
+And then we have some anonymous jobs
+here, so there's a chain of creation.
+
+00:24:44.170 --> 00:24:48.350
+So we kicked off Terminal and we see
+that we have a LaunchServices job there,
+
+00:24:48.349 --> 00:24:54.490
+and then Terminal spawned login,
+and login talked to launchd.
+
+00:24:54.490 --> 00:24:56.029
+So we created a record for that.
+
+00:24:56.029 --> 00:25:00.470
+And then login spawned bash, which tried to talk to launchd.
+
+00:25:00.470 --> 00:25:01.789
+So we created a record for that.
+
+00:25:01.789 --> 00:25:08.779
+And then finally bash spawned this instance of launchctl
+that we just ran, which of course had to talk to launchd.
+
+00:25:08.779 --> 00:25:11.269
+So we created an anonymous job record for that.
+
+00:25:11.269 --> 00:25:14.879
+So that's the chain of anonymous job creation.
+
+00:25:14.880 --> 00:25:19.870
+So let's say we want to get more information about Finder.
+
+00:25:19.869 --> 00:25:26.129
+We just put com.apple.Finder in there,
+and here's a sample of what we get.
+
+00:25:26.130 --> 00:25:33.810
+So we get the label, we get its PID if it's running,
+we get the program, path that it will execute,
+
+00:25:33.809 --> 00:25:36.960
+and it also shows you the transaction count.
+
+00:25:36.960 --> 00:25:41.960
+So if you're one of these jobs that
+has opted into a transaction model,
+
+00:25:41.960 --> 00:25:45.360
+this is a quick way of checking
+your outstanding transaction count.
+
+00:25:45.359 --> 00:25:52.459
+We also see Mach services that Finder registers,
+and on Snow Leopard you can pass the -x flag
+
+00:25:52.460 --> 00:25:55.269
+to launchctl lists, so right before the label.
+
+00:25:55.269 --> 00:26:02.410
+And you get all this information in a parseable
+property list output kind of format, so it's all in XML.
+
+00:26:04.519 --> 00:26:07.639
+And also new in Snow Leopard we have
+the ServiceManagement Framework,
+
+00:26:07.640 --> 00:26:11.700
+which is basically programmatic
+equivalents to getting this information.
+
+00:26:11.700 --> 00:26:18.380
+So it's a CoreFoundation-layer API, and
+you can just call SMJobCopyDictionary,
+
+00:26:18.380 --> 00:26:23.200
+and you'll get back a CF dictionary containing
+all the information that we just saw.
+
+00:26:23.200 --> 00:26:31.680
+And we also allow you to promote your interaction to that
+with the system launchd by using an authorization ref.
+
+00:26:31.680 --> 00:26:38.450
+So with this framework you can list jobs, get information
+about a specific one, submit jobs, remove jobs,
+
+00:26:38.450 --> 00:26:43.370
+so no more spawning launchctl to do that work,
+and no more worrying about your permission.
+
+00:26:43.369 --> 00:26:47.119
+ServiceManagement takes care of all of it for you.
+
+00:26:48.410 --> 00:26:55.519
+So let's talk a little bit about launchd's sessions.
+
+00:26:55.519 --> 00:27:03.309
+Launchd organizes jobs into sessions,
+and here's a typical example system.
+
+00:27:03.309 --> 00:27:09.379
+So when you boot up, PID 1 comes online
+and it creates the system session.
+
+00:27:09.380 --> 00:27:12.740
+This is where all the daemons live.
+
+00:27:12.740 --> 00:27:19.349
+When you get to the login window, we have a login
+window session that hosts all of the jobs that need
+
+00:27:19.349 --> 00:27:24.000
+to run before a user logs in, but also display GUI.
+
+00:27:24.000 --> 00:27:28.630
+So you're at the login window, you type in
+your user name and password, what happens?
+
+00:27:28.630 --> 00:27:33.330
+We create a per user launchd for
+you, so you get a new launchd.
+
+00:27:33.329 --> 00:27:41.299
+Login window goes away, and the first thing that per
+user launchd does is create a background session.
+
+00:27:41.299 --> 00:27:48.259
+And since you're logging into the GUI, we create
+a subsession of that called the Aqua session.
+
+00:27:48.259 --> 00:27:54.819
+And this is where all of the jobs that deal with
+graphical user interfaces live, so your pasteboard,
+
+00:27:54.819 --> 00:27:56.960
+for example, gets loaded in this session.
+
+00:27:56.960 --> 00:27:59.079
+Let's get a little bit fancier.
+
+00:27:59.079 --> 00:28:01.439
+Let's say root wants to...
+
+00:28:01.440 --> 00:28:10.160
+SSHN. Root gets its own per user launchd and the
+background session, but instead of an Aqua session...
+
+00:28:10.160 --> 00:28:13.850
+we get an SSH session for each connection.
+
+00:28:13.849 --> 00:28:18.980
+So if you SSH in from like 2 machines,
+you'll get 2 SSH sessions for root,
+
+00:28:18.980 --> 00:28:22.390
+and they're running separately of each other.
+
+00:28:22.390 --> 00:28:26.730
+And to get even fancier, we support fast
+user switching, so let's log a user in.
+
+00:28:26.730 --> 00:28:34.360
+UID 502 logs in, gets a background
+session, and also gets an Aqua session.
+
+00:28:34.359 --> 00:28:42.609
+And then if we want to SSH in as user
+502, user 502 gets an SSH session as well.
+
+00:28:42.609 --> 00:28:45.490
+So this could very easily be a real machine.
+
+00:28:45.490 --> 00:28:48.380
+This is how we organize our sessions.
+
+00:28:48.380 --> 00:28:52.730
+What exactly is a session?
+
+00:28:52.730 --> 00:29:01.920
+A session is basically your job's execution environment, and
+it's a combination of a set of jobs and a Mach bootstrap.
+
+00:29:01.920 --> 00:29:11.910
+A Mach bootstrap is just a collection of service names that
+map to ports, so that's how we VIN services on our platform.
+
+00:29:11.910 --> 00:29:16.250
+So whenever a framework asks for
+a Mach service of a given name,
+
+00:29:16.250 --> 00:29:19.259
+it starts off in your local bootstrap,
+tries to match the name.
+
+00:29:19.259 --> 00:29:23.349
+If it doesn't find it, it just goes upward until it does.
+
+00:29:23.349 --> 00:29:32.740
+So since Mach services lookups go up, you can't
+look up a service in another user's bootstrap.
+
+00:29:32.740 --> 00:29:35.930
+So it doesn't traverse through siblings.
+
+00:29:35.930 --> 00:29:39.390
+And if you want to get a kind of
+graphical idea of what this looks like,
+
+00:29:39.390 --> 00:29:43.090
+new in Snow Leopard we have this
+launchctl BS tree subcommand,
+
+00:29:43.089 --> 00:29:47.449
+and this will print out a tree-like
+representation of the Mach bootstrap.
+
+00:29:47.450 --> 00:29:52.549
+So it will give you an idea of what the
+Mach bootstrap structure looks like.
+
+00:29:52.549 --> 00:29:59.200
+And if you want to just see the services registered in
+your current session, you can just do launchctl bslist.
+
+00:30:03.410 --> 00:30:13.100
+So the system session is for daemons, and it's hosted
+by PID 1 and PID 1 also hosts the root Mach bootstrap.
+
+00:30:14.549 --> 00:30:21.099
+Per user sessions are for your agents,
+and they're hosted in per user launchd's,
+
+00:30:21.099 --> 00:30:26.269
+and they also host a user-private Mach bootstrap.
+
+00:30:26.269 --> 00:30:31.319
+So 1 user cannot look up services owned by another user.
+
+00:30:33.609 --> 00:30:38.809
+If you want to specifically target a session,
+we allow you to do that in your plist.
+
+00:30:38.809 --> 00:30:46.429
+By default agents go into the Aqua session, but you can
+override that by using this LimitLoadToSessionType key,
+
+00:30:46.430 --> 00:30:49.289
+and you can specify background, which is the other session.
+
+00:30:49.289 --> 00:30:54.759
+So if you want your job to persist after a
+user logs out, this is what you would do.
+
+00:30:54.759 --> 00:30:57.410
+So even though the user's Aqua session would go away,
+
+00:30:57.410 --> 00:31:01.529
+their background session would still be
+there, your job would still be running.
+
+00:31:01.529 --> 00:31:09.649
+And when it went away, the per user
+launchd would simply idle exit.
+
+00:31:09.650 --> 00:31:12.610
+Let's talk a little bit about user versus UID.
+
+00:31:12.609 --> 00:31:18.849
+In a lot of traditional POSIX platforms
+these 2 things are the same.
+
+00:31:18.849 --> 00:31:22.899
+The UID is the truth, that identifies you.
+
+00:31:22.900 --> 00:31:25.190
+But that's not true on our platform.
+
+00:31:25.190 --> 00:31:28.930
+On our platform the user is more than just the POSIX bits,
+
+00:31:28.930 --> 00:31:36.990
+because a launchd session consists
+of both jobs and a Mach bootstrap.
+
+00:31:36.990 --> 00:31:42.329
+The Mach bootstrap is part of what identifies a user.
+
+00:31:42.329 --> 00:31:52.710
+So launchd, the per user launchd, is the user space entity
+that unifies both the POSIX and Mach aspects of a user,
+
+00:31:52.710 --> 00:31:55.940
+and thus it provides the canonical user environment.
+
+00:31:55.940 --> 00:32:03.070
+So just doing set UID is not sufficient to run as
+a user on our platform, you must run as an agent.
+
+00:32:03.069 --> 00:32:09.089
+As with any good rule, there are some exceptions.
+
+00:32:09.089 --> 00:32:12.099
+UID 0 in Snow Leopard now has a per user launchd.
+
+00:32:12.099 --> 00:32:15.849
+It didn't before, but now it does.
+
+00:32:15.849 --> 00:32:22.480
+And so let's examine what we just
+said as it relates to root.
+
+00:32:22.480 --> 00:32:27.900
+So daemons run with UID 0, but
+they don't really run as root.
+
+00:32:27.900 --> 00:32:30.940
+They run as a system user.
+
+00:32:30.940 --> 00:32:36.769
+If you want to run as the root user,
+you would login to the GUI as root.
+
+00:32:36.769 --> 00:32:45.289
+And when you do that, as many sysadmins do,
+the terminal session you get when you...
+
+00:32:45.289 --> 00:32:49.990
+login to root user, interacts with
+the system launchd by default.
+
+00:32:49.990 --> 00:32:54.319
+So this was done to preserve consistency
+with previous releases.
+
+00:32:54.319 --> 00:33:03.250
+If you want to interact with root's per user launchd, you
+can pass -u root to launchctl, and then your subcommand.
+
+00:33:05.500 --> 00:33:11.640
+Since we provide this environment, it has impact
+on how you go about debugging your daemon.
+
+00:33:11.640 --> 00:33:16.560
+And the rule here is if you're debugging
+a daemon, don't launch it with GDB.
+
+00:33:16.559 --> 00:33:24.819
+What you should do instead is add this key
+WaitForDebugger to your plist, and this stalls the job
+
+00:33:24.819 --> 00:33:30.549
+at its first instruction, so that you can
+attach with GDB and start debugging it.
+
+00:33:30.549 --> 00:33:36.329
+But if you launch with GDB you're not launched by launchd
+anymore, so you're in a completely different environment
+
+00:33:36.329 --> 00:33:40.879
+and the environment that GDB provides,
+and the environment that launchd provides,
+
+00:33:40.880 --> 00:33:43.890
+will only get more and more different as time goes on.
+
+00:33:43.890 --> 00:33:49.920
+Another trick you can do is to use gdb attach -waitfor,
+and then just give it the name of your daemon.
+
+00:33:49.920 --> 00:33:56.450
+This will stall GDB until your daemon comes online,
+at which point it'll attach right then and there.
+
+00:33:58.279 --> 00:34:04.809
+And a case study of this is in our transaction
+API's, so the vproc transaction begin and end stuff,
+
+00:34:04.809 --> 00:34:09.299
+doesn't work if you're not running
+in your launchd environment.
+
+00:34:09.300 --> 00:34:14.470
+So if you want a debug instant
+off, you need to be run by launchd.
+
+00:34:14.469 --> 00:34:17.969
+So if you do GDB and then launch the app, it won't work.
+
+00:34:17.969 --> 00:34:23.369
+If you run the app from the command
+line yourself it won't work.
+
+00:34:23.369 --> 00:34:31.199
+Launch with launchd, and the moral of the story is that
+you should always debug and run in the same environment.
+
+00:34:31.199 --> 00:34:39.699
+So something new in Snow Leopard is we've
+flattened the Mach per user name space.
+
+00:34:41.090 --> 00:34:44.410
+What does this mean for you guys?
+
+00:34:44.409 --> 00:34:51.460
+It means that the GUI login and an SSH login
+get access to the same set of services,
+
+00:34:51.460 --> 00:34:57.340
+and this basically makes an SSH login
+equivalent to a terminal.app session.
+
+00:34:57.340 --> 00:35:03.000
+Keep in mind that this is not an X11-style remote display.
+
+00:35:03.000 --> 00:35:07.619
+While you can interact with the GUI over SSH now,
+
+00:35:07.619 --> 00:35:14.210
+all the GUI happens on the attached display,
+but this does make screen a lot happier.
+
+00:35:14.210 --> 00:35:17.010
+So let's see a little demo of it.
+
+00:35:17.010 --> 00:35:22.930
+[ Applause ]
+
+00:35:22.929 --> 00:35:25.879
+So we're back to our demo machine.
+
+00:35:25.880 --> 00:35:31.010
+Let's SSHN locally to ourselves.
+
+00:35:31.010 --> 00:35:39.610
+[ Silence ]
+
+00:35:39.610 --> 00:35:46.559
+So we're in a different session and we can check that
+by doing this manager name subcommand to launch CTL,
+
+00:35:46.559 --> 00:35:54.150
+and here we have that we're in a session that was created by
+SHD; whereas if we go over here and run that same command,
+
+00:35:54.150 --> 00:35:56.480
+we'll see that we're in the Aqua session.
+
+00:35:56.480 --> 00:35:58.760
+So here we are remoted in.
+
+00:36:01.269 --> 00:36:07.460
+Let's do something like this: we'll echo
+something to PB copy, the command line utility
+
+00:36:07.460 --> 00:36:10.760
+that lets you put things on the pasteboard.
+
+00:36:10.760 --> 00:36:15.500
+No error message, let's see if it actually did anything.
+
+00:36:17.199 --> 00:36:19.009
+And it did.
+
+00:36:19.010 --> 00:36:23.990
+[ Applause ]
+
+00:36:23.989 --> 00:36:26.279
+That would not have worked on Leopard.
+
+00:36:27.389 --> 00:36:33.009
+So that's something new in Snow Leopard, we
+think you're going to be really happy with it.
+
+00:36:33.010 --> 00:36:42.550
+[ Silence ]
+
+00:36:42.550 --> 00:36:45.570
+So about these session things.
+
+00:36:45.570 --> 00:36:50.610
+Think of this as a public service announcement.
+
+00:36:50.610 --> 00:36:55.730
+We have some different notions of sessions on our platform.
+
+00:36:55.730 --> 00:37:01.409
+We have launchd sessions, core graphic sessions,
+security sessions, and these things are kind
+
+00:37:01.409 --> 00:37:07.389
+of tied together by the task bootstrap port.
+
+00:37:07.389 --> 00:37:14.609
+So if your daemon is getting information about
+its session by checking its bootstrap port
+
+00:37:14.610 --> 00:37:18.329
+against some known value, you shouldn't be doing that.
+
+00:37:18.329 --> 00:37:21.409
+You should be using the proper
+API to get it session information,
+
+00:37:21.409 --> 00:37:24.730
+because this is an implementation detail and it will change.
+
+00:37:24.730 --> 00:37:30.840
+But this shouldn't affect the majority of you guys, and
+so if you don't know what I'm talking about it's OK.
+
+00:37:30.840 --> 00:37:35.300
+So how does all this stuff influence
+your architectural design?
+
+00:37:35.300 --> 00:37:42.830
+Let's take a little case study, a privilege separation.
+
+00:37:42.829 --> 00:37:49.119
+So a common UNIX design pattern is that you would
+have a daemon listening on a privileged port,
+
+00:37:49.119 --> 00:37:52.949
+and it would get a request that's
+destined for a certain user.
+
+00:37:52.949 --> 00:37:57.919
+And what the daemon would do is fork off an
+instance of itself, or fork off a helper.
+
+00:37:57.920 --> 00:38:05.010
+And that helper would acquire the privilege resource
+it needs from the daemon, and then it would do set UID,
+
+00:38:05.010 --> 00:38:08.970
+set GID, and do all that stuff to become the user.
+
+00:38:08.969 --> 00:38:13.439
+But remember, the user is more
+than just the UID on our platform.
+
+00:38:13.440 --> 00:38:15.260
+So that doesn't work.
+
+00:38:15.260 --> 00:38:19.450
+We need to convert the child to an agent.
+
+00:38:19.449 --> 00:38:21.980
+So here's our new architecture.
+
+00:38:21.980 --> 00:38:28.309
+The daemon still listens on the privileged port,
+however what we do instead is make the child an agent
+
+00:38:28.309 --> 00:38:34.130
+and we tell the child that it should be
+run once immediately when it's loaded.
+
+00:38:35.429 --> 00:38:39.099
+So when that agent runs, it checks in with the daemon.
+
+00:38:39.099 --> 00:38:46.000
+It says hey daemon, here I am and here's a
+resource that you can use to launch me on demand;
+
+00:38:46.000 --> 00:38:48.929
+so, like a file descriptor or a Mach fork.
+
+00:38:48.929 --> 00:38:53.239
+It sends 1 of those things to the daemon, the
+daemon says OK, stashes that away somewhere,
+
+00:38:53.239 --> 00:39:00.769
+and when the daemon gets a request for that user it
+gets back that descriptor that it can launch the agent
+
+00:39:00.769 --> 00:39:03.210
+on demand, and then sends a message to it.
+
+00:39:03.210 --> 00:39:08.349
+And the agent gets launched by the per
+user launchd in the user environment.
+
+00:39:08.349 --> 00:39:16.059
+And the agent doesn't have to do any of the set UID
+set GID magic, it just runs in the proper environment.
+
+00:39:16.059 --> 00:39:21.900
+It doesn't have to worry about any of that,
+we take care of all the boring stuff for you.
+
+00:39:23.710 --> 00:39:25.960
+So what about privilege escalation?
+
+00:39:25.960 --> 00:39:29.789
+GUI apps run as the user, they run unprivileged.
+
+00:39:29.789 --> 00:39:36.670
+But sometimes you need to write things to at
+C [phonetic] or some other system location.
+
+00:39:36.670 --> 00:39:44.320
+So the pattern we've been encouraging for you guys
+is to have a separate daemon that handles all that,
+
+00:39:44.320 --> 00:39:49.450
+just a really small piece of code that does exactly 1 thing.
+
+00:39:49.449 --> 00:39:54.869
+But we run into a bootstrapping problem here,
+because we're also telling application developers
+
+00:39:54.869 --> 00:39:59.969
+that we want you to have a drag-and-drop install.
+
+00:39:59.969 --> 00:40:08.439
+So without an installer you can't get your helper tool
+to the right locations, because that requires root.
+
+00:40:08.440 --> 00:40:11.780
+So how do we deal with this?
+
+00:40:11.780 --> 00:40:16.510
+We have a new API in Snow Leopard called SMJobBless.
+
+00:40:16.510 --> 00:40:23.770
+It's part of the ServiceManagement Framework, and this
+automates the installation of your privileged helper tool.
+
+00:40:23.769 --> 00:40:32.539
+So you can still drag-and-drop install, and also have
+a privileged tool without using authorization exec
+
+00:40:32.539 --> 00:40:37.969
+with privileges or set UID binaries;
+both of which we heavily discourage.
+
+00:40:37.969 --> 00:40:45.209
+And this API also ties the helper and
+the application together by code signing.
+
+00:40:45.210 --> 00:40:54.500
+So they establish a handshake, and the application
+says, "Here's my tool, this is what I want to install,"
+
+00:40:54.500 --> 00:40:57.409
+and the tool says, "This is who can install me."
+
+00:40:57.409 --> 00:41:01.920
+If both of those requirements are
+met, we install the tool for you
+
+00:41:01.920 --> 00:41:05.700
+and you can be assured that it's the tool that you expect.
+
+00:41:05.699 --> 00:41:06.889
+It's not some...
+
+00:41:06.889 --> 00:41:15.449
+somebody hasn't hijacked your tool with their
+own to run privileged and compromise the system.
+
+00:41:15.449 --> 00:41:21.399
+And if you want to learn more about privileged
+helper tools, check out the Managing User Privileges
+
+00:41:21.400 --> 00:41:25.240
+and Operation With Authorization Services session.
+
+00:41:25.239 --> 00:41:30.789
+That was on Wednesday, and it was a really good session.
+
+00:41:30.789 --> 00:41:32.190
+So check it out on video.
+
+00:41:32.190 --> 00:41:39.730
+And there was also Assigning Your
+Application and Identity With Code Signing.
+
+00:41:39.730 --> 00:41:43.469
+So let's talk about fault and resource isolation.
+
+00:41:43.469 --> 00:41:50.699
+Safari on Snow Leopard now runs WebKit
+plug-ins in their own processes.
+
+00:41:50.699 --> 00:41:52.299
+And what this...
+
+00:41:52.300 --> 00:41:58.430
+and these processes are launched on demand
+by launchd, and if the plug-in needs to draw
+
+00:41:58.429 --> 00:42:03.059
+into Safari, it's all done entirely through IPC.
+
+00:42:03.059 --> 00:42:05.210
+Don't ask me how, it just happens.
+
+00:42:05.210 --> 00:42:11.280
+But what this does is it gives
+you fault and resource isolation.
+
+00:42:11.280 --> 00:42:21.500
+So if you have a particularly crashy plug-in, and
+it crashes, it doesn't take Safari down with it.
+
+00:42:21.500 --> 00:42:28.159
+Also if the plug-in is particularly memory hungry,
+it doesn't take up resources when it's not needed.
+
+00:42:28.159 --> 00:42:34.619
+It can just go away and come back, and this is all
+made possible through our launch on demand model.
+
+00:42:34.619 --> 00:42:38.009
+So let's see a demo of this.
+
+00:42:38.010 --> 00:42:45.260
+[ Silence ]
+
+00:42:45.260 --> 00:42:54.070
+So here we have content on a web page that requires
+a plug-in, in this case the QuickTime plug-in.
+
+00:42:54.070 --> 00:42:56.039
+So start playing.
+
+00:42:56.039 --> 00:42:57.420
+>> ... helpful Mac geniuses.
+
+00:42:57.420 --> 00:43:00.240
+Must be so great to have a real person
+you can go to when you need help.
+
+00:43:00.239 --> 00:43:01.609
+>> What, is that different for you?
+
+00:43:01.610 --> 00:43:02.190
+>> Well...
+
+00:43:02.190 --> 00:43:08.170
+>> And we can see that in Activity Monitor
+we have this process here, no there.
+
+00:43:08.170 --> 00:43:12.039
+WebKit plug-in agent, and that hosts all of the plug-ins.
+
+00:43:12.039 --> 00:43:20.239
+And so here we have the QuickTime plug-in
+for Safari, and that's running as PID 806.
+
+00:43:20.239 --> 00:43:21.509
+So let's simulate a crash.
+
+00:43:21.510 --> 00:43:21.730
+>> I'm a Mac.
+
+00:43:21.730 --> 00:43:22.039
+>> And I'm a PC.
+
+00:43:22.039 --> 00:43:24.079
+>> And I'm a Mac genius.
+
+00:43:24.079 --> 00:43:26.299
+>> Ah, incredibly helpful Mac geniuses.
+
+00:43:26.300 --> 00:43:29.039
+Must be so great to have a real person
+you can go to when you need help.
+
+00:43:29.039 --> 00:43:30.179
+>> What, is that different for you?
+
+00:43:30.179 --> 00:43:30.589
+>> Well...
+
+00:43:30.590 --> 00:43:34.300
+customer care representative.
+
+00:43:34.300 --> 00:43:35.630
+>> Yeah hi...
+
+00:43:35.630 --> 00:43:37.380
+We'll be seeing you...
+
+00:43:37.380 --> 00:43:39.619
+>> Uh-oh, there was a crash.
+
+00:43:39.619 --> 00:43:47.009
+But Safari is not affected; it just got the little
+plug-in guy, all done through launch on demand.
+
+00:43:47.010 --> 00:43:54.720
+[ Applause ]
+
+00:43:54.719 --> 00:43:58.369
+So... let's wrap up.
+
+00:43:58.369 --> 00:44:00.969
+What did we cover today?
+
+00:44:00.969 --> 00:44:08.709
+We covered the basics of launchd's philosophy, our virtual
+process model, launch on demand, all that fun stuff.
+
+00:44:08.710 --> 00:44:11.349
+We covered how daemons and agents can interact,
+
+00:44:11.349 --> 00:44:16.259
+and how you can leverage those interactions
+when designing your architecture.
+
+00:44:16.260 --> 00:44:20.190
+And finally we covered what's been added in Snow Leopard --
+
+00:44:20.190 --> 00:44:26.659
+the flat per user name space, new launchctl
+subcommands, WebKit plug-in hosting.
+
+00:44:26.659 --> 00:44:32.460
+So for more information we have a mailing
+list, which I assure you we check.
+
+00:44:32.460 --> 00:44:36.510
+It's Launchd-Dev if you have questions,
+we're happy to answer.
+
+00:44:36.510 --> 00:44:40.670
+Launchd is also open source, it's under
+the Apache license so you can take a look
+
+00:44:40.670 --> 00:44:45.090
+at the source yourself, and if
+you really want, submit a patch.
+
+00:44:45.090 --> 00:44:51.030
+We're happy to take fixes, and for documentation
+we have the launchd man page in section 8.
+
+00:44:51.030 --> 00:44:56.850
+The launchd.plist command page in section
+5, and the launchctl man page in section 1.
+
+00:44:56.849 --> 00:45:00.989
+And there's also header doc about all
+the ServiceManagement API's we talked
+
+00:45:00.989 --> 00:45:03.759
+about in the ServiceManagement Framework's header.
+
+00:45:03.760 --> 00:45:04.580
+So check that out.

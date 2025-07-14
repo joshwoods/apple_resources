@@ -1,0 +1,285 @@
+---
+Title:  Understanding Memory Management on iPhone
+Year:   2009
+Web:    https://nonstrict.eu/wwdcindex/wwdc2009/416/
+
+[!] This transcript has potential transcription errors.
+---
+
+ Welcome to the Understanding Memory Management on iPhone session. I'm David Myszewski, and I'm here with Charles Srisuwananukorn. We both work on iPhone performance. I've been working on performance for about three years. So we have a lot of great memories -- memory topics to cover today. It's very, very important on the iPhone to keep the memory management very, very good, because we have a limited amount of memory. And so to talk about iPhone memory we divided this talk into six different topics.
+
+Memory -- first of all, we'll go over the memory architecture on iPhone to give you a really good foundation about how memory management works on iPhone and everything that's going on in the system. Then we'll talk a little bit about memory tools to show you how you can diagnose some of your memory problems.
+
+We'll talk some about image and layer memory, which are some of the issues that are most difficult to deal with on the memory management side. We'll talk in great detail and show a lot of code examples for how you respond to low memory warnings. Then we'll talk a little bit about autorelease pools, and then finally, the low memory logs that you get if your application is terminated.
+
+So let's begin by talking a little bit about the memory architecture on iPhone IPhone has limited memory, it's not like a desktop that has gobs and gobs of RAM, and a swap file that gives you effectively infinite memory. The iPhone OS, the original iPhones are limited to 128 megs of RAM, and once you run out of that memory then the operating system has to terminate an application.
+
+We do have virtual memory so you can use APIs like mmap to handle very, very large files, and the OS can swap that data in and out as it needs to. And to deal with the fact that once we run out of memory the OS is done, we have low memory notifications.
+
+And low memory notifications give applications that are running on iPhone, including your applications, the chance to free up memory so that the OS can continue to run and so the user experience is not effected. So what does memory look like on iPhone. Well, your application isn't the only thing running on the device. The iPhone is the same sort of preemptive multitasking operating system that we have in Mac OS X.
+
+And there's a lot going on at the same time. So to start out with, we have some amount of memory that's used for graphics, all the rich images that you see on the screen, video playback, and all the graphic sort of work that we have. So we use some memory for that. Then we have some amount of memory that we called wired memory. Which can grow and shrink over time.
+
+So this may be about how much you have in a typical application. Wired memory is all -- the entire code size of the kernel and all the kext. It's memory that's allocated by the drivers. And where you see wired memory vary the most is where you're doing a lot of layer usage, because we wire down some memory before we send it to the graphics hardware. So there's a chunk of wired memory that the OS needs in order to function that can't be reclaimed.
+
+Then there are a number of system daemons that are running to give you some core functionality like media playback, handling communication between the accessories and so on. Then we have the SpringBoard app, which as many of you know handles the launching of the apps and the coordination of various apps, and it's responsible for a lot of the user experience of the device, and in particular, SpringBoard has the Core Animation server, which means that any communication that your app does with SpringBoard because you have UIView that's you're drawing into, or animations that are running at the time. All of that is done in SpringBoard.
+
+So SpringBoard has the Core Animation server. And then of course on iPhone, it is a phone. So we do have a phone that's running in the background so that we can service your calls really quickly, bring that phone app up to the front so that calls are really, really responsive.
+
+And the rest is all available to your app. So on the iPhone, we'll start out with some base amount of memory, and then as your app grows over time, has less and less memory to deal with. As you're allocating memory on the heap, as you're creating all sorts of images and UIViews, the total system memory will go up. And we don't want it to go all the way up to the top, because if it goes all the way to the top the OS can't function.
+
+So we deal with this by low memory warnings. And we have today three different levels of low memory warnings. The first one is mainly a notification to help free up a little bit of memory, say, background apps that we've written, like mail, can free some memory and for your application to free up a little bit of memory as much as it can early on, so that the device will continue to perform really well. And then you may get a second memory notification later on if you continue to use more memory.
+
+And at that level, this is where we're the most aggressive about getting rid of all the memory on the system that we can free up. You may notice as you're running your iPhone and looking at various Instruments and Activity Monitor that in addition to your app and some of the daemons, a couple of our apps stick around, such as mail, so that they can do things like check e-mail in the background without a lot of overhead and things like that.
+
+And at that -- this memory level, all of those background apps exit so that they can free up memory for your app. So after that's happened, if you continue to use more and more memory then we have to issue the last and final -- the final low memory notification. And at that point the frontmost app is terminated.
+
+Now notice that the difference between the previous chart and this chart from the frontmost app perspective, if the frontmost app keeps using up memory there, basically indistinguishable. You need to do two things as you're looking at memory usage on iPhone. The first is try not to gradually increase memory over time. So if you're constantly downloading a bunch of images, displaying them, and every time you do that you use a little more memory until the app finally gets terminated -- that's bad.
+
+But if you have a memory spike, say if you're sitting down and maybe using 20 megs, and then all of a sudden you use 40 megabytes of memory right away, even though it's just a little spike, as soon as you hit that top level memory warning level, which is right now at 5%, the application will be terminated. So as an app developer you want to minimize memory growth over time and you want to ensure that you don't have any major memory spikes that will lead to your app's termination.
+
+Now of course on iPhone OS X we have all the standard Cocoa memory management model, we have Objective-C and alloc/init to create objects, and of course the reference counting retain/release/autorelease, to manage your reference counts. We don't have Garbage Collection, but we do have all your standard C and C++ memory management mechanisms, new for -- new and delete, and malloc free.
+
+So all the standard things that you're used to as an app developer. And as an app developer you need to make sure that you cache all of the right objects as you're writing your apps so that means that you don't keep caching things and not clear the cache. You do need to free the cache periodically. And -- but feel free to cache frequently used object because you may need them again.
+
+But always design your application architecture to be able to release them if needed, and we'll show you some code examples of this a little bit later on. And we have all sorts of tools that will help you see how your memory utilization is overtime. And so to start out we have Charles to demo an application that doesn't behave very well.
+
+ Hi everyone. My name is Charles Srisuwananukorn, and I work with Dave on iPhone performance. And I'd like to show you a simple little application we wrote called Breadcrumbs. And Breadcrumbs is a simple travel journal application that allows you to create a journal entry and take a photo right from your phone and it will automatically look up your current location using Core Location and MapKit, and remember that with your entries so that you can go back later and look up your entries by location, maybe put them on a map or something.
+
+And so here's Breadcrumbs, and I can go ahead and create a new entry by tapping on this plus button up here. And it brings up this compose view that let's me create an entry. So I'll go ahead and type an entry. And as you can see while I type the entry, it parses out the title for the entry from the first line of the text and it automatically figured out that I'm in San Francisco, California right now. And then I can also attach a photo to that entry.
+
+And I'm going to choose a photo that I've already taken. And I'll just pick that one over there. And it's -- as you can see, the photo is actually associated now with this entry. And I can go back to the Table view and see all of the entries that I have created so far, along with the latitude and longitude for each of those entries, and a thumbnail for all of the images associated with those entries.
+
+Now as Dave said, of course, this application is not without its problems, and in particular, if I tap this slide show button right here it will start a slide show of all of the images associated with my entries. But it will only get a handful of images in before it actually crashes.
+
+And there it goes. So let me switch now to Xcode and take a look at the crash log. So as most of you guys probably know, every time an application on the phone crashes the iPhone OS will actually write a crash log to the disc. And then Xcode will then copy those crash logs back to the computer and make them available to you in the organizer.
+
+So I'm going to go ahead and open up the organizer from the window menu. And then here I see my device is on the left. And if I click on the device and I go to the crash logs tab, it will list all of the crash logs for this device. And if I zoom in over here, we can see that the crash, the latest crash, was actually a low memory crash.
+
+Which isn't too much of a surprise, since this is the low memory session. So before we actually -- and if you actually click on the log you can actually see a lot more details about the crash, and we'll actually go into more detail about what each of these things means later. But now let's go back to Dave and he's going to tell us a little bit more about some tools we could use to diagnose this issue.
+
+ OK, so we have plenty of memory management tools to help you debug these kinds of problems, so when you see that low memory log there are a number of ways to look at how your app is utilizing memory so that you can eventually avoid all of these -- avoid being terminated. So we have three main Instruments that we use a lot for memory management on iPhone. Instruments provides an activity monitoring instrument, which will give you an overview of how much memory each process on the system is using.
+
+A Leaks instrument, which will tell you all about memory leaks. Because if you have memory that is still around but have no references to it, then that's memory that your app can no longer use. So you want to eliminate any sort of large leaks, and in fact, leaks are fairly easy to track down because the Instruments tool gives you back traces to where the object was allocated.
+
+Then you can figure out where a reference count went wrong or you misdealloced something, and you missed the leak. So that's typically one of the first things you look at, because they're usually pretty straight forward to track down. Then there's an Object Alloc instrument which will tell you how your application is growing over time.
+
+So Object Alloc tracks mallocs memory. So if you create a whole lot of objects it will show you a chart of how your memory growth goes over time, and it will tell you which objects were used and again, give you some back traces, and it has some good filtering abilities so that you can track down specific problems that you're looking for.
+
+And of course, the Leaks instrument is very, very powerful. But also, it's usually the first thing you want to do, even before going into object alk. Just make sure that you don't have any large leaks because if you have a giant leak of 200 K, that may be the first thing you want to fix. And of course now in Snow Leopard we have the Xcode Static Analyzer.
+
+Now the Static Analyzer is a very powerful tool that at build time will analyze your source code before you even run it. So it does static analysis at build time to find memory bugs and all sorts of other bugs, such as security issues, no point of view references, et cetera, that can cause crashes, without actually running the application.
+
+And one of the critical aspects of this tool that Charles will show you in a moment is that it enforces the Cocoa memory management policy, and so it knows about new -- about copy and alloc and how reference counts are supposed to work. And it can look up portions of your code to determine when, perhaps, a reference count was incremented in one function and not decremented. So it has very sophisticated tools to analyze that.
+
+And so Charles will show you a little bit about the memory tools.
+
+ Great. So now that we heard about all of these great memory tools that we have, let's try and use it here, just try and get an idea of what's going on here. So we're going to start off using the Xcode Static Analyzer that Dave mentioned earlier, and I can go ahead and run the analyzer from the build menu in Xcode, and do build and analyze in Snow Leopard.
+
+Now as its name suggests, the Xcode Static Analyzer is a static analysis tool, and what it does is it will try to follow all the code paths in your code, follow all the branchs looking for bugs. But it does so without actually running your code. So what that means is you can actually get a few false positives, it can identify bugs that may not actually be bugs.
+
+But it has a better chance of finding more bugs than something like -- some runtime tool like Leaks, for example, where Leaks will just analyze your code at runtime. So I go ahead and analyze the code here with the Xcode Static Analyzer, and it says that it found a potential leak on an object allocated on line 141, sorting into subtitle text. And if you look carefully, and sure enough, allocate init, a subtitle text, NS string here. And then I set it on the detailed text label, but I don't actually release it.
+
+One of the cool things about the Xcode Static Analyzer is that I can actually click over here and it will actually annotate my code with the actual code path that leaked. So that if I had leaked a block of memory somewhere deep in a nested if statement or something, I can actually see it right there and find it easily. So like I said, the Xcode Static Analyzer could actually give me some false positives.
+
+So I'm going to switch over to the Leaks instrument now to verify that this is actually a leak And I'm going switch to the simulator because my memory allocation patterns are almost certainly the same on the simulator as they are on the device here. And I'm going to run it with the Leaks tool from the run menu, run a performance tool, and then I can select the Leaks right here. I'm actually going to select Leaks demo, the same thing, just easier to read on the big screen here.
+
+So there it starts on the simulator, and I'm going to use the application a little bit. And then I'm going to go back into here to Instruments. And the way Leaks work is it will analyze my application periodically looking through my heap for all of my objects and all of my -- anything that might look like a pointer. And then it will report to me all of the blocks that actually leaked. So in this case, it actually didn't seem to find that.
+
+Let me just quickly rebuild that, and then deploy it again. And by default the Leaks instrument will actually search the heap every ten second for a leak. Sorry, let me actually run the performance tool and the Leaks demo. And because it's actually searching my heap looking for anything that might be a pointer, it's actually a very conservative tool.
+
+And so it will not report any false positives here. OK, I actually did this before, so I'm going to go ahead an open up this trace over here and Instruments. So let's actually zoom in on the Leaks track up here. And this -- this top red bar here shows me the number of leaks that Leaks found. And the become blue bar over here will show me the total number of bytes that I actually leaked. And if I move the inspection head, the track inspection head over here, it tells me it actually discovered three leaks for a total of 144 bytes.
+
+And if I go down here into the Detail pane, we can see that actually leaked a couple of NS CS strings, and if I drop this down and selected one of these NS CS strings in the -- in the Extended Detail Pane over here is shows me the stack trace for the allocation of those strings. So I can look at this and see exactly where I had allocated that string. And if I double click over here, it will actually bring up the source code for my particular leak.
+
+And in this case, it will bring up the source code for right here. So let me go ahead and fix that leak and see if it helps. And I'm going to again rebuild this, and send it over to the device. And actually, I did this before, and it turns out it doesn't help. It will still crash. 144 bytes that I leaked over there was actually not that much.
+
+So what I'm going to do now is actually run the application with the Object Alloc instrument. And the Object Alloc instrument will track all of my allocation. So any time I do an alloc/init, any time a do a malloc, it will record it and puts it into this nice little timeline up here.
+
+And I've also added this Activity Monitor instrument over here and set it to show me only the free physical memory on the device. So I'm going to go ahead and click the slide show, or tap the slide show button over here, and it starts the slide show images that we saw earlier.
+
+Now as you can see, Object Alloc is reporting that I'm allocating lots and lots of memory every time I change that image. And subsequently at the same time, the amount of physical free memory on the device drops quite a bit right when I actually start that slide show. So let's actually take a look at this particular section and see if we can figure out what exactly is going on.
+
+So to get a kind of general idea about what might be going on I'm going to sort the detail pane down here by the live bytes. Now the live bytes is the total number of bytes for each of these single categories that are alive at the end of the run.
+
+And every block of memory that's allocated is assigned to a certain category. So in this example, I have a malloc 5.5 megabyte category over here which is all memory blocks of -- of the size 5.5 megabytes that were allocated by malloc. And I have NS -- a CF string down here, which are all of the CF strings. So what this is saying is that I have 27.48 megabytes alive of this malloc 5.5 megabyte category.
+
+So that's kind of interesting. So let's actually zoom out and then go down to the Object List View over here. And this Object List View will list all of the objects that have been allocated in the order that they were allocated. And as I move the inspection up here in the tracks it will change the selection down here and to track the inspection head.
+
+So I'm going to move this over to one of these steps over here, and I find that every time I have one of those big jumps in memory up here, I also find one of these malloc 5.5 kilobyte blocks. Megabyte blocks, sorry. And so I can be pretty certain that these malloc 5.5 megabyte blocks are what's causing these big steps in the allocations.
+
+So I'm going to bring up the Extended Detail Pane again and I notice that this time in my stack trace it's mostly Core Graphics and QuartzCore, and not really anything of my code. So it probably has something to do with those big images that the slide show is showing.
+
+And so one other thing I wanted to take a look at here is if I click on the Activity Monitor instrument and then I sort by the amount of real memory used by each of these processes, so Activity Monitor is very similar to the top command line tool, it will just sample each of the processes that are running on the device and figure out how much memory they're using at any given point in time, how much CPU they're using.
+
+And in this case, I'm going to sort by the amount of real memory, which is the actual amount of physical memory that that process is using. And I'm going to -- I find that Breadcrumbs is actually using about 60 megabytes of real physical memory, even though if I go up to the Object Alloc track, Object Alloc believes that it's only using about 28.4 megs of memory.
+
+Now the reason for this is that Object Alloc doesn't track the backing layers for each of the images that I generated to display in the slide show. And so before we go any further let's switch back to the slides and Dave's going to tell us a little bit more about image memory.
+
+ All right, so what makes up for that discrepancy that we saw in Object Alloc and Activity Monitor? Well, it turns out that we have a lot of objects that -- their malloc size is very, very small, but the overall backing store is very, very large. Images and layers both fall into these categories.
+
+So Core Graphics -- Core Graphics images are pretty small if you look at them in Object Alloc, but they can allocate a lot of memory because if you decompress your image, the actual uncompressed image size is quite large, and every layer which every UIView has, has a shared region of memory between your application and SpringBoard.
+
+And that region of memory isn't memory allocated isn't malloced -- because it has to be shared between two processes. So every time you have a lot of views that are sticking around you may run into one of these instances where Object Alloc and Activity Monitor show a little bit different amounts of memory. And that's because every UIView has a layer and the backing store is shared.
+
+So to look at this a little bit more illustrated fashion, we have a couple of very, very tiny UIViews in your application which all have a reference to layers, and both of those have references to very large backing stores that are shared between your application and SpringBoard. So if you run into any of those situations where Object Alloc and Activity Monitor are a bit different, look at your layer memory. You can search for UIViews in Object Alloc or TA layers to see how many you have around.
+
+And one thing to note as you're dealing with images, and I actually had a question about this today, that images have to be decompressed in memory to display them. So if you have a JPEG that's the full screen size, but the JPEG is say 50 or 60 or 70 K, when we decompress -- we have to decompress the image to display them, and the decompressed memory size is going to be width times height times 4 bits per pixel, or about 600 K. So your image that was very, very small on disc is fairly large in memory.
+
+And if we go up in larger and larger screen resolutions, the typical camera size may be about 7 megs of memory. So you really want to manage every bit of image that you get from the camera very, very carefully. And if you have a giant image from some camera that maybe you downloaded from a web site, it can use most of the memory that you have available to them. So whenever you're dealing with large images you need to be very, very careful about your memory management techniques that you use. So how do you deal with all the images. Well, we have several different UIImage APIs that we provide through UIKit.
+
+And we'll talk about -- we'll talk about three of them here. The first is UIImage imageNamed. UIImage imageNamed caches the uncompressed images in memory and will free them on low memory notifications if there are no more references to them. So if you use this API and still have a -- and still keep that UIImage around, that image memory will not go away. One note that this is used by initWithNibName.
+
+So if you have large images in NIBs you may want to consider loading them using some other UIImage initializers in the viewDidLoad method instead. And it does clear the cache on memory warnings, but really this is an API that you should be using for small, frequently used images.
+
+So if you have an image that you use all the time as you scroll through lists and really want it to be always available in memory and decompressed and very highly available, then that's the type of situation where you should use UIImage imageNamed. The second API that you have is UIImage initWithData.
+
+UIImage initWithData retains the NSData that you give to it. So you should transfer ownership whenever you create a UIImage using this methodology. And on a low memory warning, or preferably before that, when you hand off the data to the image, release the NSData if you can recreate is or if you just don't need it any more.
+
+And one little technique here is that NSData has an API, initWithContentsofMappedFile, which will use memory mapping so that the memory that NSData uses can be reclaimed by the OS. So if you have some sort of large file, if the OS needs that memory later on it can reclaim some of that. Whereas using the NSData initWithContentsofFile, brings the entire file into memory and the OS can't reclaim that until you free the memory. And the third API is UIImage initWithContentsofFile. Now UIImage initWithContentsofFile only retains the path.
+
+So we don't -- we try not to store a whole lot of uncompressed image data in memory, well, whenever we can avoid it. But all of these APIs are often used to display images on screen in a UIImage view, or perhaps you draw some images yourself. So for all of these APIs on low memory warnings you should release any references you have to them.
+
+Because there may be situations where you may have to cache some data. So to summarize those three different UIImage APIs, UIImage imageNamed caches all the uncompressed images, and on low memory you should release any references that you have. And of course the note to load any large images using other initializers if you have a bunch of images in a init file. UIImage initWithData caches the uncompressed data, and you should definitely release the NSData. And UIImage initWithContentsofFile tries not to cache anything in the image that it doesn't need to.
+
+And so you -- but for all of these three APIs if you encounter low memory warnings and you don't need the image any more, you should try to throw it away, to get rid of as much memory as you can, so that the OS can continue to run. And now Charles has a demo for releasing large images.
+
+ OK, great. So now that we know all about images and the memory that they use, here we are again at Instruments. And this is that strange malloc 5.5 megabyte block that we saw earlier.
+
+Since this roughly correlates with every time a new image is displayed on the screen you can be pretty certain that this large block of memory here is probably the backing store for that image that we are displaying. So in the Object List View over here, if I scroll up until I find UIImage, this is probably the UIImage that is associated with that backing store. And so I see that sure enough this image was created in the next image function in the slide show View Controller. So this is the method that's called back every second or so to display the next image.
+
+And as you can see here, I actually don't release the current image before I set the next image and display the next image. And so what happens is UIKit will keep the backing store for that image around just in case it's displayed soon. So let's actually open this up in Xcode using the Xcode button over here in Instruments. And I am going to fix that, build it, and then run it again under Object Alloc and Activity Monitor to see if anything changed.
+
+And let's let Instruments start up a little bit there. OK. And so again I'm going to tap on the slide show button there, and you can see that as I display the images the memory usage actually grows again. But instead of continuing to grow, every time I display a new image, now, it actually releases the memory for the old image before going on to the next one. So it never actually grows as high as it used to. And you see that the free memory here never dips down as long as it did before.
+
+And so the slide show can actually go on forever, now. Really. Now. But -- so that fixed the crash. But the application actually has allocated a lot of memory that the kernel would not be able to reclaim if free memory is scarce on the device. So that brings us to our next topic, which is low memory warnings.
+
+Let me switch to the slides now and talk a little bit about low memory warnings. So before I get too deep into the low memory warnings I want to talk a little bit about the execution environment in which applications run on the device. Even though there can be one foreground app at any given time there can be many, many background apps running on the phone. And each of these processes consume some amount of memory.
+
+In addition to the memory that they allocate, [Inaudible] needs to be brought in before they can be executed, and all the pages for the files that they mmapped in need to be brought into memory before they can be used. So to show you how many processes can be running in the background, here's a screen shot from Activity Monitor running Breadcrumbs.
+
+There's actually about 20 applications running in the background along with Breadcrumbs. Now if we take a look at the physical memory used, this is roughly how it broke down in that situation. Starting with the blue wedge, which is free memory, there's about 28 megabytes free. And then there are about 30 megabytes reclaimable, which are those code pages that were brought in, and read-only pages from memory map files.
+
+Now these are reclaimable because the operating system can always page out those pages and then read them back in from disc from the file itself, or from the executable. 32 megabytes was wired memory. As Dave mentioned earlier, this is kernel memory that cannot be reclaimed. 12 megabytes are reserved for the graphics memory -- the graphics hardware.
+
+And 26 megabytes were allocated by all the processes on the device. And since we don't have a swap file on the device, that 26 megabytes can't actually be reclaimed to service new allocations. So any time an application calls malloc or NSObject alloc, the operating system actually needs to find a free page or a page that it can evict in order to allocate that memory. So to look at it another way, 55% of memory inU that case was not available to the kernel to service any of those requests.
+
+So it has to pull pages out of either the free memory or the purple memory. So as Breadcrumbs allocated more memory it would use up some more of that blue wedge, the free memory, and then it would eventually have to start using out some of the purple wedge and start kicking out code pages that were executing in order to allocate more memory for Breadcrumbs.
+
+And if left unchecked, eventually free memory would become so scarce that none of the allocation requests from applications or the kernel itself could be serviced, and no forward progress on the device could be made. So before that happens, the iPhone OS will actually issue a memory warning to all the processes running on the device. And it will ask them to release as much of the memory that they allocated as they can in order to free up some of this memory pressure. If it can't recover -- reclaim enough memory then it will start killing -- terminating background processes one by one.
+
+And then if it still can't reclaim enough memory, it will terminate the foreground process. So a few key take-aways from this are that any application on the device may cause low memory conditions, but it's probably that foreground application that's actually doing work at the time. And you should expect memory warnings, because they are a normal part of the system, they are one of the few ways that the kernel can reclaim the allocated memory, that red wedge up there, and you must respond to low memory warnings.
+
+Because if you don't respond to low memory warnings then that can cause app termination. So what should you do in response to memory warnings. Well, it all boils down to releasing any kind of objects that you can reconstruct, anything you can read back from the disc, from a database, from the network, anything like that. And also releasing any cached objects in any cached resource files that you may have in memory.
+
+What you shouldn't do, though is ask the user to do anything, because they can't. Rebooting the device may temporarily alleviate memory pressure, but the root cause, the real problem is something on the device, probably that foreground app, is using too much memory. So when UIKit receives the memory warning it actually tries to release a lot of memory for you.
+
+And among that memory it will try to release the views -- the view objects themselves that have gone off of the screen and are no longer visible. But it actually needs some help releasing the outlets associated with those views. So let's take a look at the Breadcrumbs application again.
+
+So here we have the Compose view in the Breadcrumbs application, and this is the view that allows you to create a new note and also display exiting notes. If the user taps on the thumbnail on the upper left over there, then the image viewer appears on top of the Compose view.
+
+If UIKit receives a memory warning at this point it will actually release the view behind the Compose view, or behind the image view there, the Compose view. And then kick it out of memory. So the ComposeViewController, the controller for that composed view, looks something like this. It actually has a reference to the UIView and has several outlets to subviews on the composed view. It can read in the data from the model and then update the subviews as appropriate.
+
+Now when UIKit decides to unload that view and release it from memory, as you can see, all those outlets in the compose will actually keep those subviews in memory, even though they can never be displayed again, and waste quite a bit of memory. So what we would like to do instead is detect when UIKit will unload this view so that we can release all of those outlets and set them all to nil.
+
+Now in iPhone OS 3.0 you can do this by overriding the viewDidUnload method. When UIKit decides to unload the view, it will actually call the viewDidUnload of the associated UIViewController. Letting it do some kind of -- any kind of clean up that it would like. So in this case, we overrided viewDidUnload in ComposeViewController.
+
+Released all of the outlets by setting the properties to nil, and then we call our superclass's viewDidUnload. So now when UIKit receives that memory warning and it unloads that view, it will call the viewDidUnload, and the Compose View Controller can set up of these to nil and it can release them, and we no longer have any wasted memory.
+
+Just a quick note, we've made this much easier in iPhone 3.0 with that viewDidUnload method, and if you want to see how to do this prior to 3.0 you can see the memory warning section in the memory management programming guide for Cocoa. So we talked a little bit about what UIKit will do for you automatically. But UIKit will also notify your application code about memory warnings so you can respond and release other memory as well.
+
+And it does this in three ways. It will call the applicationDidReceiveMemoryWarning method on the app delegate, it will call the DidReceiveWarning method on all the all of the UIView controllers, and it will raise the UI applicationDidReceiveMemoryWarning notification. So let's go into the Breadcrumbs app again and take a look at how it implements each of these or how it uses each of these notifications.
+
+And let's start with the app delegate. So this is the Table view for the Breadcrumbs application, again. And this Table view -- the data for this Table view is actually stored in model objects. And all the model objects are stored in array in the app delegate. So here it is, the app delegate with a reference to that array of model objects.
+
+And what's more, these model objects are actually read in lazily from a database. So here we have the property for the entries there, and it says that if the backing instance variable M [phonetic] entries is null, then it will go to the Breadcrumb store, which is our interface to our database, and read in all of the entries again, and then return back.
+
+So what the application delegate can then do is implement the applicationDidReceiveMemoryWarning method and just release those entries and set that to nil. And then the next time the user tries to look at the Table view or do anything with the Table view, it will try to access that property, read them all back in from the database, and then go on its way. And so here it is again. And when we receive the memory warning, all that memory will just go away.
+
+So now let's take a look at one of the UIViewController subclasses. And again, let's take a look at that Compose view. Like I said before, the Compose view retains several outlets to subviews on that view. Like the title label, the location label, the text view, and so on.
+
+But it also retains a reference to the model object that contains the data for that view. And in this case, it's called a Breadcrumb entry. So of course the ComposeViewController could release the Breadcrumb entry and set that to nil, if it could reread the entire Breadcrumb entry from the database.
+
+But it's a little bit more complicated than that in this instance. The Breadcrumb entry actually contains data that can be -- that both can be reconstructed from the database and only exist in memory. So for example, the text for the entry and the image associated with the entry are both things that are stored in the database and on the file system, too, respectively. But it also has some state that only exists in memory.
+
+So what it does is it exposes this received memory warning method that will do exactly what we would want. It will release everything that it could reread from the database or reread from the File System, but leave everything else in memory. So in the ComposeViewController, I can then override the DidReceiveMemoryWarning method, and then just call the receive memory warning method on that entry, and then call my superclass's DidReceiveMemoryWarning. So let's take a look at one of the instances where the app uses the direct notification API.
+
+So as I said before, we have this Breadcrumbs store class which is our interface of the database. And it's actually a singleton instance. And the singleton instance keeps a handle open to the database. And this handle will keep a lot of memory resident just in case it will be used again.
+
+So it keeps this cache of memory that can grow to be pretty large. And so what I do here is in the shared instance method -- class method for the Breadcrumbs store, if the shared store is nil I will create a new store, and then register for that UI applicationDidReceiveMemoryWarning notification. So that when that notification is posted it will call me back in this received memory warning method, and I can release that store and set that to nil, and reclaim a lot of that memory that the database handle was holing.
+
+And then I can unregister from the default center so I no longer receive those notifications. So let's take a look at how -- what effect these -- responding to these memory warnings have in the memory app. And I'm going to switch back to Xcode now. And I'm going to switch to the simulator, because the simulator actually has this really cool feature that let's me simulate the memory warning on the device. And I'm going to run this again under Object Alloc.
+
+And my target failed to launch So I actually ran this earlier as well. So why don't I go ahead and open up this trace here. And so let me zoom in on this track over here. And so as you can see, when -- as the application launches it actually allocates a whole bunch of memory. And then at some point I can go into the simulator under the hardware menu and click on Simulate Memory Warning.
+
+Right over here. Hardware Simulate Memory Warning. And then right when I do that, the memory usage actually drops to almost nothing. So I can actually move this -- this inspection head over here and see that it goes from 3.34 megabytes and then I issue the memory warning, and because I respond to the memory warnings in all the different ways I showed you, it just drops all the way down to 700 megs -- or 700 K, excuse me.
+
+But also notice that there's this kind of funny spike over here at the very beginning of the application when we're loading. And again, if I actually switched into the Object List View and tried to figure out what exactly was going on over here, I would find that it's actually allocating a whole bunch of CF strings here.
+
+And if I had selected record reference counts when I started the Object Alloc instrument, and I click on one of these addresses I find that they're all actually Autorelease strings. So the spike probably has something to do with Autoreleasing objects. So why don't we switch now back to the slides and Dave's going to tell us a little bit more about Autorelease.
+
+ So Autorelease pools are a really nice feature of Cocoa, where you manage reference counts and you may want to decrement some reference count at some time in the future as you transfer ownership from one object to another. And in UIKit when you handle any sort of event we create an Autorelease pool for you that will stay around until you're done handling the event.
+
+So we have one giant Autorelease pool, and every bit of memory that you -- every object that you call autorelease on, or is Autoreleased and returned by the system is called, such as Foundation -- some NSString parses methods, all of that will go into this overall Autorelease pool.
+
+And if you accumulate too many Autorelease objects then you'll result in the situation that Charles saw in the Instruments demo where you have this memory spike. So one example of this might be this little code snippet where we have a little loop that's iterating through every entry in a database, and we're calling a couple of methods that return Autoreleased objects. And potentially, a lot of them.
+
+So we have an array of lines, and to get that array we take a string and we call componentsSeparatedByString. Now that's an NSString method that -- that takes a string and basically splits it apart into an array of strings. Very useful for parsing, but it returns a lot of Autoreleased objects.
+
+And then for each one of those lines we take another character set and we try to trim it a little bit. So as we're going through this nested for loop, we start increasing memory and increasing memory, until eventually we have a spike and if you use too much memory you could actually have some sort of memory warning and your app could be terminated.
+
+So if you're ever using a lot of these methods that return Autoreleased objects as you're parsing something-- XML is a popular one, XML file that could be arbitrarily large from a server, you may want to look at how you're using Autoreleased objects. So what we can do here is as we process each entry we can create our own Autorelease pool so that all the Autorelease objects that happen in those two key methods that returned a lot of Autoreleased objects, all that will go away for each entry in the database. So we create a nested Autorelease pool, and then as we iterate through that entry, our memory may grow.
+
+But as soon as we hit the Autorelease pool drain, that memory will go away. So then we constantly grow and shrink and grow and shrink, rather than constantly growing until we hit that large Autorelease pool in our event handling. And when we're using Autorelease there is times when it may be tempting to use Autorelease in situations where you don't really need it.
+
+So one area where you don't really need it is in a code block such as this. People often will try to create strings. It's very, very convenient to create some formatted string using NSString string with format, and then maybe put it into a data structure. Could put it into some object, or in this case a dictionary. But that will create an autoreleased object.
+
+But you didn't really need one to do this -- to do this small little snippet. So what we remember that instead of this, use alloc init with format, which will return something that's not Autoreleased, and then once you've transferred ownership by putting it into your dictionary or putting it into your other object, then you can release it.
+
+So if at any point in time the dictionary goes away, so will that string. Whereas if it's an Autorelease method it will stick around, that string will stick around even if the dictionary goes away until the Autorelease pool is drained. So keep in mind how you're using Autorelease pools. Now Charles is going to show you how to use Autorelease pools better in the Breadcrumbs app.
+
+ So here we are again in Instruments. We'd like to figure out exactly why there's this big spike over here at the very beginning, when we're starting up the application. So I've actually moved the inspection head over to the spike and down here I found one of the strings that we actually created and Autoreleased.
+
+And I see over here in the Extended Detail Pane that it was created in the parse title [phonetic] from text method in my Breadcrumb entry. So if I double click this and take a look at the code, you'll see code that's very similar to the code that Dave just showed you on the slides. It parses out the first line of text by calling NSString components separated by characters in set, and calling NSString, string by trimming characters in set.
+
+Both of which return Autorelease memory. In fact, components separated by characters in set will return an Autoreleased array of Autoreleased strings. And then this function is called from a method called List Breadcrumbs. And List Breadcrumbs will go and fetch all of the entries for Breadcrumbs from the database, and then step through them one by one, parsing out the titles for each of the entries.
+
+And you see here that we have this Y [phonetic] loop that steps through each of the rows, and then it comes down here, parses out the text, the full text of the notes from the database using string with UTF-8 string [Assumed spelling] which also returns an Autorelease string.
+
+Then call parse title [phonetic] from text. And then because there's no other autorelease pool around here, all of that memory will go into the Autorelease pool that's created for this run through the event loop. Since this doesn't return yet, just goes back around and goes onto the next entry, we will parse out the full text again, and parse out the title [phonetic] from the text, and now all of this memory is in the Autorelease pool as well. And so as you can imagine, since it goes and reads in all of the entries from the database before returning to this function, that Autorelease pool can actually grow to be pretty big.
+
+And none of that memory will be released or reclaimed until the very end of the -- of the event loop, the run through the event loop. And so that's why we had that really big spike over there. So I can -- I can -- of course I can actually change all of these string with UTF-8 string, and components separated by string calls into the associated init call. But maybe this is an API boundary, and I can't actually do that. So one of the things I could do here is take -- actually create an Autorelease pool for this loop. Let me open this up in Xcode.
+
+Sorry. And then at the very end of the iteration through the loop I drain the pool. So now if I do this, we get into the Y [phonetic] loop over here, we create a new Autorelease pool, we parse out the string from the database, and we parse the title from the database, but all of this memory over here for the title, all that Autorelease memory will go into this Autorelease pool over here, because this is the closest -- scope, scoped Autorelease pool.
+
+And then at the very end of processing this particular entry I will drain the pool and release all of that memory. And then go back around to the next entry, create a new pool, and repeat the whole process. So now let's run this in Object Alloc, and see what it looks like.
+
+So again, it fails to launch. Let me try that one more time. Sorry, I actually selected the device one that time and not the simulator. And so now you see in Object Alloc that instead of that really big spike we had before, we have this really tiny spike now. Which is great, because as Dave said earlier in the presentation any spikes in memory allocations could potentially cause the frontmost app to be terminated, if it's getting really close to -- to that, to lots of memory pressure.
+
+So let's switch back to the slides now, and Dave's going to tell us a little bit more about those low memory logs we saw earlier.
+
+ So now you've done the work, you've done the development process, and you're iterating on your app. And you may see one of these low memory logs at certain times during the development process.
+
+So what does this low memory log that you saw in Xcode mean? Well, so in the Xcode organizer there's a little crash logs tab, and you'll see all the crashes and all the low memory logs and as Charles pointed out, they actually do say low memory as part of the type. And when you have identified that your crash was in fact a low memory log, then you'll want to know, well, what was wrong. So the first -- the main question you want to answer was, well, how big was my app.
+
+So if you zoom in to some of the content of this -- of the low memory log we list a few things. We list the number of free pages, which is always going to be small because we terminated an app. The number of wired pages, which is a little over 30 megabytes in this case. And of course we list the largest process, which is almost always going to be the frontmost app. Here we tell you how many pages that that frontmost -- that that process that was terminated was actually using. So here Breadcrumbs is using 16,000 pages or about 64 megabytes.
+
+And that's going to be a little bit too much memory on iPhone. And we note that on the right it tells you which applications were jettisoned, or terminated because of low memory. And on the far right is shows you which applications were active. So SpringBoard is always active, and your app, the frontmost app is an active app.
+
+And also note that as you're looking through these logs, if SpringBoard's memory is fairly high, then that's when -- that's a call for you to go and look and see how many layers you have. If SpringBoard memory is 20 megs, 30 megs, then that could be a sign that you have a lot of layers that you have sticking around that perhaps you can free up.
+
+And as you're looking at the logs you'll see other processes that are running on iPhone and there are some common -- some common processes that are going to be running in the background for most users. Mail, phone, Safari, our media server for all of your audio and video playback.
+
+And if you run into a situation in which it's not your frontmost app but some other app on the system is taking a lot of memory, then definitely file a radar [phonetic] and file a bug report with the low memory log and we'll definitely take a look at it. So what happens when you debugged everything, you looked at the low memory logs, you used the tools to eliminate all the problems that you know of, and you're ready to post your app to an App Store.
+
+Well the App Store has a great way of reporting all of your crashes and low memory issues after the fact. So iTunes -- if you log into iTunes Connect it will show you the crash reports as of the current date, and it will show you the last weeks of logs.
+
+And the logs are break -- broken down by crashes, time outs, if for instance your application fails to launch in time because it took more than 20 seconds to launch And it will tell you how many of your crashes were due to exhausted memory. And this should give you a sense of how to priorities problems. Some apps will crash a lot, and so then your priority is just the crashes. Fixing those bugs. Other apps, maybe more than half of the issues are low memory issues.
+
+In which case, you need to look at low memory issues that you have. And when you get into iTunes Connect you can see some representative logs for each of these. And that will give you an idea about what problems you need to solve so that your users have the best experience that they can, and so that your app is always going to be -- remain alive.
+
+So you can use iTunes Connect to figure out how you -- whether or not your application is crashing after the fact, and that is a really, really powerful tool. And you'll also notice that as part of the iTunes Connect UI we tell you the average amount of resident memory that you're using. 20 megs would probably be a little bit small.
+
+Most apps you'll see somewhere between 45 and 65 megabytes fore the average resident memory. So in summary, we have a bunch of great memory tools to help you track down all of your memory problems. We have Object Alloc for all of your malloc allocations, we have Leaks to make sure that you don't have references to objects that you no longer care about, the Xcode Static Analyzer to find problems before you run the code, and Activity Monitor to give you a sense of just how much memory your process is using. If you follow the Cocoa memory guidelines and use Autorelease pools effectively, then you will eliminate the memory spikes and ensure that your application will stick around as long as possible -- as long as a user wants it around.
+
+And then always release images when they're no longer needed. That includes responding to low memory warnings. If you ever don't need a large piece of -- a large -- an object that uses a lot of memory then definitely get rid of it when you don't need it. And always, always respond to low memory warnings and architect your app in such a way that it can respond to low memory warnings and free up the large chunks of memory so that your app can continue to function and users will have a really great experience.

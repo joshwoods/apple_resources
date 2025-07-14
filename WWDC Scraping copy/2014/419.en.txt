@@ -1,0 +1,245 @@
+---
+Title:  Advanced Graphics and Animations for iOS Apps
+Year:   2014
+Web:    https://nonstrict.eu/wwdcindex/wwdc2014/419/
+
+[!] This transcript has potential transcription errors.
+---
+
+Alright. Hello and welcome to the Advanced Graphics and Animations for iOS Apps talk. I'm Axel. Mike is over there. He will take over in the middle of the talk. And with today's talk we're going to cover the following topics. The first part we'll be talking about the Core Animation pipeline and how it interacts with the application. After this I'll introduce a few rendering concepts that are required to understand our new two classes, UIBlurEffect and UIVibrancyEffect and after this Mike will take over and walk you through existing Profiling Tools and demonstrate a few case studies.
+
+To iterate the frameworks that we'll be looking at in this talk, in the first part of the talk we're looking at Core Animation and how it interacts with OpenGL or some hardware with metal, the graphics hardware. And then in the second half of my part I will talk about the UIBlurEffect and UIVibrancyEffect that are a part of UIKit. So let's get started with the Core Animation pipeline.
+
+So it all starts in the application. The application builds a view hierarchy. These are indirectly with UIKit or directly with Core Animation. One thing worth noticing now is that the application process is actually not doing the actual rendering work for Core Animation. Instead this view hierarchy is committed to the render server which is a separate process and this render server has a server side version of Core Animation that receives this view hierarchy. The view hierarchy is then rendered with Core Animation with OpenGL or metal, that's the GPU. It's GPU accelerated. And then once the view hierarchy is being rendered we can finally display it to the user.
+
+So the interesting part is now how does this look like time wise within the application? So, therefore, I would like to introduce the following grid. The vertical lines represent particular blanking interrupts and since you're rendering at 60 hertz of UI the distance between those vertical lines is 16.67ms.
+
+So, the first thing that happens in the application, you receive an event probably because of a touch, and therefore, the usual case, I mean to handling this case is that we want to update a view hierarchy. And this happens in a phase that we call the commit transaction phase. It is in our application.
+
+At the end of this phase the view hierarchy is then encoded and sent to the render server. The first thing that the render server then asks is to decode this view hierarchy. The render server then has to wait for the next resync in order to wait for buffers to get back from a display that they can actually render to and then it finally starts issuing draw calls for the GPU, this OpenGL or metal again.
+
+Then once this is completed hopefully with the review sources now available it can finally start rendering and so the GPU starts doing its rendering work. Hopefully this rendering work finishes before the next resync because then we can swap in the frame buffer and show the view hierarchy to the user.
+
+As you can these various steps span over multiple frames. In this case it's three frames and let's say we would now continue with the next handler event and Commit Transaction after the display then we would only be able to render 20 hertz. I know that's 60 hertz. So, therefore, what we're doing is we are overlaying these stages. So in parallel with the draw codes that you can see here we will do the next handler event, handler event and commit transaction and so at the end of this flowing step diagram.
+
+In the next few slides I would like to focus on the commit transaction stage because that's what affects application developers the most. So let's take a look at commit transaction. Commit transaction itself consists of four phases. The first phase is the layout phase. This is where we set up the views.
+
+Then the next phase is the display phase. This is where we draw the views. The third phase is the prepare commit phase where we do some additional Core Animation work and the last phase is where we actually package up the layers and send them to the render server in the commit.
+
+So let's look in detail at those four phases. First the layout phase. In the Layout phase the layoutSubviews overrides are invoked. This is where view creation happens. This is where we add layers to the view hierarchy with addSubview and this is where populate content and do some lightweight database lookups. And I'm saying lightweight because we don't want to stall here too long. The lightweights could be, for example, localized strings because we need them at this point in order to do our label layout. Because of this, this phase is usually CPU bound or I/O bound.
+
+The second phase is the Display phase. This is where the draw contents this drawRect if it's overridden or do string drawing. One thing worth noting here is that this phase is actually CPU or memory bound, because the rendering is [inaudible]. We use here the core graphics for this rendering. And so we usually do this rendering with CG context. So the point is here that we want to minimize the work that we do with core graphics to avoid a large performance set in this stage.
+
+The next phase is the Prepare phase. This is where image decoding and image conversion happens. Image decoding should be straightforward. This happens if you have any images and in your view hierarchy and these JPEGs or PNGs are getting decoded at this point. Image conversation is not quite so straightforward. What happens here is that we might have images that are not supported by the GPU. And, therefore, we need to convert these images. A good example for this could be index bitmap so you want to avoid certain image formats.
+
+In the last phase the Commit phase, we package up the layers and send them to the render server. This process is recursive. You have to reiterate over the whole layer tree and this is expensive. The layer tree is complex. So this is why we want to keep the layer tree as flat as possible to make sure that this part of the phase and as efficient as it can be.
+
+So let's take a look with how this works with animation. Animations themselves are a three stage process. Two of those happen inside the application and the last stage happens on the render server. The first stage is where we create the animation, update view hierarchy. This happens usually with the animate restoration animations method. Then the second stage is where we prepare and commit your animation. This is where layoutSubview is being called drawRect and that probably sounds familiar. And it is, because these are the four phases we were just looking at.
+
+The only difference here is that with the commit we don't just commit to the view hierarchy. We commit as well the animation. And that's for a reason, because we would like to handle the animation work to render server so that we can continue to update your animation without using interprocess communication to talk back to the application or force them back to the application. So that's for efficiency reasons.
+
+So, let's take a look at a few rendering concepts that require to understand the new visual effects that we are providing you with in iOS 8. So in this part of the talk I'm covering three areas; first tile based rendering is how all GPUs work. Then I'm going to introduce the concept of render passes because our new effects they use render passes. And then I'm doing a first example by showing you how masking works with render passes.
+
+So let's take a look at tile based rendering. With tile based rendering, the screen is split into tiles of NxN pixels. I've put here a screenshot together and overlaid it with a grid where you can see actually what a tile size would be like. The tile size is chosen so that it fits into the SoC cache.
+
+And the idea here is that the geometry is split into tile buckets. And I would like to demonstrate this by using the phone icon as an example. As you can see the phone icon spans multiple tiles and the phone icon itself is rendered as a CA layer. And the CA layer in CA is two triangles. And if you look at the two triangles they are still spanning multiple triangles, multiple tiles.
+
+And so what a GP will do now, it will now start splitting up those triangles, where we committed the tile so that each tile can be rendered individually. The idea is here that we do this process now for the hue geometries so at some point we have the geometry for each tile collected and then we can make decisions on what pixels are visible and then decide what pixel shade to run. So we run each pixel shade only once per pixel. Obviously if you do blending this doesn't quite work. Then we still have the problem of overdraw.
+
+So, let's take a look at what type of rendering passes are. So let's assume application has built a view hierarchy with Core Animation. It's committed to render server and Core Animation has decoded it and now it needs to render it and it will use OpenGL or metal. In the slide I'm just saying metal for simplicity to render it. And it will generate with OpenGL command but it is then submitted to a GPU. And the GPU will receive this command buffer and then start doing its work.
+
+The first thing that GPU will do is vertex processing is where the vertex shader runs. And the idea here is that you transform all of vertices into screen space at this stage so that we can then do the second stage, which is the actual tiling. Where we actually tile the geometry for our tile buckets. And this part of the stage is called the tiler stage. You will be able to find this in the instruments, in the OpenGL ES driver instrument and the tiler utilization.
+
+The output of this stage is written in something called the parameter buffer and the next stage is not starting immediately. Instead we wait now until all geometry is processed and sits in the parameter buffer or until the parameter buffer is full. Because the problem is if the parameter buffer is full we have to flush it. And that's actually performance it because then we need to start at the vertex processing and get and frontload pixel share at work. And next stage is as I said the pixel shader stage.
+
+This stage is actually called the renderer stage and you can find this again in the instruments OpenGL ES driver tool under the name renderer utilization. And the output of this stage is written to something called the render buffer. Okay, so next let's take a look at a practical example by looking at masking.
+
+So let's assume our view hierarchy is ready to go. The command buffer is sitting with the GPU and we can stop processing. So the first thing happens in the first pass is that we render the layer mask to a texture. In this case it's this camera icon. Then in the second pass if you render the layer content to a texture and in this case it's this kind of blue material. And then in the last pass that we call the compositing pass we apply the mass to the content texture and composite to the reside to screen and end up with this light blue camera icon.
+
+So let's take a look at UIBlurEffect. For those that don't know UIBlurEffect can be used with UIVisualEffect view and this now a public API. Since iOS 8, it basically allows you to use the Blurs that we introduced as iOS 7. And if we are providing you with three different Blur styles that I want to demonstrate here. I took this regular iOS wallpaper and applied three different BlurEffects to it, extra light, light and dark.
+
+So let's take a look how this looks performance wise. I'm using here the dark style as an example for the rendering passes. The dark style is actually using the lowest amount of render passes. And you also need to keep in mind this render pass depends on the fact that we did certain optimizations for certain passer hardware. So in the first pass we render the content that is going to be blurred.
+
+Then in the second pass we captured the content and downscale it. The downscale depends on the hardware so in this slide I kept it at a certain size so it's still readable. Then in the next two passes we applied the actual blur algorithm, which is separated so we do first the horizontal blur and then the vertical blur.
+
+There's actually a common blur optimization. We could do this in a single pass but let's assume our blur corner would be 11x11. This would mean we would need 121 samples per pixel and by separating we only need to read 11 samples per pixel in each pass. So after the fourth pass we have this horizontally and vertically blurred small tiny area. And so what's left in the last pass is that we need to upscale this blur and tint it. In this case we end up then with our dark blur.
+
+So that looks fine, but let's take a look how this looks like performance wise. So what I did as I test, I created a fullscreen layer and applied the UIBlurEffect to it and measured the performance. In this diagram you can see three rows. The first row represents a tile activity, the second row a render activity and the last row I put in the VBlank interrupt and we can actually see what our frame boundaries are. And again, we are running at 60 hertz UI. So, the time you have is 16.67ms.
+
+So let's focus on a single frame. As you can see as a first look here the first tiler pass is happening before the first render pass and that's because the tiler needs to pull this whole geometry, so it's emphasized in what we just saw on previous slides. So let's go quickly over the passes again. So the first pass is the content pass. The time for this really depends on the view hierarchy. In this case it's just a simple image so it might take longer if we involve the UI.
+
+Then in the second pass we downscale and capture the content. It's actually fairly fast. This is pretty much constant cost. Then the subpass is the horizontal blur. Again it's constant cost which is pretty fast because we only apply it on a very small area. And then in the fourth pass we do the vertical Blur, again very fast and we end up with our blurred region. And then in the last pass we upscale and tint the blur.
+
+So one thing you will notice now are those gaps between those passes. I've marked them here in orange. And those gaps are actually [inaudible] and they happen because we do here run a contact switch on the GPU. And this can actually add up quite quickly because the time spent here in idle time is passable at 0.1 to 0.2ms. So in this case with four passes we have about idle time of 0.4 to 0.8ms, which is a good significant chunk of our 16.67ms.
+
+So let's take a look how the blur performs on the various devices. So again this is the fullscreen blur that I used before and I met it as well on iPad 3, 3rd generation. And as you can see the iPad 3rd generation performs much worse than the iPad Air.
+
+In the case of the extra light blur the timing is 18.15ms, so we can't render at 60 hertz this type of blur on iPad Air. And for light and dark we are around 14.5ms, which leaves us about 2ms for UI, which is not really enough for rendering any compelling UI.
+
+So the decision we made on iOS 7 RA was that we would disable the blur on certain devices and the iPad 3rd generation is one of these devices. And this -- the performance on the iPad 3rd generation changes to this. You basically just apply a tint layer on top so that we can make sure that legibility is the same as without the BlurEffect.
+
+So, and to reiterate on what devices we don't blur and that we only do the tinting on the iPad 2 and iPad 3rd generation, we just apply the tint and we skip the blur steps. On iPad 4th generation, iPad Air, iPad Mini, iPad Mini with retina display, iPhones and the iPod touch we do both the blur and the tinting.
+
+So, in summary for the UIVisualEffectView with UIBlurEffect, UIBlurEffect have multiple onscreen passes depending on the style. Only dirty regions are redrawn. So it's actually fine if you have a large blur area and you don't have the content behind it, because we only applied the blur once. The effect is very costly so UI can be easily GPU bound. So, therefore, you should keep the bounds of the view as small as possible. And, therefore, as well you should make sure to budget for effect.
+
+So, next let's take a look at the UIVibrancyEffect. UIVibrancyEffect is an effect that's used on the top of the blur and it's meant to be used for contents which can make sure that content stands out and doesn't go under with the blurs. So, let's take a look how this looks like. This is our three blur styles again. And let's assume we want to render the camera icon from our masking example from before on top.
+
+And this could look like this if you don't use any VibrancyEffect. And as you can see with the light style there might be some legibility issues because the gray starts bleeding out. So, what we decided is that we edit some VibrancyEffect and VibrancyEffect is a punch through and then you end up with this nice vibrant look.
+
+So, let's take a look how this affects performance. So, back to our render pass diagram. The first five passes are in this case for the dark blur, the blur cost. And then in a sixth pass we render the layer content to a texture. And then in the final compositing pass we take the layer content and apply filter and composite it on top of the blur. Don't be fooled here. The filter content is actually quite expensive and I want to show this in the next couple of slides.
+
+So this is our diagram from before. This is the steps for the blur and let's add on now the steps for the VibrancyEffect. So, in pass six I'm adding in here some content, you saw a camera icon. And then obviously the cost for this pass depends on what you're rendering there, what view hierarchy looks like. And then the last pass we apply the filter. And as you can see the filter cost is actually very expensive. It's actually the most expensive pass we have here. One thing to keep in mind here is that I apply the VibrancyEffect to a fullscreen area.
+
+The recommendation is to not apply the VibrancyEffect to a fullscreen area, instead to only apply it to small content areas to avoid this huge performance penalty. As well to emphasize -- we have now is way more gaps because we have more render passes. So, the GPU idle time has increased as well. We have now six gaps and this can add up to 0.6 to 1.2ms of idle time in our GPU.
+
+So, let's take a look how this looks on iPad 3rd generation and iPad Air. There is the base cost from before, 4.59ms. For the iPad 3rd generation we don't blur and different times for the iPad Air depending on the blur style. So, let's add this on and what we can see is for the fullscreen effect is that we are spending on iPad 3rd generation about 27 to 26ms just for applying the VibrancyEffect.
+
+On the iPad Air we spend about 17.48ms for the extra light style and around 14ms for light and dark. So you don't have a lot of time left there on the GPU to do any other rendering. I mean 2ms is the best case here. So to emphasize again, we should really restrict the VibrancyEffect on a small area to avoid this huge GPU overhead.
+
+So, in summary, UIVibrancyEffect adds two offscreen passes. UIVibrancyEffect uses expensive, uses expensive compositing filter for content. So, therefore, you should only use the UIVibrancyEffect on small regions. Again likeness to blur only dirty regions are redrawn and the UIVibrancyEffect is very costly on all devices. So with the blurs UI can easily be GPU bound, keep the bounds of the view as small as possible and make sure to budget for the effects.
+
+So, next I would like to give a couple of automization techniques on the way. One is rasterization. Rasterization can be used to composite to image once with the GPU. This can be enabled with shouldRasterize property on a CAlayer. And there are a few things to keep in mind when doing this. First extra offscreen passes are created when we update the contents. We should only use this for static content.
+
+Secondly you should not overuse it because the cache size for rasterization is limited to 25.5 times of the screen size. So if you start setting the rasterize property of the last part of your view hierarchy you might blow the cache flow over and over and end up as a lot of offscreen passes.
+
+Last the rasterized images are evicted from the cache if they are unused for more than 100ms. So you want to make sure that you use this only for images that are consistently used and not for infrequently used images because then you will incur every time an onscreen pass.
+
+So typically use cases are to avoid redrawing expensive effects for static content so you could rasterize, for example, a blur. And the other thing is the redrawing of complex view hierarchies so we could rasterize for view hierarchy and composite on top of a blur or under a blur.
+
+So the last thing I have here is group opacity. Group opacity can be disabled because it allows GroupOpacity property on a CALayer. Group Opacity will actually introduce offscreen passes if a layer is not opaque. So this means the opacity property is not equal to 1.0. And if a layer has nontrivial content that means it has child layers or a background image.
+
+And what this means in turn is that sub view hierarchy needs to be composited before its being blended. Therefore my recommendation is to always turn it off if it's not needed. Be very careful with this. And with this I would like to turn it over to Mike for the Tools.
+
+[ Applause ]
+
+So, I am Mike Ingrassia. I am a software engineer in the iOS performance team and the first thing I want to talk about are Tools. So before I get into Tools though, I do want to mention the performance investigation mindset. So basically, what are the questions running through my head when I encounter a performance issue and want to start tracking down the source of that?
+
+So, first thing I want to know is what is the frame rate? You know it's always good to know where you're starting performance wise so that you can gauge how the changes you make are affecting performance. So our goal is always 60 fps. We want to ensure that we have smooth scrolling and nice smooth animations to provide a good user experience. So, our target should always be 60 fps.
+
+Next up I want to know are we CPU or GPU bound? You know obviously the lower the utilization the better because it will let us hit our performance targets and also give us better battery life. Next thing you want to know, are there any unnecessary, is there any unnecessary CPU rendering?
+
+So basically are we overriding drawRect somewhere where we really shouldn't be you know and kind of understanding what we're rendering and how we're rendering it. We want the GPU to do as much of this as makes sense. Next thing I want to know is do we have too many offscreen passes?
+
+As Axel pointed out previously offscreen passes basically give the GPU idle time because it has to do contact switches so we want to have fewer offscreen passes, you know the fewer the better. Next up I want to know is there too much blending in the UI? We obviously want to do less blending because blending is more expensive for the GPU to than rendering just a normal opaque player. So, less blending is better. Next I want to know is are there any strange image formats or sizes? Basically we want to avoid on the fly conversion of image formats.
+
+As Axel pointed out previously if you are rendering an image that is not, in a color format that is not supported by the GPU then it has to be converted by the CPU. And so we want to try and avoid anything on-the-fly like that. Next up I want to know are there any expensive views or effects? Blur and Vibrancy are awesome but we want to make sure we're using them sparingly in a way that will give us the scrolling performance that we want.
+
+And lastly, I want to know is there anything unexpected in the view hierarchy? You know if you have a situation where you're constantly adding or removing views you know you could introduce a bug accidentally that say you know inserts animation and forgets to remove them or you know you're adding views to your hierarchy and forgetting to remove them. You know you want to make sure that you only have the views that you really need you know in your hierarchy because you want to avoid excessive CPU use of backboard D.
+
+So, now let's get into some of the tools that will give us the answers to these questions. So first off I want to talk about instruments and particularly we'll talk about the Core Animation instrument and the OpenGL ES Driver instrument. Then I will say a few things about the simulator that you can do with color debug options and then I will briefly talk about a new feature in Xcode for live view debugging on device.
+
+So first up, if you launch instruments and select the Core Animation template that will give you a document that contains a Core Animation instrument and a time profiler instrument. If you select the Core Animation instrument you can then choose which statistics you want to show. In this case it's only fps. So we'll choose that and then when you take a trace it will show you your frame rate. So you can see in the column here it shows you the fps for each interval that this trace was running. So you see this in sample intervals.
+
+Likewise if you want to see what the CPU is doing you can select the time profiler instrument. And so you select it and then you can then see an aggregated call stack of what the CPU is doing while you were taking your trace. So this is where you would look for you know am I overriding drawRect?
+
+Am I spending too much time in main thread doing things that I shouldn't be? Next up let's talk about some of the color debug options that are part of the Core Animation Instrument. So if you select the Core Animation Instrument you can see the color debug options over here on the right.
+
+So let's go through what those are. First up we have color blended layers and so this will tint layers green that are opaque and tint layers red that have to be blended. As we said previously, you know layers that have to be blended is more work for the GPU.
+
+And so you ideally want to see less red you know and more green but there are going to be cases where you can avoid it. For example, in this particular case we have a white table view with white table view cells and we notice that our labels are you know having to be blended here. So if we made our labels in this case opaque then we wouldn't have to worry about doing the blending so that would be one optimization we could make in this particular case. Next up color hit screens and misses red.
+
+This shows you how you're using or abusing the should rasterize property on CALayer. So what this will do is it will tint cache hit screen and cache misses red. So as Axel pointed out previously keep in mind that your cache size is only two and a half times the size of the screen and items are evicted from the cache if they're not used within 100ms. So, you know it's good to use this particular coloring debug option to see how you're utilizing the cache with you know what you have set should rasterized on.
+
+When you first launch your app you're going to see a lot of flashing red because you obviously have to render it once before it can be cached. But after that you don't want to see a whole lot of flashes of red because you know as we said previously, you know anything you're doing is going to incur offscreen passes when you have to render it and then stick it in the cache.
+
+So, next item is color copied images. As we said before if an image is in a format, is in the color format that the GPU can't work directly with it will have to be converted by the CPU. So in this particular example you know this is just a simple photo browsing app.
+
+We're just getting images from an online source. We're not really checking their size or their color format. So in this particular case we're getting images that are 16 bits per component. And so you can see that they are tinted cyan here. That is telling us that these images had to be converted by the CPU in the commit phase before they could actually be rendered.
+
+So, you know for this particular case we don't want to do this on the fly because it will affect scrolling performance. So you can beforehand you know convert your images to the size and the color format that you're expecting. And it's best to do this in, you know in the background so you're not eating up time on the main thread while you're trying to scroll or doing other things.
+
+So the next option is color misaligned images. This will tint images yellow that are being scaled and tint images purple that are not pixel aligned. You know as I said previously it's always good to make sure that images are in the color format and the size that you want because the last thing you want to be doing is you know doing conversions in scaling on the fly while you're scrolling. So the same principles we applied in the previous slide we would also apply here to get rid of the scaling on-the-fly.
+
+So, next up is color offscreen yellow. So this will tint layers yellow based on the number of offscreen passes that each layer occurs. So, the more yellow you see the more offscreen passes we have. If you notice the nav bar and the tool bar are tinted yellow, that's because there are blurs with these layers that are actually blurring the content behind it. So we expect those, but I do find it curious that the images are having offscreen passes. So we'll take a look at that later on in the presentation and see how to work around this issue.
+
+So next is color OpenGL fast path blue. And so what this will do is this will tint layers blue that are being blended by the display hardware. This is actually a good thing you want to see because if we have content that's being blended by the display hardware then that's less work for the GPU to have to do. So in this case if you see something show up in blue that's a good thing.
+
+Last option is flash updated regions. And so what this will do is it will flash parts of the screen yellow that are being updated. This particular example is with the clocks app that shifts in iOS. You notice that the yellow regions here are the second hand. Ideally you only want to see parts of the screen flash yellow that you're actually updating. Again because this means less work for this GPU and less work for the CPU. So, if you turn this on you don't want to see a lot of flashing yellow unless you actually are updating that much of the screen.
+
+So, in summary some of the questions that the Core Animation Instrument will help you get to, it will help you figure out what the frame rate is, is there any unnecessary CPU rendering because it does include the time profiler instrument. And also with the color debug options you can see things like are there too many offscreen passes? How much blending is going on? And do you have any strange image formats or sizes that you're not expecting?
+
+And so one additional point on the coloring options some of the coloring options are available in the iOS simulator so you can see the example here. A few things to point out with this, the colors might be slightly different because the version of CA that's running inside the simulator is actually a version of CA that's on OS X, not on iOS.
+
+So if you see any discrepancies always trust what you see on device, because that's what your customer is actually going to be using. So, this is a good future because you can have like say your testing team go off and hook around your app and see if you have any unexpected offscreen passes or any conversion or anything that looks suspicious.
+
+So next topic, I want to talk about the OpenGL ES driver instrument. So if you launch instruments and select the OpenGL ES driver template that will give you a document that contains the OpenGL ES driver instrument and a time profiler instrument. So if you select the OpenGL ES driver instrument you can choose from which statistics you want to actually collect.
+
+When I'm investigating things I tend to go for device utilization, which will show you how much the GPU is in use during the trace. Render and tiler utilization, those correspond to the renderer and tiler phases that Axel was talking about previously. And then, of course, the Core Animation fps because I want to know what the actual frame rate is that we're seeing.
+
+So, if you take a trace and then select the core, the OpenGL ES driver instrument you can then look at the statistics and see, for example in this case, we are hitting 60 fps and our device utilization is in like the mid lower 70s. So, you know it depends on while you're rendering so you know you may want to investigate this, like if it all boils down to what you're actually rendering for this case.
+
+And likewise since we have the time profiler instrument here you can see what the CPU is doing. So, if you select that you can then again look at aggregated call stacks of what was going on in the CPU during this time. So this is always useful because you can highlight certain regions you know if you notice that you're dropping frames or you notice a lot of activity you can zoom in and see what the CPU is doing during that particular time.
+
+So in summary, with OpenGL ES driver instrument you know this will give you answers to questions like what is your frame rate? You can see what the CPU and CPU are doing and you can also use the time profiler instrument to see are there any unnecessary CPU rendering going on?
+
+So next up is a really cool feature that was added in Xcode for live view debugging on device. So if you open your object in Xcode and then run it and then click this little button on the bottom here, what it will actually do is it will grab the view hierarchy off the device and you can then go poking around in your view hierarchy and see what exact views are in your UI.
+
+So this is always good because you can inspect to see as I said if there's anything unexpected there you know maybe something is building up or you have a leak of say animations or something or constraints. So this is good to actually see what the view hierarchy is on your device versus say what you conceptually think it is when you're writing your code. If you select an individual item or an individual view you can look at the properties for it. So in this case we selected a UI view and you can see details about what property and what image is currently being rendered by that view.
+
+So summary for Xcode view debugging this will let you poke around in your view hierarchy to see what's actually being rendered on device, you know which is helpful because you can see if you have any expensive views. You know looking at their properties you know seeing what your bounds are and whatnot. Also good to see if you have anything building up unexpectedly in your view hierarchy.
+
+So next up let's talk about some case studies. So what I want to do with this is I want to talk about a couple of different scenarios and measure performance across different devices. And then we'll figure out how we can work around these performance problems and keep the same visual appearance, but you know get the performance gain that we want. So first up, let's talk about a fictitious photo application.
+
+So this is just a simple application with a table view where each table view cell has an image and a couple of lines of text and there's also a small shadow behind each image. So, if we take this and we measure the performance on an iPhone 5s using the OpenGL ES driver instrument. You know we can see that we're hitting 60 fps. So, that's good; 60 fps is our target. So, awesome, ship it.
+
+Not just yet. We you know actually love all of our customers and we want to make sure everybody has a good user experience regardless of what device they're on. So, let's take a look at some of the other devices that we support in iOS 8 to see how the performance stacks up.
+
+So, first off let's look at the iPod touch. So I'm curious what scrolling feels like on an iPod touch. So, you know again we'll take our iPod touch and we'll use the OpenGL ES driver instrument and you know sure enough we notice our frame rate is in the mid 30s, which is nowhere near our target. So that would be a lousy scrolling experience.
+
+And if we look at the device utilization we see that you know this is like mid to high 70s. This strikes me as really kind of odd because all we're doing is just scrolling around a couple of image thumbnails and some text. So I don't really expect this much GPU activity.
+
+So let's see if we can figure out what's going on here. So, first thing I want to know is you know what's in my view hierarchy. Is there anything unexpected here? So we use the Xcode debugging feature. We grab the view hierarchy. I don't really see anything surprising here so we've got you know table view cell with an image view and two labels, nothing out of the ordinary here. So, let's see if we can figure out something else.
+
+So if we use the Core Animation instrument you know remembering that offscreen passes are expensive, let's see if we have any offscreen passes that are unexpected. And sure enough this is the slide that I referenced previously. So you know we have offscreen passes for the images, which again strikes me as curious. Let's just take a look at the code and see what we're doing, how are we setting this up.
+
+So, as I said each image thumbnail has a shadow. How are we generating that shadow? So in this case we are asking Core Animation to generate the shadow for us. And we're doing that just by setting shadowRadius, shadowOffset you know and other properties. Basically when we're doing this Core Animation has to figure out what the shape of the shadow looks like. And when it does this it has to take offscreen passes to render the content and then look at the alpha channel of what it just rendered to figure out where the shadow belongs and then go through all the extra work of doing the shadow itself.
+
+Is there a better way? Is there something that we can do to avoid this and it turns out there is. If we add the following line, so there is the shadowPath property you know we're only scrolling image thumbnail, so just basically Rects of various sizes. We can easily figure out you know what the shape of the shadow needs to look like because again, they're all just various sized rectangles.
+
+So if we take advantage of the shadow path property and add that to our code then Core Animation doesn't have to eat up any offscreen passes to actually generate these shadows. So, let's-- you know let's make this change. We'll add this line and let's take a look with the Core Animation instrument to see if this really did get rid of our offscreen passes and sure enough it did.
+
+So, this is great. Less offscreen passes means you know less idle time on the GPU. So, let's take a trace and see what our scrolling performance looks like. So, again looking at an iPod touch we'll use the OpenGL ES driver instrument and we notice that we are indeed hitting 60 fps. That's great.
+
+And check out the device utilization, you know we are now in like the mid 30s as opposed to you know the mid 70s before. So this is great, you know less GPU work means we are hitting our performance targets and it also means better battery life. So, that's a good thing.
+
+So, awesome, can we ship it now? Well not just yet; we still have one more device we should look at. So, let's take a look at an iPhone 4s and see how scrolling is with our new changes now. So, we are in fact hitting 60 fps. That's good and again device utilization seems same. You know 30 percent is a lot better than mid 70s.
+
+So, to summarize when we had Core Animation doing and figuring out rendering the shadow for us you notice there's a drop off when you look at older devices. So the iPhone 5s can handle this no problem. But as you look at the iPhone 5, the iPhone 4s and the iPhone, iPod touch you notice that performance drops off because again, older devices can't handle the amount of offscreen passes that newer devices can. And when we make this change and take advantage of the shadowPath property you know notice we're hitting our targets everywhere for 60 fps. So, this is good. We can ship this and have happy customers. So, awesome we can finally ship it.
+
+So, in summary, offscreen passes are expensive. You know you always want to use Core Animation instruments to find out if you have any unnecessary offscreen passes and know the APIs and view hierarchy that you're using to understand if there's things you can do to avoid it. In this case it was using shadowPath. And as always you know measure your performance across multiple devices. You know you can see what the GPU utilization is by looking at the openGL ES driver instrument and you can see what the CPU is up to by using the time profiler instrument.
+
+And as always you know, know your view hierarchy, know if there's any hidden costs for what you're, for what you're trying to render. And this is especially true for things that we have inside of table view cells because we want to ensure that we have smooth scrolling. So it's particularly important with a view hierarchy you build up in a table view cell.
+
+So, next case study I want to look at is a fictitious contacts application. So, again this is just a simple table view. We have you know a round thumbnail and we have a line of text. So, not a whole lot going on here. So, if we look at performance across different devices. We notice that you know the iPhone 5s and the iPhone 5 are hitting 60 fps that's good.
+
+But the iPhone 4s and the iPod touch aren't quite there. So you know again, we want everybody to have good user experience regardless of the hardware that they're using. So let's take a look at this and see why we're not getting with the target frame rate on these devices.
+
+So, the first thing I want to do is take an OpenGL, use the OpenGL ES driver instrument and take a trace. You know it's always good to know where you're starting so you understand how the changes you make are affecting performance. So take a trace. Notice that our scrolling is you know only in the mid 40s; it's not good. And look at the device utilization. The device utilization is really high here. That's rather interesting again because we're just rendering a couple of those you know images and some text. So that looks suspicious to me.
+
+So let's take a closer look. Again you know we'll use the Core Animation instrument and see if there's any unnecessary or unexpected offscreen passes. So you know we notice the images here are incurring offscreen passes. So, just kind of curious. Let's take a look at how we are rendering and how we are setting up these round thumbnails.
+
+So, basically what we're doing is we're starting off with this particular case. We're starting off with square thumbnails and we are on-the-fly asking Core Animation to round them off for us. And we're doing this by using cornerRadius and masking. So this is where the offscreen passes are coming from. So, you know again anything that we can do to avoid offscreen passes you know will improve performance across all devices.
+
+So, is there a better way to do this? Ideally if you can pregenerate your thumbnails round then that would be great, because then you'd just be rendering images and you wouldn't be trying to do all of this masking and having all these offscreen passes on-the-fly. So, you know if you can pregenerate them that's great.
+
+If you can't then another trick you could do is remember this UI was just a white table view with white table view cells and just you know white background. So we could fake it in this case. You know we could render the square content or the square thumbnail and then render a white inverted circle on top of it to kind of you know in essence cut away the rest of the image.
+
+This would be reducing our offscreen passes but increasing the amount of blending. You know but this still turns out to be a net performance win because the GPU can blend a lot faster than it can do offscreen passes. So, let's make this change of just doing the, you know, faking it and see how that affects performance.
+
+So, we'll take an OpenGL ES driver. We'll take a trace using the OpenGL ES driver instrument and see what our frame rate is and sure enough we're hitting 60 fps. And notice how much less the device utilization is. So again, we're 30 percent versus mid to upper 80s.
+
+One quick word on this, you notice before we were actually GPU bound but we weren't actually at 100 percent for GPU time. That's because you know when you have offscreen passes there is that idle time when the GPU has to change contacts or switch contacts. So, you know you still might be GPU bound, but not quite hitting 100 percent GPU usage because of the situation with offscreen passes, so that's something to keep in mind.
+
+So, if we summarize performance across all the devices you know before we were just using masking we noticed that there was a performance drop off on older devices. After we made this change and we made the tradeoff of doing, having more blending for less offscreen passes we are now hitting 60 fps everywhere which is good. This is what we want.
+
+So, in summary, notice there's a theme here. Offscreen passes are expensive, so again you can use Core Animation to find where you have any unexpected offscreen passes and you know it's always good to know you're API and what user you're using if there's anything you can do to avoid them.
+
+And, of course, always measure your performance across different devices, you know OpenGL ES, OpenGL ES driver instrument will give you GPU activity and time profiler instrument will show you CPU activity. And again always know what view hierarchy is you know if you have any kind of strange or bizarre looking performance issues.
+
+So overall summary, you know what were the question, our original questions and what tools have we used to actually find these answers? So here's a nice little table that shows what we actually used to get down to the questions. So, this is always a good starting point for figuring out before you start digging in your code to try to figure out what's going on. It's good to see what's actually happening on device.
+
+So overall summary, Axel talked about the Core Animation pipeline and talked about some rendering concepts and then talked about some new UIKit features for Blur and Vibrancy effects. And then I went over profiling tools and then did some example case studies. So if you have any questions feel free to contact either the Apps Frameworks Evangelist or the Developer Tools Evangelist.
+
+So feel free to contact Jake or Dave. If you're curious about Core Animation documentation that's available online as well as the Developer Forums is a great resource. And other related sessions that are happening at WWDC you now you might find these interesting. So these might be worth checking out. So thanks and have a wonderful WWDC.
+
+[ Applause ]

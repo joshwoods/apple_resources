@@ -1,0 +1,287 @@
+---
+Title:  Live Photo Editing and RAW Processing with Core Image
+Year:   2016
+Web:    https://nonstrict.eu/wwdcindex/wwdc2016/505/
+
+[!] This transcript has potential transcription errors.
+---
+
+Thank you so much, and good morning. And my name is David Hayward and I'm here to talk to you today about editing Live Photos and processing RAW images with Core Image. We got a bunch of great stuff to talk about today. First I'll give a brief introduction to Core Image for those of you who are new to the subject. Then we'll be talking about our three main subjects for this morning. First we'll be adjusting RAW images on iOS. Second, we'll be editing Live Photos. And third, we'll be talking about how to extend Core Image in a new way using CIImageProcessor nodes.
+
+So first, so a very brief introduction to Core Image. The reason for Core Image is that it provides a very simple, high-performance API to apply filters to images. The basic idea is you start with an input image that may come from a JPEG or a file or memory, and you can choose to apply a filter to it and the result is an output image, and it's very, very easy to do this in your code.
+
+All you do is you take your image, call applyingFilter, and specify the name of the filter and any parameters that are appropriate for that filter. It's super easy. And, of course, you can do much more complex things. You can chain together multiple filters in either sequences or graphs and get very complex effects.
+
+One of the great features of Core Image is it provides automatic color management, and this is very important these days. We now have a variety of devices that support wide gamut input and wide gamut output. And what Core Image will do is it will automatically insert the appropriate nodes into the render graph so that it will match your input image to the Core Image working space, and when it comes time to display, it will match from the working space to the display space.
+
+And this is something you should be very much aware of because wide color images and wide color displays are common now and many open source libraries for doing image processing don't handle this automatically. So this is a great feature of Core Image because it takes care of all that for you in a very easy to use way.
+
+Another thing to be aware of is that each filter actually has a little bit of code associated with it, a small subroutine called a kernel. And all of our built-in filters have these kernels and one of the great features is if you chain together a sequence of filters, Core Image will automatically concatenate these subroutines into a single program. The idea behind this is to improve performance by reducing the -- and quality, by reducing the number of intermediate buffers.
+
+Core Image has over 180 built-in filters. They are the exact same filters on all of our platforms; macOS, tvOS and iOS. We have a few new ones this year which I'd like to talk about. One is a new filter for generating hue saturation and value gradient. It creates a gradient in hue and saturation, and then you can specify, as a parameter, the brightness of the image and also specify the color space that the wheel is in.
+
+And as you might guess, this filter is now used on macOS as the basis of the color picker, which is now aware of the different types of display color spaces. Another new filter we have is CINinePartStretched and NinePartTiled. The idea behind this is you might have a small asset, like this picture frame here, and you want to stretch it up to fit an arbitrary size. This filter is very easy to use. You provide an input image and you provide four breakpoints, two horizontal and two vertical. Once you've specified those points, you can specify the size you want it to stretch to. It's very easy to use.
+
+The third new filter is something that's also quite interesting. The idea is to start with a small input image. In this case it's an image containing color data, but it can also contain parametric data. So imagine you have a small set of colors or parameters and maybe it's only 6 by 7 pixels and you want to upsample that to the full size of an image.
+
+The idea is to upsample the color image, the small color image, but respect the edges in the guide image. Now, if you weren't to respect the guide images, if you were just to stretch the small image up to the same size as the full image, you'd just get a blend of colors, but with this filter you can get more. You can actually get something that preserves the edges while also respecting the colors. And this is actually a useful feature for a lot of other types of algorithms.
+
+In fact, in the new version of Photos app we use this to improve the behavior of the light adjustment sliders. I look forward to seeing how you can use that in your application. We also have some new performance controls this year and do things that improve performance in Core Image this year.
+
+One is we have Metal turned on by default. So if you use any of our built-in 180 filters or your own custom kernels, all of those kernels will be converted to Metal on the fly for you. It's a great way of leveraging the power of Metal with very little effort on your part. We've also made some great improvements to a critical API, which is creating a UIImage from a CIImage, and this now produces much better performance than it has in the past. So you can actually use this very efficiently to animate an image in a UIImage view.
+
+Also another new feature is that Core Image now supports a feature that's new to Core Graphics, which is that Core Graphics supports half-floats. Let me just talk for a second about pixel formats because this brings up an interesting point. We're all familiar with the conventional pixel format of RGBA8 and it takes just 4 bytes per pixel to store and has 8 bits of depth, and can encode values in the range of 0 to 1.
+
+However, this format is not great for representing wide-colored data because it only has 8 bits and it's limited to the values in the range 0 to 1. So in the past the alternative has been to use RGBAfloat, which takes 16 bytes per pixel, so four times as much memory, but gives you all the depth and range you could ever hope for.
+
+Another feature of the fact that it's using floats is that what quantization there is, it's distributed logarithmically, which is a good fit for the way the human eye perceives color. Well, there's a new format which Core Image has supported and now Core Graphics does as well, which I refer to as the Goldilocks pixel format, which is RGBAh, and this allows you to, in just 8 bytes per pixel, store data that is 10 bits of depth and allows values in the range of minus 65,000 to positive 65,000. And again, those values are quantized logarithmically, so it's great to store linear data in a way that won't be perceived as quantized.
+
+So I highly recommend this pixel format. There's another new format which I should mention, which is that Core Video supports a pixel format with the long name of 30RGBLittle [inaudible] PackedWideGamut, and this also supports 10 bits of depth, but stores it in an only 4 bytes per pixel by sacrificing the alpha channel. So there's many cases where this is useful as well and Core Image supports either rendering from or to CV pixel buffers in this format.
+
+So now I'd like to actually talk about the next major subject of our discussion today, which is adjusting RAW images with Core Image, and I'm really excited to talk about this today. We've been working on this for a long time. It's been a lot of hard work and I'm really excited about the fact that we've brought this to iOS. In talking about this, I'd like to discuss what is a RAW file, how to use the CIRAWFilter API, some notes on supporting wide-gamut output, and also tips for managing memory.
+
+So first, what is a RAW file? Well, the way most cameras work is that they have two key parts; a color filter array and a sensor array. And the idea is light from the scene enters from the scene through the color filter array and it's counted by the sensor array. And this data is actually part of a much larger image, of course, but in order to turn this data into a usable image, a lot of image processing is needed in order to produce a pleasing image for the user.
+
+So I want to talk a little bit about that. But the main idea here is that if you take the data that was captured by the sensor, that is a RAW file. If you take the data that was captured after the image processing, that's a TIFF or a JPEG.
+
+RAW files store the unprocessed scene data, and JPEG files store the processed output image. Another way to think of it is that the RAW file stores the ingredients from which you can make an image; whereas, a JPEG stores the results of the ingredients after they've been baked into a beautiful cake.
+
+In order to go from the ingredients to a final baked product, however, there is a lot of stages, so let me just outline a few of those here. First of all, we have to extract metadata from the file that tells us how long to cook the cake, to extend the metaphor. Also, we need to decode the RAW data from the sensor. We need to demosaic the image to reconstruct the full color image from the data that was captured with only one RGB value per pixel location. We need to apply geometric distortions for lens correction.
+
+Noise reduction, which is a huge piece of the processing. We need to do color matching from the scene-referred datas that the sensor captured into the output-referred data for display. And then we need to do things like adjust exposure and temperature and tint. And lastly, but very importantly, add sharpening, contrast and saturation to make an image look pleasing. That's a lot of stages.
+
+What are some of the advantages of RAW? Well, one of the great things is that the RAW file contains linear and deep pixel data, which is what enables great editability. Another feature is that RAW image processing gets better every year. So with the RAW you have the promise that an image you took yesterday might have better quality when you process it next year.
+
+Also, RAW files are color space agnostic. They can actually be rendered to any target output space, which is also a good feature, given the variety of displays we have today. Also, a user can choose to use different software to interpret the RAW file. Just like giving the same ingredient to two different chefs, you can get two different results, and some users might prefer one chef over another.
+
+That said, there are some great advantages to JPEG as well. First of all, because the processing has been applied, they are fast to load and display. They contain colors and adjustments that target a specific output, which can be useful. And that also gives predictable results. Also, it's worth mentioning that cameras do a great job today of producing JPEG images, and our iOS cameras are an especially good example of that.
+
+So on the subject of RAW, let me talk a little bit about how our platforms support RAW. So the great news is that now we fully support RAW on iOS and upcoming seed on tvOS as well. This means we support over 400 unique camera models from 16 different vendors. And also, we support DNG files such as those captured by our own iOS devices. The iOS devices include the iPhone 6S, 6S Plus, SE, and also the iPad Pro 9.7.
+
+That is really exciting. I recommend you all go back, if you haven't already, and watch the Advances in iOS Photography, which talks about the new APIs that are available to capture RAW on these devices. Another great thing is that we now have the same high performance RAW pipeline on iOS as we do on macOS, and this is actually quite an achievement.
+
+I counted the other day and looked at our pipeline and it involves over 4,500 lines of CIKernel code and this all works very efficiently and it's a great testament to our ability and the abilities of Core Image to be able to handle complex rendering situations. Our pipeline on iOS requires A8 devices or later, and you can test for this in your application by looking for the iOS GPU Family 2.
+
+Another note on platform support. We continuously add support for new cameras as new ones become available, and also to improve the quality of existing cameras that we already support. New cameras are added in future software updates. And also, we improve our pipeline periodically as well. And our pipelines are versions, so you can either use our latest version or go back and use previous versions if you desire. So without further ado, I want to give a demonstration of how this looks in action.
+
+So what I have here is some sample code. There's an early version of that that's available for download, and it's called RAWExposed, and this is both an application and this latest version is also a photo editing extension. So what we can do is we can go into Photos and actually use this sample code. We have three RAW images here that are 24 megapixels each that were taken with a Canon 5D Mark III.
+
+And you can see here that this image is pretty poorly overexposed, but one of the great features of RAW is that you can actually salvage images like this. So we can go here and edit it and use our photo editing extension to edit this as a RAW file. So now, since we're editing this as a RAW file, we can actually make adjustments [inaudible]. We can adjust the exposure up and down.
+
+You can see we can pan across all the 24 megapixels and we get great results. Once I'm happy with the image, this looks much better than it did before, I can hit Done and it will generate a new full resolution image of that, and now it is actually available to see in the Photos application.
+
+[ Applause ]
+
+One of the other things that's great in RAW files is that you can make great adjustments on white balance in an image. Again, on this image the image is fine, but it may be a little crooked, but also the white balance is off. So I'm going to go in here and adjust the white balance just a little bit and I can make a much more pleasant image. And again, we can zoom in and see the results. And we can adjust these results live. So we hit Done and save that.
+
+Another image I want to show is this image here, which is actually a very noisy image. I want to show you a little bit about our noise reduction algorithms. Over half of our 4,500 lines of kernel code relate to noise reduction. So if I go in here and edit this one, you can see that there's some -- hopefully at least in the front rows, you can see the grain that's in this image. One of the features we expose in our API is the ability to turn off our noise reduction algorithm, and then you can actually see the colorful nature of the noise that's actually present in the RAW file.
+
+And it's this very challenging task of doing the noise reduction to make an image that doesn't have those colorful speckles but still preserves nice color edges that are intended in the image. So I'll save that as well. Lastly, I want to demonstrate an image we took earlier this week out in the lobby, which was taken with this iPad. Yes, I was one of those people taking a picture with an iPad.
+
+[ Laughter ]
+
+And here I want to show you, you know, this is an image that's challenging in its own way because it's got some areas that are dark and some areas that are overexposed. One thing I could do here is I could bring down the exposure -- well, I have a highlight slider which can allow me to bring the highlights in a bit.
+
+I can also bring down the exposure. And now I can really see what's going on outside the windows. But now the shadows are too dark, so I can then increase those. So this gives you an idea of the kind of adjustments you can do on RAW files, and this is the benefit of having deeper precision on your pixel data that you get in a RAW file. So I'll hit Done on that. So that's our demo of RAW in iOS.
+
+[ Applause ]
+
+And a huge thanks to the team for making this possible. So let me talk about the API, because it's not just enough to provide a demo application. We want to enable your applications to be able to do this in your apps as well. So we have an API that's referred to as the CIRAWFilter API, and it gives your application some critical things. It gives your application a CIImage with wide-gamut, extended range, half-float precision math behind it. It also gives you control over many of the stages in the RAW processing pipeline, such as those that I demonstrated. It also provides fast interactive performance using the GPU on all our devices.
+
+So how does this work in practice? The API is actually very simple. You start with an input, which is either a file URL or data, or even in our next seed we'll have an API that works using CVPixelBuffer. That is our input. We're then going to create an instance of a CIRAWFilter from that input.
+
+At the time that filter is instantiated it will have default values for all the user adjustable parameters that you might want to present to your user. Once you have the CIRAWFilter, you can then ask it for a CIImage, and you can do lots of things from there. Let me just show you the code and how simple it is just to do this.
+
+All we need to do is give it a URL. We're going to create an instance of the CIFilter given that URL. Then, for example, if we want to get the value of the current noise reduction amount, we can just access the value for key kCIInput ImageNoiseReductionAmount. If we want to alter that, it's equally easy. We just set a new value for that key. When we're done making changes, we ask for the outputImage and we're done. That's all we need to do.
+
+Of course, you might want to display this image, so typically you'll take that image and display it either in a UIImage view or in a MetalKit view or other type of view system. In this case the user might suggest though that, well, maybe this image is a little underexposed, so in your UI you can have adjustable sliders for exposure and then the user can make that adjustment. You can then pass that in as a new value to the CIRAWFilter. Then you can ask for a CIImage from that, and then you can then display that new image with the exposure slightly brighter. And this is very easy as well.
+
+You also might want to take your CIImage -- at times, let's say, you want to export your image in the background to produce a full-size image, or you may be exporting several images in the background. So you might want to, in those cases, either create a CGImage for passing to other APIs, or go directly to a JPEG or a TIFF, and we have some easy to use APIs for that now.
+
+If you're going to be doing background processing of large files like RAWs, we recommend you create a CIContext explicitly for that purpose. Specifically, you want to specify a context that is saved in a singleton variable, so there's no need to create a new context for every image. This allows CI to cache the compilation of all the kernels that are involved.
+
+However, because we're going to be rendering an image only once, we don't need Core Image to be able to cache intermediates, so you can specify false there, and that will help reduce the memory requirements in this situation. Also, there's a setting to say that you want to use a low priority GPU render.
+
+The idea behind this, if you're doing a background save, you don't want the GPU usages required for that background operation to slow down the performance of your foreground UI, either if that's done in Core Image or Core Animation. So this is great for background processing. And a great new thing we're announcing this year is that this option is also available on macOS, too.
+
+Once you have your context, then it's very simple. You get to decide what color space you want to render to. For example, the DisplayP3 colorSpace. And then we have a new convenience API for taking a CIImage and writing it to a JPEG. Super easy. You specify the CIImage, the destination URL, and the colorSpace. This is also a good time to specify what compression quality you want for the JPEG.
+
+Now, in this case this will produce an image that is a JPEG that has been tagged with a P3 space, which is a great way of producing a wide-gamut image that will display correctly on any platform that supports ICC-based color management. However, if you think your image will go to a platform that doesn't support color management, we have a new option that's available for you. This is an option that's available as part of the CGImageDestination API, and it's CGImageDestination OptimizeForSharing.
+
+The idea behind this is it stores all the colors that are in the P3 colorSpace, but stores them in such a way and with a custom profile, such that that image will still display correctly if your recipient of that image doesn't support color management. So this is a great feature as well.
+
+Another thing is if you want to actually create a CGImage from a CIImage, we have a new API for that as well with some new options. We have this convenience API which allows you to specify what the colorSpace and the pixel format that you want to render to is.
+
+You may choose, however, now you to create a CGImage that has the format of RGBAh, the Goldilocks pixel format I was talking about earlier. And in that case you might also choose to use a special color space, which is the extendedLinearSRGB space. Because the pixel format supports values outside of the range 0 to 1, you want your color space to as well.
+
+Another option that we have that's new is being able to specify whether the act of creating the CGImage does the work in a deferred or immediate fashion. If you specify deferred, then the work that's involved in rendering the CIImage into a CGImage takes place when the CGImage is drawn. This is a great way of minimizing memory, especially if you're only going to be drawing part of that CGImage later, or if you're only going to be drawing that CGImage once.
+
+However, if you're going to be rendering that image multiple times, you can specify deferred false, and in that case Core Image will do the work of rendering into the CGImage at the time this function is called. So this is a great new, flexible API that we have for your applications.
+
+Another advanced feature of this Core Image filter API that I'd like to talk about today is this. As I mentioned before, there's a long stage of pipeline in processing RAW files, and a lot of people ask me, well, how can I add my own processing to that pipeline. Well, one common place where developers will want to add processing to the RAW pipeline is somewhere in the middle; after the demosaic has occurred, but before all the nonlinear operations like sharpening and contrast and color boosting has occurred.
+
+So we have an API just for this. It's a property on the CIRAWFilter which allows you to specify a filter that gets inserted into the middle of our graph. So I look forward to seeing what you guys can imagine and think of and what can go into this location.
+
+Some notes on wide-gamut output that I mentioned before. The CIKernel language supports float precision as a language. However, whenever a CIFilter needs to render to an intermediate buffer, we will use the working format of the current CIContext. On macOS the default working format is RGBA, our Goldilocks format. On iOS and tvOS our default format is still BGRA8, which is good for performance, but if you're rendering extended range data, that may not be what you want.
+
+Our RAW pipeline, with this in mind, all of the kernels in our pipeline force the usage of RGBA half-float precision, which is critical for RAW files. But as you might guess, if you are concerned about wide-gamut input and output and preserving that data throughout a rendered graph, you should modify your CIContext when you create it to specify that you want a working format that is RGBAh. I should also mention again that Core Image supports a wide variety of wide-gamut output spaces. For example, you can render to extendedLinearSRGB or Adobe RGB or DisplayP3, whatever format you wish.
+
+Now, as I mentioned before, I was demonstrating a 24-megapixel image. RAW files can be a lot larger than you might think. RAW files can be large and they also require several intermediate buffers to render all the stages of the pipeline. And so it's important that in order to reduce the high water memory mark of your application that you use some of these APIs that I've talked about today, such as turning off caching intermediates in cases where you don't need it, or using the new write JPEG representation of image, which is very efficient, or specifying the deferred rendering when creating a CGImage. Some notes on limits of RAW files. On iOS devices with 2 gigabytes of memory or more, we support RAW files up to 120 megapixels. So we're really proud to be able to pull that off.
+
+[ Applause ]
+
+On apps running on devices with 1 gigabyte of memory we support up to 60 megapixels, which is also really quite impressive. And this also holds true for photo editing extensions, which run in a lesser amount of memory. So that's our discussion of RAW. Again, I'm super proud to be able to demonstrate this today. I would like to hand the stage over to Etienne who will be talking about another great new image format and how you can edit those in your application, Live Photos. Thank you.
+
+[ Applause ]
+
+Thank you, David. Hello everyone. I'm really excited to be here today to talk to you about how you can edit Live Photos in your application. So first, we're going to go over a quick introduction of what are Live Photos, then we see what you can edit, and then we'll go step-by-step into the code and see how you can get a Live Photo for editing, how you can then set up a Live Photo Editing context, how you can apply Core Image filters to your Live Photo, and how you can preview your Live Photo in your application, and finally, how you can save an edited Live Photo back into the Photo Library, and we'll finish with a quick demo. All right. So let's get started. So Live Photos, as you may know, are photos that also include motion and sound from before and after the time of the capture.
+
+And Live Photos can be captured on the new devices such as iPhone 6S, 6S Plus, iPhone SE and iPod Pro. In fact, Live Photo is actually a default capture mode on those devices, so you can expect your users to already have plenty of Live Photos in their Photo Library.
+
+So what's new this year about Live Photos? So first, users can now fully edit their Live Photos in Photos. They can apply -- all the adjustment that they would to a regular photo they can apply to a Live Photo. Next we have a new API to capture Live Photos in your application and for that, for more information about that, I strongly recommend that you watch this Advances in iOS Photography session that took place earlier this week. It also includes a lot of information about Live Photos from the capturer point of view.
+
+And finally, we have a new API to edit Live Photos, and that's why I'm here to talk about today. All right. So what can be edited exactly? Right. So first, of course, you can edit the content of the photo, but you can also edit all of the video frames as well.
+
+You can also address the audio volume, and you can change the dimensions of the Live Photo. Things you can't do though is that you can't change the duration or the timing of the Live Photo. So in order to get a Live Photo for editing, the first thing to do is to actually get a Live Photo out of the Photo Library.
+
+So there's two ways to do that, depending on whether you're building a photo editing extension or a PhotoKit application. In the case of a photo editing extension you need to start first by opting in to Live Photo editing by adding the LivePhoto string in your array of supported media types for your extension.
+
+And next, in your implementation of startContentEditing, that's called automatically, you can expect the content editing input that you receive and you can check the media type and the media subtypes to make sure that this is a Live Photo. Okay. On the other hand, if you're building a PhotoKit application, you have to request the contentEditingInput yourself from a PHAsset, and then you can check the media type and media subtypes in the same way.
+
+All right. So the next step would be to set up a LivePhotoEditingContext. A LivePhotoEditingContext includes all the resources that are needed to edit Live Photos. It includes information about the Live Photo, such as its duration, the time of the photo, the size of the Live Photo, also the orientation, all that. It also has a frame processor property that you can set to actually edit the contents of Live Photo, and I'll tell you more about that in a minute.
+
+You can adjust the audio volume as well. You can ask the LivePhotoEditingContext to prepare a Live Photo for playback, and you can ask the LivePhotoEditingContext to save and process a Live Photo for saving back to the Photo Library. Creating a LivePhotoEditingContext is really easy. All you need to do is institute a new one from a LivePhotoEditingInput for a Live Photo.
+
+All right. So now let's take a look at how to use the frame processor I mentioned earlier. So the frame of a Live Photo I'll describe by a PHLivePhotoFrame object that contains an input image, which is a CIImage for that frame. Type, which is whether it's a video frame or a photo frame.
+
+And the time of the frame in the Live Photo, as well as the resolution at which that frame is being rendered. In order to implement a frame processor you would set the frame processor property on the LivePhotoEditingContext to be a block that takes a frame as parameter and returns an image or an error. And here we just simply return the input image of the frame, so that's just necessarily a node frame processor. So now let's take a look at the real case. This is a Live Photo, as you can see in Photos, and I can play it right there.
+
+And so let's say we want to apply a simple basic adjustment to the Live Photo. That's start with a simple square crop. Here's how to do that. In the implementation of your frame processor you want to start with the input image for the frame. Then you compute your crop rect.
+
+Then you crop the image using [inaudible] here, which is called the cropping through rect, and just return that cropped image. That's all it takes to actually edit and crop the Live Photo. Here's the result. I can place side photo, you can see the photo is cropped, but the video is also cropped as I play it.
+
+All right. So that's an example of a very basic static adjustment. Now, what if we want to apply a more dynamic adjustment, and that is one that will actually depend on the time and will change while the Live Photo is being played. So you can do that, too. So here let's build up on that crop example and implement the dynamic crop.
+
+So here's how to do it. So first we need to capture a couple of information about the timing of the Live Photo, such as the exact time of the photo because we want the effect to stay the same and have your crop rect really centered on the Live Photo. Next we take it so we capture the duration of the Live Photo.
+
+And you can notice that we do that outside of the frame processor block and that's to avoid cycling dependency. Here in the block we can ask for the exact time of that frame, and then we can build a function of time using all that information to drive a crop rect. And here's what the result. So you can see the Live Photo is cropped the same way, the photo is the same, but when I play it, you can see that the crop rect now moves from bottom to top.
+
+All right. So that's an example of a time-based adjustment. Now let's take a look at something else. This effect is interesting because it's a resolution-dependent effect. What I mean by that is that the way the filter parameters are specified, they're specified in pixels, right, which mean that you need to be extra careful when you apply these kind of effects to make sure that the effect is visually consistent regardless of the resolution at which the Live Photo is being rendered. So here if I play it, you can see that the video -- the effect is applied to the video the same way it's applied to the photos. So that's great. So let's see how to do that correctly.
+
+So in your frame processor you want to pay attention to this renderScale property on the frame. This will give you the resolution of the current frame compared to the one-to-one full-size still image in the Live Photo. So keep in mind that the video frames and the photo are different size as well. Right. Usually the video is way smaller than the photo is. So you want to make sure to apply that correctly.
+
+In order to do that, you can use the scale here to scale down that width parameter so that at one-to-one on the full-size photo the parameter will be 50, but it will be smaller on the smaller resolution. Another way to apply your resolution-dependent adjustment is to use the extent of the image like I do here for the inputCenter parameter. I actually use the midpoint of the image and that's granted to also scale [inaudible].
+
+All right. One more edit on that image. You can notice that I did a logo here that might be familiar, and when I play it, you see that the logo actually disappears from the video. So this is how you would apply an adjustment just to the photo and not to the video, and here's how to do it.
+
+In your implementation of your frame processor you want to look at the frame type, and here we just check if it's a photo, then we composite the still logo into the image, but not on the video. So that's as easy as that. And you may have, you know, some adjustments that are local advertisement or single ad that you don't want to apply or you can't apply to the video, and so that's a good way to do it.
+
+All right. Now that we have an edited Live Photo, let's see how we can preview it in our app. So in order to preview a Live Photo you want to work with the PHLivePhotoView. So this view is readily available on iOS and is new this year on macOS.
+
+So in order to preview Live Photo you need to ask the LivePhotoEditingContext to prepare a Live Photo for playback and you pass in the target size, which is typically the size of your view in pixels, and then you get called back asynchronously on the main thread with a rendered Live Photo.
+
+And then all you need to do is set the Live Photo property of the LivePhotoView so that your users can now interact with their Live Photo and get an idea of what the edited Live Photo will look like. Now, the final set will be to save back to the Photo Library. And that, again, depends whether you're building a photo editing extension or a PhotoKit application. In the case of a photo editing extension you will implement finishContentEditing. And the first step is to create a new contentEditingOutput from that contentEditingInput that you received earlier.
+
+And next you will ask your LivePhotoEditingContext to save the Live Photo to that output. And again, that will process the full resolution Live Photo asynchronously and call you back on the main thread with success or error. And in the case everything goes fine, make sure you save also your adjustment data along with your edits and that will allow your users to go back to your app or extension later and continue editing there.
+
+And then last step is to actually call the completionHandler for that extension and you're done. If you're building a PhotoKit application, the steps are really similar. The only difference really that you have to make your -- they are from the changes [inaudible] yourself using a PHAssetChangeRequest. All right. So now I'd like to show you a quick demo.
+
+All right. So I've built a simple demo Live Photo extension that I'd like to show you today. So here I am in Photos and I can see a couple Live Photos here, can pick to see the contents. I can swipe and see them animate. All right. That's the one I want to edit today.
+
+So I can go to edit. And as I mentioned earlier, I can actually edit the Live Photo right there in Photos. Let me do that. I'd like to apply this new light slider that David mentioned earlier. All right. So here in Photos I can just play that. Right. Of course, I could stop here, but I actually want to apply my sample edits as well. So I'm going to pick my extension here.
+
+And, yes, we actually apply the same adjustment that we went through for the slides. And you can see this is really a simple extension, but it shows a LivePhotoView, so I can interact with this and I can actually press to play it, like this, right in my extension.
+
+So that's real easy. And the next step is to actually save by hitting Done here. And this is going to process a full resolution Live Photo and send it back to the Photo Library. And there it is, right there in Photos. All right. So that was for the quick demo. Now back to slides.
+
+[ Applause ]
+
+Thank you. All right. So here's a quick summary of what we've learned so far today. So we've learned how to get a Live Photo out of the Photo Library and how to use and set up a LivePhotoEditingContext, how to use a frame processor to edit the contents of the Live Photo. We've seen how to preview a Live Photo in your app using the LivePhotoView. And we've seen how to save a Live Photo back into the Photo Library. Now I can't wait to see what you will do with this new API.
+
+A few things to remember. First, if you're building a photo editing extension, do not forget to opt in to LivePhotoEditing in your info.plist for your extension. Otherwise, you'll get a still image instead of a Live Photo. And as I said, make sure you always save adjustment data as well so that your users can go back to your app and continue the edit nondestructively.
+
+Finally, I think if you already have an image editing application, adopting Live Photo and adding support for LivePhotoEditing should be really easy with this new API, especially if your app is using Core Image already. And if not, there's actually a new API in Core Image to let you integrate your own custom processing into Core Image. And to tell you all about it, I'd like to invite Alex on stage. Thank you.
+
+[ Applause ]
+
+Thank you, Etienne. So my name is Alexandre Naaman, and today I'm going to talk to you about some new functionality we have inside of Core Image to do additional effects that weren't possible previously, and that's going to be using a new API called CIImageProcessor. As David mentioned earlier, there's a lot you can do inside of Core Image using our existing built-in 180 filters, and you can extend that even further by writing your own custom kernels. Now with CIImageProcessor we can do even more, and we can insert a new node inside of our render graph that can do basically anything we want and will fit in perfectly with the existing graph. So we can write our own custom CPU code or custom Metal code.
+
+So there are some analogies when using CIImageProcessor with writing general kernels. So in the past you would write a general kernel, specify some string, and then override the output image method on your CIFilter and provide the extent, which is the output image size that you're going to be creating, and an roiCallback, and then finally whatever arguments you need to pass to your kernel.
+
+Now, there are a lot of similarities with creating CIImageProcessors, and we're not going to go into detail with them about that today. Instead we refer you to Session 515 from our WWDC talk from 2014. So if you want to create CIImageProcessors, we strongly suggest you go and look back at that talk because we talked about how to deal with the extent and ROI parameters in great length.
+
+So now let's look at what the API for creating a CIImage Processor looks like, and this may change a little bit in future seeds, but this is what it looks like right now. So the similarities are there. We need to provide the extent, which is the output image size we're going to be producing, give it an input image, and the ROI. There are a bunch of additional parameters we need to provide, however, such as, for example, the description of the node that we'll be creating.
+
+We then need to provide a digest with some sort of hash of all our input parameters. And this is really important for Core Image because this is how Core Image determines whether or not we can cache the values or not, and whether or not we need to rerender. So you need to make sure that every time your parameter changes, that you update the hash.
+
+The next thing we can specify is an input format. In this case here we've used BGRA8, but you can also specify zero, which means you'll get the working format for the context as an input image format. You can specify the output format as well. In this case we're using RGBAf because the example that we're going to be going over in more detail needs a lot of precision, so we'll need full flow here.
+
+And then finally we get to our processor block, which is where we have exactly two parameters; our CIImageProcessorInput and CIImageProcessorOutput, and it's inside of here that we can do all the work we need to do. So let's take a look at how we can do this, and why you would want to do this.
+
+So CIImageProcessor is particularly useful for when you have some algorithm or you want to use a library that implements something outside of Core Image and something that isn't suitable for the CIKernel language. A really good example of this is what we call an integral image. An integral image is an image whereby the output pixel contains the sum of all the pixels above it and to the left, including itself. And this is a very good example of the kind of thing that can't be done in a data parallel-type shader, which is the kind of shader that you write when you're writing CIKernels.
+
+So let's take a look at what an integral image is in a little bit more detail. If we start off with the input image on the left, which, let's say, corresponds to some single channel, 8-bit data, our integral image would be the image on the right. So if we take a look at this pixel here, 7, it actually corresponds to the sum of all of those pixels on the left, which would be 1 plus 4 plus 0 plus 2. The same goes for this other pixel; 45 corresponds to the sum of all those other pixels above it and to the left, plus itself.
+
+So now let's take a look at what you would do inside of the image processor block if you were writing a CPU code, and you could also use V Image or any number of other libraries that we have on the system. So first things first. We're going to get some pointers back to our input data. So from the CIImageProcessorInput we'll get the base address, and we'll make sure that we use 8-bit data, so UInt8. And then we'll get our outputPointer, which is where we're going to write all of our results as float, because we specified that we wanted to write to RGBAf.
+
+The next thing we do is we make sure to deal with the relative offsets of our input and output image. It's highly likely that Core Image will provide you with an input image that is going to be larger, or at least not equivalent to your output image, so you have to take care of whatever offset might be in play when you're creating your output image and doing your four loops. And in this case, once we have figured out whatever offsets we need, we can then go and execute our four-loop to calculate the output values at location i, j by using the input at location i, j, plus whatever offset we had.
+
+Now that we've seen how to do this with a custom CPU loop, let's take a look at how this can be done using Metal. In this case we're going to be using Metal Performance Shaders. And there's a great primitive inside of Metal Performance Shaders to compute integral images called MPSImageIntegral. From our CIImageProcessorOutput we can get the commandBuffer, the Metal command buffer, so we just create an MPSImageIntegral with that commandBuffer.
+
+Once again we take care of whatever offsets we may need to deal with, and then we simply encode that kernel to the commandBuffer, and providing as input the input texture that we get from the CIImageProcessorInput, and as a destination the output.MetalTexture. And this is how we can use Metal very simply inside of an existing CIFilter graph.
+
+So now let's take a look at what we can actually do with this integral image now that we have it. So let's say we start with an image like this. Our goal is going to be to produce a new image where we have a per pixel variable box blur. So each pixel in that image can have a different amount of blur applied to it, and we can do this really quickly using an integral image.
+
+So, as I was saying, box blurs are very useful for doing very fast box sums. So if we start right off with this input image and we wanted to get the sum of those nine pixels, traditionally speaking, this would require nine reads, which means it's an n squared problem. That's obviously not going to be very fast.
+
+That's not completely true. If you were a little more smart about it, you could probably do this as a multipass approach and do it in two n reads, but that still means you're looking at six reads, and obviously that doesn't scale very well. With an integral image, however, we can just -- if we want to get the sum of those nine pixels, we just have to read at a few locations. We will read at the lower right corner and then we can read from just one pixel off to the left, the sum of all the values, and subtract that from the first value we just read.
+
+And then we read at a pixel right above where we need to be and subtract the row which corresponds to the sum of all the pixels up to that stage. But now you can see we've highlighted the upper left corner with a 1 because we've subtracted that value twice, so we need to add it back in. So what this means is we can create an arbitrarily-sized box blur with just four reads. And if we were to --
+
+[ Applause ]
+
+Thank you.
+
+[ Applause ]
+
+If we were to actually do the math manually, you could see that these numbers do add up. So 2 plus 4 plus 6, et cetera, is equal to the exact same thing as 66 minus 10 minus 13 plus 1. Now let's jump back into Core Image kernel language and see how we can use our integral image that we've computed either with a CPU code or using the Metal Performance Shader primitives and continue doing the work of actually creating the box blur effect.
+
+So the first thing we're going to do is we're going to compute our lower left corner and upper right corner from our image. Those will tell us where we need to subtract and add from. We're then going to compute a few additional values and they're going to help us determine what the alpha value should be, so how transparent the pixel that we're currently trying to produce is.
+
+We take our four samples, the four corners, and then finally we do our additions and subtractions and multiply by what we've decided is the appropriate amount of transparency for this output pixel. Now, this particular kernel takes a single parameter as an input radius, which would mean that if you were to call this on an image, you would get that same radius applied to the entire image, but we can very simply go and create a variable box blur by passing in a mask image, and we can use this mask image to determine how large the radius should be on a per pixel basis.
+
+So we just pass in an additional parameter, mask image. We read from it. We take a look at what's in the red channel, say, or it could be from any channel, and we then multiply our radius by that. So if we had a radius of 15 and at that current pixel location we had .5, it would give us a radius of 7.5. We can then take those values and pass it into the box blur kernel that we just wrote. And this is how we can very simply create a variable box blur using Metal Performance Shaders and the CIImageProcessor nodes.
+
+One additional thing we haven't mentioned so far today is that we now have some attributes you can specify on your CIKernels when you write them and, in fact, we have this just one right now, which is the output format. In this case we're asking for RGBAf, which is not really necessarily useful, but the key thing here is that you can say that you'd like to write only single-channel or two-channel data. So if you wanted to do --
+
+[ Applause ]
+
+As some people have noticed, this is a great way to reduce your memory usage, and it's also a way to specify that you want a certain precision for a specific kernel in your graph that may not correspond to the rest of the graph, which is also what we do when we're processing RAW images on iOS. All of our kernels are tagged with RGBAh.
+
+So one or more thing we need to do to create this effect is to provide some sort of mask image. We can do this very simply by calling CIFilter(name, and then ask for a CIRadialGradient with a few parameters, which are going to determine how large the mask will be and where it will be located. And then we're going to be interpolating between 0 and 1, which is going to be black and white. And then we ask for the output image from the CIFilter and we have a perfectly usable mask.
+
+So now let's take a look at what this actually looks like when running on device, and this is recorded from an iPhone 6S. If we start with our input image and then look at our mask, we can move it around. It's all very interactive. Change the radius, even make it go negative.
+
+And then if we apply this mask image and use it inside of our variable box blur kernel code, we then get this type of result. And it's very interactive because the integral image only needs to be computed once, and Core Image caches those results for you. So it literally, everything you're seeing right now, is just involving four reads. So it's superfast.
+
+[ Applause ]
+
+Some things to keep in mind. When you're using the CIImageProcessor, if the data that you would like to use inside of your image processor is not inside of the context current workingColorSpace, you're going to want to call CIImage.byColorMatching WorkingSpace(to, and then provide a color space. Similarly, on the way out, if you would like the data in a different color space, you can call CIImage.byColorMatching ColorSpace(toWorking, and then give it a color space.
+
+Now that we've seen how to create the CIImageProcessor and how to use it, let's take a look at what happens when we use the environment variable CI PRINT TREE, which we use to get an idea of what the actual graph that we're trying to render looks like. So this is what it looks like when you use the environment variable CI PRINT TREE with the value equal to the 1.
+
+And this is read from bottom to top. And it can be quite verbose. It starts off with our input radialGradient that we created. We then have our input image which gets matched to the workingspace. And then here's our processor node that gets called, and that hex value is the digest that we've computed.
+
+And then both the processor and the color kernel result from the radialGradient get fed into the variableBoxBlur. And finally we do the color matching to our output display. So this is the original recipe that we use to specify this effect, but it's not what actually gets rendered. If we were to set the environmental variable CI PRINT TREE to 8, we can now see that many things have been collapsed and the processing looks to be less involved.
+
+We still, once again, have our processor node, which lives on a line on its own, which means that it does require the need of an intermediate buffer, which is why the CIImageProcessors are great, but you should only use them when the kind of things -- the effect that you're trying to produce, the algorithms that you have cannot be expressed inside of the CIKernel language.
+
+As you can see, the rest of the processing all gets concatenated. So we have our variableBoxBlur with the rest of the color matching, and the clamptoalpha all happening in a single pass. So this is why there are always tradeoffs in between these APIs. And if you can write something inside the CIKernel language, you should.
+
+That may be a little difficult to read. So we have an additional option now that you can specify when you're using CI PRINT TREE, which is graphviz. In this case we're using CI PRINT TREE=8, along with the graphviz option, and we can see our processor node and how it fits in perfectly with the rest of the graph. And we can also see that we've asked for RGBAf output.
+
+So let's do a little recap of what we learned today. We saw, David showed us how to edit RAW images on iOS. Then Etienne spoke to us about how you can edit Live Photos using Core Image. And then finally, we got to see how to use this new API on CIImage called CIImageProcessor, as well as how to specify an output format on your kernels to help reduce the memory usage. For additional information please visit developer.apple.com.
+
+There are a few related sessions that may be of interest to you, especially if you're planning on doing RAW processing on iOS. There's Advances in iOS Photography that Etienne mentioned as well. There's also a talk later on today, Working with Wide Color, that's taking place right here. And on that note, I would like to thank you all for coming. I hope you enjoy the rest of WWDC.
+
+[ Applause ]

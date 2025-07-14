@@ -1,0 +1,223 @@
+---
+Title:  LLVM Technologies in Depth
+Year:   2011
+Web:    https://nonstrict.eu/wwdcindex/wwdc2011/316/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Good afternoon. Welcome to LLVM Technologies in Depth. I promise this will be the geekiest session you had at WWDC. We're going to look into compilers. Oh, my name is Evan Cheng. I'm the manager of the LLVM backend team. We work hard, so you don't have to. So let's, so just a quick road map, what we're going to talk about. The first half of the talk is about LLVM backend technology, code generation, optimization, what have we been doing in the past year to make the code run fast. The second half of the talk is going to be focusing on C++ and R migrator. Let's get started.
+
+Let's take a peek at the LLVM technology in the backend. The first thing we're going to talk about is type-based alias analysis. This is a very geeky subject. Alias analysis. Well, this is about C pointers. Basically, if you say two pointers can point to the same object, the alias.
+
+And the compiler needs to know about this to make good optimizations. Let's take a look at this simple example. You have pointer 1 and pointer 2, they're being signed different values. And if you add them together, what should it be? That's pretty simple, right? You would say 3. Well, not quite.
+
+If the compiler can prove they do not point to the same object, let's say they don't alias, you're right. It's 1 plus 2. However, if they point to the same object, it's not. It's 4. So the compiler has to be conserved here. It has to know exactly what's going on to do optimization. So that's why alias analysis is important. So what is type-based alias analysis?
+
+Type-based alias analysis uses C standard rules. It's basically saying if you have two pointers and they have different types, integer, floating point, the rules say they cannot possibly alias. That simple rule, and that's basically the basis of TBAA, we use that information to do good alias analysis and optimize your code.
+
+We'll show you later on what exactly that means and what kind of results it has. It's also important to point out this is not turned on by default. So I'll get back to this a little bit later on why that's the case. Let's take a look at a quick example.
+
+Here's a struct type with two fields, size and data. They have different types. One is integer, one is double. So you have a loop here that's pretty simple. That simply iterates through every element in a data array and increments by one. So if you've ever been curious and want to see what kind of code a compiler is generating for me, you might see something like this.
+
+This is x86 assembly code. It's not important for you to understand everything that's going on here. The important thing is, notice it's doing a lot more work than you think it is. Inside the loop, which is one block of code, it's doing more than just addition. What's going on? Well, the problem here is A size, A data. The compiler, if the compiler cannot prove they don't overlap or they don't point to the same thing, the compiler has to be very conservative in reloading them every time, through every iteration of your loop. This does hurt performance.
+
+With strict aliasing rule, we say they have different types, they cannot alias, we move the code out of your loop, and this code goes at least 20% faster. So that's a simple demonstration of the power of TBAA. So that sounds great. Why don't we just turn it on and you don't need to know about this? Well, the problem is there's a lot of code out there.
+
+So even though the C standard say that it's not legal to cast a pointer from one type to another and dereference the pointer. But people, not the people, not the audience here, but people out there that do that kind of stuff all the time. So, you know, it's really dangerous just turning it on by default. We really thought about it, but there's just so many cases the compiler cannot get it right. If your code doesn't kind of follow the C standard.
+
+Here's a very simple example. Simple function, have two parameters, a and b. One is pointing to integer, one is pointing to a floating point. They cannot alias if you follow the strict aliasing rule. So the dereference of b here, notice there are two of them. The second one shouldn't require a load, right? If you follow strict aliasing, because you dereference it and you store to a. Following the previous example aliasing, this should be fine.
+
+Wrong. If you do something like this, where you cast a pointer from integer to following point, the code is going to break with strict aliasing. And that is why this option is optimization is not enabled by default. So what can you do to make sure your co-workers' code is safe so you can enable this optimization?
+
+You do need to cast sometimes. You do need to convert types sometimes. Here's a quick example. You have an array with four 16-bit integer fields, and you want to convert from 64-bit integer to four 16-bit ones. You need to do a cast. This is not entirely safe because, again, this is violating the C standard rules. Instead, you should use UNION. UNION is designed for this.
+
+So use union to convert from one type to another, and just try to get rid of as much of the pointer casting as much as possible in the code, and you'll be safe. It will be good to go. Because you do want the performance of this. Here are just a few examples. We have standard--
+
+[Transcript missing]
+
+They go from, well, 24% faster to 50% faster just by using strict aliasing.
+
+So that's that on TBAA. Make sure you eliminate unsafe pointer casts from your code, and enable with -f strict-aliasing if you're a makefile-based project. Or if you're using Xcode, just go up to Xcode and turn on enforce strict-aliasing rule. And notice this feature is only available in LLVM compiler 3.0 in Xcode 4.2. So this is another reason why you really want to switch compiler right now. So that's TBAA. Like I say, it's a very geeky subject. It's a little bit heavy. Let's move on to something a little bit lighter, like resuscitation.
+
+So what's new? Well, the new Resolcator is a lot smarter. Let's put it that way. It knows exactly where is the most important part of your function, that computation-intensive part, that inner loops where you sweat so much, put so much effort into. We want to make sure that part is optimized perfectly. We do things like split life range, optimal code placement, spill code placement. We know everything about the targets, and optimize the code size of your inner loop to as small as possible.
+
+So what does that mean? Split life range, spill code placement. Yeah, you might be wondering what exactly am I getting into? Is that door at the back of the room still open? Is it too late to get out here? So I just want to make sure security, you know, I want to make sure everybody learn before they leave.
+
+Let's take a look at a really simple example here. I'll focus on the variable X. It's a floating-point variable. It's being incremented a couple of times outside the loop, and inside the loop, it's just being doubled every iteration. This is a completely contrived example. It's pretty simple. And you expect generated code to look something like this.
+
+Calling a function, adding it inside the loop, it's just basically doubled every time. And outside loop, add it again. The problem is that's not the code you're going to get. Why is that? Well, x86 ABI say if you have function calls, they become barriers, barrier for floating-point values, because every function call can clobber every XMM register.
+
+So that means there's no way to write the code in such a way that eliminate storing the value back into memory. So we spill X here onto your stack. We'll make a function call and add it again, but before we add it, we have to load it back from memory again. And we store it back. And inside loop, we do the same thing, loading back from stack.
+
+Double it, write it back into memory, and so on and so forth. Notice how much more code is there in the loop, just because the ABI specify such a property. You're making a three instruction loop into something, into a five instruction loop, and worse still, there's low, there's memory access inside loop now. So the new reciclator is just a lot smarter. It recognizes, hey, after this addition, there's really no barrier here.
+
+From here on, inside loop, we can treat this as a separate variable. Let's call X.1. And this can live in register rather than in memory. Let's eliminate the loads and store from the code, from the most important part of your code, the loop, and move an outside loop.
+
+This is what we mean by slip. So we have a splitting live range and optimal spill code placement. This is the kind of code you expect to get out of the compiler. And we work hard to make sure that happens. Your code is going to run significantly faster now.
+
+So the next example here, the next optimization we're going to take a look at, is how the new Resolcator knows so much about your targets, and is going to work really hard to reduce the size of the loop. This is ARMv7 code, Thumbto, where instruction can either be 8-bit or 16-bit.
+
+And that depends on, basically, Resolcation. Basically, the architecture say, if these instructions are available in both variants, it depends on how you Resolcate them. If you use only the low register from R0 to R7, you can reduce them to 16-bit variants. So this is not so much a code size optimization as a performance optimization. Because if your loop is as small as possible, the machine can work much more efficiently, can load more instructions, can execute them faster, and things just run faster.
+
+We're going to see pretty shortly just how much this benefits the code. So the new registocator is a big win on 32-bit Intel, where register is really, really-- it's very, very few registers available for the compiler to play with. So you see really very acrossable wins from single digits to high double-digit wins.
+
+On 64-bit Intel, the win is still across the board. You're not going to see as dramatic improvement as 32-bit. But again, this is free performance. All you have to do is switch compiler. On iOS, where the Bose optimization come into play, and you can see some dramatic improvement in the performance of your app, going up to 38% faster here with a crypto hash algorithm. Thank you.
+
+So that's a new Resolcator. It's a cross-border performance improvement. And the good thing is there's nothing for you to do other than to switch to the new LLVM compiler in Xcode 4.2. The new instruction scheduler-- well, let's take a look what is instruction scheduling. What's its primary responsibilities? So basically, it has two primary responsibilities.
+
+The first one, it needs to reorder the order of machine code optimally to get the best benefit of the code that's being generated. So on most architectures, simple arithmetic operations like add, addition, subtraction are really fast. On the other hand, load instruction, which loads from memory, tend to take a little longer.
+
+So if the scheduler is doing something pretty straightforward, like do add, followed by load, then subtract the two values together, it's going to incur one cycle panel T because they have to wait two cycles before the result is available from memory. So the scheduler must do the right thing here and reorder the instructions.
+
+to hide the latency of low instruction. So that's the first job of the instruction scheduler, is order the instructions in such a way so your code runs as fast as possible. Its second responsibility is resource allocation. Well, not so much resource allocation, but be aware of what resources are available in the code, on the machine, to make sure it doesn't cause spills, or doesn't kind of saturate the machine too much.
+
+So one example here is if you assume there's only two registers available and want to schedule this code. So let's say we have three loads here, and from the previous example, we know we want to schedule loads as early as possible to hide the latency. The problem here is if we only have two registers available, we just ran out of registers. So this is going to cause a register spill and actually end up causing us performance.
+
+So the scheduler will do the right thing, and here, and actually move the code around to make sure we can resuscitate them correctly. So that's basically the two primary responsibility of instruction scheduling. And the new instruction scheduler does both of them really, really well. It knows when to care for one, where to worry about the other. We find this to be a really, really great benefit. With all the information it has about machine resource models, it can do really both jobs equally well.
+
+On 64-bit Intel, we see dramatic improvements from Blowfish, which is a well-known cryptography algorithm, and several other algorithms, as well as MP3 encoding and decoding. We see significant wins on 64-bit Intel. So that's a quick summary of the new instruction scheduler. Make sure you use a new LLVM compiler in Xcode 4.2 and get the benefit of the work we've been doing in this area.
+
+So one last thing we're going to talk about here in the backend optimization is called Loop Idiom Recognizer. So this optimizer here has a simple job of turning loops that can be replaced with calls to building functions. So here's a couple examples. If you're iterating through an array and setting every element to some constant value, it's going to replace with a call to main set.
+
+If you have a simple loop that goes iterates through two arrays and copy from one to the other, it's going to replace with main copy. "It's pretty simple stuff. So why is this important? You say, 'I would never write code like this. I know exactly what's the right thing to do.'
+
+Well, the optimization paths can reason about really a lot less trivial cases. Think about if you're writing C++ code and using templates, instantiation, and use standard fill, standard copy, you're going to run into this kind of code. And this kind of code does happen in real world. We've seen Viterbi decoding, which is pretty well known, just found this optimization to go up to four times as fast.
+
+It's important to know the system main copy and main set has been just optimized to the extreme. They perform really, really fast on Mac OS and iOS. So this optimization is really, really important. However, if you're implementing anything that's low level, and you do want to implement your own main copy or main set, just remember to turn it off with a -f no building option. That will disable this optimization.
+
+So that's all I'm going to talk about today about the code gen optimization part. The next part we're going to focus on C++. And I would like to welcome Doug Gregor, who is our C++ expert. So, here I'm going to talk a little bit about C++ OX, the upcoming revision to the C++ standard. So we talked about C++ OX a little bit if you were in the previous compiler talk, and the great news is we're giving you C++ OX support in Xcode 4.2 through the Apple LLVM compiler.
+
+There's a pile of new C++ OX features we have for you to try out. I would love to talk about all of these, but I'm going to restrain myself this time and just talk about a couple of features and how you can use those in your application to write code faster and write better code. First off, we're going to look at type inference in C++ OX.
+
+So take a look at this loop. If you're a C++ programmer, you probably write this kind of loop all the time. You're walking through all of the elements of a data structure. The type to name this data structure is really long. It's a dictionary of synonyms, so it maps from a string to all of the synonyms. It has these nice nested structures, lots of angle brackets, and writing that iterator type just to walk over the elements in the loop is really infuriating.
+
+So this is what's great about C++ OX. With OX, we have the auto keyword. The auto keyword uses type inference techniques to allow you to just not write these big, long types anymore. Let the compiler do the work. And the idea here is very simple. Just write the auto keyword as the type of one of your variables. Now, that variable has to be initialized with something. So here, S is initialized with synonyms.begin.
+
+Compiler will go look at synonyms.begin. It knows what it is. It knows that it returns this iterator type, and it will fill in the details behind the scenes so you don't have to write the big, long types. If you happen to be an objective C++ programmer, you can also do this, right?
+
+There's a lot of redundancy in the way we write these declarations. So here, we're allocating an NSMutable array, initializing with a bunch of objects. Compiler knows this returns an NSMutable array. So why would we go write it again for us? Don't do it. Just write auto. It'll do the right thing. Like that? All right, good.
+
+Looking back at loops again, iteration over containers is something we do all the time in C++ and in Objective-C. Actually, in Objective-C, we have a good way to do it. C++, we have to write these big, long iterator loops. So C++ OX brings in the new for range loop. New for range loop, really simple. You just want to walk over the elements of a container. You write the new for loop. You name the container after the colon.
+
+Before the colon, you declare a variable that you want to use to capture each of the elements of the container, and then write the rest of your loop body. You don't have to go through the mess of creating the both begin and end iterators and walking through all those, doing the extra dereference steps. Just write the code the way you'd like to write it.
+
+Of course, this works with all of the standard containers, vectors, lists, maps, sets, etc. But it can also work with your own user-defined containers. All you have to do is follow the same conventions set out by the C++ standard library by providing begin and end functions that return iterators.
+
+And the for-range loop already works with your data structures that way. Now, if we learned anything from the last slide, it's that pretty much any feature in C++/OX can be made cooler by the use of auto. So just stop writing the type. We don't need it anymore. Compiler can figure it out for you.
+
+So let's move to object-oriented programs. I'm sure a lot of you write these also in C++. In C++ OX, we have the notion of override controls. Override controls help you describe to the compiler and to fellow programmers how you actually intend your object-oriented hierarchy to be used. The first of those are final methods. So say you have a method that you've declared somewhere.
+
+Here I've put in the method F, and it's virtual, inside the window class. I inherit and override that F in a subclass, but I decide at this point, F should no longer be overridden by anyone. My class is not ready to handle people customizing behavior in this way. So in C++ OX, you can mark it as final.
+
+What that means is that if someone comes by and tries to override it again later, they're going to get an error out of the compiler that says, you are not allowed to override this function. The class is not prepared for it. And the programmer that wrote the widget class has told you, this isn't going to work.
+
+Final has a second place it can be used, which is for final classes. So final classes are the leaf nodes in your object-oriented hierarchy. They're classes from which you should not try to subclass. You should not inherit from these things. Use the final keyword before the opening brace here to describe that your class is one of these leaf classes, and inheriting from that class will be banned by the compiler.
+
+So, FINALE's good for documenting your intentions and how your object-oriented hierarchy actually works. It's also useful for the compiler. So remember, every time you do a virtual call, we're doing some indirect call through a Vtable, and that has a performance impact. It also makes it harder for the compiler to optimize it.
+
+If you've marked your final virtual methods that should never be overridden as final methods, well now when the compiler sees a call to one of those final methods, it knows it doesn't have to go through the Vtable. It can take the fast, direct call and optimize through that call if it's something that could be inlined and should be inlined.
+
+There's one more override control, and this is the override keyword itself. The override keyword describes programmer intention. It says, when I write this function, I'm declaring this function, I intend to override something from my base class. And if for some reason I have failed to override something from my base class because my base class changed, or I typed the signature wrong, the compiler's going to tell me, no, actually, you did not override something from the base class. Instead, you did something that's really hard to debug, which is you've hidden it with something that looks identical to you.
+
+I'm sure you've all seen the minor bug I put in this slide here of the extra const up in the top. This is a const member function. We tried to override it, but we didn't write the const. Simple, easy mistake would have cost a lot of time in debugging.
+
+But if you use override consistently, you're telling your fellow programmers what you intend to do, and you're telling the compiler just to check you work in case something changes or in case you missed something. With that, we're going to move on to A little bit heavier topic in the C++/OX arena, and this is move semantics. Take a look at this function signature for a couple seconds.
+
+If you're a performance-minded C++ programmer, this should make you cringe. This is slow, and why is it so slow? It doesn't look like it's slow. We just want to return a vector of strings. What's wrong with that? Well, the problem is that when you do return this vector of strings by value, it's going to require a copy in many cases. And that copy operation to return a vector of strings is really expensive. You have a bunch of string data in there.
+
+You need to allocate new storage within the vector for all of those strings and copy each of the strings, which means copying a lot of string data, allocating more storage just to return this vector of strings out of our function, which is actually a natural way to write the function. The really infuriating part about this is that the source of the copy, the vector of strings that was built up inside the split function, goes away immediately afterward. So we've copied away from a temporary resource and then destroyed that temporary resource.
+
+This is wasted performance. With move semantics, we address this problem by stealing resources from temporary objects that are going to go away anyway. So the idea is the vector of string inside the split function, it has these resources it stores, it has all these strings and this memory it owns, and it's going to give those up as soon as it dies.
+
+So rather than copying that data, which is a slow operation, we're going to steal it by stealing its internal resources, pretending they're our own outside of the function. And that's a constant time operation copying a couple of pointers, rather than this m by n copy operation that involves memory allocation.
+
+What's this do to performance? Well, it's an algorithmic win. So you can have huge effect on performance. Here's a little benchmark here where we have something like a vector of strings. So we have a vector of heavyweight objects of some sort, and we're constructing these vectors. As we're constructing the vectors, of course, the vector starts this big.
+
+We copy data in. Then we realize we have to reallocate it to make it larger, copy that data over, destroying the source, and so on and so on, and this takes quite a long time. So our access here is time. You can see it takes quite a while. We then sort that information. Of course, what does sorting do? It copies the data around until it's in the right sorted order.
+
+You can imagine move semantics would make this better. Rather than copying, which is an expensive operation, we do a move, which is a very cheap operation, and we see huge performance wins in this benchmark. Seven times faster for building these large vectors. Four and a half times faster when sorting these vectors. There are big wins here because they're algorithmic wins that eliminate a huge amount of work, rather than just making the work that's there slightly faster.
+
+So say you want to use move semantics. They're great. They can improve performance for your applications. The feature that actually supports move semantics in C++ OX is called rvalue references. So to describe rvalue references, we're going to look at a simple numeric vector class. So this vector class has a pointer to doubles. This is the data, the numeric data that's stored in this vector, and of course the length of that data.
+
+Now in the copy constructor, this is a value object. So the copy constructor, when it gets a vector, it's going to make a deep copy of that vector. It's going to allocate new memory, copy all of the numeric data over, and it will own the memory that it allocated. The copy assignment operator works the same way. It frees its own memory if it has any now, allocates new memory that's the appropriate size for what we're copying from, and does a deep copy of the data. The destructor in this case is responsible for freeing that data.
+
+Let's move enable this vector class. The first thing we're going to do is introduce what's called a move constructor. Now, a move constructor looks a heck of a lot like a copy constructor in its signature. It's a constructor. It takes in a vector. Except here, rather than taking a constant reference to a vector, we're using this ampersand-ampersand syntax.
+
+That is an R-value reference. And what it means is that when the compiler goes to copy a vector object, it's going to make a decision between the move constructor and the copy constructor. And when the compiler knows that the source of the copy is going to go away and die anyway, so no one cares about it, it's going to pick the move constructor over the copy constructor. So in the move constructor, we're guaranteed that the source that we're talking about, it's an object that's going to die. We can steal its resources.
+
+So we do. We copy the data pointer, which is a shallow copy of a pointer, very fast. We copy the length, and then we zero out the data and length values within the source, so that when the source is destructed, it doesn't try and free any resources. This completes the resource transfer into here, and it's fast, right? Rather than a linear time copy, we've done a constant time copy of a couple words.
+
+So here we free our own resources. We steal the resources from our source, which we know is a temporary, because the compiler's going to decide between the copy assignment and move assignment operators based on whether the right-hand side is a temporary. Once we've stolen the pointer and the length, we zero out the pointer and the length from the source, and when it gets destroyed, it just does nothing. So here we free our own resources, and then we zero out the pointer and the length from the source, and when it gets destroyed, it just does nothing.
+
+You can go move-enable your own classes when you're building in C++ OX mode. You can go move-enable your own classes when you're building in C++ OX mode. And you can get benefits out of this. You'll get benefits whenever you pass your classes by value or return your classes by value, because you'll get the fast moves automatically from the compiler rather than the slow copies. It also means you can write functions like split.
+
+There's one catch. To really get the big wins, so that all of your data structures like vectors and maps can benefit from move semantics, you need your C++ standard library to implement move semantics throughout. So your data structures, just like the vector we saw in the previous slide, your data structures need to have move constructors and move assignment operators. The library has to go a bit further, though. It has to realize when it's performing an operation, there's effectively a move, and perform a move, or try to perform a move, instead of copy in cases where it doesn't need the source value.
+
+By doing this, we can get better performance across the entire library, and we can do this both in the data structures and within algorithms like sort and unique and so on that move data around. So this is one of the many reasons that we designed and built libc++, the LLVM C++ standard library. So we built this from the ground up with complete support for C++ OX and using all of the C++ OX features, like our value references for move semantics, to give a great C++ OX library.
+
+Of course, it's a C++ OX library, so we implemented all of the new features from the C++ OX standard, almost standard, not quite there yet, such as regular expressions, smart pointers, hash tables. So libc++ is finally available. It's available in Xcode 4.2, the same compiler, the same Xcode that brings the Apple LLVM compiler with C++ OX support. And if you build your application with libc++, you can deploy it back to Lion and iOS 5.
+
+Lib C++ is part of the LLVM project. It's open source. If you want to see how we do something in Lib C++, you can go check out the source code at libcxx.llvm.org, or if you're a C++ hacker and you want to get involved, come join us. It'd be great.
+
+Talked a bit about performance, so let's look at sorting performance. A little different aspect of this. So here we're sorting heavy objects. So this is similar to what we were discussing with the previous performance slide on sorting, where we have some container of heavy objects. So copying these objects around is expensive.
+
+Now we have a time access here, and what we're doing when we're sorting these objects is we're going to show the different standard libraries and C++ versus C++ OX. Our first bar here, it's taking 8,000 milliseconds to sort this array of heavy objects using the current standard library, lib standard C++ that we inherited from GCC. Now just switching to libc++, not even turning on any of the C++ OX features, so we're not getting move semantics here, we're just getting the better algorithms from libc++ that are more careful about not copying objects when they don't need to, we get a huge win.
+
+But we've been talking about move semantics, right? So what happens when you turn on move semantics? And this takes the remaining copies that show up in a sorting algorithm and replaces them with the super-fast moves, and we get another huge win to the point where we're 100 times faster.
+
+It's cool stuff. I highly recommend you go check out move semantics. Use it with the new compiler and the new library. We'll take a little bit of a look at some of the new functionality within libc++ that we get from the C++ OX standard library. One bit of functionality that a lot of people like to use are the smart pointers. Shared pointer, for example. So shared pointer is a smart pointer, comes as part of libc++, and it provides shared ownership of a resource via reference counting.
+
+Shared pointer is extremely easy to use. You just create a shared pointer over the given type that you care about, and you initialize it with an object that you just allocated from the heap. So as soon as you call new to allocate an object, hand that off to shared pointer, and it will manage the lifetime. Shared pointer is a smart pointer, so it works like a normal pointer. You can dereference it.
+
+You can use the arrow operator. You can make copies, and each of those copies will have some ownership over the resource that's there. Shared pointer uses reference counting, so when the last reference goes away, the object is destroyed, and then the memory is deallocated. Makes memory management fairly simple.
+
+Now just in case you've had some arc envy from seeing the weak pointer system there, libc++ also has weak pointer, which is the counterpart to weak in the arc system. The idea here is weak pointer is also a smart pointer, and a weak pointer holds weak ownership over an object. It won't keep an object alive. But when that object does go away, the weak pointer knows about it and effectively zeroes itself out, so that you can't dereference a dangling pointer.
+
+Here's an example of how to use a weak pointer. So we can initialize a weak pointer to a database with a shared pointer to a database. So we're saying we want weak ownership semantics of the object that that shared pointer points to. Now at some point, we're going to want to observe that object.
+
+And we need to do so in a way that's safe. So to do this safely, there's the lock method on the weak pointer. What the lock method does is it goes and queries whether the object is still there. If it's still there, it returns a shared pointer that actually has ownership over that object to the same object.
+
+If it doesn't exist, because the object has gone away, everyone else is destroyed, has given up on their shared pointers, the object's been destroyed, this will return a null shared pointer. By using this little if construct, we end up in this great place where inside the if, we know that the object is still alive, and we're keeping it alive, so no other thread can destroy this object. It's a safe transfer of semantics from weak ownership to strong ownership, using shared pointer and weak pointer. Last, we're going to talk about library interoperability. So libc++ is a completely new C++ standard library with a completely new C++ runtime.
+
+You build your application and your own frameworks against libc++, and there will come the day when you need to link against another framework that uses libstandardc++. We know this is going to happen. We support it. The way this works is we put libc++ and libstandardc++ into different versioned namespaces. So the libc++ string is a completely different entity from the libstandardc++ entity. They can both coexist within an application, but for any given translation unit, you have to choose. Is this libc++? Is this libstandardc++?
+
+Coexistence means you can link against other frameworks. Now, we do allow interoperability at the low levels where interoperability becomes crucial, such as memory management. You can call new in something that uses libc++, and then delete that same pointer in libstandardc++, and it will work. Runtime type information stays exactly the same, and exceptions, all that mechanism is the same, so you can pass exceptions between the two different libraries.
+
+So this provides us with a path forward to the new libc++ standard library, and it's a great C++ OX support, while also supporting applications moving incrementally over to this new library. I'm going to wrap up section on C++ OX in Xcode 4.2. So Xcode 4.2 has some great C++ OX support. If you want to go try it out, I highly recommend changing your C++ language dialect to C++ OX, and your standard library to libc++. To get the best C++ OX experience. Try it, play with it, we'd love to hear what you can do with it.
+
+With that, we're going to shift gears entirely to Arc. So automatic reference counting has been a big topic this week. It's a really cool feature. One of the features that came with Arc is the migration tool. And the migration tool takes code that uses manual retain release that we've been using for years and years, and rewrites it, converts it into this new world of automatic reference counting. Now the Arc Migrator is built on LLVM technology. It uses the Clang C, C++, and Objective-C parser that powers the Apple LLVM compiler. And I want to talk a little bit just about how we do this.
+
+So the way we do it is we use the compiler essentially as it is. So we take your code, which is in manual retain release mode. And we try to compile it in Arc mode. Now of course, this isn't gonna work the first time through. You have lots of retain and release calls. You have other code that possibly violates the new rules of Arc and Objective-C. So we capture all of these new Arc-specific errors inside the migrator. We look at what the form of these errors is, and we can decide whether we know how to eliminate them.
+
+We have a set of transformations that knows how to eliminate specific kinds of errors. We know how to eliminate the error that you called retain when you shouldn't be calling retain, or that you're doing a cast that could be described with a different kind of cast. So we apply these transformations to the specific errors that come out of this ARC compilation to fix your code, update the source code, so it's closer to being right for ARC.
+
+Then we repeat the same process. Try to compile it again. See how we did this time. Maybe we introduced more Arc-specific errors. We can go clean those up as well. And after numerous transformations, we end up with a program that compiles properly under Arc. We know it does because that's the process we use to get to this point. and we'll work in the new Arc world. Let's take a look at just one of these many transformations and how it actually works. So the simplest translation that you're going to see happen throughout your program when you migrate to Arc is the removal of sends of retain.
+
+We start with what's on the top. We have a retain call. We want to transform it down to what's in the bottom. Now, from the compiler's perspective, what we have is some sort of abstract syntax tree that describes the syntax of this message send. So it has a send node, which has children of another send node, the inner NSColor white color message send, and sends the retain message.
+
+From the abstract syntax tree, we could do transformation right here. We could say, look at the inner send of this retained send, and just pretty print it. We'll get something back from the pretty printer that probably looks nice, and it will compile. We can make sure of that.
+
+But it's going to destroy the formatting that you had in your source code. It's going to remove comments, maybe it'll expand macros. And this is going to be really, really ugly in your system. So we want to do something better. Instead, we're going to look at it not semantically as, look at the abstract syntax tree, pretty print out what we want to see.
+
+We're going to say, let's look at the syntax and actually edit the syntax bit by bit to get the right thing back, to get a nice clean transformation into the code you would have written had you been using Arc all along. So we use the super precise information inside the Clang abstract syntax tree to note the location of the opening bracket, and we can just delete it from the text entirely.
+
+could do the same thing for the retain. We know where that is, and we know where the close bracket is. So just delete those entirely. And we have a transformation that's almost perfect, if you follow these rules. Except you have this annoying little space between the close bracket and the semicolon. And what you're going to do after the arc migrator runs in this case is you're going to go through and you're going to delete every one of these spaces and curse us louder and louder each time.
+
+So we don't do that. Instead, what we try to do is we look at the inside, look at the receiver, this NSColor white color expression. We know where that begins. That's fine. We know exactly where it ends, so we can go one character past the end, which is really the beginning of the error, the place that we want to remove.
+
+If we remove from there, all the way to the square bracket, we get this nice, clean rewrite. It's exactly what you would have written yourself. That's part one of two for this simple transformation. So here we have common construct. If we got an object back, then we need to retain it.
+
+We apply the transformation from the last slide to this. What do we get? We get this great statement. Hey, those were the rules. We just decided on them. This will be really annoying, because now the compiler's going to complain that you have an unused value here. Fine. We could do that.
+
+So what we do is we track. We look at the receiver that's still there. After we remove the retain and determine, does it have any side effects? Because if it has no side effects, if it's something really simple, then we could just take it out. So that do nothing statement goes away, and we're left with something else that's ridiculous.
+
+Do some more analysis. Look at the if condition. Look at this if statement. The only thing that was in the if statement, we've removed. Since we've removed it, there's no point in having the if statement. The condition doesn't do anything interesting. The body doesn't do anything interesting. So just remove it all.
+
+When you run the Arc Migrator, you're going to see this, that we remove a lot of code, and we're very, very careful when we remove that code not to upset code around it, and to try to get back to the point of what you would have written had you had Arc all along.
+
+We talked a little bit about this retain transformation in a bit of detail. I thought it was simple. It turns out it wasn't quite so simple. There's a lot of these transformations, such as taking NS Auto Release Pools out and using new features such as @AutoReleasePool. There's a ton of these transformations that we perform to go from the non-Arc world to the Arc world, all of them being driven by the compiler as it's parsing and finding Arc problems in your program. transforming your code as cleanly as possible into Arc code.
+
+With that, I'm going to wrap up. We've talked about a grab bag of technologies here, from the LLVM code generator, the new type-based alias analysis, new register allocator, new scheduling, the loop idiom recognizer. From there, we popped up the stack about 1,000 levels to C++ OX and libc++, and then peeked under the hood a little bit of the arc migrator and the LLVM technology that's behind that.
+
+If you're interested in more information about LLVM technologies, you can contact Michael Jurowicz, our developer tools evangelist. You can come visit us on the web. LLVM is all open source. You can come to LLVM.org, learn more about it. And of course, there's the Apple Developer Forums, where we can talk about more Apple-specific information. So a couple related sessions, both related to Arc. So we're doing a reprise of automatic reference counting tomorrow morning at 9:00. And then there's another session on Objective-C improvements and advancements that's going to go deeper into automatic reference counting, and also other Objective-C improvements that we've made.

@@ -1,0 +1,257 @@
+---
+Title:  High-Performance Image Processing with Core Image
+Year:   2008
+Web:    https://nonstrict.eu/wwdcindex/wwdc2008/709/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+The great thing about these filters is that the user can select one of the parameters, in this case the exposure, and do adjustments on it. Those adjustments are then fed back into the RAW filter, and as you can see, The resulting image is the result of the exposure being dropped is dimmed. This can all happen real time because we're using Core Image filters to implement all of these parameters.
+
+So that's hopefully just a good introduction on what you can do with the CI RAW filter. Let me just show you how easy it is to do in code. Again, unlike normal CI filters, you do not locate them by name. You just call CI filter, filter with image URL.
+
+You specify the URL. And in this case, the options dictionary is nil. You can specify other parameters, potentially. The next thing we want to do in this particular example is to show you what code is needed to dim the image. In this case, we're creating a double, which is the value minus one, and we're setting that to be the input EV adjustment.
+
+Now, this kind of seems like a boring example, adjusting the EV on an image, but in fact, this is one of the great things about RAW files, is with RAW files, there's extra content in an image beyond the normal clipped range. And by adjusting the exposure down in a RAW file, you can actually reveal all sorts of content in the image that may have been not visible, like detail in clouds, for example.
+
+Last but not least, we take the image and get the output image from that filter, which we can then display on the screen. So that's a brief introduction. I hope I've whet your appetite on how to use RAW processing using Core Image. Next, I'd like to bring up Ralph Brunner, who will talk in some more detail about how to write your own kernels.
+
+Good morning. I'm going to talk about how to make your own image unit. And first I'd like to point out the image unit tutorial which you'll find on your Leopard and your Snow Leopard disc is a document that kind of goes into all the details about which entry goes into which P-list, how to make the project, you know, all the administrative part of making an image unit. So I'm not going to talk a lot about that, just that's the document to read and, you know, follow the steps there.
+
+Fundamentally, to make your own filter, there are two ingredients. One is the actual kernel, or more than one kernel, that does the per-pixel processing. And that is written in the CI kernel language, which is essentially the OpenGL shading language. And if you're not familiar with that, think of it as C with a vector data type added to it.
+
+The second part that you need is the Objective-C code that wraps the kernels into the full filter. This is the code that knows how to call the kernels and it contains additional data like what kind of inputs need to be exposed and these kind of things. You then package those two pieces together, either in a custom filter that you compile into your app, or you make an image unit, which is a plug-in so that all other apps that support image units can host them.
+
+And it's a great way for debugging your filters, because when you make an image unit, it will show up in Core Image Funhouse, it will show up in Quartz Composer, and it's very easy to try it out and find bugs. Okay, so the example I'm going to talk about today is Image Straighten. So imagine you're making an app that deals with photos, and every now and then you get a photo like the one here, which is kind of an exaggerated case.
+
+So your horizon isn't straight. How do you make the horizon straight? Well, you rotate the image until the horizon is straight, and because now it's no longer a rectilinear image, you find some cropped rectangle inside, and you crop the image to the new bounds, and you have a slightly better image.
+
+So cropping is easy. Rotating is easy, too. It's these two lines of code here. Essentially what you do, you create a CG-affined transform with the rotation angle and you call image by applying transform and you get a new image out which has the appropriate rotation. However, that's too easy for what I'm going to talk about today, so we're going to aim a little bit higher.
+
+The reason is, if you're doing this, you get the default interpolation method, which is linear interpolation. And if, let's say, you're making an app that is geared towards pro photographers, you might want to do a high-quality rotation. Instead of just using linear interpolation. Oops, that was too fast.
+
+The Cialanco Scale Transform that's built into the system does a high quality image scale. However, there is no high quality rotation filter in the system. And the next 10 minutes I'm going to essentially implement one and show you how to do this. If you would like to learn more about image resampling, I would recommend this book, Digital Image Warping by George Wilberg.
+
+It goes into great detail how all these sampling methods work and why I'm, what the things I'm going to talk about in the next few minutes and why this is a good idea. So, it's my favorite book on the topic, so go get it. You're going to use a result from 1986, kind of the golden years of computer graphics, which says you can decompose a rotation into three shear transforms.
+
+And so how that works is you take the image and you shift each scan line to the right by a certain amount. Then you take that result and you shift each scan row by a certain amount. And then the last step, you shift each scan line again, and that gives you a rotation.
+
+And so why would you do it that way? Well, for one, it saves computation. Doing the filter call we're looking at would be 64 vector multiplies per pixel if you do it in a single pass. However, it's 24 total if you do it in three passes. And secondly, the implementation is much simpler because each filter step you're really just moving individual scan lines around.
+
+Okay, yeah, so this is the filter will take the image and produce the rotated image. So the immediate phases will not be visible to the client of your filter. So how do you do this? We're going to use the four-lobed Lancash interpolator. And again, Wilbur's book talks about in great detail how that works.
+
+So you have your scan line full of pixels. And how do you shift a scan of pixel by a fractional amount to the right? Well, it all comes down to, can I compute a value in between two sample points? So how do you do this? Well, fundamentally, you're looking at a local neighborhood. In our case, we're going to take four pixels to the left and four pixels to the right to the point we want to reconstruct.
+
+And then we take our Lankos kernel and align it so that its zero point aligns to the point where we want to reconstruct our data, the green point down there. And then for each of the neighboring sample points where we actually have the data, we're going to evaluate that kernel and this gives us a weight. So in the end, we're reading eight pixels, we multiply each of these RGB values by some weight which comes from this function, and then add them all up.
+
+Okay, so how do you implement this? So, first of all, we're kind of lazy, so we're writing only a single kernel for the shared transform, and essentially we use the different parameters to do the horizontal and the vertical shifts. The Lancashire function itself, we're going to put that into a lookup table, because it's quite a few trigonometric operations to evaluate it, and we don't want to do that per pixel.
+
+Now, as I mentioned before, to reconstruct one pixel, you need eight neighbors, and therefore you need eight coefficients for each location. You could put these eight values into kind of a linear table and read eight pixels and also read eight values from that lookup table, but because we are working with images, so we actually have four values in a single pixel. We have red, green, blue, and alpha.
+
+So we kind of can save a little bit here by packing this data into an RGBA floating point image, and therefore a single pixel read gives us RGBA or four arbitrary values. So to get our eight coefficients, we do two lookups. We get the first four from one pixel and the other four from the other pixel, so we save quite a bit of texture reads here.
+
+So the lookup table is kind of laid out in memory as I have a little diagram down there. So there's, it's 250, sorry, 512 pixels wide and 2 pixels high, and the 2 pixels high are the total of 8 coefficients that you need. Okay, so how does that look in code? This is the kernel that does the shear transform. Let me start here.
+
+The kernel returns a vec4 value. This is the RGBA value that gets returned for a single pixel location. And it takes four parameters. The first two are a sampler for the source. That's the image we're going to do the rotate on. And the second one is the LanCOS lookup table. You notice there is this keyword, underscore, underscore, table. And what that does, it prevents Core Image from inlining any world transform into its sampler transform, which for a lookup table doesn't make much sense, so that's why that's there.
+
+The other two parameters are two two-dimensional vectors, a direction vector and a shear vector. The direction vector is either 1, 0 or 0, 1, depending on which direction you're working on, horizontal or vertical path. And the shear vector contains the shift value, how much you shift a scan line relative to its neighboring scan line or scan row.
+
+Fundamentally, the kernel has three blocks. The first one is we take our destination coordinate and compute the source location. Where do we need to read the pixel from? And you see this little floor instruction there to kind of round to the pixel location that is the neighboring sample point that we actually have in memory. The second block is then compute the index into the lookup table and then do these two lookups, Z0 and Z1, to get our total of eight coefficients.
+
+And the last piece is we're doing eight reads from the source image, which are the four pixels to the left and four pixels to the right. You will notice I'm using F is that coordinate that we used the floor operator before. And I use that direction vector to get our values to the neighbor. So at that point, we're reading either to the left or to the right or north or south of the pixel location.
+
+And yeah, then we multiply those with all the coefficients, add them all up, and we're done. So, how do you apply the kernel? This is now in the Objective-C part, excerpt from the output image method. And what you're essentially seeing, apply is called three times. These are the three passes we need to do. In each pass, we pass in a different set of parameters, the horizontal, the vertical, and then again the horizontal pass with the shift values.
+
+There is also this interesting little piece, Apply Option User Info. And that's essentially a context information that you can provide. It can be pointed to arbitrary data. And at a later point, you will get, for the region of interest function, a callback. And that's the value you get back at that point. So we'll talk about that in a couple minutes. So just keep in mind that each of these passes pass in additional information that you can use at render time.
+
+And the last point I would like to point out here is the apply option definition. So you define--get--at that point, specify the domain of definition for your output image. And let me explain what the domain of definition is. The domain of definition is just like, you know, in math. It's the area of your function that is not zero.
+
+And in this case, it's a shape. It's the area of your image that outside of it, all, your kernel will evaluate to zero outside this area. And this allows the Core Image runtime to do optimizations. Now, keep in mind, DOD that you specify is an upper bound. So you can, for example, you could just use a bounding box if you wish.
+
+So for our shear transformation, this looks like this. So this is our first path. And the domain of definition is a shape. So this is how the shapes look like. So to take the source shape, you have to return a destination shape that has essentially a slanted rectangle.
+
+And in code, you ask the source for its definition, which is a CI filter shape, and then we transform it by a CG-affine transform, and that affine transform I'm making is essentially the shear transform, and that's how you get your domain of definition. If you don't specify a domain of definition, that is okay. It just means that whenever a piece of the image is drawn, Core Image has to call your kernel. And you can imagine if you have a lot of zeros out there, there's optimization opportunities that you miss.
+
+For kernels that don't do anything with geometry, typically the domain of definition of the output is the same as the domain of definition of the input. So you just ask source domain of definition and then pass that back and you call apply. Like a U transform doesn't change the shape of the image, so there's no need to do anything special there. And domain of definition can sometimes be rather nasty to code. It is okay to make the domain of definition a bit bigger than what would be theoretically pure. As long as it's not too big, it's slightly less efficient but not tragic.
+
+Kind of the conceptual opposite to the domain of definition is the region of interest function. And that's that callback I was talking about before. Essentially this is the runtime asks your filter question, which is, If I want to compute this area in the destination, which part of the source do I need? And this allows things like tiling and efficient use of resources if that is implemented correctly.
+
+Well, in our case, it is a parallelogram. And the region of interest function actually doesn't return a shape, it just returns a CG rectangle. So you'll return a bounding box of the area. So let me repeat that because that's a really good source for bugs when you get that wrong. The question you have to answer is to render a certain rectangle in the destination, which part of the source is needed to perform that operation, so that we can upload the proper part of the textures onto the graphics card and these kind of things.
+
+Okay, so here is the ROI function for our little rotate filter. You get called back, it's called region off, and you get called back with a sampler ID. That's the number of the sampler that you have in your kernel function. So in our case, sampler ID 0 is the image we rotate and sampler ID 1 is the Lancashire lookup table. Destination Rect, this is the rectangle you want to render. And UserInfo is that pointer that we specified back when we called Apply. In our case, that was this two-dimensional shear vector.
+
+What this function does is, if the sampler ID is 1, you simply return the 512 by 2 pixels full rectangle for the lookup table. So, to compute every pixel, we need the entire lookup table available. For the actual image that we're doing the shear transform on, we again create a CG-affined transform with the shear vector we passed in from the user info data, and then apply that to a rectangle, and we get a new rectangle back.
+
+One important piece at the very end, we take this rectangle and we enlarge it either in the horizontal or the vertical direction, depending on which path we're working on, by four pixels. And so that's an interesting detail. Remember, we're not just doing a shear transform, which turns a rectangle into a parallelogram. We're also using neighboring pixels, up to four pixels to the left, four pixels to the right.
+
+That's why we expand this rectangle here by another four pixels in the appropriate direction, to make sure that all the data that we needed, that we need slightly outside our working area, that is going to be read by the kernel. And if you ever forget stuff like that, what you will see if your image gets big, you will see little, typically black lines around tile boundaries. Because Core Image loaded a tile for you, which I thought was the right size, but you're reading slightly outside. You're getting zeros back, and then you get grayish or black lines around tile boundaries.
+
+OK, so is it all worth it? Well, it turns out it's actually pretty hard to show if you're like 30 feet away from the screen. So I'm doing something here to kind of exaggerate how this looks. I'm taking this image and I'm rotating it by five degrees and then another by five degrees, and again and again, nine times. And what you end up with is an image which is kind of blurry. So I'm exaggerating by using the fact that I could accumulate errors to make this really visible. The first step was just using linear interpolation.
+
+And now I'm using the Lancos interpolator, doing the same thing, five degrees each time, and you get an image which is substantially sharper. So if you look at zoomed-in version, the eye is a blurry mess in the case of linear interpolation. And in the Lancos case, it is actually pretty nice that the scales are still there, the wrinkles around the eye and so on, so quite a bit of detail and a bit of detail got preserved.
+
+Every now and then we get asked why does Core Image doesn't support a bicubic interpolator because it's really popular in a bunch of image processing programs. And, well, the nice thing about the implementation we're having here is it takes the kernel as a lookup table. So we don't have to use the Lancus function. You can use anything. Just, in fact, when you look at the sample code, there's a piece of code that is commented out which does the bicubic interpolation and fills in the table appropriately.
+
+So if you do that the same way, What you're seeing here is that the result of the bicubing interpolation is kind of over sharpened, you know, local contrast kind of went wacky. And the reason is the... The actual kernel has kind of exaggerated side lobes, which causes a bit of a sharpening effect, and if I do that enough, you can exaggerate that way.
+
+So there's nothing wrong with, you know, making images sharp. However, I would argue this shouldn't be a side effect of the rotate filter. If you want sharpness, you should use a sharpen filter, therefore you can control where it happens and how much sharpness you introduce, and it's not a side effect of a geometry operation.
+
+So the last thing I would like to show is, well, doing this rotation nine times is really just for illustration purposes, and you should never do this because clearly there are losses and there is, you know, performance impact and that kind of stuff. So if I'd used the Lancashire Rotate Filter and do it in a single pass, how does it look like?
+
+And people in the rows closer to the screen will see a difference that doing a single iteration is still of higher quality than doing the nine iteration step. But the difference is now pretty subtle, so it shows that there are losses, but they are not that tragic at this point.
+
+Okay, so there's another example I would like to talk about. Frank was saying that Core Image does its work in the linear working color space. And you might think for something simple like rotating an image, that doesn't really matter. Couldn't you just work in whichever color space you are and you're done? There is a difference, which I'm trying to illustrate here.
+
+I'm taking the really boring image on the left side with green and magenta, and I rotate it by 10 degrees. The middle one rotates it in the nonlinear working space, so it's essentially in device space. And on the right side we're using what every Core Image is doing by converting it to a linear color space, rotate it, and convert it to the target color space. So you'll see that there are a bunch of dark pixels in the middle.
+
+And the reason for that is In a nonlinear color space, say gamma 2.2 or 1.8, A blend between green and magenta, or pretty much any colors that are sufficiently far away from each other in the color cube, results in a color which is darker than either of those colors.
+
+And that's why you get these kind of slight aliasing artifacts, because it didn't work in a linear color space. So keep that in mind if you're doing high quality image processing, you know, how working in a linear color space matters even for really simple things like rotating an image. Okay, and with that, I would like to ask Frank back up to put it all together.
+
+Thank you, Ralph. So now for this year again, we have a new sample code that we would like to give you, and it's a Core Image Editor that kind of ties our presentation together a little bit. So what do we do in the CI Image Editor? First, we use the CI RAW filter that David was talking about to do RAW image processing, so better photo quality that we get out of it. Second, we want to use Core Animation, the new kid on the block, and to do a little bit nicer UI and show you how to integrate those two.
+
+And third, of course, it showcases also the new rotation filter that Ralph was just talking about to straighten out an image. So with that, I would like to give you a demo of the application. So since we are still actually in our old application, let me show you actually-- oops.
+
+Let me show you why this RAW part is so important. This is back to the original image. What I want to adjust actually here is now the exposure on it. So I need to find the exposure. So now with this exposure address, so this is a JPEG file. So it's an 8-bit data source.
+
+And what I'm trying to do now is you see how quickly-- it's like there's not much more detail in here. And if I go bright, it's like, boom, it washes out immediately to white. That's because this is a JPEG file. Now with our new sample code that you find actually attached to the session, it's available on the ADC website. This should look a little bit different. So we use a different image. We use a RAW file.
+
+Open this up here. And you see this photo has a problem. So we used a contractor to get this image, and he did a mistake. It's easy to blame those people. So now I'm using actually the exposure adjust again.
+
+[Transcript missing]
+
+Now, as I promised, we can straighten the image. And this, I just grab it here and straighten it out so that, yeah, now it's a nice realigned. And all these kind of things, like you see this little glow and so on, that is all done in Core Animation.
+
+One of the other things that I can do nicely with the RAW file is actually, for instance, look at the real color temperature setting of it. And so we should just show off here, OK, these are the different ones. I just created some scenes for doing this. And say, OK, well, this is actually how I want this picture to look like if I didn't set the white balance correctly on my camera. And of course, we can use some effects.
+
+And now I can make this look like a photo from my grandparents, kind of like from the 60s. And since this is all done in Core Animation, it's also very easy for me to go like, boom, full screen. It nicely animates everything, showing back, like, for instance, this kind of stuff. This is all happening in Core Animation. Going back, it scales nicely. I said I would like to go back to the slides.
+
+Thank you. So let me walk you through some of the high level aspects of the code. So first of all, as I said, we're using core animation. And we're using a so called CA tiled layer, since we have a really large image. This was a 12 megapixel file that I was using in this demonstration. And you notice that there was little blocks basically showing up. This is because we draw it in little tiles.
+
+Well, core animation draws in little tiles. And this allows us, first of all, that this image gets scaled down. So we only see basically a representation on the screen. It's, of course, much smaller than the original size. And that has a scale factor that we can actually use from core animation and pass this on to the CI raw filter, which then is smart enough not to process all the data it needs. It actually scales it down and only samples the points that are needed. This gives us the nice performance that we are looking for.
+
+And the moment basically I step into full screen, I'm sure if this was really visible here on the projector, but you will notice that the details all of a sudden pop up, because now we are using a different scale factor of the image and we'll draw in the background with higher details. So the user can already interact with the image and you can, and all the stuff is happening nicely in the background.
+
+Now, how do you get the context when you want to draw with a Core Animation layer? That might not be as obvious in the first place, but Core Animation provides you, again, a CG context. And as I showed in the beginning, from that, we simply can create our CI context.
+
+In the moment, there is still some work that we need to do to make it a little bit faster. As you noticed, it was not quite as performing as we would like it to see. But in Snow Leopard, we are making this, the Quas-GL integration on this one, even a little bit better. Now, I can't explain everything about Core Animation, so please check out the Core Animation sessions. There's one also later on today. Or definitely look also on the online documentation of Core Animation.
+
+How does the drawing code look like? First, as I mentioned, we get the CI context from the CG context that gets passed in. It's important that you don't cache this one because Core Animation might decide for you, well, I need to switch the context for each drawing. Now I'm getting the current transformation matrix from the context, and that allows me to use the scale factor from it. Now you notice that I put in the synchronization step. As I mentioned, all this drawing is happening asynchronously. It's happening on multiple threads. So you have to make sure that your code for the drawing part is thread safe.
+
+Here I use the scale factor, and you will see in the real code what that does to the CIRAW filter. Taking from the CTM value and passing it down, and therefore the CIRAW filter only has to process certain parts of the data. and then I simply draw into our context.
+
+That is as simple as it is for the drawing part. Now when you would use something like GDB, you would notice, for instance, well, I get asked like eight times for each tile to draw this whole image. And you don't see, like, well, what rectangle do I have to draw? You don't have to care about this because Core Animation actually sets up in that CG context a clipping rectangle which Core Image simply honors and will only take basically that tile of the image to draw. It's that simple. Let's work for you.
+
+Now, how did I do these effects? And you see here in the screenshot, I actually used the Image UI demo application, from which I can actually export my chain of filters. So I created these effects for like the Ansel Adams effect or the old photo style, and simply export them as the CF filter generator. And then they act as a single filter that I simply imported now into my application.
+
+Now, there always comes a time when we have to debug a problem. We all hate it, but it happens. It's the nature of the beast. Now, what do you do? Of course, everybody knows to work with GDB, and there's, like, for those who want to do a little more of the low-level stuff with the OpenGL code, can use OpenGL Profiler and so on. But there's one tool that I would like to point out today that might not be as obvious in working with Core Image, and that is Dtrace.
+
+And internally, we started using it for debugging some of our stuff, and had really great results with it. Now, Dtrace on its own is a little bit more complex, so I can't give you a full overview here, but there's plenty of sessions on Dtrace that explain all that.
+
+So what is Dtrace good for in this particular scenario? With Core Image, the nice part is, first of all, with Dtrace, I can do this on any kind of client machine. I don't need to have any kind of special debug environment. If I want to analyze the performance of, like, who's getting, actually calling my drawing code and which context and so on I get created, I mean, yeah, old school style. You would put a lot of printfs in there, and you have to recompile it and try it on the client's machine and say, "Ah, this is actually what the problem is." With Dtrace, you don't have to do that.
+
+You can simply run on your client machine, and it will, with probes, actually show you, "Okay, that's the one who called it, and this is actually how often you got called, and this is very useful information, particularly for performance debugging, or even, like, in general, even, like, finding out what problems might occur in my code."
+
+Now, you need to know what probes do we have. So Core Image has a few of its custom probes that actually are specific to Core Image problems. And since it's an Objective-C language that we use for the API, you can actually know all the probes that you need to know in terms of figuring out who's creating a filter or who's rendering.
+
+If you don't know them because you're new to this, you can simply use DTrace and query, okay, give me all the probes available in this process on a CI context or on a CI filter, and I can find out what probes I have and set basically a DTrace script that gets triggered whenever these functions get called. So this is just a little appetizer for DTrace. And yeah, just close to your heart, this is a good debugging tool, particularly for performance part.
+
+So this was a lot today, hopefully for you. And now you want to know, OK, what can I do next? First of all, we have a bunch of sample code. It's already on your disks in the developer examples. Find them in the Quartz and Core Image. In addition, we have on the ADC website, this was often requested from last year, our sample code that does some CI color tracking. It's also mentioned in the NVIDIA book GPU Gems 3. There's a whole article about it, so you can learn more about something interesting to do with Core Image. Okay.
+
+I would recommend playing around with the sample apps, concatenate filters, create interesting effects, don't see them as a single instance that you want to use, and don't just use them for image editing, which is the one part, but also use them like, you know, as we've shown, like these little glow effects in the UI to make your UI a little bit more interesting.
+
+And if you're in the business of doing like 2D graphics, like using quartz drawing, we've seen some samples of people who do like very nice stuff and actually creating just a drawing application and use actually these CI filters to give a little bit more real life scenarios by creating shadows or blurriness to give you a depth of field.
+
+And that's part of, if there are more questions, Alan Schaefer, who is our contact for you, you have his email right here. You find the documentation on our website. And with that, I would also like to point you out to our lab, which is shortly after the session downstairs, so you can come and ask any questions for us. Your kernel will evaluate to zero outside this area, and this allows the Core Image Runtime to do optimizations. Now, keep in mind, DOD that you specify is an upper bound. So you can, for example, just use a bounding box if you wish.
+
+So for our shear transformation, this looks like this. So this is our first path. And the domain of definition is a shape. So this is how the shapes look like. So to take the source shape, you have to return a destination shape that has essentially a slanted rectangle.
+
+And in code, you ask the source for its definition, which is a CI filter shape. And then we transform it by a CG-affine transform. And the affine transform I'm making is essentially the shear transform. And that's how you get your domain of definition. If you don't specify a domain of definition, that is okay. It just means that whenever a piece of the image is drawn, Core Image has to call your kernel. And you can imagine if you have a lot of zeros out there, there's optimization opportunities that you miss.
+
+For kernels that don't do anything with geometry, typically the domain of definition of the output is the same as the domain of definition of the input. So you just ask source domain of definition and then pass that back and you call apply. Like a U transform doesn't change the shape of the image, so there's no need to do anything special there. And domain of definition can sometimes be rather nasty to code. It is okay to make the domain of definition a bit bigger than what would be theoretically pure. As long as it's not too big, it's slightly less efficient but not tragic.
+
+Kind of the conceptual opposite to the domain of definition is the region of interest function. And that's that callback I was talking about before. Essentially this is the runtime asks your filter question, which is, If I want to compute this area in the destination, which part of the source do I need? And this allows things like tiling and efficient use of resources if that is implemented correctly.
+
+Well, in our case, it is a parallelogram. And the region of interest function actually doesn't return a shape, it just returns a CG rectangle. So you'll return a bounding box of the area. So let me repeat that because that's a really good source for bugs when you get that wrong. The question you have to answer is to render a certain rectangle in the destination, which part of the source is needed to perform that operation? So that we can upload the proper part of the textures onto the graphics card and these kind of things.
+
+Okay, so here is the ROI function for our little rotate filter. You get called back, it's called region off, and you get called back with a sampler ID. That's the number of the sampler that you have in your kernel function. So in our case, sampler ID 0 is the image we rotate and sampler ID 1 is the Lancashire lookup table. Destination Rect, this is the rectangle you want to render. And UserInfo is that pointer that we specified back when we called Apply. In our case, that was this two-dimensional shear vector.
+
+What this function does is, if the sampler ID is 1, you simply return the 512 by 2 pixels full rectangle for the lookup table. So, to compute every pixel, we need the entire lookup table available. For the actual image that we're doing the shear transform on, we again create a CG-affined transform with the shear vector we passed in from the user info data, and then apply that to a rectangle and we get a new rectangle back.
+
+One important piece at the very end, we take this rectangle and we enlarge it either in the horizontal or the vertical direction, depending on which path we're working on, by four pixels. And so that's an interesting detail. Remember, we're not just doing a shear transform, which turns a rectangle into a parallelogram. We're also using neighboring pixels, up to four pixels to the left, four pixels to the right.
+
+That's why we expand this rectangle here by another four pixels in the appropriate direction, to make sure that all the data that we need, if we need slightly outside our working area, that is going to be read by the kernel. And if you ever forget stuff like that, what you will see, if your image gets big, you will see little, typically black lines around tile boundaries, because Core Image loaded a tile for you, which I thought was the right size, but you're reading slightly outside, you're getting zeros, and then you get grayish or black lines around tile boundaries. Okay, so... Is it all worth it?
+
+Well, it turns out it's actually pretty hard to show if you're like 30 feet away from the screen. So I'm doing something here to kind of exaggerate how this looks. I'm taking this image and I'm rotating it by five degrees and then another by five degrees and again and again, nine times. And what you end up with is an image which is kind of blurry. So I'm exaggerating, kind of using the fact that I can accumulate errors to make this really visible.
+
+If I then, the first step that was just using linear interpolation. And now I'm using the Lancos interpolator, doing the same thing, five degrees each time, and you get an image which is substantially sharper. So if you look at the zoomed in version, the eye is a blurry mess in the case of linear interpolation. And in the Lancos case, it is actually pretty nice that the scales are still there, the wrinkles around the eye and so on. So quite a bit of detail got preserved.
+
+Every now and then we get asked why does Core Image doesn't support a bicubic interpolator because it's really popular in a bunch of image processing programs. And, well, the nice thing about the implementation we're having here is it takes the kernel as a lookup table. So we don't have to use the Lankos function. You can use anything. Just, in fact, when you look at the sample code, there's a piece of code that is commented out which does the bicubic interpolation and fills in the table appropriately.
+
+So if you do that the same way, What you're seeing here is that the result of the bicubing interpolation is kind of over sharpened, you know, local contrast kind of went wacky. And the reason is the The actual kernel has kind of exaggerated side lobes, which causes a bit of a sharpening effect, and if I do that enough, you can exaggerate that way.
+
+So there's nothing wrong with, you know, making images sharp. However, I would argue this shouldn't be a side effect of the rotate filter. If you want sharpness, you should use a sharpen filter, therefore you can control where it happens and how much sharpness you introduce, and it's not a side effect of a geometry operation.
+
+So the last thing I would like to show is, well, doing this rotation nine times is really just for illustration purposes, and you should never do this because clearly there are losses and there is, you know, performance impact and that kind of stuff. So if I'd used the Lancashire Rotate Filter and do it in a single pass, how does it look like?
+
+And people in the rows closer to the screen will see a difference that doing a single iteration is still of higher quality than doing the nine iteration step. But the difference is now pretty subtle, so it shows that there are losses, but they are not that tragic at this point.
+
+Okay, so there's another example I would like to talk about. Frank was saying that Core Image does its work in the linear working color space. And you might think for something simple like rotating an image, that doesn't really matter. Couldn't you just work in whichever color space you are and you're done? There is a difference, which I'm trying to illustrate here.
+
+I'm taking the really boring image on the left side with green and magenta, and I rotate it by 10 degrees. The middle one rotates it in the nonlinear working space, so it's essentially in device space. And on the right side we're using whatever Core Image is doing by converting it to a linear color space, rotate it and convert it to the target color space. So you'll see that there are a bunch of dark pixels in the middle. And the reason for that is, color space, say gamma 2.2 or 1.8.
+
+A blend between green and magenta, or pretty much any colors that are sufficiently far away from each other in the color cube, results in a color which is darker than either of those colors. And that's why you get these kind of slight aliasing artifacts, because you didn't work in a linear color space. So keep that in mind if you're doing high quality image processing. Working in a linear color space matters even for really simple things like rotating an image. Okay, and with that, I would like to ask Frank back up to put it all together.
+
+Thank you, Ralph. So now for this year again, we have a new sample code that we would like to give you. And it's a Core Image Editor that kind of ties our presentation together a little bit. So what do we do in the CI Image Editor? First, we use the CI Raw filter that David was talking about to do raw image processing, so better photo quality that we get out of it. Second, we want to use Core Animation, the new kid on the block, to do a little bit nicer UI and show you how to integrate those two.
+
+And third, of course, it showcases also the new rotation filter that Ralph was just talking about to straighten out an image. So with that, I would like to give you a demo of the application. So since we are still actually in our old application, let me show you actually-- oops.
+
+Let me show you why this RAW part is so important. This is back to the original image. What I want to adjust actually here is now the exposure on it. So I need to find the exposure. So now with this exposure address, so this is a JPEG file.
+
+So it's an 8-bit data source. And what I'm trying to do now is you see how quickly-- there's not much more detail in here. And if I go bright, it's like, boom, it washes out immediately to white. That's because this is a JPEG file. Now with our new sample code that you find actually attached to the session, it's available on the ADC website. This should look a little bit different. So we use a different image. We use a RAW file.
+
+Open this up here. And you see this photo has a problem. So we used a contractor to get this image and he did a mistake. It's easy to blame those people. So now I'm using actually the exposure adjust again. And what you see now is like how nicely actually the face comes out of the rock part, in this case in Yosemite, El Capitan that we see here. And this is just because now when I go a little bit higher, you see now how the shadows come out of the trees. I can see more of the details there because the RAW file has so much more data available.
+
+Now, as I promised, we can straighten the image. And this, I just grab it here and straighten it out so that, yeah, now it's nice and aligned. And all these kind of things, like you see this little glow and so on, that is all done in Core Animation.
+
+One of the other things that I can do nicely with the RAW file is actually, for instance, look at the real color temperature setting of it. And so we should just show off here, OK, these are the different ones. I just created some scenes for doing this. And say, OK, well, this is actually how I want this picture to look like if I didn't set the white balance correctly on my camera.
+
+And of course, we can use some effects. And now I can make this look like a photo from my grandparents, kind of like from the 60s. And since this is all done in Core Animation, it's also very easy for me to go like, boom, full screen. It nicely animates everything, showing back, like, for instance, this kind of stuff. This is all happening in Core Animation. Going back, it scales nicely. Instead, I would like to go back to the slides.
+
+Thank you. So let me walk you through some of the high level aspects of the code. So first of all, as I said, we're using core animation. And we're using a so called CA tiled layer, since we have a really large image. This was a 12 megapixel file that I was using in this demonstration. And you notice that there was little blocks basically showing up. This is because we draw it in little tiles.
+
+Well, core animation draws in little tiles. And this allows us, first of all, that this image gets scaled down. So we only see basically a representation on the screen. It's, of course, much smaller than the original size. And that has a scale factor that we can actually use from core animation and pass this on to the CI raw filter, which then is smart enough not to process all the data it needs. It actually scales it down and only samples the points that are needed. This gives us the nice performance that we are looking for.
+
+And the moment basically I stepped into full screen, I'm not sure if this was really visible here on the projector, but you will notice that the details all of a sudden pop up because now we are using a different scale factor of the image and we'll draw in the background with higher details. So the user can already interact with the image and you can, and all the stuff is happening nicely in the background.
+
+Now, how do you get the context when you want to draw with the Core Animation layer? That might not be as obvious in the first place, but Core Animation provides you, again, a CG context. And as I showed in the beginning, from that, we simply can create our CI context. In the moment, there is still some work that we need to do to make it a little bit faster.
+
+As you noticed, it was not quite as performing as we would like it to see. But in Snow Leopard, we are making the quasi-geo integration on this one even a little bit better. Now, I can't explain everything about Core Animation, so please check out the Core Animation sessions. There's one also later on today, or definitely look also on the online documentation of Core Animation.
+
+How does the drawing code look like? First, as I mentioned, we get the CI context from the CG context that gets passed in. It's important that you don't cache this one because Core Animation might decide for you, well, I need to switch the context for each drawing. Now I'm getting the current transformation matrix from the context, and that allows me to use the scale factor from it. Now you notice that I put in the synchronization step. As I mentioned, all this drawing is happening asynchronously. It's happening on multiple threads. So you have to make sure that your code for the drawing part is thread safe.
+
+See here I use now the scale factor that I'm, and you will see in the real code what that does to the CIRAW filter. Taking from the CTM, simply a value and passing that down and therefore the CIRAW filter only has to process certain parts of the data.
+
+and then I simply draw into our context. That is as simple as it is for the drawing part. Now when you would use something like GDB, you would notice, for instance, well, I get asked like eight times for each tile to draw this whole image, and you don't see like, well, what rectangle do I have to draw? You don't have to care about this because core animation actually sets up in that CG context a clipping rectangle, which core image simply honors, and will only take basically that tile of the image to draw. It's that simple, so let's work for you.
+
+Now, how did I do these effects? And you see here in the screenshot, I actually used the Image UI demo application from which I can actually export my chain of filters. So I created these effects for like either the Ansel Adams effect or the old photo style and simply export them as the CF filter generator. And then they act as a single filter that I simply imported now into my application.
+
+Now there always comes a time when we have to debug a problem. We all hate it, but it happens. It's the nature of the beast. Now what do you do? Of course everybody knows to work with GDB and there's like for those who want to do a little more of the low level stuff with the OpenGL code can use OpenGL Profiler and so on. But there's one tool that I would like to point out today that might not be as obvious in working with Square Image and that is D-Trace. And internally we started using it for debugging some of our stuff and had really great results with it.
+
+Now D-Trace on its own is a little bit more complex so I can't give you a full overview here but there's plenty of sessions on D-Trace that explain all that. So what is D-Trace good for in this particular scenario? With Square Image the nice part is first of all with D-Trace I can do this on any kind of client machine. I don't need to have any kind of special debug environment.
+
+If I want to analyze the performance of like who's getting actually calling my drawing code and which context and so on I get created. I mean yeah old school style. You would have to do that. Put a lot of printfs in there and you have to recompile it and try it on the client's machine and see ah this is actually what the problem is.
+
+With D-Trace you don't have to do that. You can simply run on your client machine and it will with probes actually show you okay that's the one who called it and this is actually how often you got called in. This is very useful information particularly for performance debugging or even like in general even like finding out what problems might occur in my code.
+
+You need to know what probes do we have. Core Image has a few of its custom probes that are specific to Core Image problems. Since it's an Objective-C language that we use for the API, you can find out all the probes that you need to know in terms of figuring out who's creating a filter or who's rendering.
+
+If you don't know them, you can simply use DTrace and query, "Okay, give me all the probes available in this process on a CI context or on a CI filter, and I can find out what probes I have and set a DTrace script that gets triggered whenever these functions get called." So this is just a little appetizer for DTrace and, yeah, just close to your heart, this is a good debugging tool particularly for performance part.
+
+So this was a lot today, hopefully for you. And now you want to know, OK, what can I do next? First of all, we have a bunch of sample code. It's already on your disks. And the developer examples find it in the Quartz and Core Image. In addition, we have on the ADC website, this was often requested from last year, our sample code that does some CI color tracking. That's also mentioned in the NVIDIA book, GPU Gems 3. So you can learn more about something interesting to do with Core Image.
+
+I would recommend play around with the sample apps, concatenate filters, create interesting effects, don't see them as a single instance that you want to use. And don't just use them for this image editing, which is the one part, but also use them like, you know, as we've shown, like these little glow effects in the UI, so to make your UI a little bit more interesting.
+
+And if you're in the business of doing like 2D graphics, like using quartz drawing, we've seen some samples of people who do like very nice stuff and actually creating just a drawing application and use actually these CI filters to give a little bit more real life scenarios by creating shadows or blurriness to give you a depth of field.
+
+And that's part of, if there are more questions, Alan Schaffer, who is our contact for you. You have his email right here. You find the documentation on our website. And with that, I would also like to point you out to our lab, which is shortly after the session downstairs, so you can come and ask any questions.

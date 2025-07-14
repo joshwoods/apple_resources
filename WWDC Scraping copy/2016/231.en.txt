@@ -1,0 +1,233 @@
+---
+Title:  CloudKit Best Practices
+Year:   2016
+Web:    https://nonstrict.eu/wwdcindex/wwdc2016/231/
+
+[!] This transcript has potential transcription errors.
+---
+
+Good morning. And thanks for checking out our session. My name is, Dave Browning. And here with me today is, Nihar Sharma. And we're going to be, we're both engineers on the CloudKit team. And we're going to be talking to you today about some best practices when building your applications with CloudKit. So, what are we going to cover specifically?
+
+Well, first I'm going to walk through how we here at Apple use CloudKit. We'll talk about the work flow and the API's that we use in order to provide a seamless experience for our customers. And by that I mean, allowing them to access the same data in their applications across all of their devices.
+
+Next, Nihar is going to come up and talk about some details when using the CKOperation API. And the configurability and flexibility you can get when you use it. Then he's going to talk about some things to consider when data modeling. What you're going to store in CloudKit. How you're going to store it. How you're going to build your scheme up.
+
+And then he'll talk about error handling, which we've always said is very important in CloudKit applications. He's going to cover the different types of errors that you'll encounter potentially when using the API and how to consider responding to those depending on your application's use case. So, a quick reminder, we here at Apple have built CloudKit, or built many applications on top of CloudKit.
+
+And so you can be confident that yours will scale, because we've scaled it to hundreds of millions of users. I also want to do a quick refresher about the conceptual model. So, the highest level, we have what's called a container. This is usually a one to one mapping to an application. So, the photos application has a container in CloudKit, the notes application, your application.
+
+Inside of the container you have a public database. This is where you can store data that all users can see. So, an example of this is the WWDC app, or the news app in iOS. They're built on CloudKit. They use a public database for storing articles, news, that kind of stuff that everyone can see.
+
+Next there's the private database. This is where you store data specific to a single user. That user can see their data across all of their devices, but no other users can see it. And then new this year is the shared database. If you want to learn more about this makes sure to go back and check out the video for yesterday's session on What's New in CloudKit. And they do a deep dive on the sharing stuff.
+
+Inside of the database you then have a zone. And there's a default zone, and a public, and private database, where if you throw records in there by default, that's where they'll end up. But, you can choose in the private database to create 1 or more custom zones. And you can store stuff in those zones. And then when content is shared to a user from another user, that shows up as a shared zone in their share database, which you can think of as basically a proxy to the custom zone and the private database of the owner.
+
+And then of course if multiple users share stuff with you in multiple custom zones you're going to end up potentially seeing a lot of shared zones in the shared database. And now what I'm going to focus on with this work flow is mostly in a custom and shared zones that we're talking about right here. Finally at the lowest level you have records. This is your key value structure data where you store everything. And a record always exists in a specific zone.
+
+So, a quick reminder on the benefits of using CloudKit at the high level, you focus on building your application and not worried about building back in services. We do that for you. Your users get what we like to call automatic authentication. That means, if they're signed into iCloud on a device, you do not need to prompt them for signing up, or logging in, or any of the stuff that can usually then be a barrier to using your application.
+
+If they're signed into iCloud with CloudKit, you immediately have a uniquely identifier for that user. And you can start storing data on their behalf. And then finally, what the focus is today is you can get that same data, your users can get the same data across all of their devices when you store it in CloudKit.
+
+All right. So, let's talk about the common use case that we see when we're building our apps on top of CloudKit. And so what happens is, you have a user who runs an application, in this example let's talk about Notes. So, Notes is built on CloudKit. They create a note on their iPhone, let's say, that's stored over to the cloud. And then when they open up Notes for the first time, maybe on a second device, their iPad, it feels like that data was sort of magically pushed. And it's already there in their iPad.
+
+And if they make edits in the iPad, it feels like it's just magically pushed the other way. So, that's sort of the use case that we're looking at providing for our users. So, the way to think about this is, iCloud, the servers are the source of truth, your devices have a local cache of that truth data. And then CloudKit, the API is the glue in between the two.
+
+All right. So, how does this actually work? Well, basically when your app launches, the work flow we recommend is that you fetch changes from the server. Especially the first time your app launches, because you don't know if something already exists that the user wrote from another device. All right. So, you talked to the server. You fetched down any data that you don't have yet.
+
+And then you insure that you're subscribed to future changes. By subscribing to future changes, it tells CloudKit, the server, to send push notifications to your applications on their other devices. And then of course when you get a push, you'll want to fetch changes again to pull down the new changes that happened from the users other device.
+
+All right. So, let's dig into these in a bit more detail, so subscribing to changes. The way this work is, when your application is launched for the first time, and we'll talk about why in just a second, but when it's launched for the first time, you create a subscription telling the server, here is the set of data I care about subscribing to. And then when that data changes, it will let you know.
+
+When your application launches for the first time on another device the subscription might already exist for the user on the server. But, your app doesn't know that, because it's launching for the first time. So, you need to make sure it exists. So, you'll do the same thing that you did before on the other device.
+
+Now that you're subscribing to changes and CloudKit is sending you push notifications, you want to listen for those push notifications. So, let's walk through an example. The user writes a new note. The application stores that down to the server. The servers says, ah ha, there's a subscription for this user. They wanted to know when new data showed up.
+
+It says it came from the iPhone. So, I don't need to bug the iPhone. But, the user also had an iPad. So, it looks up the proper Apple push notification service token. Talks to APNS on your behalf, and tells them to send a push to the iPad. So, you don't have to deal with sending pushes yourself in the back end.
+
+So, then finally your iPad gets the push. What does it do next? Well, as we said, now it goes and fetches the new changes from the server. So, it talks to CloudKit, pulls down the new data, updates its local cache, and then when user opens up notes, bam, they see the same stuff they just wrote on their iPhone.
+
+All right. So, let's look at actually building this. Let's walk through the code, the specific API that we use to make all of this happen. So, first we'll talk about subscribing to changes. So, remember what I said before. This is one of those things that you only need to do the first time your app launches. So, you'll notice we have a check here at the top of our code that says, have we locally cached on this device?
+
+The fact that we've already created this subscription, because if we've already created it, we don't need to keep doing it every time we launch. You save yourself network requests. You save the user some network stuff. All right. So, if we haven't done this before, let's look in the code to set it up.
+
+So, new this year in iOS 10, there's an API called CKDatabaseSubscription. This allows you to subscribe to any change across an entire database, and it works in a private database, in a shared database. So, in this example let's focus on the new shared database. So, you can give a subscription an ID, which allows you to check it later. And we'll talk about that it just a minute. But, in this case because we're dealing with a shared database let's call it, shared changes.
+
+Next you need tell CloudKit what type of push you want it to send when this subscription triggers. And so let's dig into the different types you can do. So, the first one that we actually use a lot and recommend in most cases is a silent push notification. And the way to do that in our API is on a subscription object. You can set the notification using a CKNotification info object. And if you set the property, shouldSendContentAavailable to true, and only that property, you'll get a silent push, the back end will send a silent push on your behalf for this subscription.
+
+And the key to this is that you do not need to prompt the user for acceptance. So, we've had people ask in the past, hey, we have this subscription, but it's popping up here. You guys have seen it, allow push notifications for this app. And a lot of people hit no to that. You don't get pushed and then you rely on pulling. If you do it this way, you're not going to be alerting the user in any way. So, you don't need to ask for acceptance.
+
+And then finally you can listen for these notifications in your app delegate. RegisterForRemoteNotifications. So, if you do want to send a UI push, you actually want a badge, or banner, or make a sound, then you can set any one of these 3 properties. And that will tell CloudKit to send a UI push to your user, because you will be alerting them you do need to ask for user acceptance in this case. And then of course you register for remote notification in the same way as before.
+
+So, a little bit of fine print. If you read the APNS documentation, they tell you that pushes can be coalesced depending on the conditions of the device. So, that means if a subscription triggers and a push is sent to your user's device, there are many cases low battery, bad network, etcetera where they may not get that push. But the coalescing piece means they promise to deliver at least one of those.
+
+So, what that means is, you should not think of push as a way to tell your apps what changed, because if 5 pushes were sent but you missed 4 of them, you're going to miss 4 of those what's. Instead, think of push as a way to tell you that something changed.
+
+One or more things. And that's why we need to go talk to the server, to figure out what those were. And the good news is the CloudKit API provides you a way to ask for only what has changed. So, you don't have to pull down all the stuff you already have.
+
+All right. Let's jump back into our code. Remember we're creating a subscription. And in this case we've set up a silent push notification by doing shouldSendContentAvailable to true. Now, we need to take this subscription and ask the CloudKit client to save if off to the server. And you're probably familiar with this if you've used CloudKit. But, the way you do everything is with operations. And in this example, we do a CKModifySubscriptionsOperation. And we tell it about the subscription we've just created. And this is the one we want to save.
+
+With CloudKit because the client is going to be talking to the server over the network, and that might take a bit of time, everything is asynchronous. So, that means all of your operations have completion blocks. They get called once a response comes back. And so in this case, we have a modify subscriptions completion block.
+
+And the first thing you want to do in all of your completion blocks, I know we say this all the time, is check for errors. And Nihar is going to talk to you in a bit more detail about this. But, in this case, let's just say if there not an error, then we know that the subscription was saved. Now we can locally cache the fact that we've done this, so that we don't do it next time, because of that check up at the top.
+
+Quick note, and Nihar is going to talk about this to. CKOperations inherit from NSOperation, or Operation in Swift 3, and so you have the ability to set this quality of service property. And the default is utility. And he'll talk about some of the things to keep in mind when setting this.
+
+And then finally, the way to actually finally take this operation and ask the client to send it back, is to add it to a database's operation queue. And again because we're doing a shared database subscription in this case, we add it to the shared database's operation queue. And the client will now go off and send that to the server. Okay. So, we're subscribed to changes now. So, now the next step is to listen for pushes, since CloudKit will send them to us when data is changed on another device.
+
+So, you want to make sure that in Xcode you've turned on background modes. And you want to check the box for remote notifications. And potentially background fetch if you want to do this while your app is in the background. Once you've done that, there's a method in the app delegate that you might be familiar with, which is applicationDidReceive RemoteNotification, fetchCompletionHandler. This method gets passed a user info dictionary. And CloudKit provides you a handy way to see if you can get a CKNotification out of that dictionary.
+
+So, if you can, remember there might be pushes for other reasons. But if it's coming from a CloudKit subscription, you'll be able to get a CKNotification. And now we can check the subscription ID. So, the reason this is important is because likely you're going to end up having a database subscription for the private database, and the shared database and maybe for other things.
+
+So, this is how you differentiate which subscription triggered this push. So, in this case let's say it was our shared changes. Now we can go off and fetch that shared data. And we'll talk about that in just a second. And when that's done, we call it CompletionHandler that was passed into this method.
+
+Okay. So, now we are listening for pushes. And let's say some time later your application gets a push. So, what do we do? Remember what we said. You need to fetch new changes. And so let's look at a graphical example of sort of how this works. So, we got to push into our device. And we said, okay, that's for the shared database.
+
+There are sort of 2 steps you need to take. The first one is, you go and ask the server for which zones changed in the shared database. Remember we talked about zones before, right, because there may be new zones that showed up that you don't even know about, because someone shared something with you.
+
+And you pass along a server change token that tells the server where in history you are. And we'll dig into that in just a minute. Step 2 is, now with the no zones, you go back to the server and say, okay, please tell me what records where changed inside of those specific zones. And again you have change tokens for each zone marking where in history your local device cache is.
+
+All right. So, let's talk about that change token thing in a bit more detail. So, imagine your user has a device, the iPhone we were talking about before, they're using your application, and they send some changes down to the server. Those changes are accepted, and the server wants to mark that point in history.
+
+It does that with the server change token. And in this case for simplicity sake, let's save the letter A. That device sends down another set of changes that are accepted, goes to B, etcetera, it goes to C. Sometime later user runs your app on a second device. Let's say that iPad we were talking about before.
+
+And the first thing that iPad needs to do, remember on app launch is go and ask for any changes that it doesn't have. So, it goes and says, I would like to fetch the changes from the server. The server says, okay, here you go. Here's what exists. And at the end of that it says, you are now at server change token C. So device 2 has now marked where in history it is.
+
+Now let's say device 2 then later writes some data. Somewhere along the way device 1 gets a push. Device 1 fetches down the new changes. And at the end of that the server says, okay, you're now at change token E. All right. Device 2 makes another set of changes. Device 1 gets a push, pulls that stuff down, it's now at change token I.
+
+Now you'll notice that device 2 is still at change token C. And that's because when you're writing data you're not getting change tokens back. You don't get those until you actually fetch it. So, let's say device 2, the app restarts, or they restart their iPad or something. Your app launches up.
+
+You go and fetch changes. The server will send you the stuff that you wrote from that device, because it doesn't know if you had that locally cached or not, for various reasons. All right. So, don't be surprised if you see some of the same. This allows you to confirm that you have this stuff. And now at the end of that, the server will send out a change token, I. And you notice that both devices are now at the same state. They have same server change token. So, that's sort of an example of how that works.
+
+Okay. So, let's look at actually writing the code for fetching these changes. So, in this case we're going to talk about database. So, a new API, iOS 10 is CKFetchDatabaseChangesOperation. And again you pass in the server change token that we just talked about. And the first time you ever do that, that will be nil, and it will tell the server that you have nothing. And it will give you everything that exists on the server.
+
+Next, in previous versions of the API, at the end of this operation you had to actually check a flag to see if the server said that there was more data coming. Now, we'll talk about it in just a second. But, if that was set to true, it was your job on the client's side to re-trigger this operation. But, what we've done is, we've added a new property on these operations called fetchAllChanges.
+
+And it defaults to true. And what it does is, it tells the CloudKit client to do that on your behalf so that you don't have to fool with it. So, if after running one of these operations, if the client sees that the server has more data, it will automatically enqueue your operation again for you. And of course call your callbacks along the way so that you don't have to worry about that anymore.
+
+Next, you want to implement this completion block, recordZoneWithIDChangeBlock. And this is where you will be told about the zones that changed in the shared database. So, you'll want to collect these zone ID's, and we'll talk about what to do with them in a second. Next, there is, recordZoneWithIDWasDeletedBlock. This tells you about the zones that no longer exist on the server. And allows you to clean up any local cache data that was in those zones from before.
+
+And you'll see this in cases potentially where something was unshared with your user, because that zone no longer exists in their shared database. And then new is, a changedTokenUpdatedBlock. So, let's dig into this. So, remember before we had device 1 had written some data down in the server.
+
+We had device 2 had written some data down. And then sometime way later, device 3 for this user comes along. And remember the first thing it needs to do is, go talk to the server and fetch any changes. And because fetchAllChanges was true, it's asking for everything. But, there might be a lot of data there, like in this case. Right. And the server might decide, it doesn't make sense to send all of this back in a single response. So, we're to chunk it up.
+
+So, it's going to send you back a chunk of it. The CloudKit client will see that there's more coming from the server. So, it needs to go back and issue another operation on your behalf. But, before it does that, it's going to call changeTokenUpdated and tell you that you're now at change token C.
+
+And this allows you to sort of move along with the client as it's making its operations. So, you update your local change token and don't repeat some of the stuff you've already done. So, let's say this client, on your behalf, says, there's more stuff coming from the server. Let's go back and get it. See some new data. At the end of that calls changeTokenUpdated, see if there's new data, goes back to the server again. But, this time there's an error.
+
+In your error handling, it's likely that you're going to end up calling fetchChanges again. But, instead of starting all the way back at A, because you have a changeTokenUpdatedBlock, your local change token is now at E. So, when you call your next one, the server says, okay, you only need F through I. You don't need the old stuff that you've already processed. So, that's why it's important to implement the changeTokenUpdatedBlock. And you just cache the server change token just like you normally do.
+
+And then finally we have our completion block, which in this case is, fetchDatabaseChanges CompletionBlock. Again, the first thing you do, error handling. Again, Nihar will walk about this. And then you'll get a final change token, which in that last example had we not received an error, would have been the I at the end. Cache that just like you normally do.
+
+And so now we've collected a set of zones that changed in that database. Now we need to go fetch the records that changed. That was step 2 in that diagram before. And we do that via new API, CKFetchRecordZone ChangesOperation. And it allows you to pass in a set of zone ID's.
+
+So, you don't have to worry about calling all these for all the different zones that changed. You call one, pass in all the zones that changed. And we won't dig into the code, but it looks very much like this. You're going to have some completion blocks where you're dealing with records instead of zones. And you'll be getting change tokens along the way.
+
+All right. So, quick recap on what we talked about. So, you subscribed to changes to tell CloudKit that you want to receive pushes when a user changes the data on another device. You've listened to those push notifications. And when you receive one, you've gone and talked to the server, and fetched exactly what changed. And by doing this, your application now provides that seamless experience for your users across all of their devices. All right. So, now Nihar's going to come up and dig into some more specific best practices.
+
+[ Applause ]
+
+Thanks, Dave. Good morning, everyone. Thanks for coming out today. My name is, Nihar Sharma. And I'm an engineer on the CloudKit team. And today I'm very excited to share with you some CloudKit best practices that we've learned here at Apple over the past few years that you can take advantage of in your apps today. Let's take a look at what we're going to cover.
+
+First, I'd like to talk about automatic authentication. Dave touched on this briefly. I'd like to go into a little bit more detail about what it is. How you can take advantage of it. Next, I'd like to talk about the CKOperation API, which is the workhorse of our native talk at frameworks.
+
+Then we'll dig into a couple of tips that you can keep in mind when designing the schema for your apps, that will help you take advantage of the CloudKit API more effectively. And finally, we've told you before just how critical great error handling is to writing a CloudKit app. And I'd like to reiterate that today. And talk to you about a few different class of errors, and how your application should handle them. So, let's get started. First up, automatic authentication.
+
+Now, you might be familiar with a UI like this, where on first launch an app requests a lot of private information from a user, even before the user has started using their apps. Well, we think in CloudKit we have a great way for you to increase the chances of engaging with your users without requiring any private information upfront. The way we do this is via the CloudKit user record.
+
+As a reminder, this user record is automatically created for every user that when they first use your apps that is logged into an iCloud account. In this manner it is unique per CloudKit container. And it offers you a stable identifier for that user that is stable across app re-launchers, OS upgrades, etcetera. So, you can save this identifier to your servers and start building a profile for that user right away. And when you notice that they're engaged with your apps a lot more, then go ahead and request information to enrich their profiles.
+
+The way you access the user record ID for the current user is via the fetchUserRecordID CompletionHandler API on CKContainer. So, that was automatic authentication with CloudKit. Now, let's talk about CKOperations. As a recap, there are 2 main ways in which the CloudKit framework exposes operations to your apps. One is via convenience API calls, which work on one item at a time.
+
+And the other is via those CKOperation counterparts. So, in this manner, every convenience API call that we expose, that works on one item, has a CKOperation counterpart. And that works on a batch of those items. So, for example, we have the fetchWithRecordID API on CKDatabase to fetch 1 record at a time. And we have its corresponding CKFetchRecordsOperation that takes an array of record ID's and fetches them in a batch.
+
+Now, there's certain advantages to using this CKOperation API that you get over convenience API call. I'd like to walk through a lot of those today. So, first and foremost, CKOperation is a subclass of NSOperation. What this means is that, you get the full power of the NSOperation API available to you for free. You can do things like, set up dependencies between your CKOperations.
+
+You can assign the quality of service to them, to let the system know how important that operation is to you, or even manage queue priorities when scheduling them on your own NSOperation queues. And you even get cancellation for CKOperations that have already started executing. So, I'd like you to go up, go back, and read up the documentation on NSOperations to take full advantage of the CKOperation API. A great reference for this is our advanced NSOperations talk that we gave at WWDC last year.
+
+So, now since we're talking about CloudKit operations, there are a few more things that come along with the ride. And I'd like to touch upon 3 of those main things today. First, is the configurability that CKOperation gives you. Next is, how it lets you optimize resources both for the system, and you as a developer. And last, I'd like to talk about lifetime management, which is something new that we've enabled you to be able to do in iOS 9.3.
+
+So, first up, a quick recap on just what you can configure on a CKOperation. Operations let you have fine grain access to whether or not you wish network activity for that operation to go out over cellular. You can also specify keys for operations that fetch items from the server if you want to download just partial records instead of the entire record, which the community's API does not let you do.
+
+You can even limit the number of results that a particular operation returns to you. And finally, long running operations also give you progress updates that you can use to drive certain UI elements. Now, let's talk about resource optimization. The number 1 resource used by your operations on the system are network requests. Now, every convenience API call turns into at least 1 network request on the system.
+
+So, when you use the CKOperation batch API, you allow the system to minimize the number of requests needed to be able to send your changes to the server. So, for instance, if you want to save a batch of records and you use a CKModifiedRecordsOperation, the system will take that batch and be able to optimize a request needed to send that to the server.
+
+So, now in this manner it is not only good for the system resources, but it also helps you optimize your network request quota as developers. Additionally, by default CKOperation lets you opt your network activity into discretionary behavior. What we mean by this is that, you let the system decide an opportune time for your request to be scheduled.
+
+For more information I encourage you to check out the discretionary property on NSURL session Configuration. The way we expose this to you on CKOperation is via the quality of service properties. So, by default, CKOperations have a quality of service utility. Any QOS, which is utility or below will opt-in to this discretionary behavior. So, if you notice that your CKOperations are taking a much longer time to execute than you expect, that might be because the system does not think that it's a good time for your request to go out yet.
+
+Now, additionally there are a few other behaviors that you should keep in mind. When opting into discretionary behavior, network failures will be automatically retried for you. And along with that, by default you get a 7-day resource timeout for every single request that your operation executes. So, that was resource optimization. Now, let's talk about CKOperation lifeline management. On our platforms, there are various reasons why your application may exit. For instance, you might be suspended in the background and be evicted, or a user might force quit your app.
+
+Now, you might have certain updates running while this happened, which were either user-initiated and you really want to just save them to the server. Regardless of whether your app may have exited, or you might have a longer running update at a lower priority that you wish to finish whether or not your app sticks around. So, to serve this purpose in iOS 9.3 we introduced the concept of CloudKit long-lived operations.
+
+What these operations let you do is, once you mark them long-lived, the system will execute that operation on your apps behalf whether or not your app sticks around. We will cache any server responses we get for that operation, and will provide you with an API to be able to replay those responses once your app returns.
+
+So, let's take a look at the API that we have exposed to be able to do this. Well, on CKOperation it's pretty straightforward. You have an isLongLived flag. So, you create a CKOperation like normal. Once you've set this flag, you've turned it into a long-lived operation. Along with that you have an operation ID, which is a system assigned string that uniquely identifies every CKOperation. And we will take a look at why that's important in just a second.
+
+So, here's the general architecture of how you run a long-lived operation. You initialize an operation like you would normally. You just set the isLongLived flag on it, along with your arguments and callbacks, and you run the operation. Now, when you wish to resume it, you will fetch that long-lived operation from the CKContainer class via the operation ID. You will set the callbacks if you're interested in hearing about. And you would run that operation once more.
+
+Let's take a look at an example. Let's say we wish to run a long-lived fetchRecordsOperation. So, we set up the operation like we did normally with our arguments. But, we remember to set the isLongLived flag. And we save the operation ID property to our local cache so that we'd remember what this operation represented.
+
+We set up the callbacks, and then queue the operation. Now, when you wish to resume it, you can use the fetchLongLivedOperation with ID API available on CKContainer to fetch that operation. And since you know what that operation represents and from your cache, you can safely cast it and set the appropriate callbacks on it. You do not need to set the arguments again, or tweak any of the other operation properties that you might have previously, and you've resumed that operation.
+
+Now, CloudKit will then replay all the cache responses we have back for that operation. And either catch you up to the progress that the operation has made why your app was not around, or give you the entirety of the results of that operation. And what this also means is that these operations are cleaned up. That's important sign. And normally this happens when the completion block of that operation is called. You must note that your apps will have at least 24 hours to resume any long-lived operations that they might have enqueued.
+
+So, that was all about CKOperation API. Now, let's switch gears and talk about data modeling. There's 3 main tips that I'd like to give you today. The first one is around schema redundancies. How you can use them and how they help you leverage the CloudKit API more effectively. The second one is how to use references to avoid a certain class of errors that you might encounter in your CloudKit apps. And lastly I'd like to talk about parent references, which are a new type of reference that we've added in this release to support CloudKit sharing.
+
+So, let's talk about schema redundancies. Let's take an example of developing a photo sharing app. Now, the first thing that you might have on a server this app is a record type for photo, where you store a user's high resolution photograph that they've taken on one of our iOS devices as a CK asset.
+
+Now, let's say when the user first launches the app, while you're fetching changes like Dave recommended before, you wish to display just a thumbnail view of all the user's most recent photos. Something like this, which the photos app does. Then it seems like an awful waste of network bandwidth to be able to download that entire high resolution asset every single time you have to load this page. So, what can you do here? Well, it's pretty straightforward. You can think about adding a redundant field on that record, which represents the downscaled asset.
+
+And what this allows you to do is, coupled with the usage of CKOperation and the desired keys property that we talked about, that enables you to fetch partial records. You can now fetch just the key that you need to drive the UI that your user's interested in. You can even set the results limit property to limit just the number of results that you're showing on a single page. So, in this manner, you can enqueue an optimized download to be able to present a dynamic UI to your users.
+
+You fetch only what is needed, when it is needed. And the desired keys property is also available on the new CKFetchRecordZone ChangesOperation, as well as CKFetchRecordsOperation, both of which fetch items from the Cloud for you. Now, as a reminder, these API's are also available to you on the web via CloudKit JS.
+
+So, by using them, you enable your users to have a more dynamic experience in your apps, because they're not waiting for you to finish operations that are downloading data that they're not going to use. Next, let's talk about CKReferences. As a quick reminder, what are these? Well, they're CloudKit's way for you to point records to other records.
+
+So, for instance, if we have 2 records here. Record A and record B, we store reference on record A, initializing it with record B. We've created a CKReference. Now, let's say we wish to add albums to our photo sharing app, which can contain multiple photographs. So, how would we go about modeling this one-to-many relationship?
+
+Well, in a simple manner, and either you might think that this might be a good day to model for this. Storing the record ID's, the references to the photo records that are part of that album right on the album record itself as an array. This is what that will look like. Now, let's take a look at what happens when multiple devices for your user try to add albums, try to add photographs to that same album.
+
+So, let's say we have an album record up on the Cloud that does not have any photos yet. Now, remember that your users are going to have multiple devices. They all fetch this album record. See that it has no photos. They're happy with it. Now they have photos. They each have photos that they wish to add to the same album.
+
+So, now they in-queue that update on that record. Let's say our iPhone gets there first. And now the server knows about one of the photographs, the references to one of those photographs. But, now when the other new devices come in and try to make their updates, they're no longer updating the latest version of the server record.
+
+So, in this case, both of those devices will see the error, CK error serverRecordChanged. Now, I invite you to take a look at our advanced CloudKit talk from WWDC '14 for more details on how you can handle this error. But, let's see if we can figure out a way where we can avoid it entirely.
+
+Well, in this case we know that our album record is going to have frequent rights on it. So, instead if we model our one-to-many relationship using a back pointer by storing the reference on the photo record that is part of that album, we completely eliminate the right contention that we had on our album record.
+
+So, in this case whenever a new photo needs to be added, you just set a reference on it to the album record that it's a part of and save the photo record. But, by doing this you've completely eliminated your contention that you had previously. And now you might wonder, well, how do I fetch all those photos, which is part of my problem to begin with? Well, you can use queries for this purpose.
+
+Here's a query that you need to be able to fetch all photo records that are part of this album. It's pretty straight forward. All you need to do is equate it to the album reference field that you have on your photo records. Next let's talk about parent references.
+
+On CKRecord this year, we've added a new type of reference called a parent reference that will help you model your data in a way that better supports CloudKit sharing. What we'd like to recommend is that, if your app supports sharing, you use the parent references to set up a hierarchical data model.
+
+Recognize the unit of sharing in your apps and set up the parent references accordingly. Let's take a look at an example of what I mean by that. Our photo and album records are a great example of using a parent reference. An album is clearly a parent of a photo record. So, all we need to do is set the parent property on the photo record to our album record ID, and save that photo record.
+
+Now, let's say that we've used this model throughout our app, and we end up with a hierarchy that looks like this. And now a user comes along that wishes to share this entire album. Well, all you would need to do in this case is, create a CKShare with that album record as the group record. And in one fail swoop you will share the entire hierarchy that you set up using parent references.
+
+Now, CloudKit also supports partially shared hierarchies. So, in this case, if a user might have only wanted to share photo C, for example. You could have created a share just with photo C. And in this case, only the photo C and all its descendents set up via parent references will be part of that share.
+
+And that was data modeling. Let's talk about error handling. Now, there are a few different types of errors and your application should handle these in a few main different ways. And let's take a look at each of them. So, let's say we have a simple example where your device comes along and you chose a CKModifyRecordsOperation and tries to talk to the server. There are 2 main things that the server might respond with.
+
+It could either say that, I didn't like that request at all, please don't try it again, or it could say that everything was fine with your request, but right now is not a good time. Come back a little later and try it again. Now, we need your apps to handle these 2 types of errors in very different ways. And let's take a look at what that is.
+
+The first kind of error, which is a fatal error, you really can't do much. There are a couple of error codes which indicate a fatal error. For example, internalError, serverRejectedRequest, invalidArguments, or permissionFailure. In this case, we want you to show an appropriate UI to your user in your apps and let them know that something went wrong, which cannot be retried.
+
+However, the other type of error, where the server wants you to come back at a later point and time, we will tell you the amount of time that the server wishes for you to wait. Here are a couple of error codes that will have that value of time embedded in them.
+
+ZoneBusy, serviceUnavailable, and requestRateLimited. When you receive any of these error codes, you should check for the CKError RetryAfterKey in the errors users info dictionary. You should wait for that period of time and reinitialize the same CKOperation with the same arguments, and retry that operation. Here's all the code you need for a simple example of how to wait for that period of time represented by the CKErrorRetryAfterValue. And reinitialize the same CKOperation.
+
+Now, what happens in some cases when your operations might be failing on the device before even talking to the server? There are 2 main cases that I'd like to discuss today where CloudKit may be completely unavailable to you. The first one is when the device is off line. Well, in this case, what we recommend is that you monitor network reach-ability just like you would for any other network based app.
+
+If you're using a quality of service of user initiated or above, such that a network failures are not being automatically retried for you, you will see this error code CKErrorNetworkUnavailable. So, once you're monitoring network reachability, which you can do via the SCNetworkReachability API, for example, in system configuration framework, you can then let the user know that, hey, these changes are not going to make it to the server yet.
+
+But, we recommend that you let your users keep interacting with your app while the device is offline. You should save these changes to where your local cache. And when your reachability API tells you the device is back online, then you enqueue your CloudKit operations to save those records to the server.
+
+The other main state is when you're trying to use the private database for a user and the user is not logged into an iCloud account. In this case we will return the error code CKErrorNotAuthenticatedTo. And what we recommend is, for all of your apps, on first launch always register to listen to the CKAccount change notification. When it fires use the account status with CompletionHandler API to research the account status for the current user. And let them know that certain operations may fail, because they don't have an iCloud account signed in.
+
+So, in summary, let's take a look at what we've seen today. We saw how to subscribe and fetch changes to efficiently stay up to date with the server. We saw the advantages of using the batch CKOperation API, which we recommend all of your apps adopt. We saw a couple of tips on how to design your schema to completely avoid a certain class of errors, or to use the CloudKit API more effectively.
+
+And finally, we saw how to handle certain types of errors. And how to differentiate between them. And what the server means when it comes back with certain error code as opposed to others. Now, we had a related session yesterday. If you could not check it out, I invite you to go back and look at it online. More information is available here. Thank you and have a great day.
+
+[ Applause ]

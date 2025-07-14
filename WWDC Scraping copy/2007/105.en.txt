@@ -1,0 +1,298 @@
+---
+Title:  Optimizing Your Core Data Application
+Year:   2007
+Web:    https://nonstrict.eu/wwdcindex/wwdc2007/105/
+
+[!] This transcript has potential transcription errors.
+---
+
+[Adam Swift]
+Good morning. And welcome to Session 105; Optimizing Your Core Data Application. I'm Adam Swift, I am an engineer on the Core Data team. And two years ago we shipped the first version of Core Data on Tiger, and we love seeing what you guys have done with it. We've gotten a lot of great feedback, and we've been busy for the last two years working on adding new APIs, new features, and tools. So today I'm going talk about some optimization techniques that you can use, and some general information about Core Data performance.
+
+Specifically, we've -- we've added a new Atomic Store API, a lot of new performance APIs, performance-tuning APIs, and we've learned a lot about optimizing Core Data applications for your applications. Later on Ben will come up and he will be talking about multithreading, Core Data performance tools and analysis, and some of the raw speed improvements we've been able to achieve in the framework. Excuse me.
+
+So let's start off talking about some of the tools -- sorry -- the types of stores you can use and the tradeoffs. This should be familiar to most of you. But we're going to cover it again. There are three basic categories of stores. The SQLite store, in-memory store, and the Atomic Store.
+
+SQLite is your best choice when you're dealing with performance. It scales to large data sets extremely well. It uses a real relational database as its backing, and as a result you're only loading the data you actually want to work with. This means you're going to have a smaller in-memory footprint, and due to the efficient way that SQLite stores data on the disc, you actually get a smaller store on the file system than you would with the other store types. SQLitealso offers the most performance-tuning options. Things that the other store types can't really offer.
+
+The in-memory store is unique, it doesn't offer any persistence, really. It's all stored in memory, in RAM. So why would you want to use it? There's two good reasons. One is Object Graph Management, integration with Cocoa Technologies, and free support for Undo and Redo. The other thing is in Tiger, this is the only way to get your data into and out of a custom file format, or Legacy file format. You had to import or export your data directly into Managed Objects and work with it that way.
+
+The good news is we've added a new Atomic Store API. So you can now support your custom file format directly within Core Data. It's a first-class persistent store. We still support the XML and the binary stores, and all the store types, all the Atomic Store types handle persistence with Atomic file reads and writes. So when you load your store, you're reading in every record. When you save your store, you're writing out every record.
+
+Performance-wise you're not going to be able to scale as well as you can with the SQLite store, but the Atomic Stores offer some nice development time benefits since you can -- with the XML store, for example, you can inspect the data in your store type. So during development time can be handy to use the XML store type. And then when you're ready for deployment make the switch to SQLite or something -- if performance is your issue. So what about building your own Atomic Store?
+
+The API works really nicely. We take care of all the interfacing with the coordinator. All you need to do is build a support for your custom file format. You might need to do this if you've got a Legacy file format, or if you want to be able to interchange data with other technologies or platforms. you're building an Atomic Store, it's a first class persistent store. As far as Core Data's concerned it's just like any other -- you don't lose out on anything there.
+
+There are some file requirements though. You -- you need to be able to store not just the record data, not just your attribute values and relationship states. But also the unique IDs for those objects, and also some of the store information. There's a metadata dictionary that's required. And you also need to store your unique identifier. Or UUID. So let's take a look at how these actually work in practice.
+
+In the diagram here you can see we've got the Persistent Store Coordinator. And a picture of your file type. Your custom file type. All the interactions with the Atomic Store occur between the coordinator around the store. There's no interactions with the Managed Object context or -- or objects at that level. So it starts off when you open your store file. Persistent Store Coordinator receives the addPersistentStoreWithType method. Looks up the type for the class of Atomic Store that you've registered and creates an instance.
+
+At that time the Coordinator checks the metadata for your store file to make sure it's compatible with the data model. And then issues a request to load all of the record data from your Atomic Store. At that time your Atomic Store needs to register all the record data, reading it in from the external file and representing it as cache nodes.
+
+Once that's done, the Coordinator returns control, your store returns control to the Coordinator, and it's up to the user using your application to insert objects, update, delete, make changes, however they will. And none of this effects your store or cache nodes until the coordinator receives a request to save those changes. At that time any newly inserted objects need to get permanent object IDs. When you first insert an object they have temporary IDs, and your store is responsible for providing that unique data.
+
+So the coordinator asks your store for the unique IDs for all the newly inserted objects. Once it has them it updates the objects with their permanent IDs and then requests that the store add new cache nodes for each newly inserted object. Any updated Managed Objects need to have those values propagated to the cache nodes to synchronize their state. And any Managed Objects that have been deleted need their cache nodes deleted in your store. So the Coordinator will ask your store to delete those.
+
+Finally the Coordinator issues the command to save changes. And at that time your Atomic Store will have only the cache nodes that are current according to the state from the Saved Managed Object context. And so you simply walk your set of registered cache nods and write those out to your external file. You're done.
+
+So all of these interactions come down to interfacing with two classes. The AtomicStore, and the AtomicStoreCacheNode. The great sample code available associated with this session on the ADC website. Take a look at the CustomAtomicStoreSubClass example. When you're doing your Atomic Store class it's an atomic -- um, abstract class that you need to sub class. And what you need to do is provide implementations for all of the work that has to happen to archive data in your proprietary format, or your custom format, and read it back in. As well as managing the cache nodes that are representing that data.
+
+Representing the records for the Coordinator. One of the subtle details in managing those cache nodes is when you remove the store any relationships between cache nodes will retain those cache nodes. And you can wind up with a retain cycle. So you need to make sure to break those up when it's time to remove the store. You also need to provide access to metadata and the store's unique identifier.
+
+The AtomicStoreCacheNode represents the record data for all the records in your store. And this is the intermediary representation that the Coordinator talks to. When you've got a Managed Object that's a fault and you want to get the property values faulted into that Managed Object, the Coordinator talks to the cache nodes to get those actual values. Particularly with the Atomic Stores. We'll get into that a little more later.
+
+So once you've decided how you're actually going to store your data file, where it's going to live, the next step is how are you going to design your data model? How are you going to keep your information? This is a complicated issue. This is something that people get tripped up in a lot. You can do it in a simple way, but to really get good performance it's a little bit more involved. There is no single right answer. It really depends on your application's workflow. And the application-specific data.
+
+So how do you start designing your model? If you saw Melissa's talk earlier today -- sorry -- she gave you a basic idea of how you handle -- how you can do the strategy of database normalization. This is a good starting point for breaking up all the data that you want to work with in your application.
+
+There's great examples and details on Wikipedia if you missed Melissa's talk, or if you want to learn more about it, I highly recommend you take a look there. But it basically comes down to normalizing your data model, avoiding data duplication, modeling the real relationships between data that's -- as it's represented in the real world.
+
+I would also say database normalization is sort of a -- sometimes you can take it a little too far. There's about six levels you can go of database normalization. Practically speaking, you are only interested in the first one or two levels. And that's avoiding the data duplication issues.
+
+The other part of it is sort of an art of database -- data modeling. You want to look at how your application workflow goes, group information according to how it will be displayed in your interface, and then you want to turn that around and when you're designing your interface, consider how much information you can really present to the user at one time. The user won't benefit if you throw too much information at them, and it's also going to lead to bloat in your data model.
+
+So relationships are a powerful tool in data modeling. And they allow you to defer loading up some data, minimize unnecessary data loading, and objects that are on -- at the destination of a relationship can be compared as IDs rather than actually comparing the attribute values. This can be a lot faster, and in a lot of cases, especially if the attributes don't compare quickly.
+
+The other aspect of that is if you are frequently accessing some data that's at the destination of a relationship that involves reading and data from two tables, you'll be faster to put that right into your main -- as an attribute right into your main entity. Additionally, it takes additional -- it takes some time to update values across a relationship.
+
+One of the great new additions to the data modeling tool and the framework in Leopard is we now support transformable attributes. In the past you would have to represent a runtime representation in your data model and then archive it out as binary data and with the new -- new support in Leopard you can simply mark attributes as transformable. They are automatically transformed using the value transformer class that you specify in the data modeling tool. And they are archived out as binary data. It's a huge time saver, and let's you focus on the work that you really want to do.
+
+So let's take a little moment to talk about binary data. This is another area where you can get tripped up with performance. There's no hard and fast rules about where and how you want to model your binary data. But we have some good rules of thumb, and basically it comes down to the size that the binary data's going to tend to be.
+
+For example, if you've got something that's small, on the order of 1K, something like -- and it's color -- that's a perfect example for a transformable attribute. Something that's written directly into your entity, your main entity table. And performance shouldn't suffer at all. I mean, you would actually probably see a performance hit by moving that into a relationship.
+
+On the other hand, if you're looking at something a little bit bigger like a thumbnail image or an icon, something on the order of 100 kilobytes, you don't want to load that data in when you're loading in your primary data -- your primary entity. It's better to push that off, defer loading that until it's needed. And so you want to put it at the end of a 2-1 relationship, so you can just get that data on demand.
+
+On the other hand, if you are looking at something truly large, something on the order of a megabyte, like a video file -- it's just -- you're better off not putting it in the database at all. Keep it on the file system. Make a reference and its URL, and look it up on demand. It's going to bog down your performance.
+
+So once you're done normalizing your database it's time to start thinking about performance considerations. Specifically, there are times when it makes sense to add derived attributes. Derived attributes are a way of referring to attributes that can be recalculated from other attributes intrinsic to your model. We've used derivative attributes for benefits and search performance, there are other cases where there will be an expensive calculated value that you want to be able to look up quickly. And derived attributes -- you pay a cost by having some redundant data, some redundancy in what you're storing, additional memory usage. However -- and additionally you're having to maintain this data any time the underlined value changes.
+
+But there are a lot of circumstances where it will solve your performance problems better than any other solution. So let's take a look at an example of a Calendar application where event data has some -- well, you're displaying events in, say, a week view. And each of the events has associations with people or alarms, notes, and other display badges.
+
+In a well normalized model, this is how it might look. You've got your event entity, you've got person, alarm, note -- but the problem is when you go to display all of these events into a single place in a window, you're having to walk all of these key paths to calculate are there any people associated with this event? Should I put the badge on? Are there any alarms? Are there any notes?
+
+So if you're having -- if your display is getting bogged down, it's a perfect time to consider de-normalization. Add some derived attributes right on the event table that indicate -- does this event have alarms? Does this event have attendees? Does this event have notes? That way you can search, you can load up your event data without having to walk any key paths and be able to provide those visual cues very quickly. Another confusing point in data modeling is entity inheritance. This has nothing to do with class inheritance. It's something that trips up a lot of people.
+
+The right reason to use entity inheritance, the best reason to use entity inheritance, is if you want to be able to fetch a heterogeneous collection of entities. One of the new API features is you can now specify that for a particular fetch you don't want to include subentities.
+
+But I -- I want to tell you to consider inheritance -- entity inheritance carefully when you're designing your model. The reason why -- it has a lot to do with how it works. All of the subentities of the core root entity wind up getting folded into the root entity table.
+
+So you get an aggregation of all of the properties, and not only that you get an aggregation of all of the different entity instances. So your table's wider and longer than it would be if it were broken up into separate entities. This is, again, mindful of performance -- this can be a problem. You want to keep it shallow.
+
+Let's take sort of a quick look at how this gets realized. We've got sort of an example model showing an inheritance of a collection of six entities. And you can see in the table at the bottom all of these entities's properties are written into a single table and you wind up with a lot of fragmented information. If you're only using entity B, you're still paying the cost to have all of those columns unused in your database.
+
+So can't emphasize this enough. Optimize your data model. All of the performance work you want to do with your application is really grounded in coming up with the right model to allow you that flexibility. The great news is if you didn't get it just right the first time you've got a lot of tools in Leopard with the version migration support to change your model and migrate your stores. I encourage you all to go to Miguel and Ron's session at 2 o'clock.
+
+They'll be talking about the tools. And they'll show you how you can map from one scheme into another. In many cases using simple mappings; with key paths, not even using any code, and if there are complicated transformations we've got all the hooks in there for you to be able to make those changes in your own custom subclasses. So now let's look at actually getting the data into your application. Fetching and faulting.
+
+A lot of the new APIs that we've offered in terms of performance tuning allow you to fine-tune how you do your fetching and faulting. There are -- when we talk about records that you're storing in your data store, we're talking about a couple different aspects. There is an object ID, which is a very lightweight reference to an object that contains no property data, no relationship information. And then there's at a slightly more full level we've got the fault. The fault knows about the object ID. A fault is a Managed Object that's an empty shell. It doesn't have its property data yet; it's a placeholder.
+
+So when you ask a fault -- for one of its properties because it looks like a Managed Object, it will automatically go to the database to load up the data for that Managed Object. Something that's happening behind the scenes that tends not to be called out very often, but you saw it with our talk about the Atomic Store API is the snapshot of property data. In the Atomic Store API that was the cache node. And what that is, is that is at the Coordinator level a representation for every record that has been loaded of its state of property values.
+
+So we're going to get back to that in a minute. But first I'd like to show you a quick demo of the headstart example GoFetch. This -- this will give us a chance to look at some of the new APIs and how they can impact fetch performance. So this is the GoFetch example.
+
+And along the left side here you can see we've got a number of different controls to select whether we want Managed Objects, or if we want to fetch Managed Object IDs. Whether we want to include subentities, property types, or return objects as fault. So I'm just going to real quickly go through this. And I'll show you the actual commands, SQL commands being issued to the database for these fetches.
+
+So first off, if we're just fetching Managed Object IDs we can get those back pretty quickly. Five milliseconds. We're not getting our SQL logging, unfortunately. Well, that's too bad. But the timing should still be interesting. So we can do a fetch for Managed Object IDs in about five milliseconds.
+
+Just to take it to the next extreme, if I were to fetch Managed Objects including the property values and run the same fetch, we're looking at 50 -- 53 millisecondsS. So I'm afraid I might be running a little short on time. And without the SQL logging the rest of this demo's kind of hard to do. But I encourage you to download the example, play with it. There's great documentation within the source files, and also just in the interface. There is a lot of discussion of how the -- how these options impact your performance. So let's go back to the slides.
+
+And let's talk about these APIs. So something that isn't present in the GoFetch example but is a really powerful new piece of API on the fetch request is you can now fetch the count of objects that match any fetch. So if you're not actually going to use the objects, if you just need to know how many exist -- whether it's to size a scroller or to put a number up on -- on your interface, you can specify for any fetch request that you want the count. It won't fetch any of the IDs, it won't fetch any of the property values, and it won't fetch any of the records.
+
+Extremely fast, if all you need to know is how many. The next granularity level -- fetching just the IDs. This is a really powerful way to deal with large collections in fetching. So you can fetch the IDs, they're very lightweight, they're thread-safe. And what that means is that if you wanted to do a long-running fetch, something expensive, you can perform that fetch on a second thread. You'll get back the object IDs. The thread's safe, so you can hand those back directly to your main thread, and that context can work with those to fetch in -- to fault in Managed Objects.
+
+Something that's -- isn't necessarily obvious about that is one of the options on the fetch request. Even if you're fetching object IDs, you can specify that you want to fetch the property values. You want to the fetch to include property values. So as I told you before, objects IDs don't have any representation for property values. So why would you want to do that?
+
+Well, the reason why is because it allows you to warm up the snapshot cache. Those cache nods I was talking about before. That actually -- at the Coordinator level represent the property values for every record. So the sort of the most common, frequent pattern for using this is you boot -- you do your fetch on a second thread. You include the property values.
+
+You hand the object IDs over to your main thread. And then as the main thread walks through and faults in those Managed Objects, all of the property values have already been loaded up. So there's no disk I/O required to get at them. Really powerful way to handle performance in that circumstance.
+
+Now, on the other hand, if you're on your main thread and you know you're going to be X -- if you're going to be working with all of the property data immediately. Whether you're exporting to a different file format or you're producing a report that touches all the properties of the records that you're interacting with, you can now specify that you don't want your fetch results managed as faults.
+
+But you want your fetch results to come back as fully populated Managed Objects. So that -- that means if you're going to walk through a huge collection of Managed Objects you don't need to fire faults individually for them, and that saves you on performance in a big way.
+
+Going one step further. If you know you're going need objects related to the core entity that you're fetching on, in the same kind of example whether you're producing a report or exporting to another file format, prefetch your neighbors. Specify some prefetching key pads on your fetch request and all of those objects will be fetched in immediately.
+
+And you won't, again, incur that penalty of doing many round trips as you walk the key path to fetch the values that you need for whatever goal you're trying to achieve. One side note on this is you don't need to worry if your key paths have overlap. We do a good job of figuring out the minimal set and just working that out.
+
+So -- we've seen a lot of great uses of Core Data, we've seen a lot of common mistakes. And this is going to be a tour of a lot of a couple of patterns that we've seen that get people tripped up in performance. And a lot of it comes down to one simple thing, which is making many round trips to the database to fetch data is expensive. It's very costly.
+
+Firing faults individually is the root cause of so many performance problems in Core Data applications. The -- the way I'd like to think of it is consider how much slower a disc is than your CPU or RAM. In the time for run fast disc revolution, about 6 milliseconds, think about how many processes -- how many cycles an 8-core, 3GHz processor can get done.
+
+And you don't want that processor to sit there and wait for disc I/O all the time. So you want to batch things up So one real common pattern is you're importing data into your application. So you're doing a lot of inserts and you're doing a lot of uniquing to find out if the data that you're importing is already present in the database.
+
+The frequent problem is you hit the database repeatedly to find out if an object already exists. Every time you issue a fetch request, every time you execute a fetch request it's going to go out and check the database. So keep a local cache, build up the cache as you do your import, and avoid doing that round trip as much as possible.
+
+The other side of it is while you're doing all of these inserts you don't want to save after every insert, but you don't want to save after 10,000 inserts or 100,000 inserts. Depending -- and these are all kind of rules of thumb. There's no hard and fast numbers on this. But you want to try and batch into manageable chunks and that's really sort of a question of looking at your application data and analyzing performance. Don't try and save a batch that's too big. Don't save after every insert.
+
+Deletions. This is a surprise to a lot of people. Why would deletion -- why would deleting objects get slow? I'm just getting rid of data. The reason why deletions can get bogged down is because of relationship maintenance. If you have relationships from the object you're deleting to other tables, the inverse relationships need to be maintained.
+
+And if you have various delete rules, depending on the delete rule you're using, if you specify a cascading delete rule, deleting a single object could walk -- a significant -- over a significant portion of your graph, fault in and fetch in a lot of objects. How do you deal with this? Prefetching. Take a look at what you're going to delete before you start the delete.
+
+Look at the relationships that are going to be affected. Set up some relationship key paths, prefetching relationship key paths, and do a fetch to get all that data and ready -- warm up the cache before you do it. Again, just as with the inserts, don't save after every delete, and don't try and do batches that are too big.
+
+Searching. You want to keep your searches focused. Predicates that get out of control, crossing a lot of key paths and relationships can get bogged down. They -- they tend not to perform well when they get past a certain size. So what can you do? Order the simpler parts first in your predicate. That's one thing that helps.
+
+And the other thing that you can do is you can break up one large predicate into a number of smaller predicates by taking the results of one search, using those object IDs to feed in to an in predicate -- or as an in-operator in your next predicate to cut down the collection that you're searching against.
+
+Text. Searching against text. Core Data provides incredibly complete, excellent support for Unicode searching, very powerful. But it can sometimes get to be a performance problem if you're dealing with large -- large blocks of text, or if you're doing complicated text searches. For example, Unicode regex is a complicated and expensive operation.
+
+More flexibility, more work. One thing that we've used is -- as I was talking about before with derived attributes, if you take rich text and you flatten it to case normalized diacritic normalized representations you can make great us of indexes. Something I didn't mention before. But now in the modeling tool you can mark any attribute as being an indexed attribute. So for this SQLite store this means it's going to be build up an index and do fast look-ups against those values. But indexes can only be used for some types of searches. So that gets back to the derived values.
+
+And for the truly pathological case where you've got something where you want to do, like, a Google-style search with complicated text rules and that sort of thing, supplement the search technology with something like SearchKit indexes. We've used this as well. One of the benefits there -- well, the way you make that work is you can make reference to your object IDs in the SearchKit indexes.
+
+And let's get to some of the other things that I didn't get a chance to cover in detail. There's some new API in the Managed Object context. When you're working with a couple of different Managed Object context in a single application you can now listen for new notifications.
+
+One is the context will save. This gives you an opportunity to add application behaviors before a save. And the other one is merging context changes after a save. So a common problem that would happen is you have two contexts. One has a set of changes that have been saved.
+
+The other context isn't aware of those changes. And you get inconsistencies. Now, you have your second context or your second thread listening for the notification, and you can integrate changes from the context that's saved. There's also new API for getting permanent object IDs so newly inserted objects in one context can be passed over to another context with permanent IDs. You can't pass objects if they don't have permanent IDs.
+
+And these are some biggies here. Dynamic accessors. These are huge performance win. You can now call on any NS Managed Object or its subclass. The attribute names as direct accessors, rather than using value for key. These are much better performing ways to access your data. And there's also support for dynamic primitive accessors. So if you want to be able to access those primitives, again, don't need to use value for key, or primitive value for key, you can call the primitive accessors directly.
+
+Also, we are huge fans of the new Objective C 2.0 syntax. There's the property syntax we fully support. And Core Data has been optimized for garbage collection. We're also supporting all the new platform initiatives in Core Data. 32-bit, 64-bit, multicore, Intel, PowerPC. Lot of -- a lot of performance tuning has gone into that.
+
+And the last point I'm going touch on is there's a new version of SQLite and Core Data shipping with Leopard. It's been updated to 3.3.17. And one of the best benefits you will see is that it has the same default configuration now that other platforms have been using. So your performance will out of the box be a lot better in saves.
+
+There's some new pragmas for controlling disc synchronization in SQLite. Take a look at the Release Notes for Leopard and Core Data. And for more information I recommend you take a look at sqlite.org, where there's tons of information about what you can do with SQLite. So -- with that I'm going turn it over to Ben. He's going to talk to you about multithreading. Thank you very much.
+
+( Applause )
+
+[Ben Trumbull]
+Thank you, (Inaudible) --
+
+[Ben Trumbull]
+Morning. I am Ben Trumbull, I'm the manager of the Core Data team. And we're going to get into some issues in multithreading. This is a pretty common question these days about using Core Data. And at the end I will wrap up with some tips about threading with Cocoa in general. That turns out to be pretty important to us.
+
+So there's some good motivations to using threads. Responsiveness is probably the key reason to keep the user working with the UI while you go off and do more complicated operation yourself in the background. Or you have some long-running operation. You want to leverage additional cores. This is one of the reasons that I do most of my multithreading is, you know, no point leaving the machine idle while it can be used for something to my ends. I don't really need it to share well with others.
+
+And then improving batch save performance. If you're running a long import operation, you're migrating data from another app and you're consuming a large amount of XML or something like that -- and you're creating a lot of objects and you need to do a lot of saves. That's something you can do pretty well in the background.
+
+But first there's some bad reasons to be using threads. And this is sort of a word of warning here. This is a very simple app that I wrote that just allocates memory. That's all it does. It just mallocs memory. So you can see in the top bar, the green bar, that's if you have four threads on a quad core machine and they're all using the same pool of memory, and they're all contending over a single lock. So here it's more than ten times slower than the same four threads allocating the same amount of memory, with four separate pools and four separate locks.
+
+They're still doing the same locking, but they're not contending over the same lock. So it's something to keep in mind that when you started adding threads you need to have something useful for those threads to do, where they're not going to start impeding the work that other threads you already have are trying to do.
+
+So in terms of Core Data itself and our thread safety, the object IDs are thread safe. They are mutable objects and you can pass them around without worry. And then we really want you to have separate Managed Object context in each of these threads. And so that's going to be the basic pattern we're going to talk about today is different threads are using different context. And when they want, they'll--you pass object IDs over to other threads and they'll pull up those objects themselves. The Managed Objects, they're controlled, they're owned by the same thread that owns their Managed Object context.
+
+So this pattern we're discussing is called thread confinement. You can read about it online or in some references I'll bring up later. And here the Managed Objects are all being used by one thread, and they don't migrate between threads. This is much more manageable for you to debug. If you have an idea of what thread created those Managed Objects you can put a little stamp on it, and they don't move around.
+
+You don't have multiple threads turning a lock over an individual fine-grained objects, but you have an opportunity to add debugging code to the larger granularity interactions where the threads start communicating to each other, where they start passing object IDs or other messages, notifications between each other. And so that you can focus your debugging efforts.
+
+And there's also less locking. As I showed you, if you have a lot of threads locking on the same locks that can get slow. And so locks are resources that you might contend over. Less locking is faster. And here the thread confinement pattern is duplicating a small amount of data, not too much, but a little bit. In order to cut back on extraneous locking.
+
+So if you use this pattern and you have Managed Objects context separate for each thread, then Core Data is automatically going to handle a lot of the locking needs that the framework has so some of our classes implement NS locking and they need to be locked. But if you just create a Managed Object context on one thread and you don't move it to any other threads, and Core Data can handle locking it for you, because it knows which thread created your context and it's not going anywhere.
+
+It will also handle all the locking between the context and the coordinator. So when the context has a fetch request, or the context needs to save, it needs to lock the coordinator to get its operation, so that another Managed Object context on a different (Inaudible) doesn't come in and interrupt that save operation.
+
+And Core Data can handle all that locking for you as long as you have each context confined to a single thread. Now, you're going to want to be able to move information between threads. Otherwise it's a really very simple app and not terribly interesting. So as I keep mentioning you can move the object IDs between threads. And the other context on that separate thread can use the object with ID method to create a local clone of that object.
+
+Now when you do this you can get all the objects that you'vd previously saved, and you can get the updated objects and the deleted objects. Because those objects still exist. But you can't pass inserted objects to another context or to another thread, because those objects haven't been saved yet. So they don't exist outside the scope that their originating context represents.
+
+Now like I said, when you pull these clones of objects into new Managed Objects contexts on separate threads you're duplicating a little data. But you're not duplicating very much data. So you don't have to worry about duplicating all of your image data or all of your string data or what not. The coordinator's providing captions.
+
+So all the contexts using the same cache on that coordinator. And these are basically analogous to the cache nodes that Adam's talked about for the custom Atomic Store. And the SQLite store has something similar. So those -- that data is basically the column data that we fetched from the database.
+
+And that's all going to get shared copy on write between all the Managed Object contexts that use that coordinator. So the Managed Objects themselves are fairly lightweight little wrappers around that, that are provided for you to make changes to, or you to work with, provide you all that Cocoa integration. Now you don't have to lock the coordinator when you're working in the Managed Object context.
+
+But if you start messaging the store coordinator directly you will need to lock it to run other threads, from say, trying to save while you at the same time are trying to add a new store. Or you want to create a new Managed Object ID from a URI. That's a method on the coordinators that take a URI representation and give you back a Managed Object ID.
+
+So you have to lock the coordinator when you interact with it directly. You might also want to lock the coordinator if you have a number of different operations. And you want to have a single scope around them. So you want a little bit less concurrency. Right. So a Managed Object context needs to do a fetch, and a save, and maybe another fetch and a save. Or some other set of operations That you want to appear to all the other threads as a single operation. You can lock the coordinator to basically make the other contexts using that coordinator hold off on their interactions.
+
+Finally, you might want more concurrency. In which case you use multiple coordinators. And here you're making a performance memory tradeoff, where you defeat some of the caching we're trying to do. So each of those coordinators is going to build up its own cache of the records it fetches. But at the same time when a Managed Objects context locks the coordinator to do a fetch it's not impacted by any contexts that are using different coordinators, because they are different locks and they're a whole different -- stacks all the way down to the bottom.
+
+So the only locks you then have are at the file system level. And so if you have an SQLite store, there will be a POSIX file lock, basically is what's going on there. So the different coordinators will contend at that level, but all the computation stuff done in memory. You can get more concurrency out of it.
+
+So there's an example, and in the Developers/Examples folder on background fetching. And this example there's one shared coordinator that's providing caching between two contexts, one in each thread. One's in the main thread and it's bound in the Cocoa UI. So Cocoa bindings basically only wants to interact with the main thread. That's the safest way to work with it.
+
+And so what ends up happening here is the background thread fetches a whole bunch of object IDs and includes the property values. And then passes those object IDs to the main thread, which then tells Cocoa bindings, hey, there are a whole bunch of new objects I would like you to register with the URI controller. And here's an example of threading for responsiveness. It's a pretty simple app, and it defers loading all of the words in this dictionary database until the user's done. So it pops up the UI quickly and starts fetching in the separate words individually by letter.
+
+So validating for correctness, Core Data does have this threading debug default. There is a debug image of Core Data, and it will log multithreading assertions So if you use the debug image you will get these assertions. Unfortunately it's not quite ready from developer.apple.com yet, but it will be available for Leopard.
+
+And this is a way where you can run your app in the debugger and you'll get NS assertions whenever you violate one of the rules that Core Data has about multithreading, about what things you need to be locking or using the thread confinement pattern that I've talked about. So the thread confinement pattern not only makes it easier for you to debug, but it also makes it easy for us to add a little bit of extra auditing code to track how you're using these objects.
+
+So here's some basic Cocoa threading tips. And just touching upon a bunch of stuff that's relevant to how you might be using multiple threads with Core Data. First is Undo on background threads. The default Undo manager settings are not compatible with background threads. They only work on the main thread.
+
+So most of the time when you're working with a background thread and Managed Object contexts in the background, typically you just disable the Undo management on that context. If you do want to use Undo on a background thread, you're going to need to turn groupsByEvent off, and manage the under grouping yourself using the foundation API. It's not hard, but it's just a little bit extra work there.
+
+And finally, if you're creating NS threads, all NS threads are detached and what this means is that they're optional. So the application doesn't actually have to finish the work they represent in order to quit. So the system will let the app quit even though those threads are busy doing something. So if you need the application to wait for one of the detached threads, one of your NS threads, then you're going to have to add some manual synchronization to make sure the app doesn't quit while you're still in the midst of an important operation.
+
+An important operation might be saving the user's data. You might decide to save something in the background, or you might be importing something in the background -- anything -- you might be writing to disk in the background. And if you're going that you really need to add extra code to make sure your app doesn't quit in the middle of the thread writing out this data. Otherwise you risk losing that data. The SQLite database will just roll the transaction back. But some of the other data files, right, an XML file, if you get halfway through writing it -- that's going to be really bad.
+
+Now being a detached thread isn't all bad. There are a bunch of things you could be doing in the background where you don't actually care if the app quits. In fact, it might even be good for the app to quit. Say you're in the midst of a large clean-up operation.
+
+You're freeing up a lot of in-memory resources. Well, if the process quits -- well, you want the background thread to quit. You don't want it to finish because you're releasing the same resources that the kernel would as soon as your process terminates. You might also have speculative operations you could be doing in the background.
+
+Or you could be doing increments of batch operations. If you're doing some kind of batch import that I mentioned, right -- you could be doing it in batches. And you might decide that it's a better UI experience to just recompute the last batch. Just kind of throw it away. And the next time the app starts up, pick up where you left off.
+
+So in Leopard, the Cocoa team has provided new API, NSOperationQueue. I'm not going to talk too, too much about this. But I just want to make sure you're aware of it, because it does offer some really nice behaviors that are in contrast to the detached NS thread behavior. This is a convenient Cocoa API for managing tasks.
+
+And one of the advantages it has is it allows you to specify dependencies between these tasks very easily, which is something that threads don't do. Right? I actually like working with P threads, but coordinating between these threads is a -- it's really tedious. So there's a very convenient Cocoa API on this. And I recommend you check that out.
+
+There's also API to wait for the queue to finish all these operations. I keep mentioning you need to add manual synchronization to prevent the app from quitting while something's happening in the background. Well, the NSOperationQueue has a method to just wait for everything to finish and just be done. And it also provides ways to suspend and cancel events. So your operations could check back with their queue and realize, uh-uh, the application's trying to quit. Maybe I should cancel myself.
+
+One of the things that, like I said, I really like the way it allows you specify dependencies between these background tasks. And it's really tedious to write that code myself. So to give you an example of what this is like, I've provided in a single slide a fully multithreaded merged sort implementation. So this is the kind of thing where basically -- it's a little busy, but it's pretty simple. So basically the NSOperation is allowing you to add these operations to the queue. You specify which operations depend on which other operations to finish.
+
+And then you just wait for the queue to be done executing. So there's a sorting operation, which is a sub class of NSOperation. And actually in my code all it did was call the queue sort function that's available in standard (Inaudible) so that's really simple. And then the merge operation is another subclass. It merges two continuous ranges together.
+
+I experimented with a couple different things and finally just asked Google to give me an answer. So that was actually pretty simple to write. And then these dependencies they're sort of towards the bottom. Let you specify that the merge operations need to wait for the sorting operations to finish, and which ones to wait.
+
+And then the queue processes those. And then you can add a final one that merges the two halves together into a single whole. Add that, and then you're done. So this is a very nice way of specifying -- you have certain correspondences between threads going on in the background. And it's pretty straight forward to organize entire clusters of workers together with the NSOperationQueue API.
+
+There's also some new API on the NSProcessInfo. So you can get the active processor count, physical memory. And then there's the sysctlbyname() function that's also available at the lower level to query about what kind of machine are you running on, what kind of resources are available to you. Some basic stuff.
+
+And finally, there's nothing quite like having a great reference. And I keep looking for them. There are a lot of API references about threading. It's pretty easy to get information about P threads or other threading architectures. So I realized the first one is about Java. That said, the Java Concurrency in Practice book is the best nuts-and-bolts engineering book that I've actually read about multithreading. So this book is actually more about how do I build objects that are working in a multithreaded environment. And it's really -- it's a great book that talks about how do I build up things that can be cancelled safely.
+
+Why are most UIs single threaded, what's the reasoning behind that. How do I build up notification patterns. And it's really about object-oriented software programming, engineering, in a multithreaded environment. So that's actually quite a stark difference from a lot of multithreading books. And I recommend it highly. It's only about 30 bucks.
+
+The second book is sort of in contrast to that. It's more academic text, it's not very long. And it's again, also about $30. And it's more about design aspects of large multithreading systems. So the authors are trying to do sort of a similar book compared to, like, the design patterns Gang of Four book. And finally, for Mac OS X specific information, there's the multithreading programming topics offered by ADC downloadable PDF. And it provides a great review of a lot of different multithreading architectures available as Mac OS X specific technologies.
+
+Finally, Core Data is trying -- is going to be trying to use some of those extra cores for you on your behalf automatically. Whenever we can infer that there's enough work to make that worth doing. So if you have a large fetch operation, you're fetching thousands of objects, we're going to do that. We do some extra work when you're adding stores, some of the versioning stuff we can do in the background.
+
+If you're tearing down large stacks, again, we try to leverage the fact that the attach threads are optional. So if you're tearing down a stack and opening up a new one, that happens in the background. But if you're tearing down the stack and you quit the app it -- it's basically no op.
+
+And the background fetching, if you have a large enough fetch request, we're going to do this for you. So you mostly want to focus on responsiveness in the UI. And you don't need to do that for out of -- sort of absolute performance. But the out-of-box behavior will scale quite well.
+
+So I'm going give you a quick overview of some of the tools on Leopard to explore the performance in a Core Data example with the GoFetch. Sorry. First I'm going take a look at this slide. So here's a basic example of Core Data is working. And in the middle we're showing you that being able to use those extra cores is quite an advantage over just doing SQLite work yourself by hand.
+
+And as a reference, you can see that there is a malloc time to malloc the amount of memory we're using, and vm_allocate so you can also see that memory utilization is going to be a bottleneck there. The memory bus is something of a limiting factor. So Core Data gets down to about the same order of magnitude as allocating the memory itself.
+
+And on -- on a mid range quad core machine we're going to be fetching 800,000 objects per second. You can save about 20,000. And if you're fetching just the object IDs, you just want to identify the objects that match a particular query, you're looking at about 3 million object IDs per second. You can pull back.
+
+So like I mentioned, that memory bus is a real limiting factor. Particularly if you have an 8-way box. The memory bus is not even running at a gigahertz. So you want to keep as much data as possible on disk, and you want to be focused on your working set.
+
+So even if you cache the memory, cache the data in memory, you'll still have an issue if you try to have a lot of threads going at the same time. They're contending over that memory bus. So you want to focus on specific working sets at a time, and you want to be kind to those UI widgets, and not overload them. Now we're going to take a look.
+
+So one of the things we have here is the new Xray app, which offers a very nice collection of instruments in sort of a GarageBand style. And Core Data has some static probes built into the framework to, as you might have guessed, monitor fetching, faulting -- and when a fault actually has to go to disk because this isn't cached in memory. And then we have a default I/O tool. So if we launch an executable -- and we do a fetch. We come back. Change the scale here.
+
+So we can see we did some I/O here, and take a look, we're basically loading up some of the frameworks towards the beginning. Here we have -- bring up the detailed view -- so we have a fetch. And in here we can see we fetched against the person entity.
+
+And at the end we returned 9611 results. In a duration about 0.4 seconds. And we had a stack trace for us here. And if we bump up the scale a little bit more we can see that a bunch of work started happening after the fetch where Managed Objects got instantiated and we can even see which objects got instantiated. If it will cooperate with me.
+
+So we basically started faulting in both people and icons to get the view that we showed you earlier. Just fetching and the little icon that one associated with it. And in the cache missing, we can see that the fetch request only fetched the people, and we didn't fetch any of the icons.
+
+So the table view then, here in the stack trace, comes down and starts asking for the table data for that icon column. And then asks the Managed Objects that are all the people. And then the people come through. Value for key. You can see that there's some faulting. And then we have this dtrace method here.
+
+That registers a static probe. And you can see then we go back to disk with the read-write tool. And there actually is some logging, apparently, as we can see from the stack trace. And there's some faulting going on here, and you can see that we're reading from the database. So you can add more tools.
+
+Like the ObjectAlloc tool. And -- and basically you can start seeing what kind of objects get allocated and where those allocations happen. So you can see some of the places where these get fetched. Stuff like this. So this is an Xray tool there's a whole session on this. And I just wanted to give you an overview -- that you can use the custom instruments for. And if you give me one second, I'm afraid that it took a little bit longer to get the demo set up in between sessions than we had hoped.
+
+So -- there we go. So we have two short examples. And one of the things that the GoFetch example does is, it's fetching all these people, and it issues a fetch request which captures the data -- but I wanted to show you something in Shark. And so I wrote a little tool that basically asked for each of those objects one by one. So there's a lot of faulting going on in here.
+
+And one of the things that is nice to notice here in Shark is that there's both a time sample and there's a time sample with all thread states. And if we bring up -- the Mini Config Editor. You can see there's a pop up. When you take Shark samples and it says all thread states option.
+
+And what that's doing is it's going to record events even had the thread is blocked on I/O, it's waiting on a lock, or some other reason. And this regular time sample is only charging when the CPU is actually in use. So we can see there's some differences here when we do this fetch and we fault in all these objects individually.
+
+And we can see in all thread states we spend an awful lot of time in this system called here, Fcntl, which turns out to actually be file locking. And here in the regular time sample, it's not up towards the top. So if we look in the tree view -- don't click too much -- we see that in main, in value for key, which I was using to trip all those faults, we spent about 1.6 seconds in the regular time sample in Shark. But in all thread states example, it recorded 2.6 seconds.
+
+And so the difference is how much time you were waiting on I/O. So I just want to keep that in mind as you work with the performance tools that you have a lot of different options with both the new Xray tool in Leopard, as well as in Shark, that you can record both the CPU time and where you're spending time in your application code. But also where you're blocked on the system, waiting for certain resources to become available. If we can cut back to slides.
+
+Great. So just a recap. The user default for SQL debugging is available now. You can use that on both Tiger and Leopard. And that is just logging the SQL. You can also use Xray. And we have instruments to find faulting. There are a couple of other instruments for saving and for faulting too many relationships that I didn't show you -- that are available.
+
+And you can also find disk I/O. And you can use that garage venue to correlate certain events. Both with the stack traces, but also when an event like, say, when a fault goes off and trips file I/O, you can see that, and you can correlate those two event last together. Which is something that's quite difficult to do in Shark.
+
+So these two tools are providing you different views of the performance data. And Shark is providing you a sampling view. So it doesn't tell you how many events occurred, but it provides a very nice aggregation of all the information about where you're spending time or where your threads are blocked and waiting.
+
+And now we're going to wrap up. More information, there's a lot of documentation available for us. There's a Core Data Programming Guide which keeps getting expanded with new sections as people file requests for enhancements. There's an Atomic Store Programming Guide for Leopard, NSPersistentDocuments, Low-level tutorials, and all that good stuff.
+
+Some related sessions, so after lunch at 2 p.m. in this room there will be an entire session devoted to our new feature on schema versioning and migration that Miguel and Ron will be doing. And then later on there will be Getting Started with Cocoa Bindings session, for those of you who want to brush up on Cocoa bindings and working with Interface Builder that Malcolm Crawford will be giving.
+
+And finally, there will be the Core Data Lab tomorrow at 3:30 in the Mac OS X Lab where you're welcome to bring either problems or ask us questions. The whole team will be there. And we look forward to meeting with you. And Matt Formica is the Cocoa evangelist, Cocoa Dev mailing lists -- the usual suspects.

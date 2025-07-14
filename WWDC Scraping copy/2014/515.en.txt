@@ -1,0 +1,269 @@
+---
+Title:  Developing Core Image Filters for iOS
+Year:   2014
+Web:    https://nonstrict.eu/wwdcindex/wwdc2014/515/
+
+[!] This transcript has potential transcription errors.
+---
+
+Good afternoon, everyone. Name is Alexandre Naaman and I'm here today to talk to you about developing custom Core Image kernels and filters on iOS. So let's start with a little bit of history. We've been able to write custom kernels on Mac OS X since 2005 with the advent of Core Image. And now, with iOS 8, we're going to show you how you can do that on our embedded devices.
+
+So the main motivation, why would you want to write custom kernels? Well, you can - there are - although we provide many, many built-in kernels and filters, there are situations where you can't use an existing set of filters or some combination of to create the effect that you're trying to achieve.
+
+So if you were trying to do something such a hot pixels effect or a vignette effect, which is an example we're going to go into complete detail a little bit later on, that's something that you wouldn't have been able to do without writing a custom kernel. Or if you wanted to create some sort of interesting distortion, such as the Droste deformation that we showed how to do in our talk two years ago, that also wouldn't have been possible. But now, on iOS 8, with custom kernels, it is.
+
+So let's talk a little bit about our agenda. First off, we're going to start about - we're going to talk about the - some core concepts involved in image processing and how to use Core Image. We're then going to go through a whole series of examples on how to write custom kernels of your own, and that's where we're going to spend the majority of our time today. And then, at the very end, we're going to talk about some platform differences in between OS X and iOS and what you need to keep in mind when you're writing kernels for either target.
+
+So key concepts. And this is going to sound familiar to you if you were here for the earlier talk. I'm just going to go over this really quickly and explain how Core Image works. So if you had, for example, an input image, the original image on the left, and you wanted to apply a sepia tone filter, you could easily do that. But Core Image lets you apply much more complicated effects and create arbitrary filter graphs and not just necessarily daisy chaining images up in this manner, but also creating more complicated graphs. And these are all lightweight objects that eventually get combined together.
+
+And each one of these filters can be represented by some number of kernels. And internally, what Core Image does is it will combine these all to - into one program, such that we minimize the number of intermediate buffers that you might have and maximize performance, which is our goal.
+
+So let's talk about the classes that we're going to be dealing with today. And again, if you were here earlier, you've got a brief glimpse of this already. The first class we're going to deal with is CIKernel, which is what we're going to spend most of our time working on today.
+
+And it represents the object that encapsulates the kernel that you'll be writing to drive - to interact with your image and is written in our Core Image kernel language, which is based on GLSL. The next object is a CIFilter, which you use to drive the parameters of the kernel. And it has any number of inputs, and they can be images, NSNumbers, or CIVectors, and one output, which is a new output image.
+
+We then have CIImage, which is different from other images you may have seen with other APIs because it's an immutable object and only represents a recipe the image. So it doesn't actually contain any real data. It's just a recipe for how to produce the final result and it's also based on Cartesian coordinates, lower left corner, and may have infinite bounds. So it's not necessarily a bounded rect. It can be infinite as well.
+
+The final object that we're going to be dealing with is a CIContext and a CIContext is the object that you use to render all of your images, your CIImages, whether that be to CGImage Ref or to an EAGL context or whatever other destination you desire. So let's take a look at how you might do this if you were dealing with standard C code and dealing with just, you know, trying to produce some new output image given some bucket of bytes.
+
+So you would typically write some for loop over all the rows in an image and then iterate over all the columns. And then, for each input pixel, input buffer at [i][j] produce some - you know, run your algorithm here, indicated by processPixel, and create some new output value, and put that into your result.
+
+What we like to do inside of Core Image is abstract all of that for loop away for you and have it such that all you need to do is concentrate on your core algorithm, in this case, processPixel, and we will take care of running that in a parallel fashion for you on the GPU, and running it as oftenly as possible.
+
+Now, in order to use a CIKernel, you need to subclass from CIFilter. And CIFilter is going to tell us, given some number of, let's say, zero or more input images and some parameters, how to apply that kernel onto your input image and produce one new output image. So let's take a look at the workflow in iOS.
+
+And if you've written kernels - I'm sorry. If you've written filters on iOS or on desktop in the past, this is going to sound very similar to you, but we've got some new things. So first things first, create an input image with CIInputImage. Then, we subclass CIFilter. We're going to get our output image eventually, once we're done running the CIFilter. And then, when we have our output image, we can display it, as I said earlier, using either CGImage or - rendering to CGImage or an EAGL context.
+
+What's new and what we're going to talk about today is how you create those kernels and how you apply the parameters that you have from your filter to the kernel to get your final output. So let's talk about what exists currently in Core Image. Right now, in iOS 8, we have 115 built-in filters.
+
+Take a little closer detail - closer look at this. We can see that they're actually - from this - set of 115, there are 78, which are actually just purely modifying the color of the images. There are another 27, which are pure geometry distortions. And then, there are a final seven that are convolutions, which brings us to our next point, what is the anatomy of a CIKernel on iOS?
+
+So in iOS and on OS X, we now have a CIKernel class, but on iOS, we now have two new classes that allow for greater performance and are specializations of CIKernel and allow us to do higher performance optimizations than we do currently elsewhere. So we have CIColorKernel and CIWarpKernel and we're going to talk about three of those today in order of difficulty.
+
+So let's look a little deeper into the interface for what a CIKernel looks like, and you can see there are really only two methods that we care about. The first one is to create a kernel, you call kernelWithString. And then, to create a new CIImage after having running your kernel, you call applyWithExtent and a few other parameters. And again, it's important to remember that calling apply doesn't actually render anything. It's just a recipe so you can daisy chain these up, create whatever graph you want, and no work is performed until the last moment when you actually need those pixels.
+
+So what is CIKernel's language? Well, it's based on GLSL and it has extensions for imaging. So to deal with tiling and all kinds of other optimizations we've put in. It also - all the inputs and outputs are floats. So fairly easy to use. Let's now take a look at what is involved in writing a CIColorKernel.
+
+So as I was saying, all the inputs for CIColorKernel are going to be float data and that doesn't - it - regardless of what your input data is, whether it's RGBA8 or 16-bit ends or float data, it will come into the kernel as float data, as a vec4, and the output from every CIFilter is also going to be a vec4.
+
+So let's take a look at the simplest possible example we could come up with, which actually does nothing. So this is a no op. It just takes an input. In this case, it's going to be an underscore underscore sample, and you can see we just returned - which is effectively just a vec4, and we just return s.rgba. So if we were to apply this filter to the input image on the left, we would get the exact same image on the output.
+
+We can make things a little more interesting and just swap the red and green channels. So this is a very simple process. We just take our red channel and put it in the location of the - where the green was and take the green channel and put in the location where the red was.
+
+And if we were to apply this kernel to our input image, we get a new output image, and you can clearly see that the macaroon in the foreground has changed colors and same thing for the green. We can make things a little more interesting and so, what it looks like when you actually want to have an input parameter that controls how much of this effect gets applied. So here we have a new variable called amount that's applied - that's used in our kernel.
+
+And we just use a mix function to do linear interpolation in between the original unmodified pixel value, our final destination value as if it was at value 1.0, and then the input value amount that is going to be something that goes between 0 and 1. And if we were to apply this kernel and vary the value between 0 and 1 interactively, you would get very quickly a, you know, an animated blend in between these two extreme images. And that's pretty much all you need to do to write a color kernel on iOS.
+
+The next thing we need to do, once we've done our work in kernel land, running the CIKernel, is we need to subclass CIFilter in order to drive that kernel. So in this case, we derive from CIFilter. We've created a new filter called SwapRedGreenFilter. It has two properties, the first property being the input image that we're going to be working on and the second property is the input amount. So how much of that along (0,1) do we want to go?
+
+So let's take a look at the methods that we're going to be implementing today. First things first, we're going to be using this throughout our presentation today. We're going to have the convenience function for creating a kernel such that we don't recreate these kernels at every frame, because we don't want to do that.
+
+We're going to have a customAttributes method, which is oftentimes used to drive UI elements, such as what we saw in Core Image Funhouse earlier, in the previous talk. And the method that you absolutely must implement, which is outputImage, and that's where you take all your input parameters and you drive your kernel to produce an output image.
+
+So let's take a look at the actual implementation. As you can see, creating a CIColorKernel is just done by calling CIColorKernel kernelWithString:, and passing along our kernel code. The next thing we need to do is call self myKernel, and then we apply that and we pass in two arguments, the input image, which maps to the first parameter of our kernel, and an input amount, which maps to our second parameter of our kernel. And that is literally all we need to do to create a custom color kernel on iOS.
+
+So now, let's look at a slightly more complicated example, where we, in addition to modifying colors, we also use position to determine how much of an effect should be applied. So let's pretend we wanted to do a vignette effect and take the image on the left and produce a new image on the right that looked like it had been vignetted. So in this case, you can see that the - we want the pixels at the center of the image to remain unmodified and as we go further out towards the corners of the image, we want those to be as dark as possible.
+
+So we can think of those as being, like, values between 1 and 0 and we're going to be linearly interpolating along that vector. So if we were to look at what an image looked like if we were to create that 0 to 1 mapping for the entire image, we were to get this gray image in the middle here.
+
+And then, if we take our image on the left and we multiple the red, green, blue values by that new computed value, we would get our vignetted effect. And it's really that simple. So now, let's take a look at how we use position information inside of a kernel. So this is the signature for our kernel and we're going to go over through each step about how we would create a simple color kernel that depends on position.
+
+So as I mentioned earlier, CIImages may or may not be - have a (0,0) origin. In this case, you can see that the image is not at the origin, and what we need to do is find out where the center of the image is because every pixel that's going to get darkened is with respect to the center. So we need to know how far away we are.
+
+The next thing we can do is we can take the size of the image and just divide that in two, and we have a vector that takes us from the lower left corner of the image to the center. And then, if we add these two vectors together, we have a new vector called center offset, which takes us from the origin of the image to the center of our image.
+
+We then are going to compute one more value, which we're going to be passing into our kernel, which is the extent of the image divided by two, and that's going to be the longest length of any point in our image, and we're going to be dividing values by that such that we can determine how much of the effect needs to be applied.
+
+So as I was saying earlier, we have many extensions inside of Core Image to deal with imaging. One of them is called destCoord and this is going to tell you which current pixel you're trying to render in global space. So what we need to do is figure out how far away from the center is every single destCoord that's going to get evaluated. And this function will get called on every single fragment you're trying to render in the image. So you can see here, it's a simple matter of just subtracting one vector from the other. We just take destCoord minus centerOffset and we get a new vector called vecFromCenter.
+
+So inside the kernel, this is what it looks like. We're then going to get the length of that vector, called distance in this case. We compute a darkening amount by doing distance divided by radius, which, like, half our diagonal of the original rectangle. One minus that is going to give us our darkening amount.
+
+And then, finally, we call - we return a vec4 that takes our input sample, s, multiplies the RGB value by that darkening amount, and maintains alpha as is. And we have the vignetting effect. So now, let's take a look at what we need to do in Objective-C land.
+
+First things first, the dod, which stands for domain of definition, and we're going to talk in more detail what that means in a bit, but this is how much - what is the extent of the output image going to be? And in this case, it's - our output image is the same size as our input image.
+
+So that's constant. We're then going to compute our radius and then create a vec2, which takes us to the center of the image. And then, all we need to do is call self myKernel apply WithExtent dod and then pass in an array of arguments, which, again, you can see the input image matches the first parameter of our kernel, centerOffset matches the second parameter and radius matches the third parameter. So that's how we pass parameters from Objective-C land into our kernel language lan. So let's talk a little bit more about domain of definition.
+
+Oftentimes, domain of definition is equal to the input image size. But there are situations when that's not going to be the case. So if, for example, we have two input images and we were doing a sourceOver, you can image that if either one of these images didn't have a (0,0) origin, the output image that you would want to create would be larger. And so, you would want to take the union of those two and that's what's all you need to think of. What are the non-zero pixels that your kernel is going to be producing by taking a given set of input images?
+
+And that is what a domain of definition is. And as a parameter, you have to always specify. And that's really all you need to know about how to write color kernels on iOS. So now, let's talk about warp kernels, which is our second subclass of CIKernel and let's you do geometry modifications to an image.
+
+So in addition to specifying DOD, you also need to specify an ROI, and we're going to explain what that is in a minute. But let's take a look at the workflow. The workflow is basically that you get an input position and you're asked to produce a new output position. And those are both going to be vec2s.
+
+So let's, once again, look at the simplest example, which is a kernel that does nothing and just returns destCoord. If we were to apply that kernel to our input image, no change. And so, if we were to look at a random pixel in our image, what we always need to think about is, in our output image, where does that pixel come from in our input image? And that is the equation that we need to come up. In this case, you can see that it's just identity. There's no change, which is why we can just return destCoord.
+
+Let's take a slightly more interesting example, where, instead of just returning destCoord, we're going to flip the image around the center of it. In this case, it should be fairly clear that if we look at a pixel near the shoulder of this woman on the right and the output image, the - where we need to read from in the input image is not the same location.
+
+Instead, we're going to be reading from a different location. The y-value won't be changing, but the x-value is different. So destCoord.y is fine, destCoord.x needs to change. How do we do that? Well, we have an x value, destCoord.x. We know what the width of the image is. We can pass that in as a parameter to our kernel.
+
+And using that, we can do imageWidth minus x and that gives us the location in our original input image from where we want to read. And if we do that, you can see that the kernel above, mirrorX, that's all we need to apply. We just take destCoord, imageWidth minus x for our x coordinate, and return the same value in y and we get a mirroring effect.
+
+So let's take a look at what we need to do in Objective-C. So now, instead of creating a color kernel, we create a CIWarpKernel. We pass along the source code we had earlier and then we call apply. And now, apply you'll see has one additional parameter we need to pass, which is an ROI callback. And I'm going to - the next thing we're going to do is talk about what is an ROI callback and why do we need to do that for warp kernels and why it's important.
+
+So ROI stands for region of interest. The basic idea is that internally, Core Image is going to tile your image and perform smaller renders, such that we can deal with larger images and do things - optimally on the GPU. Now, as I'm sure you can imagine, what we need to do when we're producing a rectangle, let's say rectangle 5 here, is determine where the data in the original input image comes from, such that we can load that. And we can't figure that out on our own and you need to help us to provide that information for us. And you do that by providing an ROI callback, which is the additional parameter that you need to specify for a warp kernel.
+
+So in this case, it should be fairly obvious if we take our mirrored kernel that, if we look at the rectangle on the output image and the rectangle on the input image, that the - we overlay our coordinate system over these once again, we can see that the width of the rectangle isn't changing. The height of the rectangle isn't changing.
+
+The origin and y of the rectangle isn't changing. But we do have a new origin. So all we need to do, given an output rectangle 5 on the right, we need to figure out where the one on the left and the input image comes from, is compute a new rectangle, a new origin, and that's simply equal to the image width plus - sorry, minus the origin and the width of the rectangle that we're currently trying to render. And that is basically all we need to do for our ROI function.
+
+So now, let's take a look at a little more detail of our mirror kernel. Now, it - in this case, we're going to start off by doing a check that I mentioned earlier. We - that CIImages may be of infinite extent. And in order to keep the kernel a little simple, we're - we decided to just show you what it looks like if you are dealing with flipping around the center of the image. In this case, it doesn't deal with images that have infinite extent, so we're just going to return nil. This wouldn't be a difficult modification to make, but too long for doing on a slide.
+
+So first things first, inside of our output image method for the mirror kernel, we're going to make sure we're not dealing with an image of infinite extent. We're then going to get a few parameters that we're going to be reusing. So first things first, we're going to create and AffineTransform that moves our image to the origin and then applies that translation onto the image to create a new output image.
+
+We then apply our mirror kernel and once we're done, we create a new translation that moves it back to where it was. In our case, where we're looking at the previous slide, there was no actual translation, but if the image wasn't as (0,0) we would have had to do that. And it's oftentimes easier to think of a kernel in terms of how would this be either when its image is centered or if it was at (0,0) and then do the work about moving the image in Object-C world than it is to do in the kernel.
+
+So let's take a look at a slightly more complicated kernel. So let's pretend you had an input image or some input video and the size of this image was 1024x768, but what you really wanted was an image that was wider and was of - in the width of 1280.
+
+So we can do that with an anamorphic stretch and we're going to do that by maintaining the center of the image and just stretching it out further as you get away - further away from the center. I should be fairly clear that, based on this vector field, that the y-values for this kernel aren't going to change as well. We're only going to be modifying values in X.
+
+So we can think about this problem purely in terms of x-values. So let's take a look at a little bit of math. It helps oftentimes to have invertible functions and let's take a look at how we're going to model this problem in our head. So let's pretend we have an input value, x, and some output value, f(x).
+
+If we weren't - and we're going to use these with respect to the center of the image. All this math is going to be with respect to the center image. So it's going to go from minus width/2 to width/2. If we were not to modify the scale of this image, so if we were taking an input image of size, you know, 1024x768 and producing 1024x768, we would just have identity.
+
+So a slope of 1, some input value xi is going to produce a new - the same value on the y-axis, f(xi) is equal to xi. But what we want instead is that as we get further away from the center of the image, we want our points to be moved more. And we can do that by creating a curve like this, which maintains a slope of 1 through the center of the image.
+
+And the equation for this is just x over 1 minus absolute value of x/k, and we'll talk about that k constant in a moment. And this is the same equation that we're going to use to compute the DOD, or domain of definition, that we spoke about earlier. So now, if we take that equation, we put a source value of x into it, we get new destination value of X, which shows how far away we moved.
+
+In this case, the equation is really handy because it's very easy to invert. So if we were to isolate the value of x in the previous equation from sourceToDest(x), we would get a new equation called destToSource(x), which would just be 1 over - sorry, x/1 plus absolute value of x/k. And this is the function that we're going to be using internally in our kernel and our ROI math.
+
+Because, as I said earlier, you always have to think in terms of where does this pixel come from in the input? So how do we compute k? It's a relatively simple matter. We just do desiredWidth, so in this case 1280, divided by inputWidth, 1024. We get some scale value. The k value is just equal to inputWidth/1 minus 1/scale. And then, if we were to plug these values into our equations, we would see that sourceToDest of 1024 would gives us 1280 and to destToSource of 1280 would gives us 1024. So all the math works out.
+
+Now, what does a kernel look like? It's relatively simply. We get to reuse our equation that we talked about earlier. First things first, we're going to translate it such that we're working with respect to the center. We then apply our equation and then translate it back. And that's all we need to do to create to an anamorphic stretch.
+
+But we do have to specify an ROI function. So let's talk about what an ROI function might look like for this kernel. So if we have an input rectangle r, we're going to be asked to produce some input, rectangle r'. So for a given rectangle we're trying to render, where does the rectangle in the input image come from?
+
+Now, if you didn't have an invertible function, you could always return something larger, but that might hurt you if you were trying to deal with very large images. So it's helpful to try to get this to be as optimal as possible. In this case, we have easily invertible functions, so we're going to be able to compute this exactly.
+
+So let's take a look at the left - and again, nothing changes in Y. So all we need to worry about is what's happening along the x-axis. So we have our left point, which is equal to r.origin.x from our original input - output rectangle, and we want to find out where our r' is. We just need to put it through our equation for destToSource and we get a new left point prime.
+
+And then, if we look at the point at the other end of our input rectangle, our - so - which is equal to r.origin.x plus the width of the rectangle we're currently trying to render, we can put that through our same equation and get a new right point prime.
+
+Should be fairly obvious. We have all the information we need now to produce the rectangle for our ROI function and it's just going to be computed by calculating a new width, which is equal to right point prime minus left point prime, and then we just return a new rectangle, which has the left point prime as its origin, the same origin in y that we had for the input, a new width, and the same height. And that's how you would provide your ROI function for this kernel.
+
+So let's take a look at how we get to reuse our code once again from our kernel. We have our equation and if you look at the code here, now we're back in Objective-C land and we got to reuse the exact same math, just written in C instead of CIKernel language.
+
+We can create a function that just does the equivalent of what we've shown in the previous slide in pseudo-code, and returns a new rectangle, given three input parameters, input rectangle r, a float center, and a float value k, which is our constant in the equation. The domain of definition, similarly can reuse the same math that we talked about earlier. And instead of using as a denominator 1 plus absolute value of x/k, we use 1-x/k, but it's exactly the same otherwise.
+
+And we can take that same pseudo-code and apply it to any given input rectangle r to figure out what the output rectangle r' would be that we were producing, given a certain scale and the center. So now, let's take a look at the outputImage method, which is what we used to drive our kernel.
+
+We need to compute three constants that we're going to pass into our kernel, and it's oftentimes good to compute whatever - as much as we can outside of the kernel if it's a constant and isn't changing on a per fragment basis. So in this case, we have our - a value k that we can compute in Objective-C land that gets computed just once, which is great, and then we're going to compute the center, which also we can compute outside of the kernel, and then, finally, the DOD, which is what are the output pixels that we're going to be actually rendering?
+
+And then, all we need to do is call applyWithExtent on the kernel that we created given the DOD, and now we have an ROI callback, which is a block callback, that has three parameters that we pass in rect, center and k. Rect is given to us. And in the case of a warp kernel, index is always going to be equal to 0 because there's only one image.
+
+We'll talk later about other examples about how this can get a little more complicated. And then, finally, we pass our two parameters to our kernel, center and k, and that's all we need to do. So earlier, I alluded to one more function that's useful for dealing with UI elements, and that is the customAttributes method.
+
+The customAttributes method lets you return a dictionary and a whole bunch of keys, such as what is this filter going to - what's its display name, what kind of categories does it apply to? So for example, this is a distortion effect. It would apply equally well on video or still images, et cetera, et cetera.
+
+And then, for each input parameter, you can talk about what are its limits, and this will help us automatically put up UI for your elements. So if you were using this in the context of something like CI Funhouse, it would be very easy to just interact with your kernel.
+
+So that's all I have to say so far about color kernels and warp kernels. Let's do a brief overview. So in the case of color kernels we have zero or n input images. The input type is going to be an -- sample which is effectively just a vec4. The output type is going to be a vec4. You do have to specify a domain of definition or DOD. And you do not have to specify a region of interest function.
+
+In the case of a warp kernel there's only ever one image that you'll be modifying. You can get to that location that you're currently trying to render by calling the function destCoord which is going to give you a vec2. The output image is basically just going to be a vec2 location once again.
+
+You do have to specify a DOD and a region of interest function. The next thing we're going to talk about is the more general-purpose kernels which are just CIKernels, and they have the properties listed below. And on that note I'm going to hand it off to Tony who's going to explain that in a lot more detail. Thank you.
+
+[ Applause ]
+
+All right, thank you, Alex. Good afternoon, everyone. My name is Tony, and what I'm going to talk about now is the third and final type of kernels called general kernels. So here - here again are the three types of kernels we support in iOS, and what we've seen so far are the first two, color and warp, which allow you to implement the majority of filters with as little code as possible. And now the third type called general kernels basically completes the set by allowing you to implement any kind of filter.
+
+So when would you need to write a general kernel? Well, it's simply whenever you cannot express your kernel as either a color or a warp. One scenario could be that your kernel needs multiple samples of your input image, so for example, any type of blur or convolution filter would need that kernel. And a second - a second scenario would be that your kernel contains a dependent texture read.
+
+And by that, what I mean is, you have to sample from image A in order to determine where to sample from image B. And in a moment we'll take a look at a couple of examples that actually illustrate these two use cases. But first let's just go over some basic principles behind general kernels.
+
+If you recall this diagram earlier for color kernels, this shows that you can have one or more input image - images to your kernel along with an output image. But the key difference here is that instead of each input to your kernel being just an individual color sample, what you actually get instead is a sampler object from which you can take as many samples as you like and order them however you need. So let's take a look at how you would actually go about spreading a general kernel.
+
+So here we have a very simple kernel that effectively does nothing. It takes an input image as a sampler, samples from it, and returns the color unaltered. But in order to sample from this input image you have to provide the coordinate in sampler space and not in destination space. And there are several reasons why the two spaces are different. One could be your input image is tiled, but at the very minimum the sampler space is in a coordinate space that's between zero and one.
+
+But instead of having to call destCoord and samplerTransform every single time, you could also conveniently call another CI language extension called samplerCoord, and these two pieces of kernel functions are actually effectively the same, and in fact compile up to the same kernel program. So now you might wonder why would you use samplerTransform when you can just call samplerCoord and write less code?
+
+Well, let's imagine you have a kernel here that actually does something, and in this case it's just going to apply an offset of two pixels in a vertical direction. And let's walk through what would happen in this - if this kernel were to be executed. So assume we have an input image here that's just 600 pixels wide by 400 in your destination space, and we're just going to render that out to with the exact same dimensions.
+
+And assuming this image - input image is not tiled, our sampler space is just going to be normal - in normalized coordinates between - with a range of zero to 1 in both axes. And let's imagine we're asked to render out this pixel in the center, which has a value of 300 in x and 200 in y.
+
+In the first call, the samplerCoord will actually transform this value over to sampler space and give you a value of (0.5, 0.5). And then if you were to apply that offset in that space you'll get a value of (0.5, 2.5). And as you can tell you'll end up sampling from outside the image, and the result you'll get will be incorrect.
+
+Instead what you want to write is a kernel that looks like this. So again, let's walk through what would happen in this case if the kernel was executed. You're going to first call destCoord, which will give you a value of 300 and 200. And then you're going to apply the offset in that space, and you'll get a value of 300 and 202.
+
+Then you're going to call samplerTransform with that, and it'll give you a value of 0.5 and 0.505. And as you can tell, this will give you the correct location to sample from. So this is the right way to apply an offset in your sample. So now that we got the basics out of the way, let's take a look at some examples that are a little bit more interesting.
+
+The first one we're going to look at is a motion blur filter, and this is an example where your kernel actually requires multiple samples. So imagine we had an input image like this, and in our kernel we're going to compute the average of N samples along a bi-directional vector.
+
+And in this particular example we're just going to apply a horizontal motion blur. And if you were to run this kernel on all the pixels of this image you would get a result that looks like that. So let's take a look at what the kernel function for this would look like.
+
+So here we're going to define our motion blur kernel called motionBlur, and return a vec 4, and it's going to take two arguments. The first one is your input image as a sampler, and a velocity vector that will describe the direction in which you want to blur. And then we're going to arbitrarily define a number of samples to take in each direction. In this case it'll be 10, but which - but it may be larger depending on what your maximum blur radius is.
+
+Then we're going to declare a variable S to accumulate all our samples. And we're going to first call destCoord to get the current destination of the location we're rendering to. And we're going to initialize offset at the opposite end of your velocity vector. Then we're going to loop through starting with one end of your velocity vector, take 10 samples along the way, applying the offset in each iteration, take the center pixel which - which corresponds to your destCoord, and then take another 10 samples on the other direction. And then once you've got all your samples accumulated you just need to average them all and - and that will give you your final result.
+
+So again, you would put this all together with a CIFilter subclass. To initialize that kernel that we just saw, you just call CIKernel kernelWithString and path of the source that we just - that we saw earlier in the previous slide. And that string could either be hard coded in your Objective-C file or loaded from a file off this. And then in your output image function for this case our filter has two parameters, an input radius and an input angle from which you can derive your velocity vector.
+
+And then you just call apply on that kernel, giving it those arguments as well as a DOD and a region of interest callback function which we'll see in a moment. But first let's take a look at how to calculate the DOD for this filter. So again, here is the input image with given extent.
+
+And if you were to focus on the pixels that are just outside the edge of that image, these pixels were initially clear, but because those pixels end up sampling inside the image when the filter is applied it will actually become non-clear pixels, and so your domain of definition here is basically expanded out in both directions that is the distance of the velocity vector. And in this case this is just along the x direction. But for the general case your - the expression that you can use for your DOD is just that.
+
+Similarly for the ROI if you were to consider a region that we need to render to that's outlined here in - in blue and focus on one of the edges of the - of this region, and imagine if you were to - if you needed to render out that pixel in our kernel we need to sample along the bi-directional vector and take N number of samples along that vector.
+
+You'll end up with a region that you would need for that input image that corresponds to the region in red. And so again, the ROI callback function would have an expression that - that is in this case the same as your DOD. And the reason for that is because your blur kernel is symmetric in all directions.
+
+But now let's take this effect one step further. Imagine you had this input image where you did not want to apply the motion blur uniformly across the entire image. Instead what you want is, keep the vehicle in this image nice and sharp and blur out the background of the image. And on top of that, you don't want to apply the blur in the same direction for all pixels; instead you want to blur them out radially to achieve an effect that looks like this.
+
+And so one way to imagine this image is a camera that's anchored to the car as it's traveling through the road, and the picture was snapped, and you got the blurry background. And so in order to achieve this effect what you actually need is a mask image that not only masks out the vehicle but provides a vector field that describes your per-pixel blur velocity.
+
+So let's step through - let's break down this filter step by step to see how we would implement it. So you start with your input image, and you're going to generate a mask from that to - to mask out the images - the pixels that you not want to blur. And then using that mask image you can generate a vector field that will describe on a per-pixel basis the velocity that you want to blur your - apply your motion blur.
+
+And in this case the velocity vectors are encoded in the red and green channels in this image, and the pixels that are gray basically represent a zero-velocity vector. Now you can - that's - you can generate this mask image either offline, or you can even write a color kernel to generate this image. But let's assume for the - this example that we already have this mask image.
+
+Then in our kernel what you need to do first is, read from this mask image to get your velocity vector, and then you would sample from your input image and apply the same motion blur effect that we just saw using that per-pixel velocity vector. And if you were to run that kernel, that will give you the resulting image that we just saw.
+
+So let's see how you would implement this kernel function. So here again was the motion blur kernel that we saw earlier, and the nice thing about CI's kernel language is you can reuse this function in this new kernel by converting it into a helper function. And this function has the exact same code that we saw earlier minus the kernel keyword. And then you can just layer on top of that your new kernel function that we have called motionBlurWithMask, which in this case will take an input image as well as a mask image and a parameter called radius that will specify your maximum blur radius.
+
+And then in your kernel, the first thing that you do is read from that mask image which will contain the vector field in the R and G channels. And because those values are stored in a range of zero to 1 you need to de-normalize it to a range between "-1" and "+1". And once you got that directional vector you just multiply that with radius to get a velocity vector. And then you just pass that velocity vector into that motionBlur helper function, and that will do the calculation for you and give you the final result that you want.
+
+And again, you put this all together with CIFilter subclass which here is actually very similar to the first example that we just saw. The difference here - the difference here is the slight change in the DOD calculation where instead of a velocity vector we have - we just have an input radius parameter that basically represents the maximum velocity vector in your vector field.
+
+And the other difference here is when you apply the kernel the - the roiCallback function actually needs the index parameter. And this is the first example where we see that because we have more than one input images. So let's take a look at what the roiCallback function for that looks like.
+
+Well, it's actually pretty straightforward. You just need to check the index parameter for which your - for which the ROI is being called for. And if the index is equal to zero that corresponds to our input image, and you would return the same expression that we saw earlier.
+
+But if index - index is equal to 1 that corresponds to our mask image, and for this it's actually even more simple, you just return the same input rect because we just take one sample from our mask image using sampleCoord, and so that maps one to one to the same location. So as you can see from these two examples, we can implement any kind of filter using general kernels, no matter how complex they are.
+
+And the reason for that is because it was designed to be a desktop-class kernel type that has the exact same language syntax and semantics as OS X. And as - and as a byproduct of that, you can actually port these general kernels back and forth between the two platforms with very little effort. And in fact some of the new - new built-in filters that David mentioned earlier were actually ported over to iOS using general kernels, namely the glass distortion filter and the histogram display filter.
+
+So with the great flexibility that general kernels offer you there are some performance and memory considerations to keep in mind. With respect to performance, one thing you should be aware of is in order to get, pass sampler objects to your general kernel, we have to render out each input image to an intermediate buffer first. And so effectively each input image to your CIKernel adds an extra render pass to your filter graph.
+
+And because we need to render out intermediate buffers you may need to decide what format is most appropriate for a given situation. In the case of your working space being null, i.e. your color management is off, you can just safely use the 8-bit RGBA format without worrying about any quantization errors being introduced in your image pipeline. But in the case of your working space being the default within your Rec. 709 you can use the default 8-bit format, but that would require a conversion from linear to sRGB space when writing out the intermediate buffer, and vice versa when reading back from the intermediate buffer.
+
+Alternatively, and this is new in iOS 8, is the ability to specify a 16-bit half-flow format, and so you can do that and not - and avoid having it incur the cost of a conversion at every single pixel, but it would require twice the amount of memory. So the right choice will ultimately depend on what your requirements are.
+
+Now with these considerations in mind you should be careful not to think that every type of filter needs to be implemented with the general kernel, even if it's a complex one. Consider, for example, a square kaleidoscope filter which, by the way, is very similar to the kaleidoscope filter on the photo booth, but instead of repeating triangles we just have repeating squares and - like so.
+
+So at first glance you might think that this filter would need a general kernel because it contains both a geometric transformation that warps the space that you're sampling from as well as a color kernel - as well as a color falloff. And so you cannot represent this kernel with either a warp or a color kernel. So you can use a general kernel, which is fine, but we'll see in this case that you actually don't have to. Let's see if there's a better way to implement this.
+
+If you were to break down this filter into stages, you will notice that the first stage is just the geometric transformation for which you can just apply a warp kernel. And then the second stage is the color falloff or attenuation from the center, and for that you can apply a color kernel.
+
+And so in this example you can see that you can just chain together a warp and a color kernel and achieve - and get the same effect. And this is actually the better way to implement this filter for some of the reasons - for some of the advantages that we heard earlier with using these specialized kernel types.
+
+So here are the - here is the kernel code - kernel function for the warp kernel. But in - in the interest of time we're not - I'm not going to bother walking through all the math that's involved in this. But I recommend that you review this on your own later, or even copy and paste it into your own custom filter to convince yourself that it all works correctly.
+
+Similarly, this is the kernel function for the color kernel which you can review at your leisure. But assuming we have the two kernel functions already written let's actually take a look at how you would put them all together. So you start with your input image, and the first thing is to apply the warp kernel. And if you were to run that for all the pixels, you would get your intermediate image, which just has the geometric transformation.
+
+And for this example the DOD for this filter is actually an infinite rect because the repeating squares extend out indefinitely in all directions. In the ROI callback function for this is actually very simple. It's just a constant rect that is defined by this little orange rectangle in the input image, and that's because all the pixels that need to be rendered just needs to sample from that small little region.
+
+And then the next step is to apply your color kernel, passing in as input the result from your warp kernel, and the result that you get after applying that is the final result that you want. And again, the DOD for your final result is infinite because the warp kernel image was also infinite.
+
+So the key takeaway from all this is you should only write a general kernel when needed, namely the the scenarios we saw with the motion blur examples. But if you're not sure, you can also write a general kernel initially for rapid prototyping, but then you should try replacing it with some combination of warp and color kernels to get the - for the sake of better performance and lower memory usage. And with that I'm going to hand it back over to Alex just to say a few more words before we wrap up. Thank you.
+
+[ Applause ]
+
+Thank you, Tony. Okay, so let's quickly talk about platform differences. I have some good news. There is only one slide about the platform differences. They actually aren't that dramatic. There are some slight differences, for example, what type of renderers are supported, also the kernel language on iOS allows control flow, so you can express more complicated things in the language. We have three kinds of classes to do kernels on iOS whereas on OS X we have just one.
+
+You cannot specify a sampler mode on iOS, but you can on OS X. Filter shape is different. It's only a rectangle on iOS versus a filter shape on OS X. The ROI function on iOS is done via a block pointer, whereas on OS X it's done as a selector from the filter. And then there is some tiny, tiny differences.
+
+CIFilter setDefaults gets called automatically on iOS, whereas on OS X you need to do that explicitly on your own. And then finally, the customAttributes method is a class method on iOS and is an instant method - instance method on OS X. So let's talk about what we've learned today. First things first, we learned how to write color, warp, and general purpose kernels.
+
+We went through a number of examples that showed you how to start thinking about what a domain of definition is for your kernel, and then also how to write a region of interest function. And what's great about the way we've implemented things on iOS is that you - we are going to force you to write an ROI function when you have to, so it's not something that you can accidentally forget to do. So we think that's a great plus. On the ROI function, one thing I would really like for you to remember is that it is really important for you to do this if you want to get good performance when dealing with very large images.
+
+And then finally we talked about platform differences very briefly in between iOS and OS X. So on that note I would like to invite you all to - if you have any additional questions you can email Allan Schaffer. We have some resources at DTS, and there's also the dev forums, which we all look at to see if anyone have questions with Core Image.
+
+There are a few additional sessions which may be of interest to you if you're interested in writing kernels of your own, including the "Introducing Photo Frameworks" which took place earlier today, and David's talk from earlier that took place just right here. We're really looking forward to seeing all the effects you are going to create using custom kernels, and hope you enjoy using them on iOS 8. Thank you very much. Once again, I hope you enjoy the rest of the conference.
+
+[ Applause ]

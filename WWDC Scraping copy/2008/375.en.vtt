@@ -1,0 +1,3074 @@
+WEBVTT
+
+00:00:20.370 --> 00:00:22.300
+Good afternoon, everyone.
+
+00:00:22.300 --> 00:00:27.260
+My name's Christopher Linn,
+and I work on the core
+
+00:00:27.260 --> 00:00:31.310
+services team at Apple,
+which means we work on
+
+00:00:31.310 --> 00:00:34.250
+a whole constellation of
+
+00:00:34.750 --> 00:00:36.900
+pieces of technology down
+at the core services,
+
+00:00:36.900 --> 00:00:40.440
+application services layer.
+
+00:00:40.530 --> 00:00:43.570
+And today,
+we wanted to talk about the file
+
+00:00:43.570 --> 00:00:48.900
+system APIs at the framework levels
+and let you know what we're doing in
+
+00:00:48.900 --> 00:00:52.600
+Snow Level to improve efficiency and
+how you can take advantage of it.
+
+00:00:52.600 --> 00:00:53.820
+So here's our agenda.
+
+00:00:53.820 --> 00:00:57.710
+I wanted to give a quick overview
+of the current state of the
+
+00:00:57.740 --> 00:01:00.230
+APIs for accessing the file system.
+
+00:01:00.370 --> 00:01:05.130
+And that's to set the stage for giving
+you an idea of what the limitations are
+
+00:01:05.260 --> 00:01:09.680
+and what we're looking at improving.
+
+00:01:09.680 --> 00:01:14.220
+And then we'll go into a fair amount of
+detail about the solutions that we want
+
+00:01:14.220 --> 00:01:19.880
+to present in Snow Leopard for certain
+parts of accessing the file system.
+
+00:01:19.890 --> 00:01:23.280
+We're not talking about things
+like reading and writing,
+
+00:01:23.280 --> 00:01:26.350
+opening files right now
+or mounting volumes.
+
+00:01:26.380 --> 00:01:29.060
+But the areas we're
+concentrating on today are,
+
+00:01:29.260 --> 00:01:35.040
+getting info out of the file system,
+info about specific files,
+
+00:01:35.040 --> 00:01:38.810
+enumerating directories,
+and we're also going to
+
+00:01:38.810 --> 00:01:42.710
+touch on creating long-lived
+persistent references to files,
+
+00:01:42.810 --> 00:01:43.740
+tracking files.
+
+00:01:44.370 --> 00:01:45.620
+Okay.
+
+00:01:45.620 --> 00:01:47.860
+So these are the kinds of things that
+we hope you'll be able to take away.
+
+00:01:48.330 --> 00:01:52.590
+What are the problems that we're both
+internally at Apple and you guys are
+
+00:01:52.590 --> 00:01:56.630
+facing in writing your applications,
+the kinds of performance
+
+00:01:56.640 --> 00:01:58.320
+problems you're facing?
+
+00:01:58.400 --> 00:02:02.250
+How can approved APIs help
+solve these problems.
+
+00:02:02.990 --> 00:02:09.430
+How will these new APIs affect your
+application in Snow Leopard even
+
+00:02:09.430 --> 00:02:14.480
+without adopting and how you can take
+advantage of them in your own code?
+
+00:02:15.680 --> 00:02:17.020
+So here's the overview.
+
+00:02:17.180 --> 00:02:20.100
+We've got a long history
+in the operating system.
+
+00:02:20.100 --> 00:02:23.830
+We've had a lot of different pieces
+coming together over the years with
+
+00:02:23.940 --> 00:02:29.000
+companies coming together and many
+different layers of the system.
+
+00:02:29.000 --> 00:02:32.310
+So what we've got right now
+are pretty much three different
+
+00:02:32.310 --> 00:02:34.290
+ways to get at the file system.
+
+00:02:34.290 --> 00:02:37.000
+We've got the CoreOS or POSIX APIs.
+
+00:02:37.000 --> 00:02:45.000
+And sitting on top of that, we have the
+Carbon File Manager and Cocoa APIs,
+
+00:02:45.000 --> 00:02:46.760
+primarily NS File Manager.
+
+00:02:46.760 --> 00:02:55.340
+And these APIs all give mostly
+overlapping access to the file system.
+
+00:02:55.380 --> 00:02:58.980
+And so right away,
+you can probably guess it.
+
+00:02:59.000 --> 00:03:01.930
+So let's look at some of the
+problems that this presents.
+
+00:03:01.950 --> 00:03:05.150
+The redundancy is sort
+of heavy in the system.
+
+00:03:05.220 --> 00:03:07.780
+There's different ways
+to do the same thing.
+
+00:03:07.780 --> 00:03:11.730
+There's complexity associated
+with all these different APIs,
+
+00:03:11.820 --> 00:03:16.440
+and it gives rise to some kinds of
+inefficiency that I'll go into here.
+
+00:03:16.440 --> 00:03:19.200
+So first of all, complexity.
+
+00:03:19.200 --> 00:03:22.560
+As I mentioned,
+there's a lot of different ways,
+
+00:03:22.560 --> 00:03:26.750
+different APIs for getting at
+some of the same information.
+
+00:03:29.710 --> 00:03:36.360
+These APIs use different
+data types to identify files.
+
+00:03:36.360 --> 00:03:39.590
+So, for example,
+we have in POSIX APIs primarily
+
+00:03:39.600 --> 00:03:45.100
+we have C strings representing
+paths to identify a file.
+
+00:03:45.140 --> 00:03:50.910
+At the Cocoa layer,
+we mostly looking at an NS file manager,
+
+00:03:51.050 --> 00:03:53.850
+we use paths but as NSStrings.
+
+00:03:55.150 --> 00:03:58.660
+The Carbon File Manager uses FSRefs,
+which those of you who aren't
+
+00:03:58.670 --> 00:04:04.880
+too familiar with them,
+they're 80 byte opaque data.
+
+00:04:04.880 --> 00:04:09.060
+And so they're path independent,
+regardless of the path to the file,
+
+00:04:09.060 --> 00:04:12.990
+they're always 80 bytes in size,
+and you have no idea what's inside them.
+
+00:04:13.040 --> 00:04:15.900
+But it's just a different
+way to refer to a file.
+
+00:04:17.840 --> 00:04:23.480
+We also have APIs that are URL based
+that only accept file URLs and of
+
+00:04:23.880 --> 00:04:27.900
+course file URLs are ultimately
+just another form of a path.
+
+00:04:27.900 --> 00:04:32.240
+But those APIs don't
+accept a string as a path.
+
+00:04:32.340 --> 00:04:36.660
+You have to have an NSURL or
+CFURL object passed to them.
+
+00:04:36.750 --> 00:04:43.800
+And so the APIs wrapped around these data
+types are sort of mutually exclusive.
+
+00:04:43.800 --> 00:04:47.280
+For example, with a C string,
+you would be using to get some
+
+00:04:47.280 --> 00:04:51.150
+basic information about a file,
+you'd be calling Lstat or stat.
+
+00:04:51.160 --> 00:04:54.310
+The equivalent call in
+the Carbon File Manager is
+
+00:04:54.310 --> 00:04:55.760
+FSKit Catalog Info.
+
+00:04:55.840 --> 00:05:01.770
+NS File Manager uses attributes,
+the method attributes of item
+
+00:05:01.800 --> 00:05:05.070
+path and takes an NSString path.
+
+00:05:05.210 --> 00:05:08.500
+So while there's many different
+ways to do similar stuff,
+
+00:05:08.710 --> 00:05:12.370
+none of these APIs is actually complete.
+
+00:05:12.410 --> 00:05:17.960
+And so you often are faced with the
+requirement of switching to a different
+
+00:05:17.960 --> 00:05:21.650
+data type in order to get at some
+piece of information you need that
+
+00:05:21.670 --> 00:05:25.980
+you can't get from NS File Manager or
+you can't get from POSIX or you can't
+
+00:05:25.980 --> 00:05:27.820
+get from the Carbon File Manager.
+
+00:05:27.850 --> 00:05:32.390
+And so this switching
+around requires conversion.
+
+00:05:32.460 --> 00:05:35.670
+So in your application,
+if you're primarily path-based
+
+00:05:36.110 --> 00:05:39.740
+and you want to get,
+you're able to get it, given a path,
+
+00:05:39.780 --> 00:05:44.740
+you're able to get it, say,
+the name or the file size from the
+
+00:05:44.740 --> 00:05:48.180
+APIs that you have available for paths.
+
+00:05:48.240 --> 00:05:50.580
+And then you need to get
+some other information,
+
+00:05:50.580 --> 00:05:52.830
+say,
+the localized name or the display name,
+
+00:05:52.830 --> 00:05:56.160
+as Launch Services calls it,
+or you want to get the icon.
+
+00:05:56.210 --> 00:05:59.510
+Well,
+you either need to convert to an FSRef
+
+00:05:59.590 --> 00:06:05.560
+yourself by calling fspath make ref,
+or you might be using some of the
+
+00:06:05.640 --> 00:06:10.350
+convenience functions in Cocoa that
+give you access to this information.
+
+00:06:10.460 --> 00:06:14.580
+But the fact is that under the covers,
+Cocoa is often doing a conversion
+
+00:06:14.580 --> 00:06:18.680
+to an FSRef in order to call
+through to the Carbon File Manager.
+
+00:06:18.710 --> 00:06:21.460
+And vice versa,
+sometimes you find yourself holding
+
+00:06:21.460 --> 00:06:25.970
+onto an FSRef and you need a path,
+and so you call FSRef make path to
+
+00:06:25.980 --> 00:06:28.260
+do another data type conversion.
+
+00:06:28.320 --> 00:06:30.260
+And there's a lot of problems with this.
+
+00:06:30.360 --> 00:06:32.870
+First of all, it's just not any fun.
+
+00:06:32.980 --> 00:06:34.500
+It's -- it's -- it feels
+like a waste of time.
+
+00:06:34.500 --> 00:06:39.300
+You're going along and you
+scratch your head and you think,
+
+00:06:39.520 --> 00:06:43.630
+darn, I need to do this data
+type conversion here,
+
+00:06:44.070 --> 00:06:49.140
+and it adds to my code,
+and it's just unpleasant or yucky to
+
+00:06:49.140 --> 00:06:52.670
+have to do this in your application.
+
+00:06:52.680 --> 00:06:56.180
+It would be much more convenient
+if you didn't have to.
+
+00:06:56.180 --> 00:06:59.880
+But worse than that,
+it also triggers IOs.
+
+00:06:59.930 --> 00:07:04.280
+Whenever you're converting between
+a path and an FSRef or vice versa,
+
+00:07:04.300 --> 00:07:08.890
+we have to actually look on disk to
+generate the internals of an FSRef
+
+00:07:09.010 --> 00:07:12.710
+or to turn it back into a path,
+because what's in an
+
+00:07:12.710 --> 00:07:16.880
+FSRef is a persistent file
+ID and a device identifier.
+
+00:07:17.000 --> 00:07:21.210
+And so usually, you know,
+it's pretty quick because it's
+
+00:07:21.270 --> 00:07:23.220
+usually cached in the kernel.
+
+00:07:23.290 --> 00:07:28.800
+But you can get into situations where if
+you do have to go out over the network,
+
+00:07:28.800 --> 00:07:32.690
+when you're talking to a file server,
+you've got network latency problems
+
+00:07:32.690 --> 00:07:34.100
+that can slow you up or worse.
+
+00:07:34.110 --> 00:07:38.880
+The network could actually be
+disconnected or have a hiccup and
+
+00:07:38.880 --> 00:07:40.130
+you might hang for a long time.
+
+00:07:40.270 --> 00:07:44.450
+So this can really interfere
+with your application.
+
+00:07:45.300 --> 00:09:26.000
+[Transcript missing]
+
+00:09:27.200 --> 00:09:29.590
+Okay.
+
+00:09:29.740 --> 00:09:33.560
+So I wanted to show an example
+of what I was just talking about,
+
+00:09:33.560 --> 00:09:35.440
+opening up a document.
+
+00:09:35.440 --> 00:09:39.920
+And I wanted to use a very
+low-level debugging tool or
+
+00:09:40.020 --> 00:09:45.590
+analysis tool called FS Usage,
+which can show all access to the
+
+00:09:45.610 --> 00:09:52.240
+file system by the entire system or,
+in this case, just from one application.
+
+00:09:52.240 --> 00:09:55.720
+So we're going to use -- we're
+going to be opening up an image in
+
+00:09:55.720 --> 00:10:00.430
+preview and I want to launch preview
+first so that we're not seeing
+
+00:10:00.430 --> 00:10:03.050
+anything related to launch activity.
+
+00:10:03.190 --> 00:10:06.870
+We're just looking at the
+I/O from opening up a document.
+
+00:10:07.080 --> 00:10:08.590
+Start up FS Usage.
+
+00:10:08.860 --> 00:10:14.980
+This command says I want to look at
+file system access and network access.
+
+00:10:14.980 --> 00:10:16.960
+I want to look at just preview.
+
+00:10:17.100 --> 00:10:18.140
+Now we're ready to go.
+
+00:10:18.240 --> 00:10:20.040
+I'm going to open up the document.
+
+00:10:20.070 --> 00:10:22.760
+As I mentioned,
+there's a lot of things happening here.
+
+00:10:22.760 --> 00:10:25.460
+Before I open this,
+we're sending an Apple event
+
+00:10:25.460 --> 00:10:26.930
+to the application.
+
+00:10:27.010 --> 00:10:31.700
+It receives the Apple event
+and there's an alias in it.
+
+00:10:33.220 --> 00:10:36.820
+It has to resolve the alias,
+compute the localized
+
+00:10:36.820 --> 00:10:40.230
+name of the document,
+get the icon of it so it can
+
+00:10:40.230 --> 00:10:41.660
+show it in the title bar.
+
+00:10:41.660 --> 00:10:46.080
+It has to add it to the
+application recents menu.
+
+00:10:46.160 --> 00:10:49.450
+It has to add it to the
+system's global recents menu.
+
+00:10:49.490 --> 00:10:54.100
+We tell Spotlight that
+the document was opened.
+
+00:10:54.100 --> 00:11:01.450
+At some point we read the file
+and actually display the contents.
+
+00:11:01.450 --> 00:11:01.450
+Let me go ahead and open it.
+
+00:11:05.730 --> 00:11:08.660
+So that was pretty quick.
+
+00:11:08.830 --> 00:11:12.250
+But let's look back at what happened.
+
+00:11:13.740 --> 00:11:15.300
+Okay, that's too slow.
+
+00:11:15.310 --> 00:11:17.440
+Let me go back.
+
+00:11:17.620 --> 00:11:22.810
+So there's over 600 lines of output here.
+
+00:11:22.810 --> 00:11:22.810
+And
+
+00:11:26.600 --> 00:13:36.700
+[Transcript missing]
+
+00:13:37.010 --> 00:13:42.970
+And we're opening the file and
+closing it again four times.
+
+00:13:43.520 --> 00:13:44.500
+All to open it.
+
+00:13:44.500 --> 00:13:47.470
+It happens pretty fast.
+
+00:13:47.470 --> 00:13:53.310
+It might not seem like something to
+really get all that worried about.
+
+00:13:53.390 --> 00:13:56.340
+But it's a lot more
+apparent when you're on,
+
+00:13:56.340 --> 00:14:00.160
+say, a network file server
+that this can slow you up.
+
+00:14:00.490 --> 00:14:05.480
+But also, we know that it is preventing
+us from really being zippy.
+
+00:14:05.480 --> 00:14:09.660
+It must be easier than just doing
+the same work over and over again
+
+00:14:09.660 --> 00:14:11.900
+in a very short period of time.
+
+00:14:12.850 --> 00:14:18.300
+So that gives you an idea of the
+problem we're trying to solve here.
+
+00:14:18.340 --> 00:14:21.740
+Let me go back to slides.
+
+00:14:21.740 --> 00:14:27.480
+No, I lost my clicker.
+
+00:14:36.090 --> 00:14:40.400
+So we thought about this a long time
+and we've come up with some solutions.
+
+00:14:40.400 --> 00:14:47.720
+We want to simplify and provide
+a clear direction for everyone,
+
+00:14:47.720 --> 00:14:52.300
+both internally at Apple and
+app developers like yourselves,
+
+00:14:52.690 --> 00:15:00.360
+a preferred file system API that we can
+optimize for and is designed to work well
+
+00:15:00.360 --> 00:15:05.560
+with all different kinds of file systems.
+
+00:15:05.970 --> 00:15:10.230
+In order to do that,
+we need to unify all of our APIs around a
+
+00:15:10.230 --> 00:15:16.200
+particular file type or file identifier.
+
+00:15:16.900 --> 00:15:22.540
+Some of the things we can do to make
+this API more efficient are make sure
+
+00:15:22.540 --> 00:15:27.720
+that we're caching at a high level,
+say in the application process,
+
+00:15:27.730 --> 00:15:31.000
+so we have at least short-term
+caching of values that are being
+
+00:15:31.000 --> 00:15:35.350
+computed over and over again,
+avoid the kind of object reallocation
+
+00:15:35.350 --> 00:15:37.840
+that happens in bursts right now.
+
+00:15:38.440 --> 00:15:42.130
+And we are also looking at directory
+enumeration and making that as
+
+00:15:42.130 --> 00:15:45.430
+efficient as possible so that
+when you hit a directory with
+
+00:15:45.430 --> 00:15:50.230
+10,000 items in it in particular,
+and we definitely have a bunch of
+
+00:15:50.230 --> 00:15:54.230
+customers out there like that with
+those kinds of configurations,
+
+00:15:54.230 --> 00:15:58.030
+that you can be assured you're
+as efficient as possible at
+
+00:15:58.040 --> 00:16:00.960
+enumerating those directory contents.
+
+00:16:02.730 --> 00:16:05.960
+And then finally,
+we want to eat our own dog food on
+
+00:16:05.960 --> 00:16:12.540
+this and design these APIs for use
+in our own frameworks so that we can
+
+00:16:12.540 --> 00:16:18.220
+get benefits from these APIs right
+in Snow Leopard even before we
+
+00:16:18.430 --> 00:16:21.050
+get wide application adoption.
+
+00:16:21.060 --> 00:16:24.840
+So it kind of started with, well,
+what are we really going
+
+00:16:24.840 --> 00:16:26.770
+to base all these APIs on?
+
+00:16:26.780 --> 00:16:28.260
+What's the best choice here?
+
+00:16:28.260 --> 00:16:29.420
+Because we do have several choices.
+
+00:16:29.540 --> 00:16:33.160
+We have existing APIs, as I mentioned,
+that are using paths.
+
+00:16:33.240 --> 00:16:35.060
+We have FS refs.
+
+00:16:35.100 --> 00:16:37.790
+We have some APIs that are URL-based.
+
+00:16:37.830 --> 00:16:39.420
+Or we could do something new.
+
+00:16:39.420 --> 00:16:43.520
+And, you know,
+something new is kind of a neat idea,
+
+00:16:43.520 --> 00:16:46.980
+a new object type,
+because it could be completely
+
+00:16:47.080 --> 00:16:50.220
+pristine and do everything just
+exactly the way we want it to.
+
+00:16:50.220 --> 00:16:54.780
+But the effect on our APIs would
+be pretty bad because we would have
+
+00:16:54.800 --> 00:16:57.280
+to have a completely new API set.
+
+00:16:58.400 --> 00:17:02.810
+and it would be unfamiliar to everybody.
+
+00:17:03.000 --> 00:17:07.630
+And so looking back at
+paths and FSRefs and URLs,
+
+00:17:07.630 --> 00:17:11.680
+well, paths kind of are what they are.
+
+00:17:11.680 --> 00:17:13.720
+They give us one way to identify a file.
+
+00:17:13.720 --> 00:17:20.240
+FSRefs, likewise,
+they're purely ID-based.
+
+00:17:20.290 --> 00:17:22.610
+FSRefs are not objects.
+
+00:17:22.680 --> 00:17:26.650
+It's one of the problems we've
+had over the years is that FSRefs
+
+00:17:26.650 --> 00:17:29.900
+are just stack-based largely,
+and we have no idea
+
+00:17:29.900 --> 00:17:31.720
+when they come and go.
+
+00:17:31.720 --> 00:17:36.480
+And so that makes it difficult for
+us to do any kind of cache management
+
+00:17:36.480 --> 00:17:41.300
+or cache policy to know when an FSRef
+is no longer going to be in use.
+
+00:17:41.300 --> 00:17:45.250
+So considering all these
+different pros and cons,
+
+00:17:45.250 --> 00:17:46.980
+let's look at URLs.
+
+00:17:46.980 --> 00:17:52.680
+There are a bunch of advantages
+to focusing our APIs.
+
+00:17:52.680 --> 00:17:58.820
+First of all,
+I mentioned that creating a whole
+
+00:17:58.820 --> 00:18:01.900
+new data type would explode our APIs.
+
+00:18:01.900 --> 00:18:05.940
+URLs are nice because we actually
+have quite a few APIs that
+
+00:18:05.940 --> 00:18:08.170
+are already using file URLs.
+
+00:18:08.180 --> 00:18:13.930
+So these are the frameworks
+or technologies that...
+
+00:18:14.770 --> 00:18:17.780
+Sorry,
+I'm getting distracted because they're
+
+00:18:17.780 --> 00:18:24.610
+counting down my timer at about one
+minute every five seconds right now.
+
+00:18:24.640 --> 00:18:27.600
+I'm going to talk really fast.
+
+00:18:27.600 --> 00:18:32.910
+These technologies are using URLs for
+file system access right now.
+
+00:18:33.010 --> 00:18:36.840
+So they have APIs that
+accept only file URLs.
+
+00:18:36.880 --> 00:18:41.720
+And AppKit has a whole bunch in, say,
+for NS document and even pasteboard,
+
+00:18:41.720 --> 00:18:43.200
+using pasteboard.
+
+00:18:43.200 --> 00:18:46.200
+What else?
+
+00:18:46.330 --> 00:18:50.850
+Core Foundation uses them
+heavily in the CFBundle API.
+
+00:18:50.850 --> 00:18:54.510
+Launch Services has
+always supported URLs,
+
+00:18:54.510 --> 00:18:58.200
+both file URLs and arbitrary other URLs.
+
+00:18:58.200 --> 00:19:02.520
+So you can see there's actually
+a wide adoption of URLs already,
+
+00:19:02.520 --> 00:19:07.920
+but we didn't really have any core
+API that gives us access to directory
+
+00:19:08.330 --> 00:19:13.100
+contents and file properties via URLs.
+
+00:19:14.070 --> 00:19:16.210
+There are some other things
+that are attractive about URLs.
+
+00:19:16.260 --> 00:19:21.600
+We already have NSURL and CFURL as
+toll-free bridged objects.
+
+00:19:21.700 --> 00:19:27.360
+So you can cast back and forth
+between C and Objective-C all you want
+
+00:19:27.360 --> 00:19:30.790
+without any sort of conversion cost.
+
+00:19:32.220 --> 00:19:35.580
+Because URLs are objects in the sense
+that we know when they come and go,
+
+00:19:35.580 --> 00:19:41.500
+it allows us to do some
+smart cache management.
+
+00:19:41.500 --> 00:19:45.020
+We know when you're no longer
+going to be referencing the file
+
+00:19:45.170 --> 00:19:47.250
+through a particular URL object.
+
+00:19:47.320 --> 00:19:50.570
+And on top of all that,
+there's a general URL syntax
+
+00:19:50.570 --> 00:19:52.760
+that's very flexible,
+right?
+
+00:19:52.760 --> 00:20:01.900
+So you can imagine wanting to access
+resource domains other than the file.
+
+00:20:01.900 --> 00:20:02.060
+So we can use that to do that.
+
+00:20:02.060 --> 00:20:02.280
+We can use that to do
+that in the file system.
+
+00:20:02.280 --> 00:20:07.180
+But even within the file system domain,
+URLs give us a lot of flexibility
+
+00:20:07.180 --> 00:20:10.010
+for how we identify files.
+
+00:20:10.080 --> 00:20:11.560
+And I'll talk about
+that in a few minutes.
+
+00:20:13.820 --> 00:20:20.850
+So as you have guessed,
+we picked the URL as the new
+
+00:20:20.850 --> 00:20:26.700
+preferred file identifier on
+Mac OS X at the foundation layer
+
+00:20:26.700 --> 00:20:28.150
+and core foundation and above.
+
+00:20:28.180 --> 00:20:32.330
+So we're introducing new APIs in
+Snow Leopard in both foundation and
+
+00:20:32.330 --> 00:20:38.130
+core foundation that largely mirror
+each other so that it's convenient for
+
+00:20:38.130 --> 00:20:45.240
+Objective C and C developers or for lower
+level programs that need just C access.
+
+00:20:45.280 --> 00:20:49.600
+And it consists of new
+methods on NSURL and some
+
+00:20:49.600 --> 00:20:56.970
+new methods in NSFileManager,
+particularly for directory enumeration.
+
+00:20:57.710 --> 00:21:00.990
+And in core foundation,
+we have new CFURL methods for
+
+00:21:00.990 --> 00:21:07.570
+accessing file properties and a new
+type CFURL enumerator for enumerating
+
+00:21:07.570 --> 00:21:10.970
+directories as well as the volume list.
+
+00:21:13.900 --> 00:21:15.190
+So what does the API look like?
+
+00:21:15.290 --> 00:21:18.990
+Well,
+in the URL language that we're using,
+
+00:21:18.990 --> 00:21:20.780
+everything's a resource.
+
+00:21:20.780 --> 00:21:24.760
+That's what URL,
+that's what the R in URL stands for.
+
+00:21:24.760 --> 00:21:27.840
+So everything's a resource.
+
+00:21:27.840 --> 00:21:32.320
+And so resources have properties,
+which are identified by keys.
+
+00:21:32.320 --> 00:21:37.380
+And every property key can be turned
+into a value for that property.
+
+00:21:38.100 --> 00:21:42.130
+And so it's a pretty familiar
+sort of API model on our platform.
+
+00:21:42.240 --> 00:21:47.200
+And we have more than three properties,
+but these are three examples.
+
+00:21:47.200 --> 00:21:51.730
+NSURL name key,
+NSURL modification date key,
+
+00:21:51.730 --> 00:21:53.990
+NSURL file size key.
+
+00:21:53.990 --> 00:21:57.560
+So these are string constants in the
+API that you would pass in if you wanted
+
+00:21:57.560 --> 00:22:00.900
+to get the value of one of these keys,
+one of these properties.
+
+00:22:02.530 --> 00:22:05.600
+We have both getters and
+setters for properties.
+
+00:22:05.600 --> 00:22:11.440
+Many of the properties are read-only,
+but anything that you would
+
+00:22:11.440 --> 00:22:14.870
+expect to be settable,
+as long as you have access to the file,
+
+00:22:14.870 --> 00:22:15.760
+is settable.
+
+00:22:16.100 --> 00:22:23.350
+We also support temporary properties,
+which is something whose use will become
+
+00:22:23.450 --> 00:22:26.330
+a little more obvious later in the talk.
+
+00:22:26.460 --> 00:22:31.080
+It's basically a way for you to, say,
+in memory only,
+
+00:22:31.300 --> 00:22:36.410
+set a property value of your own
+design and be able to get back
+
+00:22:36.660 --> 00:22:42.490
+at that property value through
+the same URL instance later on.
+
+00:22:45.750 --> 00:22:51.550
+So I wanted to just show you a
+whole list just to help emphasize
+
+00:22:51.580 --> 00:22:53.860
+how much we're supporting.
+
+00:22:53.860 --> 00:23:00.100
+We've got over 40 properties available,
+and I think there will definitely be a
+
+00:23:00.100 --> 00:23:02.970
+few more before we ship Snow Leopard.
+
+00:23:03.290 --> 00:23:06.240
+We've got the core set
+that you might expect,
+
+00:23:06.240 --> 00:23:09.160
+the name,
+some Booleans like is it a file,
+
+00:23:09.230 --> 00:23:16.190
+is it a directory, is volume, is package,
+that is, is it a packaged directory,
+
+00:23:16.190 --> 00:23:19.830
+is it immutable, is it hidden,
+does it have a hidden extension,
+
+00:23:19.830 --> 00:23:25.470
+all the dates, creation date,
+modification date and so on.
+
+00:23:26.320 --> 00:23:27.360
+What's the parent directory?
+
+00:23:27.360 --> 00:23:29.360
+You get that back, of course, as a URL.
+
+00:23:29.360 --> 00:23:31.940
+What's the volume URL that it's on?
+
+00:23:32.160 --> 00:23:35.480
+These are the kinds of core properties
+you can get for any file system resource.
+
+00:23:37.160 --> 00:23:40.790
+And then there's other higher-level
+ones that you don't have to go to
+
+00:23:40.790 --> 00:23:42.860
+a higher-level framework to get.
+
+00:23:42.860 --> 00:23:43.760
+We do that for you.
+
+00:23:43.760 --> 00:23:47.240
+We have a model of providers
+from higher-level frameworks.
+
+00:23:47.300 --> 00:23:50.770
+But through one API,
+you can get things like
+
+00:23:50.840 --> 00:23:56.010
+the type identifier,
+that is, the uniform type identifier that
+
+00:23:56.060 --> 00:23:59.810
+symbolically describes the resource type.
+
+00:24:00.410 --> 00:24:05.100
+Likewise, you can get the localized type
+description or the kind string.
+
+00:24:06.110 --> 00:24:08.900
+You can get the label
+information and the label color.
+
+00:24:08.900 --> 00:24:10.900
+That's the finder label.
+
+00:24:10.900 --> 00:24:12.860
+You can even get the icon.
+
+00:24:12.860 --> 00:24:15.870
+You can get both the effective icon,
+which is the one that
+
+00:24:15.870 --> 00:24:19.520
+the finder is displaying,
+or if you want to know whether
+
+00:24:19.530 --> 00:24:24.560
+the item has a custom icon,
+you can ask for the custom icon key.
+
+00:24:25.850 --> 00:24:30.860
+And that's available either
+if you request it through
+
+00:24:30.880 --> 00:24:35.000
+the core foundation API,
+you get it back as a CG image,
+
+00:24:35.000 --> 00:24:37.200
+the core graphics image.
+
+00:24:37.200 --> 00:24:40.440
+If you request it through
+the foundation NSURL API,
+
+00:24:40.440 --> 00:24:44.050
+you get it back as an NS image,
+assuming you have AppKit linked
+
+00:24:44.350 --> 00:24:45.760
+into your process.
+
+00:24:47.830 --> 00:24:51.830
+And then the last set on the bottom
+right is a whole slew of properties
+
+00:24:51.830 --> 00:24:54.570
+for getting at volume capabilities.
+
+00:24:54.570 --> 00:24:58.860
+So we're continuing and pushing
+even harder on our design
+
+00:24:58.920 --> 00:25:02.760
+point of not assuming too much.
+
+00:25:02.760 --> 00:25:06.420
+If you need to know what volume
+format you're on in order to know
+
+00:25:06.420 --> 00:25:11.000
+whether a certain capability exists,
+don't assume that the volume
+
+00:25:11.130 --> 00:25:15.790
+format capabilities are going
+to remain constant forever.
+
+00:25:16.480 --> 00:25:20.630
+You're much better off asking,
+instead of asking for the
+
+00:25:20.640 --> 00:25:24.290
+format and inferring information
+from the format code,
+
+00:25:24.290 --> 00:25:26.910
+ask the volume for its capabilities.
+
+00:25:26.920 --> 00:25:32.690
+So these properties tell you,
+does the volume support
+
+00:25:32.890 --> 00:25:35.390
+persistent file IDs?
+
+00:25:35.390 --> 00:25:37.440
+Does it support symlinks?
+
+00:25:37.690 --> 00:25:39.660
+Does it support journaling?
+
+00:25:39.660 --> 00:25:44.290
+Does it support some esoteric
+things like zero runs in files?
+
+00:25:44.340 --> 00:25:45.260
+Does it have case sensitive names?
+
+00:25:45.280 --> 00:25:49.230
+These are all properties
+you can get through,
+
+00:25:49.290 --> 00:25:51.900
+values you can get through this API.
+
+00:25:53.820 --> 00:25:57.220
+Now about enumerating directories.
+
+00:25:57.360 --> 00:26:03.490
+We have enumerators that now
+return URLs instead of paths.
+
+00:26:04.040 --> 00:26:10.510
+In order to use them most efficiently,
+we want to be able to, under the covers,
+
+00:26:10.540 --> 00:26:13.750
+get things in bulk from the kernel.
+
+00:26:13.760 --> 00:26:19.540
+And so we can do that most efficiently
+if we know up front which properties
+
+00:26:19.720 --> 00:26:25.650
+you're going to be accessing against the
+URLs you're going to be getting back.
+
+00:26:25.870 --> 00:26:29.040
+So that's called prefetching,
+and that's a feature of the
+
+00:26:29.040 --> 00:26:33.610
+enumerators that you can give us
+optionally an array of property keys
+
+00:26:33.620 --> 00:26:36.130
+that you want prefetched up front.
+
+00:26:36.140 --> 00:26:38.680
+And as the enumerator
+runs under the covers,
+
+00:26:38.810 --> 00:26:42.050
+it's getting all the values for
+those properties in the most
+
+00:26:42.050 --> 00:26:48.730
+efficient way possible and caching
+them in the application process so
+
+00:26:48.770 --> 00:26:52.550
+that when you later ask for those
+properties from the URLs that
+
+00:26:52.550 --> 00:26:56.940
+you get back from the enumerator,
+we don't do any additional I/O to
+
+00:26:56.940 --> 00:26:59.360
+give you those property values.
+
+00:26:59.360 --> 00:27:02.750
+These enumerators also
+support deep enumeration for
+
+00:27:02.750 --> 00:27:04.690
+those of you that need that.
+
+00:27:05.300 --> 00:27:07.350
+In core foundation,
+I mentioned that's done with a
+
+00:27:07.350 --> 00:27:08.960
+new type called CFURL enumerator.
+
+00:27:08.960 --> 00:27:14.590
+And what we've done in foundation
+is we already -- NS file manager
+
+00:27:14.590 --> 00:27:20.030
+already has the NS directory
+enumerator type that returns paths.
+
+00:27:20.500 --> 00:27:24.300
+And we're just making a new
+factory method for that that
+
+00:27:24.450 --> 00:27:28.890
+gives you an NS directory
+enumerator which returns URLs,
+
+00:27:28.950 --> 00:27:30.540
+NSURLs instead.
+
+00:27:32.730 --> 00:27:34.490
+Now, what about FSRefs?
+
+00:27:34.560 --> 00:27:37.420
+I mentioned that URLs are path-based.
+
+00:27:37.420 --> 00:27:42.410
+And there are some things that
+FSRefs do that are pretty useful.
+
+00:27:42.530 --> 00:27:48.070
+The main thing is that since
+FSRefs are path-independent,
+
+00:27:48.320 --> 00:27:51.020
+and remember,
+you track your file by file ID,
+
+00:27:51.020 --> 00:27:53.700
+they're much smaller.
+
+00:27:53.700 --> 00:27:57.250
+It doesn't matter how long the path is.
+
+00:27:58.320 --> 00:28:02.830
+But also, the file ID doesn't change
+when the path may change.
+
+00:28:02.960 --> 00:28:07.640
+So, if the user moves a document
+around or renames it,
+
+00:28:07.640 --> 00:28:13.390
+a path reference to that file
+becomes invalid and is useless.
+
+00:28:13.390 --> 00:28:18.500
+But an FSRef remains valid and can
+track that file around on disk.
+
+00:28:20.520 --> 00:28:25.100
+In addition,
+the 80 byte size means that it
+
+00:28:25.100 --> 00:28:29.530
+scales really well for a few
+clients who need to hold on to
+
+00:28:29.530 --> 00:28:34.220
+a lot of FSRefs like the finder.
+
+00:28:36.400 --> 00:28:42.500
+So we realized that we can do the same
+thing by being clever with our URLs.
+
+00:28:42.500 --> 00:28:46.540
+And so we're introducing today
+something called file reference URLs,
+
+00:28:46.540 --> 00:28:52.790
+which you can think of as a file
+URL that behaves just like an FS ref.
+
+00:28:52.910 --> 00:28:55.890
+And in a lot of ways,
+it's even better because
+
+00:28:55.890 --> 00:28:58.250
+it's smaller than 80 bytes.
+
+00:28:58.600 --> 00:29:03.900
+But better than that, because it's a URL,
+we don't need two separate APIs in order
+
+00:29:03.900 --> 00:29:10.920
+to work with either path references
+or path URLs or reference URLs.
+
+00:29:10.920 --> 00:29:14.740
+We can have a single API that can
+handle either form of the URL,
+
+00:29:14.740 --> 00:29:20.130
+but you get the semantics that
+you want depending on your needs.
+
+00:29:20.140 --> 00:29:24.060
+Let me show you a little bit
+about what those look like.
+
+00:29:26.020 --> 00:29:32.090
+So imagine I have my presentation
+on disk and a traditional file
+
+00:29:32.090 --> 00:29:36.710
+URL would look a little bit like this,
+just a path into my home directory
+
+00:29:37.210 --> 00:29:38.420
+that identifies the file.
+
+00:29:38.420 --> 00:29:42.060
+A file reference URL looks
+a little different.
+
+00:29:42.080 --> 00:29:48.150
+It has something at the beginning
+that says .file and that's simply
+
+00:29:48.320 --> 00:29:52.950
+a reserved name in our file
+system that tells us at the root
+
+00:29:52.950 --> 00:29:58.340
+of the file system that this URL,
+it's not a valid path, by the way.
+
+00:29:58.340 --> 00:30:03.210
+This is only valid in URL space,
+but we prevent it from
+
+00:30:03.210 --> 00:30:04.500
+conflicting in the file system.
+
+00:30:04.500 --> 00:30:10.330
+And it tells us that in the URL,
+the next item in the next element
+
+00:30:10.330 --> 00:30:16.920
+of the path in the URL is an ID,
+a device and a file ID pair.
+
+00:30:16.920 --> 00:30:19.550
+But you don't need to worry about this.
+
+00:30:19.550 --> 00:30:23.130
+I just wanted to explain what
+you see when you look at the
+
+00:30:23.130 --> 00:30:29.340
+URL string because the URL string
+is what identifies the resource.
+
+00:30:29.400 --> 00:30:33.540
+But we have the flexibility
+to interpret file URLs on our
+
+00:30:33.540 --> 00:30:36.170
+platform the way that works for us.
+
+00:30:36.300 --> 00:30:42.870
+And so this is not a format, though,
+that you ever have to worry about.
+
+00:30:42.880 --> 00:30:49.350
+In fact, please don't try to construct
+this yourself or parse this
+
+00:30:49.420 --> 00:30:50.530
+string and make sense of it.
+
+00:30:50.580 --> 00:30:55.360
+We provide very convenient APIs that do
+everything you need to produce a file.
+
+00:30:55.380 --> 00:30:58.090
+So, how does that work?
+
+00:30:58.090 --> 00:31:02.670
+Well, first of all,
+we have a lot of APIs that
+
+00:31:03.090 --> 00:31:05.160
+are URL based already.
+
+00:31:06.080 --> 00:31:10.570
+And those people expect to continue
+returning path-based file URLs,
+
+00:31:10.580 --> 00:31:12.280
+so we'll continue to do that.
+
+00:31:12.320 --> 00:31:18.120
+Your app's not going to see any file
+reference URLs unless you ask for them.
+
+00:31:18.870 --> 00:31:20.980
+However,
+our frameworks will be supporting
+
+00:31:20.980 --> 00:31:24.220
+them so that you can start using them
+anytime you want in Snow Leopard.
+
+00:31:24.220 --> 00:31:29.370
+And it's mostly transparent
+because what most people do
+
+00:31:29.840 --> 00:31:34.240
+currently with URLs is when you
+need to get at the underlying file,
+
+00:31:34.240 --> 00:31:38.100
+you ask for its path,
+or you say you call CFURL,
+
+00:31:38.100 --> 00:31:41.380
+get file system representation,
+which gives you back the CPath.
+
+00:31:41.440 --> 00:31:45.400
+And that will all continue to
+work with file reference URLs.
+
+00:31:45.400 --> 00:31:49.000
+If you call these APIs,
+you'll get back the
+
+00:31:49.000 --> 00:31:52.940
+standard file system path,
+not an ID-based path.
+
+00:31:54.720 --> 00:31:58.740
+But if you use them to say,
+if you use a file reference
+
+00:31:58.740 --> 00:32:03.540
+URL to get property values,
+then we don't have to do any conversion.
+
+00:32:03.540 --> 00:32:06.610
+The path to ref conversion
+or any of that stuff,
+
+00:32:06.690 --> 00:32:11.420
+we can talk directly to the Core OS to
+get properties from the file ID that's
+
+00:32:11.420 --> 00:32:13.760
+encoded in the reference URL.
+
+00:32:16.900 --> 00:32:22.240
+One important difference about reference
+URLs is that they're not persistent.
+
+00:32:22.240 --> 00:32:25.440
+You don't want to save them to disk
+and expect them to work later on.
+
+00:32:25.440 --> 00:32:32.550
+Like FSRefs,
+they're valid for the mount lifetime
+
+00:32:32.550 --> 00:32:34.000
+of the volume that you're working with.
+
+00:32:34.000 --> 00:32:37.520
+So if your system is rebooted,
+whatever file reference URL you
+
+00:32:37.520 --> 00:32:40.400
+may have been holding onto,
+it's no longer valid.
+
+00:32:40.670 --> 00:32:43.680
+However, they are good globally,
+so you can send them between
+
+00:32:43.680 --> 00:32:45.270
+processes no problem.
+
+00:32:46.790 --> 00:32:50.420
+All right,
+so that's a quick overview of the APIs.
+
+00:32:50.460 --> 00:32:54.820
+I wanted to run through
+a few code examples.
+
+00:32:54.980 --> 00:32:57.630
+Just to give you a feel
+for what it looks like,
+
+00:32:57.800 --> 00:33:02.950
+if I want to get values, property values,
+this is a method called
+
+00:33:02.950 --> 00:33:04.680
+name and icon for URL.
+
+00:33:04.680 --> 00:33:11.430
+It returns a dictionary with just
+the localized name and the icon
+
+00:33:11.430 --> 00:33:16.230
+of the file that's passed in,
+the file URL that's passed in.
+
+00:33:16.410 --> 00:33:20.260
+So in order to do that,
+we create an array containing
+
+00:33:20.260 --> 00:33:24.010
+the keys that we want,
+the localized name key and
+
+00:33:24.010 --> 00:33:26.140
+the effective icon key.
+
+00:33:26.140 --> 00:33:30.700
+I spaced this out vertically
+because if I put it all in line
+
+00:33:30.750 --> 00:33:35.780
+with creating the array on the fly,
+it would be hard to see.
+
+00:33:35.780 --> 00:33:38.940
+But we create the array,
+and then we simply
+
+00:33:38.940 --> 00:33:43.200
+call on the URL itself,
+we call resource values for keys,
+
+00:33:43.200 --> 00:33:45.480
+we pass in the keys array.
+
+00:33:46.240 --> 00:33:51.470
+And then optionally,
+we could get back an error if we want.
+
+00:33:51.790 --> 00:33:57.100
+The way the API works in this
+case is it returns a dictionary,
+
+00:33:57.100 --> 00:33:59.560
+resource values for keys
+returns a dictionary,
+
+00:33:59.560 --> 00:34:03.220
+or if an error occurs, it returns nil,
+and then you can check
+
+00:34:03.230 --> 00:34:05.140
+the optional output error.
+
+00:34:09.140 --> 00:34:11.860
+If I want to set a property,
+say I want in this example,
+
+00:34:11.860 --> 00:34:15.320
+I want to set the
+modification date on a file.
+
+00:34:15.320 --> 00:34:19.600
+This method example is called touch URL.
+
+00:34:19.600 --> 00:34:21.630
+It's like the touch command line.
+
+00:34:21.630 --> 00:34:26.540
+It simply calls set resource
+value and you pass in the value,
+
+00:34:26.540 --> 00:34:31.840
+in this case, NSDate date,
+which is the current time and date.
+
+00:34:32.640 --> 00:34:36.930
+For key, and the key is NSURL content
+modification date key,
+
+00:34:37.080 --> 00:34:40.440
+and again,
+you get back an optional error.
+
+00:34:40.440 --> 00:34:44.160
+This method returns a Boolean
+for success or failure.
+
+00:34:44.160 --> 00:34:47.450
+If it returns false,
+then you've got an error result.
+
+00:34:52.250 --> 00:34:56.730
+If you want to create
+a file reference URL,
+
+00:34:56.730 --> 00:35:01.620
+and the case where you might want
+to use this is any time you want to
+
+00:35:01.620 --> 00:35:06.040
+make sure you're tracking a document
+by its ID so that if you're holding
+
+00:35:06.040 --> 00:35:09.510
+onto it in memory for a long time,
+the path might change,
+
+00:35:09.510 --> 00:35:13.060
+then it's a good idea to hold
+onto a file reference URL.
+
+00:35:13.060 --> 00:35:16.800
+In this example,
+the set document method is
+
+00:35:16.800 --> 00:35:21.230
+given an arbitrary file URL,
+and you know you want to assign
+
+00:35:21.310 --> 00:35:24.190
+it to your instance variable,
+but you don't know what kind
+
+00:35:24.190 --> 00:35:25.780
+of file URL you were given.
+
+00:35:25.780 --> 00:35:29.220
+It may be a file reference URL or
+it may be a path-based URL.
+
+00:35:29.220 --> 00:35:34.860
+Well, you can simply call on the URL,
+you call the file reference URL method,
+
+00:35:34.860 --> 00:35:40.280
+and if necessary, it converts it into a
+reference URL and returns it.
+
+00:35:40.380 --> 00:35:46.720
+And then we see... simply hold
+onto that in the instance variable.
+
+00:35:48.510 --> 00:35:52.500
+A quick example of directory enumeration.
+
+00:35:52.500 --> 00:35:57.760
+Say we want to enumerate the
+directory and we know that right
+
+00:35:57.760 --> 00:36:01.890
+after we finish the enumeration,
+we're going to be drawing the icons
+
+00:36:01.890 --> 00:36:07.490
+and the display name or localized
+name of each item in the directory.
+
+00:36:07.500 --> 00:36:11.790
+And so what we do is we make
+an array with the property
+
+00:36:12.440 --> 00:36:17.080
+keys that we want to prefetch,
+so the localized name and
+
+00:36:17.080 --> 00:36:19.540
+the effective icon key.
+
+00:36:19.540 --> 00:36:24.160
+And then continuing,
+we ask NSFileManager for an
+
+00:36:24.160 --> 00:36:27.340
+enumerator that is URL-based.
+
+00:36:27.340 --> 00:36:31.580
+So that method is enumerator at
+URL and you pass in the directory
+
+00:36:31.580 --> 00:36:33.910
+URL that you want to enumerate.
+
+00:36:33.950 --> 00:36:37.340
+This is the parallel
+to enumerator at path.
+
+00:36:37.870 --> 00:36:41.530
+Which is an existing
+method in NSFileManager.
+
+00:36:41.730 --> 00:36:45.080
+So enumerator at URL,
+including properties for keys,
+
+00:36:45.170 --> 00:36:46.500
+we pass in our key array.
+
+00:36:46.760 --> 00:36:50.080
+And there's some options
+that I won't go into,
+
+00:36:50.080 --> 00:36:52.720
+but it includes things
+like deep enumeration.
+
+00:36:52.740 --> 00:36:57.050
+And then there's an error handler,
+which is actually a block,
+
+00:36:57.050 --> 00:37:03.270
+a callback in the form of a block
+that allows you to handle errors
+
+00:37:03.330 --> 00:37:05.500
+and either continue or not continue.
+
+00:37:05.760 --> 00:37:10.040
+Once you have an enumerator,
+you can go through it anyway
+
+00:37:10.040 --> 00:37:12.140
+in any of the traditional ways.
+
+00:37:12.140 --> 00:37:16.320
+In this case,
+we call for URL in enumerator using
+
+00:37:16.320 --> 00:37:18.280
+the fast enumeration protocol.
+
+00:37:18.280 --> 00:37:22.430
+And we just go through
+each item one at a time.
+
+00:37:22.440 --> 00:37:31.690
+We get back the URLs in the directory
+and add them to our object view here.
+
+00:37:32.100 --> 00:37:33.970
+Pretty simple.
+
+00:37:34.030 --> 00:37:38.800
+Although it's one at a time
+access at the API level,
+
+00:37:38.800 --> 00:37:44.760
+we're doing bulk access when
+enumerating the directory,
+
+00:37:44.760 --> 00:37:47.670
+talking to the core file system.
+
+00:37:49.480 --> 00:37:53.520
+Before I finish my section,
+I wanted to mention and just show real
+
+00:37:53.750 --> 00:37:56.540
+quick some sample code that's available.
+
+00:37:56.540 --> 00:38:03.180
+If I can switch to this
+machine and get rid of that.
+
+00:38:05.250 --> 00:38:07.370
+The sample is called URL Git Info.
+
+00:38:07.710 --> 00:38:09.900
+It doesn't do a whole lot yet,
+but we're going to be adding to
+
+00:38:09.900 --> 00:38:11.680
+it as we fill in more of the API.
+
+00:38:11.680 --> 00:38:17.170
+It does this nice sort of simplified
+version of the Finder Info Window where
+
+00:38:17.180 --> 00:38:22.550
+it gives us a bunch of information,
+basically fetching property
+
+00:38:22.550 --> 00:38:25.100
+values from using the API.
+
+00:38:25.100 --> 00:38:26.510
+So this is a volume.
+
+00:38:26.510 --> 00:38:31.660
+It starts out with showing the root,
+but it gives us the volume name,
+
+00:38:31.660 --> 00:38:38.590
+tells us the localized description,
+the type identifier is public.volume,
+
+00:38:38.590 --> 00:38:40.460
+and a bunch of other things, the date.
+
+00:38:40.500 --> 00:38:45.430
+The parent directory URL is null,
+but the volume URL is
+
+00:38:45.430 --> 00:38:47.990
+basically slash itself.
+
+00:38:48.020 --> 00:38:50.760
+And this app just lets
+you drag in anything.
+
+00:38:50.760 --> 00:38:53.220
+You can drag a file in,
+and it shows you all of
+
+00:38:53.220 --> 00:38:54.740
+the same information.
+
+00:38:55.100 --> 00:38:57.500
+Of course, this is a package.
+
+00:38:57.540 --> 00:39:02.600
+The keynotes documents are packages,
+so the size in this case is zero
+
+00:39:02.600 --> 00:39:07.690
+because it's really a directory.
+
+00:39:07.850 --> 00:39:10.830
+An alias, you can see a couple of things.
+
+00:39:10.830 --> 00:39:14.810
+First of all,
+this is the music folder's custom icon.
+
+00:39:14.820 --> 00:39:18.260
+We get that back from the
+API and it's even badged.
+
+00:39:18.260 --> 00:39:21.060
+It has the little alias badge on it.
+
+00:39:21.060 --> 00:39:23.790
+And this is all through one API.
+
+00:39:24.910 --> 00:39:26.990
+So as I said, we'll be adding to that.
+
+00:39:27.030 --> 00:39:37.330
+I was going to open up the project,
+but I think
+
+00:39:44.220 --> 00:39:48.180
+So what's the status of the API on
+the DVD that you got on Monday?
+
+00:39:48.180 --> 00:39:55.040
+Right now we have fetching
+property values is supported
+
+00:39:55.100 --> 00:39:57.660
+both for NSURL and CFURL.
+
+00:39:57.660 --> 00:39:58.990
+So you can get property values.
+
+00:39:58.990 --> 00:40:04.040
+You can also use file reference
+URLs so that the methods that convert
+
+00:40:04.040 --> 00:40:09.360
+back and forth between reference
+URLs and path URLs work properly.
+
+00:40:10.030 --> 00:40:14.330
+And coming soon in upcoming seeds,
+we'll have setting property values
+
+00:40:14.330 --> 00:40:17.080
+supported and directory enumeration.
+
+00:40:20.070 --> 00:40:23.880
+So just recapping some
+of the benefits here,
+
+00:40:23.880 --> 00:40:28.260
+this is really designed to
+provide the future foundation
+
+00:40:28.260 --> 00:40:32.300
+going forward for framework
+level access to the file system.
+
+00:40:32.300 --> 00:40:39.580
+It improves efficiency by avoiding all
+those costly data type conversions.
+
+00:40:40.280 --> 00:40:45.540
+It simplifies our APIs by preferring
+one data type going forward
+
+00:40:45.540 --> 00:40:50.820
+that works for all different
+usage models of the file system.
+
+00:40:50.820 --> 00:40:54.800
+And as you adopt the APIs,
+we hope you'll find them
+
+00:40:54.920 --> 00:40:57.040
+much more convenient.
+
+00:40:57.040 --> 00:41:03.250
+You'll be able to simplify your code
+and really get every bit of efficiency
+
+00:41:03.260 --> 00:41:08.990
+you can by adopting this model
+all the way into your application.
+
+00:41:10.890 --> 00:41:11.710
+Now, what else?
+
+00:41:11.710 --> 00:41:13.280
+What else haven't we covered?
+
+00:41:13.280 --> 00:41:19.040
+Well, I mentioned up at the top
+persistent file references.
+
+00:41:19.040 --> 00:41:25.040
+And URLs, in addition to file reference
+URLs being not that great for tracking
+
+00:41:25.170 --> 00:41:30.330
+a file over the long term because
+your system might get rebooted,
+
+00:41:30.330 --> 00:41:35.760
+even file path URLs aren't that great
+because file paths change over time.
+
+00:41:35.790 --> 00:41:38.630
+And so,
+we've reached that point in our show
+
+00:41:38.630 --> 00:41:44.070
+where Keith is going to explain all
+about persistent file references.
+
+00:41:47.800 --> 00:41:49.790
+Thank you.
+
+00:41:49.790 --> 00:41:51.200
+Am I on?
+
+00:41:51.800 --> 00:41:53.340
+Okay.
+
+00:41:53.340 --> 00:41:57.500
+As Chris said, I'm going to talk about
+persistent file references.
+
+00:41:57.500 --> 00:42:00.250
+And as he said,
+everything you've heard about so
+
+00:42:00.260 --> 00:42:04.040
+far is designed to give you really
+efficient and fast access to cache
+
+00:42:04.210 --> 00:42:06.770
+properties of files and stuff in memory.
+
+00:42:06.770 --> 00:42:08.780
+However,
+sometimes that isn't what you need.
+
+00:42:08.930 --> 00:42:12.430
+Sometimes you have to store away
+what file in particular you're going
+
+00:42:12.430 --> 00:42:15.710
+to need to use later or keep track
+of it so that you can come back to
+
+00:42:15.710 --> 00:42:17.780
+it the next time the user opens it.
+
+00:42:17.800 --> 00:42:21.070
+And URLs aren't the best for that.
+
+00:42:21.110 --> 00:42:26.420
+As Chris said, URLs are either path-based
+or file ID-based.
+
+00:42:26.420 --> 00:42:29.690
+And file IDs aren't valid terribly long.
+
+00:42:29.690 --> 00:42:33.510
+And paths are usually valid for a while,
+but there are times
+
+00:42:33.510 --> 00:42:35.460
+paths aren't sufficient.
+
+00:42:35.460 --> 00:42:38.250
+And the reason is for files
+on your local hard drive,
+
+00:42:38.310 --> 00:42:40.040
+usually the path is the same.
+
+00:42:40.040 --> 00:42:45.320
+But if users have a USB drive or
+they put stuff on a file server,
+
+00:42:45.320 --> 00:42:47.410
+sometimes even the path
+to a file can change.
+
+00:42:47.800 --> 00:42:57.350
+And so when you go to use it later,
+that path is no longer correct.
+
+00:43:00.980 --> 00:43:02.740
+What do you do?
+
+00:43:02.740 --> 00:43:05.460
+If you're an old-school Carbon person,
+you're saying, hey,
+
+00:43:05.620 --> 00:43:07.510
+aliases are the answer.
+
+00:43:07.520 --> 00:43:12.180
+And Alias Manager has solved
+most of those problems for
+
+00:43:12.180 --> 00:43:14.210
+the last 15 years or so.
+
+00:43:14.260 --> 00:43:17.780
+Aliases, you create them with an FS Ref.
+
+00:43:17.780 --> 00:43:21.000
+It gives you back something
+called an alias handle.
+
+00:43:21.000 --> 00:43:24.750
+Later, you get that alias handle back
+to the Alias Manager and say,
+
+00:43:24.750 --> 00:43:27.770
+hey, what file did this use to point to?
+
+00:43:27.810 --> 00:43:31.580
+And it gives you back an FS Ref if
+it can find the file that it thinks
+
+00:43:31.690 --> 00:43:34.320
+the alias was originally made to.
+
+00:43:34.350 --> 00:43:37.110
+Now,
+there are a lot of Alias Manager calls.
+
+00:43:37.230 --> 00:43:41.540
+There are more every year because
+we need to add more stuff.
+
+00:43:41.540 --> 00:43:45.260
+And the API has evolved over time.
+
+00:43:45.260 --> 00:43:48.340
+There also are things that
+you know in the Finder.
+
+00:43:48.360 --> 00:43:50.930
+You can say,
+make alias under the File menu.
+
+00:43:51.040 --> 00:43:54.070
+And that makes a little file on
+your hard drive that when you
+
+00:43:54.070 --> 00:43:59.370
+double-click on it or when a user
+picks it in an open or save panel,
+
+00:43:59.470 --> 00:44:02.260
+it kind of follows what
+the alias was made to.
+
+00:44:02.260 --> 00:44:07.350
+And it acts a lot like symbolic links,
+but kind of at a higher level with
+
+00:44:07.450 --> 00:44:11.520
+a lot of the benefits we just talked
+about-- finding and mounting file
+
+00:44:11.630 --> 00:44:15.070
+servers or disk images or USB keys.
+
+00:44:16.370 --> 00:44:19.780
+That said, aliases aren't perfect.
+
+00:44:19.780 --> 00:44:21.810
+They use FSRefs and
+they use alias handles,
+
+00:44:21.820 --> 00:44:26.330
+which are both kind of older types,
+and we've explained why we're not that,
+
+00:44:26.400 --> 00:44:30.360
+you know, why FSRefs aren't doing it for
+us as well as they used to.
+
+00:44:30.360 --> 00:44:34.020
+Alias handles also, handles are kind of
+deprecated in the API.
+
+00:44:34.020 --> 00:44:37.520
+They're not necessary anymore,
+certainly the way they used to be.
+
+00:44:38.480 --> 00:44:41.110
+Aliases also have a limited
+set of information in them you
+
+00:44:41.110 --> 00:44:42.840
+can get back without resolving.
+
+00:44:42.840 --> 00:44:46.130
+You can ask an alias what the
+name of its file was and maybe
+
+00:44:46.130 --> 00:44:49.190
+what kind of volume it was on,
+but you can't ask it
+
+00:44:49.220 --> 00:44:50.820
+for much beyond that.
+
+00:44:50.820 --> 00:44:53.410
+And as I said before,
+there are a lot of calls in
+
+00:44:53.550 --> 00:44:57.140
+the alias manager because the
+API has had to evolve over time.
+
+00:44:57.140 --> 00:45:01.540
+And so just staring at the header file,
+it's difficult to know what function to
+
+00:45:01.540 --> 00:45:03.930
+call and what to pass in at some points.
+
+00:45:03.940 --> 00:45:08.240
+The set of rules for how we resolve
+an alias has changed over time.
+
+00:45:08.360 --> 00:45:10.180
+It's been a little bit more
+complicated in the past,
+
+00:45:10.180 --> 00:45:12.360
+but it's been a lot easier to
+solve because it's needed to.
+
+00:45:12.360 --> 00:45:15.270
+Paths are a lot more important
+in Mac OS than they used to be.
+
+00:45:15.440 --> 00:45:18.580
+When aliases were first created,
+the only kind of file server that
+
+00:45:18.580 --> 00:45:20.280
+existed was an AFP file server.
+
+00:45:20.360 --> 00:45:23.230
+And now we have the
+Internet and we have USB drives.
+
+00:45:23.270 --> 00:45:27.350
+So the rules for how they work have
+changed and that's caused problems.
+
+00:45:27.360 --> 00:45:29.980
+And lastly,
+aliases don't mesh very well with
+
+00:45:29.980 --> 00:45:32.390
+everything you've heard about so far.
+
+00:45:32.980 --> 00:45:36.680
+So we're introducing a
+new type called bookmarks.
+
+00:45:36.700 --> 00:45:39.870
+And we were going to put up bookmarks
+in huge letters and do that flashy
+
+00:45:39.960 --> 00:45:41.380
+thing Steve does when it's new.
+
+00:45:41.380 --> 00:45:44.460
+But I didn't know how to do
+the flashy thing in Keynote.
+
+00:45:44.470 --> 00:45:47.020
+And then Chris Parker gave
+away our name earlier.
+
+00:45:47.050 --> 00:45:49.240
+So it's not a surprise anymore.
+
+00:45:50.090 --> 00:45:50.650
+That's it.
+
+00:45:50.740 --> 00:45:52.780
+Bookmarks, I mean,
+you've heard the name before.
+
+00:45:52.780 --> 00:45:55.270
+You know, in web browsers,
+you have bookmarks.
+
+00:45:55.380 --> 00:45:59.000
+And logically,
+a bookmark is kind of a saved URL,
+
+00:45:59.000 --> 00:46:00.670
+something you can come back to later.
+
+00:46:00.680 --> 00:46:04.710
+And they're the same
+thing in FSEfficiency.
+
+00:46:04.740 --> 00:46:08.900
+If you have a file colon URL,
+you can make a bookmark from it.
+
+00:46:09.030 --> 00:46:11.940
+And then later, you can say, hey,
+give me back that original URL.
+
+00:46:11.940 --> 00:46:15.180
+And it'll do what it can to get
+you back a pointer to the file
+
+00:46:15.270 --> 00:46:17.250
+that you originally had it from.
+
+00:46:18.400 --> 00:46:22.080
+Bookmarks use standard foundation,
+core foundation types,
+
+00:46:22.120 --> 00:46:25.240
+like NSStrings and NSNumbers,
+just like everything else
+
+00:46:25.240 --> 00:46:26.680
+in the FSEfficiency APIs.
+
+00:46:26.680 --> 00:46:30.860
+So they mesh well with
+the rest of the system.
+
+00:46:30.860 --> 00:46:35.420
+Bookmarks can also store resource
+properties in the same way that,
+
+00:46:35.450 --> 00:46:38.370
+you know, we said URLs all have
+resource properties.
+
+00:46:38.380 --> 00:46:42.640
+Bookmarks all have resource properties,
+and they map directly onto the
+
+00:46:42.640 --> 00:46:47.370
+resource properties that from the
+original file it was a URL from.
+
+00:46:48.650 --> 00:46:52.710
+And in Snow Leopard, bookmarks,
+we expect you're going to use
+
+00:46:52.710 --> 00:46:54.980
+them for file scheme URLs.
+
+00:46:54.980 --> 00:46:59.170
+You can make a bookmark from
+any URL you have in memory.
+
+00:46:59.180 --> 00:47:02.820
+And, you know, if you have an HTTP URL,
+and you say, hey,
+
+00:47:02.820 --> 00:47:05.150
+give me a bookmark to this,
+I'll give you a bookmark.
+
+00:47:05.290 --> 00:47:08.720
+And if you give me the bookmark later,
+I'll give you back an HTTP URL.
+
+00:47:08.720 --> 00:47:12.020
+But there won't be much in it
+besides the string of the URL.
+
+00:47:15.400 --> 00:47:17.540
+Here's what you do to create a bookmark.
+
+00:47:17.540 --> 00:47:21.690
+As we said, you have, for example,
+a URL in foundation.
+
+00:47:22.060 --> 00:47:26.560
+You'd say bookmark data with options and
+you'd pass in a bunch of zeros and nulls
+
+00:47:26.610 --> 00:47:28.700
+to get pretty much the default behavior.
+
+00:47:28.710 --> 00:47:31.740
+It will give you back an NSData item.
+
+00:47:32.030 --> 00:47:35.450
+Then you can squirrel that away in
+whatever place you want to use it
+
+00:47:35.520 --> 00:47:38.400
+in your document or just in memory.
+
+00:47:38.820 --> 00:47:41.810
+At Core Foundation,
+we have pretty much the same function,
+
+00:47:41.850 --> 00:47:48.100
+the same functionality, CFURL,
+create bookmark data.
+
+00:47:48.900 --> 00:48:28.700
+[Transcript missing]
+
+00:48:28.960 --> 00:48:29.800
+Resolution.
+
+00:48:29.800 --> 00:48:32.040
+This process is called resolution.
+
+00:48:32.140 --> 00:48:34.640
+If you're familiar
+with the alias manager,
+
+00:48:34.640 --> 00:48:35.700
+it's the same idea.
+
+00:48:35.950 --> 00:48:38.490
+Internally,
+we'll go through a whole bunch
+
+00:48:38.490 --> 00:48:42.130
+of rules to try to find the file
+that you made the bookmark to.
+
+00:48:42.130 --> 00:48:45.630
+If the file was on a file server,
+we may tell the user, hey,
+
+00:48:45.630 --> 00:48:49.340
+you need to give us a password
+so we can mount this file server.
+
+00:48:49.340 --> 00:48:52.490
+If it was on a USB key,
+we may ask the user to insert that
+
+00:48:52.580 --> 00:48:55.710
+USB key back into the computer
+or mount a disk image for a
+
+00:48:55.710 --> 00:48:57.640
+file that was on a disk image.
+
+00:48:58.900 --> 00:49:01.210
+And that's all code that
+you don't have to write.
+
+00:49:01.220 --> 00:49:03.710
+We'll do the right thing.
+
+00:49:05.570 --> 00:49:07.530
+Earlier I said there were
+properties in bookmarks,
+
+00:49:07.540 --> 00:49:10.140
+just like URLs have resource properties.
+
+00:49:10.170 --> 00:49:14.510
+Bookmarks have the same properties
+that you can get from an NSURL.
+
+00:49:14.530 --> 00:49:22.200
+They use the same namespace and they have
+information in NSStrings or NSNumbers.
+
+00:49:22.780 --> 00:49:26.820
+So once you've learned how to get a
+property from the file system through
+
+00:49:26.820 --> 00:49:30.410
+the FS efficiency APIs on a URL,
+you know how to get the same
+
+00:49:30.410 --> 00:49:31.950
+property out of a bookmark.
+
+00:49:31.950 --> 00:49:32.780
+It's the same key.
+
+00:49:32.780 --> 00:49:34.360
+It's pretty much exactly the same code.
+
+00:49:35.660 --> 00:49:38.310
+This includes any temporary
+properties that you add.
+
+00:49:38.310 --> 00:49:45.120
+So if you want to create a bookmark
+and kind of squirrel away some
+
+00:49:45.210 --> 00:49:48.480
+information of your own in it,
+you can create a URL,
+
+00:49:48.480 --> 00:49:52.520
+add a temporary property to
+that URL with your information,
+
+00:49:52.520 --> 00:49:56.000
+then ask to create a bookmark and
+ask it to include the value for
+
+00:49:56.000 --> 00:50:00.250
+that property in the bookmark,
+and it'll create a bookmark with that.
+
+00:50:00.260 --> 00:50:02.950
+Later,
+you can ask the bookmark what was the
+
+00:50:02.950 --> 00:50:05.250
+value of this key that you guys set.
+
+00:50:05.420 --> 00:50:07.710
+That is your temporary key value,
+and it'll return it to you.
+
+00:50:07.780 --> 00:50:10.280
+Not only that,
+it has to be one of the standard
+
+00:50:10.280 --> 00:50:14.190
+types that the system knows about,
+like an NSString or an
+
+00:50:14.190 --> 00:50:15.840
+NSNumber or an NSData.
+
+00:50:18.040 --> 00:50:21.500
+and this information is retrieved without
+needing access to the original item.
+
+00:50:21.500 --> 00:50:25.480
+We don't touch the file system to
+return properties from bookmarks
+
+00:50:25.580 --> 00:50:29.130
+because the bookmark has pretty
+much encoded everything into that
+
+00:50:29.270 --> 00:50:31.690
+NSData object that I showed you.
+
+00:50:32.720 --> 00:50:36.720
+Here's an example of how you create
+a bookmark with a set of properties.
+
+00:50:36.840 --> 00:50:39.790
+In this particular case, I'm saying,
+I'd like you to make a
+
+00:50:39.850 --> 00:50:43.650
+bookmark from this URL,
+which is that URL up front.
+
+00:50:43.750 --> 00:50:46.890
+In the bookmark, I'd like you to include
+the name of the file,
+
+00:50:47.080 --> 00:50:51.580
+the display name of the file,
+how big the file is,
+
+00:50:51.580 --> 00:50:55.500
+and what the effective icon is for it,
+which will be the icon that would show,
+
+00:50:55.580 --> 00:50:58.190
+for example, in the finder for the file.
+
+00:50:58.680 --> 00:51:01.200
+and when that comes back,
+you'll have a bookmark.
+
+00:51:01.260 --> 00:51:05.050
+Later, you can ask that bookmark data
+object for any of those values
+
+00:51:05.090 --> 00:51:08.070
+and it'll give it to you,
+even if the user has unmounted the disk,
+
+00:51:08.190 --> 00:51:11.900
+even if you save this out and
+write it back into memory later,
+
+00:51:11.900 --> 00:51:15.420
+even on a different computer
+if you send this across the
+
+00:51:15.430 --> 00:51:17.410
+network to somewhere else.
+
+00:51:17.650 --> 00:51:22.910
+Now that said,
+if you want to ask a bookmark for a
+
+00:51:23.020 --> 00:51:27.780
+property at some time in the future,
+you need to ensure that you ask to have
+
+00:51:27.820 --> 00:51:30.210
+the bookmark created with that property.
+
+00:51:30.220 --> 00:51:36.130
+We are trying not to include
+any default types in bookmarks.
+
+00:51:36.320 --> 00:51:39.470
+We want you to tell us what you
+need so that we don't have to guess
+
+00:51:39.470 --> 00:51:42.980
+and we don't have to make things
+bigger or slower or less efficient
+
+00:51:42.980 --> 00:51:46.010
+than they would otherwise be.
+
+00:51:46.740 --> 00:51:50.340
+Here's how you'd get those same
+properties back from that bookmark.
+
+00:51:50.340 --> 00:51:54.140
+You would call NSURL's
+resource value for keys.
+
+00:51:54.430 --> 00:51:57.900
+Earlier you saw Chris was calling
+URL resource values for keys.
+
+00:51:57.900 --> 00:51:59.440
+Here you have a bookmark.
+
+00:51:59.550 --> 00:52:02.350
+You're saying,
+please return resource values
+
+00:52:02.420 --> 00:52:04.600
+for keys for this bookmark data.
+
+00:52:04.890 --> 00:52:07.060
+You've given me the bookmark
+data and you've said,
+
+00:52:07.060 --> 00:52:11.510
+I'd like the file name, localized name,
+and file size back.
+
+00:52:11.580 --> 00:52:13.510
+And that's going to give
+you back a dictionary.
+
+00:52:13.530 --> 00:52:17.000
+And you can then just ask the
+dictionary for each of those keys in it.
+
+00:52:17.020 --> 00:52:21.210
+And again, all these values are returned
+without accessing the file system,
+
+00:52:21.210 --> 00:52:23.660
+without touching the
+original item on disk.
+
+00:52:23.800 --> 00:52:26.970
+So one thing that means is...
+
+00:52:27.700 --> 00:52:30.640
+Those values might now be wrong
+because they were essentially
+
+00:52:30.720 --> 00:52:32.510
+cached at the point in time,
+you know,
+
+00:52:32.680 --> 00:52:36.170
+they were frozen in the bookmark at
+the point in time you created it.
+
+00:52:36.420 --> 00:52:40.000
+However,
+if what you want to know is here's a
+
+00:52:40.120 --> 00:52:42.340
+file the user might want to locate,
+what's its icon?
+
+00:52:42.340 --> 00:52:43.980
+Well, you've got an icon to show.
+
+00:52:43.980 --> 00:52:47.250
+You don't have to worry about hoping
+that the file system is available,
+
+00:52:47.260 --> 00:52:49.420
+that it doesn't take too
+long to spin up the disk.
+
+00:52:52.130 --> 00:52:54.560
+Earlier I mentioned alias
+files as something that
+
+00:52:54.560 --> 00:52:56.500
+exists in the Alias Manager.
+
+00:52:56.500 --> 00:52:59.580
+We have the same idea with bookmarks.
+
+00:52:59.580 --> 00:53:02.850
+We expect to have a bookmark file format.
+
+00:53:03.500 --> 00:53:06.290
+From the point of view of the user,
+it will probably look
+
+00:53:06.290 --> 00:53:09.800
+exactly like an alias file,
+which will store all of the
+
+00:53:09.800 --> 00:53:13.500
+information that I've been
+talking about being in bookmarks,
+
+00:53:13.500 --> 00:53:16.300
+supporting functionality very
+similar to the alias manager.
+
+00:53:16.300 --> 00:53:22.030
+We expect to have an API to let
+you create bookmark files on disk
+
+00:53:22.130 --> 00:53:27.970
+so that you can do it in the same
+way that we in the Finder do it.
+
+00:53:28.880 --> 00:53:32.820
+You're probably going to find you
+may need to work with existing
+
+00:53:32.820 --> 00:53:37.230
+aliases and alias files in order
+to begin converting your code over
+
+00:53:37.230 --> 00:53:39.630
+to use this FS efficiency stuff.
+
+00:53:39.720 --> 00:53:43.590
+And there's public API for all of this.
+
+00:53:43.740 --> 00:53:48.880
+If you have an alias record or an
+alias handle in your application,
+
+00:53:48.880 --> 00:53:53.770
+well, first you're going to resolve that
+into an FS ref using one of the tried
+
+00:53:53.790 --> 00:53:58.460
+and true alias manager routines like
+FS resolve alias with mount flags.
+
+00:53:58.800 --> 00:54:03.970
+That will give you back an FS ref
+and then you can create a URL from
+
+00:54:03.970 --> 00:54:09.100
+that FS ref by going through
+see if URL create with FS ref.
+
+00:54:09.100 --> 00:54:11.690
+If you then needed to
+convert that into a bookmark,
+
+00:54:11.840 --> 00:54:14.050
+you would do what I just showed you.
+
+00:54:14.340 --> 00:54:17.670
+You would say bookmark with URL.
+
+00:54:18.120 --> 00:54:21.080
+You would ask the URL for
+its bookmark data.
+
+00:54:22.000 --> 00:54:25.680
+What's the state of bookmarks in
+the developer preview you have?
+
+00:54:25.680 --> 00:54:28.000
+Most of the APIs are there.
+
+00:54:28.200 --> 00:54:31.200
+You can create a bookmark given a URL.
+
+00:54:31.200 --> 00:54:34.440
+You can, given a bookmark,
+resolve it back into a
+
+00:54:34.440 --> 00:54:36.880
+file URL of some kind.
+
+00:54:36.880 --> 00:54:41.390
+And you can ask bookmarks for
+their resource properties.
+
+00:54:41.500 --> 00:54:42.950
+There are some limitations so far.
+
+00:54:43.130 --> 00:54:46.310
+We're not done, because if we were done,
+we'd ship it.
+
+00:54:46.910 --> 00:54:50.390
+So right now bookmarks only
+resolve to their items by path.
+
+00:54:50.570 --> 00:54:54.440
+We don't have the user
+has renamed the file,
+
+00:54:54.440 --> 00:54:58.170
+let's go out and find
+it behavior working yet.
+
+00:54:58.200 --> 00:55:00.840
+We don't have support for
+automatically mounting file systems
+
+00:55:00.840 --> 00:55:02.660
+or asking the user to put disks in.
+
+00:55:02.660 --> 00:55:07.570
+And we don't have support for
+every property type in a bookmark.
+
+00:55:07.620 --> 00:55:09.940
+We currently can't put
+icons in bookmarks.
+
+00:55:09.940 --> 00:55:14.640
+There are a couple other things that
+haven't been fully tested and vetted yet.
+
+00:55:14.660 --> 00:55:18.480
+And we don't have any of the
+bookmark file APIs I just
+
+00:55:18.480 --> 00:55:20.260
+talked about present yet.
+
+00:55:20.260 --> 00:55:23.020
+We hope to have them in one
+of the next upcoming seeds.
+
+00:55:24.300 --> 00:55:27.940
+So I'll kind of wrap up by
+saying why you should use these.
+
+00:55:28.040 --> 00:55:34.350
+Bookmarks let you leverage the rest
+of your adoption of NSURL and CFURL.
+
+00:55:34.380 --> 00:55:37.990
+As I said,
+they use the same namespace of keys,
+
+00:55:38.000 --> 00:55:41.670
+so once you've learned how to
+do something in the URL space,
+
+00:55:41.820 --> 00:55:43.180
+you know how to make aliases from it.
+
+00:55:43.260 --> 00:55:47.060
+And they're also extensible in ways
+that aliases didn't used to be.
+
+00:55:47.060 --> 00:55:50.160
+You can ask to have your own
+information encoded in them,
+
+00:55:50.160 --> 00:55:53.460
+and we can continue to
+grow them over time.
+
+00:55:54.300 --> 00:55:58.090
+So with that,
+I'll ask Chris to come back up.
+
+00:56:07.250 --> 00:56:07.750
+Thank you, Keith.
+
+00:56:07.750 --> 00:56:15.740
+So just to recap everything
+from the last hour.
+
+00:56:20.500 --> 00:56:24.560
+We've gone over a bunch of new
+foundational APIs for getting
+
+00:56:25.280 --> 00:56:28.800
+information out of the file system.
+
+00:56:28.800 --> 00:56:31.100
+We love URLs.
+
+00:56:31.290 --> 00:56:33.170
+Everything is URL-oriented now.
+
+00:56:33.770 --> 00:56:40.080
+So we have APIs for getting and
+setting properties from file
+
+00:56:40.260 --> 00:56:46.970
+objects and under the covers,
+they're cached to improve performance.
+
+00:56:47.000 --> 00:56:52.600
+We have efficient directory enumeration
+with prefetching of properties.
+
+00:56:52.600 --> 00:56:57.510
+And we have the whole bookmark system.
+
+00:56:58.100 --> 00:57:03.610
+Model and API that Keith just went over,
+providing very efficient resolution
+
+00:57:04.030 --> 00:57:07.720
+and the kind of extensibility that
+people have been asking for from
+
+00:57:07.720 --> 00:57:09.260
+aliases for a number of years.
+
+00:57:11.560 --> 00:57:14.400
+So, of course, the message is we want
+everyone to use URLs.
+
+00:57:14.400 --> 00:57:19.850
+We're really happy with the kind
+of capability that this is going to
+
+00:57:19.910 --> 00:57:26.580
+give us to simplify our own APIs,
+use our own APIs internally to,
+
+00:57:26.580 --> 00:57:31.320
+in our own frameworks,
+improve Snow Leopard performance,
+
+00:57:31.320 --> 00:57:34.290
+even in applications that
+aren't using these APIs,
+
+00:57:34.300 --> 00:57:37.000
+just by changing the
+way our frameworks work.
+
+00:57:38.020 --> 00:57:41.870
+And we invite you all to just
+take a look at these APIs,
+
+00:57:41.870 --> 00:57:46.500
+see if it helps you simplify your code,
+and give us feedback because, you know,
+
+00:57:46.500 --> 00:57:49.430
+we're not totally done yet
+and we still have time to...
+
+00:57:50.700 --> 00:58:05.000
+[Transcript missing]
+
+00:58:05.390 --> 00:58:09.330
+Related sessions, I didn't go in,
+we didn't really have time to
+
+00:58:09.650 --> 00:58:14.740
+mention the additional higher level
+APIs that are going to be specifically
+
+00:58:14.740 --> 00:58:18.330
+taking advantage of this stuff,
+but Chris Parker's session
+
+00:58:18.380 --> 00:58:23.200
+this morning on what's new in
+Cocoa actually covered some of this
+
+00:58:23.200 --> 00:58:29.530
+as well as additional APIs going into
+NS File Manager for copying files,
+
+00:58:29.550 --> 00:58:32.410
+moving files, things like that.
+
+00:58:33.080 --> 00:58:37.300
+So if you can catch those slides,
+you can see all those APIs reviewed.
+
+00:58:37.300 --> 00:58:41.060
+They're also in the release
+notes for Foundation.
+
+00:58:41.060 --> 00:58:45.860
+This afternoon, I'm sorry,
+tomorrow is performance in
+
+00:58:45.860 --> 00:58:50.050
+document-centric Cocoa apps
+where Mark Petrelli is going to
+
+00:58:50.050 --> 00:58:51.660
+be talking about NS Document.
+
+00:58:51.660 --> 00:58:55.770
+And one of the things that NS Document is
+doing in Snow Leopard is using
+
+00:58:55.770 --> 00:58:58.180
+these APIs to improve performance.
+
+00:58:59.930 --> 00:59:03.100
+We also have the Filesystem
+Lab coming up this afternoon.
+
+00:59:03.100 --> 00:59:07.040
+In fact, right after this session,
+I'll be going downstairs.
+
+00:59:07.040 --> 00:59:10.650
+Keith will be downstairs in the
+lab to answer any more questions.

@@ -1,0 +1,275 @@
+---
+Title:  Cocoa Development Tips, Tricks, and Debugging Techniques
+Year:   2006
+Web:    https://nonstrict.eu/wwdcindex/wwdc2006/152/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+This is session 152, Cocoa Tips, Tricks, and Debugging Techniques. My name's Ken Ferrry. I'm a software engineer on the Cocoa Frameworks team. And again, thank you for coming. So the overall goal for this talk is that I would like you to be able to come to a greater understanding of sort of the Cocoa mindset, the worldview that we have, because we do have a worldview.
+
+And if you properly understand it, it's pretty easy to work with our framework. So you can sort of predict how things behave. And when you look at a new API, you say, OK, I know how that works. And when you're writing your own code, similarly, you can write it in our style. So when you're reading it in six months, you can still understand it.
+
+But that's a little general. So how are we actually going to try to address this? There are a couple different ways. First of all, I'm going to try to show you just some sort of snippets of code, small, interesting bits that you can find in the framework that you might or might not run into yourself but are good to know about. And hopefully, understanding some of these issues will help you to sort of solidify the edges again on your understanding of the framework as a whole. However, I can't really cover too many snippets like that in an hour-long talk.
+
+So most of the talk is not going to be that exactly. It's going to be how you would discover such little interesting tidbits on your own. So it's going to be covering the documentation a little bit, F script, which is an interesting environment for Cocoa programming that you may or may not be aware of, and GDB, which you almost certainly are aware of. It's the debugger installed with your developer tools. For the tidbits, which I'm calling case studies up here, that's going to be sort of mixed throughout the entire talk to some degree. We're just going to see.
+
+While we're doing something with F script, say, we'll find a few interesting bits that I think are interesting by themselves. But we're mostly going to see those as a part of everything else that we're doing. But first, I do want to go through one particular case study in a fair bit of depth, just maybe as a warm-up a little bit, and it is also a little bit interesting, though maybe a little bit surprising. And that is trying to implement in an NSL subclass the copy method.
+
+So the reason I bring this up is because, unfortunately, like I said, we try to be very consistent. We try to follow the principle of least surprise. But it's a sizable framework, and there are a few spots that don't behave the way you might expect. And this is unfortunately one of them. So here we have a cell subclass called fancy cell. There's not much to it. I'm sure it draws something beautiful. But in terms of instance variables, it just has one additional instance variable, which is a fancy color of some sort.
+
+And we implemented a copy with zone method like this. So all we did is we overrode copy with zone. We called super to let cell do whatever it thought was appropriate for copying. And then we took our fancy color and set it into the new copy of the cell. Unfortunately, this is not good code. This will probably crash. Some of you might be looking and thinking, oh, I can see something wrong with that.
+
+That looks like a latent bug. But it's not just latent. This is probably a crashing bug. If the copying method ever gets called. If you want to try to figure this out, figure it out quick, because I'm just about to tell you what it is. Can you say that again? Is it because we're trying to make an image?
+
+He's asking if it has something to do with mutability and immutability, and the answer is no, it does not. So good try, though, and you had to do it quickly. So the problem is that there is a function defined in Cocoa called NSCopyObject, which is somewhat unique and does not behave the way most things in the app kit behave. So what it does is it creates a complete memory copy of an object.
+
+If you have an object whose instance variables take 100k, say, then what you do when you call NSCopyObject is it will create a new block of memory of the appropriate size, and it will just, as bytes, take the first one and just smash it over, which is obviously kind of fast. But there are things that happen with this that are very surprising from a Cocoa perspective. So in particular, you don't generally expect your superclass to be able to have any effect on your own variables.
+
+It just doesn't have any way to reference them. It doesn't know they exist. But in this particular case, it will manage to modify them, and that can cause some trouble. I do want to mention that this is documented well. We'll cover that later as part of when we try to debug our issues, sort of. But I don't want you to think that this is just something completely mysterious.
+
+So what happens in this particular case? The first thing we did, again, is we called the super, and we said copy with zone, which is going to create a new instance and partially initialize it. So that is, it's going to initialize it to the NSCell level. But among other things, because of this call to NSCopy object, which NSCell uses-- maybe I didn't mention that yet.
+
+It's actually the only place NSCopy object is used in our code. It's going to have the effect of doing what I wrote at the very top. You can think of it as saying, just going directly to the instance variable and setting the fancy color in the copy to be the fancy color in the original. In particular, though, it doesn't retain it, because it doesn't know enough to retain the objects. It's just copying them as bytes.
+
+So if we look at the set fancy color method, and this is a properly implemented accessor, the first thing it does is it checks if the color coming in to the copied cell is the same as the color that's already there. And if it is, it just bails out and does nothing at all. And it is actually going to be the same because of this NSCopy object method that was invoked by a function that was called by NSCell. So again, somehow in the copy, we're going to end up with the fancy color will be set, but it was never retained.
+
+So indeed, when we go look at our dealloc method, it's going to release the color, which is appropriate, but there's no balancing retain. So that is very likely eventually going to cause a crash, provided anybody ever actually tries to copy the cell. There now are a few things to think about with that. So first of all, the crash is going to be delayed. We're not really sure when it's going to happen because we just had this memory management issue where when the copy gets deallocated, the color will get released an extra time.
+
+That might deallocate the color. That might just drop its release count by one. Hard to say exactly. Now, a secondary issue that you might want to think about is that you might say, well, it doesn't really matter to me if this copy method doesn't work because I'm never going to copy the cell. But now this is an interesting thing about frameworks in general is that you kind of can't make that kind of decision because you pass the cell off to the framework, say if you put it in a table view, and the framework kind of runs the show.
+
+We'll do all sorts of stuff with it, and you can't guarantee. Because NSCell implements NSCopying, it's your responsibility to do it in subclasses. And in fact, NSTableView will copy cells for you whenever you click one. That's whenever you click a cell. That is sort of an implementation detail for NSTableView. It's not the kind of thing you want to rely on, but it'll happen, and it will make a difference in this particular circumstance if you made this other mistake.
+
+If you do everything perfectly, then no problems. OK. So. OK. So basically what happens if we end up, if we run this, we put it in table view, we see the table view, it looks all great. We click it twice, and it crashes. And the crash, oh, sorry. First, I do want to say, so that seemed very unfortunate. So what is it that we should be doing instead?
+
+The answer is that in the copy with zone method, it's not a good idea to call accessors. You really want to go directly to the instance variables and set them. This looks a little funny to a Cocoa programmer at first. So this is another one of these defining the edges where figuring out exactly what it is you're supposed to be doing.
+
+This looks funny because usually we don't use that dereferencing operator, the arrow, at all. And we certainly usually wouldn't use it on an object other than self. But if you think about it, this actually is appropriate in this case. Let's think about a slightly different case first. Let's think about it in a knit method.
+
+People, a lot of people are sort of aware that it's a bad idea to call accessor methods, or at least public accessor methods from an init method. The issue there is that the object has only been partially initialized if you're in the middle of an init method. And if you call out to a public method like an accessor, then subclassers have to somehow be aware that they might get, their code might be running when the object is not fully constructed yet. So you generally want to avoid that kind of assumption at all.
+
+I hope that makes sense. So in an init method, you generally also want to go directly to the instance variables. Now the thing is that a copy with zone really is the init method for the copy. It looks a little bit different because it's not self that we're initializing, it's the copy. But we're not violating encapsulation here. It's the same class. We already have complete knowledge of it. It's not, usually the reason why you don't want to use that dereferencing operator is because you're destroying your encapsulation And that's not true in this case.
+
+So that's why that is both why this is going to work in this case. I mean, you can just see we sort of explicitly set the fancy color to be a copy of our original color. But it's also just good in general. So if we had been writing the copy with zone method with exactly the right pattern, then we wouldn't have even noticed this issue. So I think it's good to notice the issue because then it won't bite you when you're not expecting it. Okay, so a little bit of advice here regarding some of what we've just seen.
+
+So don't use NSCopyObject. It does behave the way we generally don't expect as Cocoa programmers. And there's some, I think it's understandable to kind of want to use it. When you find something that behaves a little oddly, you say, oh, that's really interesting. And I think this is interesting.
+
+I think NSCopyObject is kind of, you know, it's worth knowing about. But it's definitely for very specialized use cases. And generally, when you find one of these sort of corners in the framework, what you really want to do is just, stay the heck away. The important thing is knowing where the corners are so you can do that.
+
+Okay, but more important than that, really, is to say that you don't want to say, oh, NSCell is using NSCopyObject, so I don't really have to copy any of my scalers. It's going to handle it for me. That's not a good idea at all because we might change this. It really would be kind of nice to change it, I think, because of the sort of behaviors I'm talking about.
+
+But there are other trade-offs. Okay. So, we do care quite a bit about binary compatibility. Certainly, something that people in this room want. They want to see the framework improve. They also want to see when they have an application that works on Tiger, they want to see it work on Leopard.
+
+So, we do have to pick and choose a little bit where we try to make these improvements. In this case, if we were going to change it, we'd have to do something where it only changes for applications that are recompiled on Leopard. Because, and we would mark this in our release notes. I'll talk about that a little bit later.
+
+Because, because, because, it's too big of a change. It's too easy to accidentally rely on this working. In fact, we've done it ourselves. That's where I ran into this. That's how I know about it. So what does the crash actually look like? The reason I want to bring this up is because you look at the-- so this is what you get if you create such an object and then click on it twice in a table view.
+
+This, at first glance, to some programmers might look like, oh, it's an AppKit bug, because you look at the call stack and there's no client code at all. It's all completely internal. But you can see that that wasn't the case. There was something that was wrong in client code, but it was passed off to the framework, and the error didn't manifest until a little bit later.
+
+First of all, for a recently experienced Cocoa programmer, it is fairly clear what happened here. This looks like a prematurely deallocated object. Let's discuss how you recognize that case a little bit. First of all, if you see crashes in an obse message send, it's almost always a prematurely deallocated object, just because if there are bugs in an obse message send, we're going to find them pretty fast. Another way you're going to see it is XC bad access. That means you're trying to... get at some bit of memory that you cannot, or you're trying to access something you can't, and often that's going to be a prematurely deallocated object.
+
+Perhaps a slightly more interesting one, well, not that those aren't interesting, but this one's interesting because it's a little bit stranger looking, is that if you see really odd-looking selector not recognized messages, if you get something like this, you say NS sound doesn't respond to the table view object value for table column row method. If this shows up in your console, you might say, yeah, good question. Good work there. It really doesn't. But why is this in my console?
+
+And what happens here is that if you have an object that gets prematurely deallocated, that same memory may be reused for an entirely different object. But in this case, it would be that your data source, which is not retained by the table view, somehow got prematurely deallocated. The space was reused for a sound, but the table view was still pointing, had the same pointer in it. So it tried to send. This data source message to the sound. So what you would take away from that particular message is that you have a there's a problem with the memory management for your data source.
+
+Okay, so how would we go about debugging this though? If you go back to that backtrace, it's a little bit mysterious. It's just there's this crash. We know that an object was prematurely deallocated, but we do not know what the object is yet. So there is a nice tool that's definitely worth knowing about, which is the NSZombiesEnabled environment variable. So let's talk about that for a minute, and let's talk about what it does.
+
+So if you set this environment variable, which I'll show you in a minute, objects will never actually be deallocated. They will be zombified. So it will mark, instead of actually freeing any particular object, when it gets down to the dialog method, it will instead mark it as something that was supposed to have been freed, a zombie. And then if you ever try to message it, you'll get an error.
+
+It won't crash anymore. You'll get a log, and it'll give you some interesting information. It is also just worth mentioning. So if you go back to the NSString, it's going to really be a core foundation object. Though if you subclass it, it's going to be a core foundation object. The point is that NSZombieEnabled will never catch those bridged objects. So when you create a standard NSString, you need to use CFZombieLevel to catch that particular case.
+
+Okay, but anyway, let's just see how this works. So we would go to Xcode. We would create, you get this if you control click on the executable in Xcode. You get a chance to set environment variables. You would set NSZombie enabled to yes. You run the app. Like I said, it's not going to crash anymore.
+
+Instead, we get a log in the console. It says selector release sent to a deallocated instance of class NS calibrated RGB color. So now we have more information. Now we don't just know that an object was prematurely deallocated. We also know what kind of object it was. It was a color.
+
+So we might start wondering about that fancy color. But it gives us a little bit more information. It tells us to set a breakpoint and has NSZombie release to debug it. We set that breakpoint. Here's what we get. Not only is it a color, but the color we're finding is getting, we're trying to message it within fancy cell dealloc.
+
+So now we're totally sure because there's only one thing we're trying to message there, and that is our fancy color. So we're pretty sure what's going on. We screwed up the memory management for the color. OK, that's great. But we're still a little confused because we don't know why it's wrong. So what are we going to do?
+
+And the answer is, in this case, that we're going to go for the documentation. So when you know it's a memory management error, one of the nice things about Cocoa's memory management-- well, classic memory management now. Garbage collection would be even easier, of course, in this case-- is that we tend to isolate our memory management code.
+
+So in the case of the cell subclass, chances are the only places where retain or release are ever sent are going to be in the init method, the copy method, the dealloc method, and the accessors. So we can kind of go through those. We can say, I know the init method's right. I know the dealloc method's right. There's nothing to it.
+
+I know my accessor's right. And at some point, we're going to say, OK, well, by process of elimination, I thought I knew how to write a copy method, but I guess I didn't. Or maybe you just start looking through documentation again. Anyway, the place where you go, first of all, is you go to the NSCopying protocol.
+
+You read through that. You don't see any information. So you go up to the conceptual doc level, and you start to read through that. And indeed, if you look, there's a whole section implementing option copy, and there's a major heading which talks specifically about NSCopyObject. It says-- this is the first sentence, I think, in the section-- you must consider the possibility that the superclass implementation uses the NSCopyObject function.
+
+So in some sense, we all should have read that documentation. We probably mostly have. But I, at least, didn't remember it. Why didn't I remember? Probably because I read that NSCopying information within the first few weeks of Cocoa programming. And at the time, I didn't realize that that was at all interesting. I couldn't distinguish between that and the more usual Cocoa patterns, which I was also learning at the time.
+
+Okay, but that is very typical. So I do want to emphasize now, I think for some of the people who have been around for a while, some people tend to think of our documentation as not being so great. For a while, it had a lot of things like documentation forthcoming, or was it description forthcoming?
+
+I'm not quite sure now. Okay. Anyway, but that's really not true anymore. The documentation is very solid and tells you pretty much everything you need to know. But one thing we don't document, to my knowledge, is sort of how you go about using the documentation. There is a pattern to it. For an experienced Cocoa developer, you always want to go for the API documentation first. If you have a string question, go look at the NSString docs.
+
+When that fails you, or when you don't see what you want to know at that point, you want to go up and read the conceptual documentation, typically linked at the top of the API documentation file. And then once you've read through any information that looks relevant at that level, that's when you want to go to Google. That's when you want to start searching the mailing list, trying to find some good information.
+
+It is worth noting also, though, for people who are somewhat more new to Cocoa, it's not really worth reading the API documentation until you understand our four or five sort of design patterns that are used just absolutely everywhere. You have to understand our memory management scheme, you have to understand delegates, notifications, just a few things like that. Last, I did want to mention the release notes.
+
+In the AppKit group, we absolutely assume that you're reading our release notes, because there are going to be changes that we, when we do make a change, like I was mentioning with NSString, we're going to be doing a lot of changes. So if you have a nice copy object where there's a chance that it could break you if you recompile your app on Leopard, that is, the release notes are where that information is going to be. So that is sort of required reading.
+
+Okay, that is all I have to say about NSCOPY Object. So now I'm going to go on and the documentation too. So now we're going to go on and talk about F-Script a little bit. So F-Script is a tool which you may or may not be familiar with, but it is an aid for this talk anyway.
+
+It's many things, but for this talk I want to talk about it as an aid for debugging your Objective-C application and exploring Cocoa and learning how to use the framework. So So certainly a lot of authoring an app is exploration. So you have something you want to do, and you don't know how to do it.
+
+What do you do when you're in this circumstance? The first thing you want to do is go to the documentation, but then you probably do want to run some sort of experiments. You want to solidify that knowledge one way or another. A lot of people will go write a small Objective-C test application just to exercise their knowledge. That's a good thing to do. Another alternative, though, is to use something like F-Script. F-Script is a runtime interactive scripting language that lets you work with Cocoa. It's really a lot like Objective-C. It's designed for use with Cocoa.
+
+It has no life outside of Cocoa. It looks a lot like Objective-C without brackets. We're going to demo it, and we're going to look at the syntax a little bit. But like I said, the really interesting part is that it's very, very runtime, and it lets you add your Objective-C object model. It's free and open source. It's BSD licensed. The author is Philippe Mougin, who is in the audience somewhere here today.
+
+You can take a bow afterwards or something, I guess. And it's really a pretty good tool. So mostly what I want to do is demo it for you and talk about while I'm demoing it. But I don't want to get lost, so I do have to give you a little bit of a syntax primer.
+
+As I said, it really looks a lot like Objective-C. There's a few differences. So in Objective-C, we surround message invocations with brackets. In F-Script, you don't need to type anything there. If you need to disambiguate the order of message sends, you can use parentheses. But in circumstances where it's not required and there's a precedence rule, then you just don't need to type anything at all.
+
+For assignment, you don't use equals operator. You use the colon equals operator. No big deal. For string literals, instead of using at quotes, you don't use equals operator. You use the colon equals operator. No big deal. For string literals, instead of using at quotes, you use single quotes. And everything in F-Script is an object. They're all basically typed id. So we don't bother to declare variable types. There's no utility to it.
+
+OK, so if I could have the demo machine, I'd like to show this off a little bit. What we're going to do is we're going to use everybody's favorite demo application, which is TextEdit. And we're going to say, suppose that we are interested in, for some reason, programmatically adding an image to this menu item right here, this automatic menu item.
+
+Okay, now the reason why we're bothering to do this, why we're bothering to experiment with this at all is that we went and looked at documentation, and we noticed that it actually says that the set image method on NSPopupButton doesn't do anything. And that's because the image actually comes from the menu items, which are inside.
+
+So rather than setting the image on the pop-up button itself, we're going to get its first menu item and set an image there. Okay, but first of all, so you might notice that TextEdit looks a little tiny bit different than usual. It has an extra menu up there, FSA. That stands for F-Script Anywhere, which is to say that it's running in your application as opposed to its own application. Now, an interesting feature of this is that I did not alter the TextEdit project. The Xcode project has not been modified.
+
+There are no extra nibs. I didn't programmatically add this menu. It was injected at runtime using Mach inject. So this is actually kind of nice because it lets you work with your application without messing with your Xcode project whatsoever. You can be sure you're not messing it up. You're just doing some debugging or exploration or something. So anyway, let's pull this up.
+
+So I was telling you that it was in some way interactive and runtime. And what I mean by that is here we have a flashing cursor prompt. If I type NSImage. Well, it does something or other. That's actually printing the description method for the NSImage class object. And if I say image named exactly as I did in the sample before. If I can type. Okay.
+
+Well, we just printed out an image. And at this point, I almost want to stop and just look at this for a minute, because it's pretty great. We're just completely working with Cocoa Runtime. There was no need to compile anything at all. And this is completely a feature of Objective-C. It's just so dynamic. And we all know that, but it just becomes so much more obvious when you start working with it like this.
+
+You realize it hardly even needs to be compiled. It's faster if it's compiled, but we can do pretty much everything we want at runtime. So let's go ahead and give this a name. I'm going to call that app icon and use the colon equals operator to assign. And now if I refer to that, I have this icon here.
+
+So let's go ahead and try to set this. So this is the interpreter that I mentioned before, but there is a second component to F-Script-- well, second in some sense-- which is the object browser. So this is pretty good. So right here we have something in this leftmost column, which is App Icon. If I click on it, what are we seeing? We're seeing lots of properties of that image.
+
+Furthermore, if we go down, we're not just seeing properties, we're seeing methods. And if I were to click on one of these, it will actually invoke the method. So hasAlpha is true for this image. You may be used to this sort of thing. This is somewhat similar to the DOM browser that you might use for web development, or it's a little bit similar to the Accessibility Inspector that comes installed in the machine if you're doing accessibility work.
+
+But this is obviously sort of explicitly for Cocoa. We're looking at the Cocoa object hierarchy as opposed to the accessibility hierarchy or as opposed to the DOM. Anyway, so this is pretty good, too. I'm going to click the Select View button, which allows me to go over and just click on the pop-up button over here, and now I get a pointer to it.
+
+Uh... So I could name this variable, I could name a pop-up, this object, and if I were to go over here and print it out, now I have a pointer to the pop-up that I can work with. But I'm not even going to do that. So first I'm going to verify what we saw in the documentation. I'm going to call setImage here with the app icon, and we expect nothing.
+
+"And, oh, we actually got something. So it removed the title. And I do know what's going on here. That was a little bit of a setup. What happened is that the pop-up button happens to be configured for NSImage only. So when it has an image and a title, it tries to-- "Not use the title at all. But unfortunately in this case it won't display the image either. So that should have restarted.
+
+Okay. Let's try to fix that up quickly. "Is that better? Okay, that's a little better. All right. So moving on. So now we're going to try to do it the way we were intended to do it. Oh, I'm sorry. I meant to mention. So we have this large list over here, which is a little bit hard to manage in some ways just because there's so much information. But if we click over here in the search field, we can filter it.
+
+So if I type image, we're only seeing properties and methods that have image in the name. If I type menu, we're only going to see the menu items. If I go over here and set the image for this menu item, Then there it is. Oh, but that was a little bit interesting, too. We see that as it happens, a menu item's not going to resize an image for you. OK, so that was interesting information. That may or may not have just saved us a recompile, because now we know that we have to size the image first.
+
+So if we take our app icon-- and we call setSize. This is-- I'll cover this in a minute. This is one of the slightly unfortunate features about F-Script. It can't deal with any C types. So if you want to pass something around like a size, there are a few extensions to create one.
+
+OK, that sets its size. We can see it printed out there. The size is 13 by 13. By the way, also note the image reps. Oftentimes with images, it actually can be quite useful to be able to see what the image reps are. Let's clear that and set it to the app icon again. And this time it worked.
+
+Okay, can I have the slides back, please? All right, so let's go through that a little bit. Let's think about what we just saw and what was good about it, what we really gained. So we were just using point-and-click debugging. You saw I clicked this browse button, and I clicked on the pop-up button, and I was able to work with the pop-up button. What was so good about that?
+
+Well, for one thing, we didn't have to chase down the relevant code. We were also able to tell what the relevant code was. I don't know if you noticed, but the class name for that pop-up button was "Encoding Pop-up Button." So if I find that I do need to alter the code, I know where to go. This is a good time saver. When you just need to work with something, you don't necessarily need its source code.
+
+slightly more subtle point, we don't end up making as many assumptions about the state of an object when we work with F script as we do when we're usually debugging things. Normally we get into a situation where we say I know how this is configured because I configured it back here so that's probably how what it is now.
+
+But you don't really know if it might have changed in the interim and you have to sort of reason about it. If you're using something like F script you don't know why an object is configured the way it is necessarily but you know exactly how it is configured.
+
+You can just look at its properties and see what it is right now. Also good when something goes wrong. You load up F script and you say oh why isn't, what's wrong there? Why don't I see text? Oh because my text is the empty string for some reason. Okay so somebody set it to the empty string.
+
+You saw the way I was using the search field up there. That can be a good way to avoid sort of unnecessary in some circumstances trips to the documentation. An example of that might be if you have a window that you're moving around for some reason. Well if you're
+
+[Transcript missing]
+
+OK, so let's just do a few other quick little things that are sort of interesting with this. So can I have the demo machine back again?
+
+Okay, so if you've been reading our documentation, you know that we have sort of this interesting concept, which is the field editor. The field editor is a text field object. It's actually sort of kind of dumb or dumber than you'd think. It doesn't really do text layout. It doesn't do text editing. It doesn't do very much at all other than just sort of contain. But whenever there is real text editing to be done, a field editor object, which is a text view, gets swapped in on top.
+
+So it's sort of very transparent, but when I change between fields here, what the documentation would have you believe is that there is a single shared text view that's being used in different places. Well, we can at least sort of start to at least believe the documentation a little bit.
+
+If I go over here and click with F-Script on the second field, which is not the one which has focus, I see that it's an NSText field. But if I click on the first one, it's a text view. So yeah, there's a field editor there, and it sort of demonstrates. extremely different.
+
+And we can see, for example, if we were to go get the delegate of the text view, we'd find that it was the original field. So that's the way that gets set up. Okay, that's interesting. And then a question I had a few months ago was, how about for non-editable text fields but selectable text fields? It seems like selection is a little too complicated for something like a text field to handle. So is that handled by the field editor?
+
+Well, let's find out. So I'm going to click over here on this text field, which is not editable, but for purposes of the demonstration, I want to make it editable. So the first thing we're going to do is call set editable, and F-Script uses true instead of yes, and now it is editable, so I can select in there. Okay. Thank you.
+
+So now I'll select again and the question is, is it a text field or is it a text view? And view. Okay, that uses the field editor. Now we know. Not necessarily again, I mean, I'm not, again, you don't necessarily want to rely on the things you find this way, but it's really a good way to further your Cocoa understanding. Can I have the slides back, please?
+
+Okay, yeah, which is exactly what I want to talk about right now. So let's speak about encapsulation, which you may be wondering about a little bit given some of this. So it's very, very white box, which is to say you can just see everything about everything. Nothing is hidden. Very nice for debugging. Let's you figure out what's going on.
+
+Not so nice for a few other reasons, especially from our point of view. You're going to see private methods when you do this. F-Script cannot distinguish between public methods and private methods. Basically, the point here is that we treat developers with a lot of respect, and Objective-C treats developers with a lot of respect. There is no such thing as a private method in Objective-C. All there is is a method that we haven't bothered to tell you about.
+
+That doesn't mean that you should use them. In fact, it means the opposite. It means that you have a strong responsibility to respect the encapsulation boundaries that we have set up, and it's in everybody's best interest that you do so. You want us to improve the frameworks. You also don't want your programs to crash when they're run on Leopard. Basically, the only way that we can make that work is if you agree to adhere to the contract that we set up.
+
+But this just becomes very, very obvious with F-Script, so don't overdo it. You can get excited and you can see what's going on. That's great. There's nothing wrong with understanding Cocoa. But you need to keep a very clear division between what you understand and what's sort of understood by your code at any particular time.
+
+OK, let's go very quickly through some things the interpreter is not good for, just lest you think it's panacea. Actually, I may not pronounce it right. So it's not very good for anything you have to do multiple times. So every time the application gets launched. Not good for unit tests, because they won't get run. Or rather, it's not good in situations where you might use unit tests. If you want to interactively check things, that's great. But it's not going to get automatically run every time your app is compiled. So it's not good for unit testing when used in this way.
+
+I just wanted to point out that there wasn't support for creating classes in Fscript until fairly recently. I think really what this tells you is that it's not that useful in a way. It's nice to have support for creating classes. But Fscript got on for years and years and years without it. And that's just because it's not trying to replace the Objective-C model. It's using it. It's just part of it.
+
+Oh, I did want to mention that. So another alternative to Fscript is-- PyOpc and Python, things like that. They fulfill a lot of the same-- they help in a lot of the same ways. I wanted to cover Fscript maybe because I think it's great. And also because it's not as well covered, I think, as PyOpc.
+
+But that has many of the same benefits. OK, like I said, when you're working with non-objects, Fscript's not so great. It doesn't have any concept of C at all. So you can't call functions. And if you need to create structs, there have been additions made to Fscript. They'll let you do that.
+
+Things like sizes, as you saw. Stepping through long sequences of function calls. I guess you could do it. You could always paste some code over and go through one by one line. But it's not so great. Maybe you want to use GDB for that instead. It's better for high-level interaction bugs.
+
+Memory management is just very naive reference counting. So you might have been wondering what was going on there. I was just leaking when we were running those demos. But what happens is that whenever you name an object in Fscript, that sends it a retain message. If you ever assign something else to that name or assign nil to the name, that will release it. Okay, that's fine. That will sort of tend to keep things around for as long as you want for the most part. It will also tend to leak in a lot of circumstances. If you ever end up with a cycle, it's never going away.
+
+But it's just not that big a deal because we're generally, at least the way I was using it here, we're not sort of doing real programming with Fscript. We're just exploring. Okay, sometimes Fscript can change the behavior of your app. This actually happens in TextEdit, which is one of the reasons I was using it as an example, actually. Fscript has a save method that comes from, I think, Smalltalk, that it adds as an NSObject category.
+
+Well, it happens that TextEdit uses save as the action, that the save menu item. is connected to. So basically, the responder chain gets all screwed up and you can't save documents. So, not so good. Hopefully, it won't happen in your own apps, but you definitely don't want to get fooled if it does.
+
+But like I said, since you're not actually adding it to the Xcode project, it's not a permanent problem. And I do still want to emphasize, using Fscript makes you a sophisticated programmer. And you cannot start using all the private stuff that you are probably going to find. Okay, just a quick note on installation and getting started. There's not much to it. You have to drag that.
+
+This is what the bundle, the package looks like when you download it. You need to drag the framework out to your frameworks folder, say in your library. Then you want to click on either Fscript.app. That'll just bring up an interpreter where you can start working with the system.
+
+Or for the kind of things we're doing, where you're actually using it to debug your existing app, that's where you want to use Fscript anywhere. That'll show you how to inject it into your own app. And you can set it up so it injects automatically every time the app is run, which gives you good debugging. Okay, so let us go on to sort of the last section of our talk, which is GDB.
+
+So GDB is the debugger that comes with your developer tools. And it definitely fulfills a different niche than the interpreters do. And that's actually one of the great things, I think, about these tools, because they do complement each other. Sorry, I did want to say that it's good when you end up wanting to go down into a method, when you say, this particular method does not work, as opposed to the way these methods are wired together does not work.
+
+That's when you want to use GDB. Or maybe once you've narrowed the problem down a little bit. OK, so I'm not going to cover GDB a whole lot. But in particular, since the Xcode guys are mostly interested in talking about GDB within Xcode, just for variety, let's talk about GDB not from within Xcode, using Xcode's console, which gets you something a lot closer to command line GDB.
+
+Definitely also useful. A lot of people I know really only use this mode of working with GDB. I pretty much only use this mode, though. I really do like a lot of the new features in Xcode. So for people who aren't aware of it, I think it's worth looking at. But since this is a Cocoa Talk, I want to talk about some of the things that are really specific to Cocoa about it.
+
+Print Objects If you find yourself typing in GDB things like "nslog_perend @% @, object_perend," you don't need to do that. I'm not quite sure how people find these things. I think I just stumbled on it. But there's a P-O. If you just say P-O object in GDB, that'll print it out.
+
+I'm sure a lot of people know that, but I bet a lot of people don't. You can also set variables in a debugger, sort of debugger-level variables, as opposed to things you already have space allocated for in your source. That's used. Set $VARIABLE_NAME equals something or other. And you can set breakpoints from the command line as well. And this is the syntax. So either break on a function, for example, or break on our standard way of writing out an Objective-C method. So dash or plus if it's a class method, brackets, class name, method name, colon, and colons as appropriate.
+
+Ken Ferrry Print Objects Okay, so, uh... In particular, there are, for working with Cocoa, some breakpoints that a lot of people like to set all the time, at least some of them, because they almost always signal app error. If you ever see an exception raised in Cocoa, it always means something has gone wrong.
+
+This is something that people from other languages like Java or Python don't necessarily realize about Cocoa, but the way we use exceptions is that they always signal programmer error. You will not even see exceptions raised and caught internally to the frameworks that we create. You won't see that within GapKit or anything like that at all. If you ever see an exception raised, it means something has gone wrong. So it's a good idea to put a breakpoint on that.
+
+Now, you do also need to put a breakpoint on obse exception throw. This is because there's a language extension made, maybe in the 10.2 timeframe, the at throw directive, which basically just brought exception support down to the language level instead of being done. So you can do that at the Cocoa level. But it doesn't go through quite the same path yet. We'd like to make it go through the same path, but it doesn't today, so you need to set two breakpoints. AutoZone resurrect.
+
+So this is a new breakpoint that you want to set if you're working with garbage collection. So we already talked about zombies, which is one way objects fail to die. Unfortunately, there's also resurrection now, so we're sort of going through all these possibilities. But resurrection is a lot less nice than zombies. Resurrection occurs when there's an object which has been marked for deletion, but has somehow been added to an object which is live, and then suddenly is supposed to be live again. That's very bad for our collector.
+
+I won't go into that too much because Blaine, I think, did actually a pretty nice job of covering this in his garbage collection talk, and it was packed, so I bet you were all there. Now, unfortunately, this doesn't... In our own testing, we found that at the moment, at least in your seed, the AutoZone resurrect does not catch all of the GC errors that you might hope it would. So another good breakpoint to set is malloc printf. That's when you see messages logged in the console, and this will show you what's going on in some cases. You probably don't want to set that one all the time.
+
+Okay, so another nice thing that you can do in the console in GDB that you cannot do right now in the UI is print out...
+
+[Transcript missing]
+
+So it does happen that if you set a breakpoint on one of those internal app get methods, even though you can't say po self, because there's no local variable named self, you can still figure out how to print that out. You can print out all your parameters. So up here what I have on the slide is, oh, sorry, and the way that works basically is that the compiler has conventions for how it passes arguments to a function.
+
+So when a function gets invoked, so okay, so execution jumps to that point, but it has to know where to find the arguments to the function. And that all has to be documented or else things don't work right. And it is documented. I have the full URL at the bottom. It's different on different architectures.
+
+It's also different with different argument types. What I put on the board here is for when all your argument types are all objects and returns too. But it's still very useful. And even if you're not going to memorize all of the documentation for how the calling can work, so how you would print everything out, you don't really need to. I mean, even just what I put up here is pretty useful. So on PowerPC, you find your arguments in registers usually.
+
+So self is always going to be in $R3. This is only when you break on the method itself. Since it's a register, it'll get changed in the course of the method. But at the beginning, that's where it is. The first Objective-C argument you're going to find in R5, and then more arguments 6 through 10, and the result is in R3.
+
+So it's not actually exactly the same, but in this case, it's the same. X86-64, similarly, arguments are passed in registers. You kind of see the odd one out here is on I386. If you want to print out your arguments in methods where you don't have the source, it's quite a bit different. The reason here is that I386 doesn't have very many registers to work with, so arguments are passed on the stack.
+
+We don't need to go into it too much, I don't think. This is just sort of the magic invocation. Everything is off by an offset from this EBP register. The nice thing about this, though, is that actually on all the other architectures, you have to break right at the beginning of the method if you want to see the arguments.
+
+If you go down, then they're no longer going to be valid. But on I-386, because it's sort of on the stack, it's permanent. And you can see it throughout the entire implementation of the method. Okay. Let's go back to the machine for a minute. This is an i386 machine, and I just wanted to show you how this works.
+
+So I just launched TextEdit in debugging mode, and I'm going to pull up the console. Okay, we're going to set a breakpoint as we discussed. Oops, I need to pause it first. I think I can do that now with Control-C. I'm going to set the breakpoint on, since we were looking at it before, NSL set image, colon, like that. OK. So that's a breakpoint.
+
+I'm going to continue. Go back to TextEdit. Let's pull up a Preferences panel. I happen to know this is going to trigger the method. So we just hit the breakpoint. There's no source. We're still going to print everything out. So, PO, Print Object, again, star, id star, oops.
+
+of, now it was $EBP plus 8. Hi, I'm Ken Ferrhy, and I'm a developer at GDB. I'm going to talk about how to manage your application with GDB. In this case, I'm going to talk about how to manage your application with GDB. I'm going to talk about how to manage your application with GDB. In this case, I'm going to talk about how to manage your application with GDB.
+
+Every object is off by an offset from this EBP, and they're all sort of sequential. So because that first self object takes four bytes, Since we're on a 32-bit machine, if we add 12 to this, we're going to get the next argument. Now, the next argument is... In Objective-C, when we make method calls, those translate down to C calls that have an implicit extra two parameters. The first one is the self object. It's really just a local variable. There's nothing special about self.
+
+And the second one is _cmd, which identifies the current selector. But we're going to print that out, so we'll do NSSelector from String. "And we'll go over here and... oh, I screwed something up." Oh, it wasn't an id. Okay, I may be out of luck here, but I'm going to have to reset.
+
+What do you know? Okay. Am I in a reasonable place now? Yeah, probably. I should have read the message. Okay, that's a little weird. Okay, so that probably means that we actually need to finish the... Yeah, it's still, uh, oh, geez. Let's just not do that one. I'm restarting this now.
+
+Anyways, that works perfectly fine if you don't get yourself all confused. But we did want to show the argument to this one also, which is what I'm going to do now. And that's going to be at abp plus 8 plus 4, brought us up to 12, plus another 4 for the selector, brings us up to 16. There it is. And it's null. It's nil. So that can also be interesting information. Often passing nil to something in Cocoa is a mistake. Probably not in this case, though. Certainly sending an image to be nil is OK. OK, can we go back to the slides, please?
+
+That is actually most of my talk. So I just have a few other things I want to mention to you. I do think it's a good idea to just sort of try to figure out how everything works in Cocoa, even if you're not going to use it in your code. I mean, it's definitely nice to understand how the framework works. A few interesting experiments you can run for yourself.
+
+Why don't you write a little app that catches and logs all notifications? If you register on the object nil for the notification with name nil, that'll just catch everything. I've certainly written such an app. I know Malcolm Crawford mentioned to me that he's written such an app. Lots of people have. It's very useful. Another thing you can do that's sort of-- just to see what's flying around while your app is running. Another thing you can do is set the nstraceEvent user default.
+
+This will let you see what's going on with events in your app. Again, not the kind of thing that you want to be relying on necessarily, but it's very instructive just to understand how this is all working. Now here's another little tidbit, I suppose, which is that when you want to set a user default in your app, you don't have to go to the command line or to your plist to do that.
+
+What you can do is in Xcode, if you pass the arguments dash and then the name of the default and then the argument yes, like this, so dash nstraceEvents yes as an argument to your executable, it will get pushed into NSUserDefaults. This is a service that NSApplication provides to you. Works for all defaults. So that's how I'd recommend doing that in this case. That's all I have to say about that. And so we're down to the conclusion. The conclusion is, like I said, please work with this stuff.
+
+Try to develop your mindset. Understand how everything works together so you can write your own code in the same style as we do so that we can understand your code, you can understand our code. Everything just works together great. You've got various resources. You have documentation. I wanted to point out Fscript because, again, I think a lot of people don't know about it. GDB, more people know about, but they almost certainly don't know about all its features. And there's just all sorts of good stuff available. So have fun.
+
+If you want some more information, you can talk to Derek Horn, who is our application frameworks evangelist. I wanted to point out the APKIT API documentation, because that's where I said is always the first place to start. There is an excellent, excellent technical note, which I probably should have mentioned before this, which is Mac OS X debugging magic. It's just an amazing amount of information just about all sorts of previously undocumented tricks that you can use. Fscript is at Fscript.org. Philippe can also tell you more about that to flag him down. And debugging with GDB is a nice little tutorial.

@@ -1,0 +1,2486 @@
+WEBVTT
+
+00:00:20.150 --> 00:00:21.060
+Good afternoon.
+
+00:00:21.080 --> 00:00:25.710
+Welcome to the last session
+of the last day of WWDC.
+
+00:00:25.840 --> 00:00:27.770
+Are your brains full?
+
+00:00:29.000 --> 00:01:37.600
+[Transcript missing]
+
+00:01:37.870 --> 00:01:40.740
+The big thing for us is that
+it's the basis for new features.
+
+00:01:40.790 --> 00:01:45.130
+We have cleaned this up and built
+it with a mind to the future,
+
+00:01:45.260 --> 00:01:47.140
+and we're going to be talking
+a little bit about some of the
+
+00:01:47.140 --> 00:01:48.500
+things we're building on top of it.
+
+00:01:48.550 --> 00:01:51.630
+After I've talked about all that,
+Andrew is going to talk to you about the
+
+00:01:51.630 --> 00:01:56.100
+new linker that has really opened the
+floodgates to make all of this possible.
+
+00:01:57.170 --> 00:02:01.660
+So what we're going to cover in general
+order is the overt changes to the
+
+00:02:01.750 --> 00:02:05.500
+tools and to KEXT management support
+that you deal with as a developer,
+
+00:02:05.520 --> 00:02:09.540
+the internal changes to the system that
+hopefully won't affect you too much,
+
+00:02:09.730 --> 00:02:11.870
+the features we have
+planned coming along,
+
+00:02:11.870 --> 00:02:14.020
+and then the benefits of the new linker.
+
+00:02:14.020 --> 00:02:14.980
+Again, Andrew will cover that.
+
+00:02:15.190 --> 00:02:20.820
+We've been repeating this in every
+presentation dealing with KEXTs.
+
+00:02:20.820 --> 00:02:23.330
+iPhone does not use loadable KEXTs,
+so if you came here for that, sorry.
+
+00:02:24.620 --> 00:02:29.760
+The technology framework we're
+using is in three general chunks,
+
+00:02:29.760 --> 00:02:31.780
+and then the linker
+underneath all of that.
+
+00:02:31.900 --> 00:02:34.800
+Userspace KEXTs management
+is the tool such as kextload,
+
+00:02:34.910 --> 00:02:38.640
+kextd, and the others that you use as a
+developer and that the system uses.
+
+00:02:38.770 --> 00:02:42.100
+There's also the specification
+for KEXTs bundles themselves.
+
+00:02:42.390 --> 00:02:44.340
+We're going to go into
+a few changes there,
+
+00:02:44.570 --> 00:02:47.480
+and then we're going to talk about
+how the kernel manages KEXTs.
+
+00:02:47.590 --> 00:02:51.310
+And again, Andrew will cover the
+KEXTs linker itself in detail.
+
+00:02:51.490 --> 00:02:55.040
+Now, I do want to say this stuff is
+very much in development right now.
+
+00:02:55.040 --> 00:02:56.650
+We have all of the pieces working.
+
+00:02:56.650 --> 00:02:59.580
+Everything is pretty much
+feature compatible with Leopard.
+
+00:02:59.580 --> 00:03:01.660
+Your KEXTs should work
+as they have before.
+
+00:03:01.660 --> 00:03:04.430
+But some of the new features I'm
+talking about are not here yet.
+
+00:03:04.570 --> 00:03:08.090
+We've laid the groundwork for them,
+but we haven't implemented them all yet.
+
+00:03:08.640 --> 00:03:12.420
+And some aspects that were there
+on Leopard are only partially
+
+00:03:12.420 --> 00:03:13.470
+re-implemented or ported.
+
+00:03:13.470 --> 00:03:15.490
+The caching schemes
+are in flux right now,
+
+00:03:15.560 --> 00:03:16.290
+for example.
+
+00:03:16.290 --> 00:03:18.940
+And the logging, while improved,
+is only partial.
+
+00:03:18.940 --> 00:03:21.660
+There are some things that
+we need to add there yet.
+
+00:03:21.720 --> 00:03:22.750
+So, let's go ahead and get started.
+
+00:03:24.320 --> 00:03:27.990
+As a brief overview,
+this is more of a Delta talk.
+
+00:03:28.050 --> 00:03:30.900
+It's not an introduction,
+but I'll go through some of the basics.
+
+00:03:30.950 --> 00:03:34.380
+A KEXT is a driver for the
+kernel for hardware devices,
+
+00:03:34.450 --> 00:03:37.120
+or it's a file system or network plug-in.
+
+00:03:37.410 --> 00:03:39.490
+It's packaged as a bundle on disk.
+
+00:03:39.500 --> 00:03:43.220
+If you're not familiar with that,
+we wrap individual files and resources
+
+00:03:43.220 --> 00:03:46.900
+under a directory that the finder
+treats as a single file to users.
+
+00:03:46.930 --> 00:03:50.860
+And we use that to organize the
+data and resources that we use.
+
+00:03:51.890 --> 00:03:57.180
+For use of KEXTs, what we do is,
+our job is to load the executable
+
+00:03:57.540 --> 00:03:59.400
+from disk into the running kernel.
+
+00:03:59.430 --> 00:04:02.790
+So what we do is we resolve
+dependencies on the families that
+
+00:04:02.790 --> 00:04:05.300
+Dean talked about in his earlier talk.
+
+00:04:05.920 --> 00:04:08.010
+We figure out where the KEXT is
+going to be in the kernel,
+
+00:04:08.020 --> 00:04:11.680
+relocate that, locate its code in the
+kernel's address space,
+
+00:04:11.680 --> 00:04:13.840
+and then execute the
+start point of the KEXT.
+
+00:04:13.840 --> 00:04:16.990
+We also handle unloading,
+as well as things like analyzing,
+
+00:04:17.040 --> 00:04:19.040
+developing, and debugging KEXTs.
+
+00:04:19.040 --> 00:04:22.760
+So you use our tools to
+generate symbols for debugging.
+
+00:04:22.760 --> 00:04:25.770
+We've got a tool that will figure
+out what your library should be that
+
+00:04:25.770 --> 00:04:28.150
+you're going to need to link against,
+and so on.
+
+00:04:28.160 --> 00:04:29.490
+This is not about the runtime.
+
+00:04:29.570 --> 00:04:31.460
+This is not about writing your KEXT code.
+
+00:04:31.460 --> 00:04:32.270
+It's not about the IOCit.
+
+00:04:32.360 --> 00:04:33.500
+It's not about the kernel calls.
+
+00:04:33.500 --> 00:04:35.700
+That's all handled through the framework.
+
+00:04:35.900 --> 00:04:36.900
+Thank you.
+
+00:04:38.880 --> 00:04:41.090
+Now,
+to get into the actual details of things,
+
+00:04:41.090 --> 00:04:44.010
+we've made some changes to
+user-space KEXT management,
+
+00:04:44.120 --> 00:04:46.730
+and the big one is that we're
+splitting KEXT load out.
+
+00:04:46.790 --> 00:04:48.910
+If you're not familiar
+with these tools yet,
+
+00:04:48.910 --> 00:04:51.640
+KEXT load is the tool you use
+to explicitly load a KEXT.
+
+00:04:51.640 --> 00:04:54.660
+Most I/O Kit KEXTs automatically
+load as devices appear,
+
+00:04:54.690 --> 00:04:56.940
+and they unload as devices disappear.
+
+00:04:56.990 --> 00:05:00.340
+But if you want to force a KEXT to load,
+or if it's a non-Iokit KEXT,
+
+00:05:00.340 --> 00:05:02.170
+KEXT load is the tool you use.
+
+00:05:02.180 --> 00:05:04.790
+And up until SnowLeopard,
+it has been the single tool
+
+00:05:04.940 --> 00:05:09.400
+for loading a KEXT for both
+deployment and development purposes.
+
+00:05:09.400 --> 00:05:12.650
+We're going to split those out for
+SnowLeopard so that we can simplify
+
+00:05:12.760 --> 00:05:15.660
+KEXT load and reduce it down to just
+the essentials that it needs to do.
+
+00:05:15.660 --> 00:05:18.800
+And to that end, it's going to accept
+just these basic options.
+
+00:05:18.820 --> 00:05:21.030
+You can still specify
+a KEXT by bundle ID.
+
+00:05:21.040 --> 00:05:24.380
+You can still list a dependency
+explicitly on the command line that
+
+00:05:24.440 --> 00:05:26.280
+isn't in the extensions folder.
+
+00:05:26.280 --> 00:05:29.510
+And you can still specify a
+whole folder of additional KEXTs.
+
+00:05:29.600 --> 00:05:31.480
+But you won't be able to say,
+for example,
+
+00:05:31.480 --> 00:05:32.160
+don't load a KEXT by bundle ID.
+
+00:05:32.160 --> 00:05:33.370
+You won't look in the
+system folder at all,
+
+00:05:33.440 --> 00:05:34.790
+because that's really a developer thing.
+
+00:05:34.800 --> 00:05:38.410
+Of course, all of the basic options for
+verbose logging and whatnot
+
+00:05:38.410 --> 00:05:39.060
+are going to be there.
+
+00:05:39.080 --> 00:05:42.230
+Right now on SnowLeopard,
+if you run KEXT load with the
+
+00:05:42.470 --> 00:05:45.440
+additional developer options,
+it will work as it did on Leopard.
+
+00:05:45.440 --> 00:05:48.090
+But you're going to get a notice
+saying that it's splitting and
+
+00:05:48.090 --> 00:05:50.150
+that you should use the new tool,
+which is called KEXT util.
+
+00:05:50.180 --> 00:05:51.780
+And I'll be talking about
+that in just a second.
+
+00:05:51.780 --> 00:05:55.460
+Our ultimate goal here is to
+reduce KEXT load to a very thin
+
+00:05:55.460 --> 00:05:58.530
+wrapper that will just message
+kexty with the load arguments.
+
+00:05:58.540 --> 00:06:04.200
+And kexty, the ongoing daemon,
+that the kernel talks to to handle
+
+00:06:04.200 --> 00:06:08.010
+all sorts of things related to KEXTs,
+will handle the load operation
+
+00:06:08.010 --> 00:06:09.260
+itself by talking to the kernel.
+
+00:06:11.700 --> 00:06:15.430
+As I mentioned, for developer loading,
+we're replacing kextload with
+
+00:06:15.430 --> 00:06:16.400
+a new tool called kextutil.
+
+00:06:16.510 --> 00:06:19.590
+And it's basically going to
+be today's kextload with a
+
+00:06:19.720 --> 00:06:21.270
+few extra new options now.
+
+00:06:21.280 --> 00:06:23.680
+And it's going to be less
+fussy about those options.
+
+00:06:23.680 --> 00:06:26.260
+If you have ever wanted to
+generate symbols for your
+
+00:06:26.260 --> 00:06:29.270
+KEXT and groaned as you typed in,
+you know,
+
+00:06:29.280 --> 00:06:32.530
+dash A with all of the addresses for
+every library that you don't care about,
+
+00:06:32.680 --> 00:06:34.120
+you're not going to
+have to do that anymore.
+
+00:06:34.120 --> 00:06:37.780
+You can just say, give me the symbols for
+this KEXT at this address,
+
+00:06:37.870 --> 00:06:41.230
+and it will just skip generating
+symbols for all the rest.
+
+00:06:42.760 --> 00:06:45.630
+Similarly, if you are in a batch
+or interactive mode,
+
+00:06:45.730 --> 00:06:48.980
+if you've used this tool,
+kextload would ask you for the load
+
+00:06:48.980 --> 00:06:51.110
+address of every library up to your KEXT.
+
+00:06:51.110 --> 00:06:53.900
+And if you failed to
+enter that or skipped it,
+
+00:06:53.900 --> 00:06:55.400
+it would just abort.
+
+00:06:55.400 --> 00:06:57.870
+Now it will just make up an address,
+do the link,
+
+00:06:57.910 --> 00:07:00.750
+and then not write out that file,
+and it will only give you
+
+00:07:00.750 --> 00:07:02.160
+the files that you want.
+
+00:07:02.260 --> 00:07:04.190
+In general,
+it's going to be less pedantic
+
+00:07:04.190 --> 00:07:07.310
+about duplicated options,
+so that if you specify something twice,
+
+00:07:07.310 --> 00:07:09.220
+it won't bomb out,
+it will just print a warning,
+
+00:07:09.220 --> 00:07:11.330
+and you'll be able to
+continue with your work.
+
+00:07:12.200 --> 00:07:13.700
+There are two big new options to mention.
+
+00:07:13.700 --> 00:07:16.120
+We finally have a dash-arch flag,
+so you can generate symbols
+
+00:07:16.160 --> 00:07:17.280
+across architecture.
+
+00:07:17.280 --> 00:07:20.920
+PPC-R386-X86-64.
+
+00:07:20.920 --> 00:07:23.340
+And Andrew's going to
+talk about this later,
+
+00:07:23.340 --> 00:07:25.690
+but because the linker
+layout has changed,
+
+00:07:25.690 --> 00:07:28.640
+if you want to do symbols for
+an older release of the OS,
+
+00:07:28.640 --> 00:07:31.770
+you'll need to specify the
+dash-legacy layout flag.
+
+00:07:31.770 --> 00:07:33.960
+We're looking into ways
+to make that automatic.
+
+00:07:33.960 --> 00:07:37.500
+I will point out that some
+behavior that you may be used to,
+
+00:07:37.500 --> 00:07:40.700
+especially in interactive mode,
+is different.
+
+00:07:41.700 --> 00:07:45.700
+So if you specify interactive mode,
+the old KEXT load would say,
+
+00:07:45.700 --> 00:07:47.700
+do you want to load the KEXT,
+do you want to start the KEXT,
+
+00:07:47.720 --> 00:07:48.630
+do you want to send personalities?
+
+00:07:48.700 --> 00:07:51.440
+It's actually going to load
+them all regardless now.
+
+00:07:51.440 --> 00:07:53.930
+And then it will say,
+do you want to start the KEXT,
+
+00:07:54.010 --> 00:07:56.520
+because really that's the
+only part that matters.
+
+00:07:56.520 --> 00:07:59.730
+We are looking into
+whether that's appropriate,
+
+00:07:59.730 --> 00:08:02.690
+but it's probably going
+to work out just fine.
+
+00:08:06.100 --> 00:08:08.870
+Overall,
+we are updating all of the KEXT tools.
+
+00:08:08.870 --> 00:08:13.520
+We're using the new,
+more efficient code base to build them.
+
+00:08:13.520 --> 00:08:17.790
+We're adding long options to all of
+them so that you'll be a little bit less
+
+00:08:17.790 --> 00:08:22.940
+confused over single-letter options that
+have opposite meanings from tool to tool,
+
+00:08:22.940 --> 00:08:24.320
+which is the case for a few of them.
+
+00:08:24.600 --> 00:08:27.420
+We're also cleaning up the
+behavior so that when you
+
+00:08:27.420 --> 00:08:31.200
+run these tools on your KEXT,
+it won't do a whole bunch of background
+
+00:08:31.200 --> 00:08:35.190
+operations on every other KEXT it
+encounters and log about all of that.
+
+00:08:35.380 --> 00:08:38.910
+It will just work on your
+KEXT and log about your KEXT,
+
+00:08:38.910 --> 00:08:41.250
+just the stuff you care about.
+
+00:08:41.390 --> 00:08:44.520
+Of course, we've got support for the
+64-bit kernel and KEXTs,
+
+00:08:44.520 --> 00:08:48.170
+and again, operation for a specified
+architecture with these tools.
+
+00:08:48.220 --> 00:08:50.430
+They're not all ported yet.
+
+00:08:51.880 --> 00:08:54.290
+Right now we've got
+these six tools ported.
+
+00:08:54.460 --> 00:08:57.880
+kextload, of course, kextunload,
+which is a little bit cleaned up.
+
+00:08:57.980 --> 00:08:59.950
+You might want to read the man
+page of that again because some
+
+00:08:59.950 --> 00:09:02.350
+of the options behave a little
+bit differently than you thought.
+
+00:09:02.500 --> 00:09:05.710
+kexty is ported,
+not something you generally deal with.
+
+00:09:05.860 --> 00:09:08.860
+And kextool,
+which is the replacement for kextload.
+
+00:09:08.860 --> 00:09:12.580
+kextstat has been updated
+to work on running on top of
+
+00:09:12.580 --> 00:09:14.510
+both 32- and 64-bit kernels.
+
+00:09:14.520 --> 00:09:17.380
+And the kextlib command is also ported.
+
+00:09:17.420 --> 00:09:20.260
+So that lets you find out what
+libraries you need to declare.
+
+00:09:21.290 --> 00:09:24.560
+Not yet ported,
+but hopefully will be there very soon,
+
+00:09:24.560 --> 00:09:28.170
+are the kextfind utility, kextcache,
+and mkextunpack.
+
+00:09:28.290 --> 00:09:30.590
+As I mentioned earlier,
+the caching schemes are
+
+00:09:30.590 --> 00:09:31.860
+still being worked out.
+
+00:09:34.410 --> 00:09:39.550
+Speaking of caching schemes,
+if you're working with KEXTs on
+
+00:09:39.550 --> 00:09:42.700
+systems from Leopard and prior,
+the good news is that
+
+00:09:42.700 --> 00:09:43.340
+nothing has changed.
+
+00:09:43.430 --> 00:09:44.950
+You're going to install
+your KEXTs atomically into
+
+00:09:44.950 --> 00:09:46.930
+the extensions folder,
+and then we'll notice that,
+
+00:09:46.930 --> 00:09:49.870
+or if you touch the extensions folder,
+we're going to notice that and just
+
+00:09:49.870 --> 00:09:51.570
+rebuild the caches automatically.
+
+00:09:51.660 --> 00:09:54.570
+The truth, of course,
+is that everything is
+
+00:09:54.570 --> 00:09:56.420
+changing since Leopard.
+
+00:09:56.420 --> 00:10:00.330
+So if you're doing any touching
+of the individual cache files,
+
+00:10:00.330 --> 00:10:03.150
+you probably want to
+move to the new model.
+
+00:10:04.200 --> 00:10:06.890
+Specifically,
+we're moving all of the cache files
+
+00:10:06.940 --> 00:10:09.500
+into system library caches where
+they should have been all along.
+
+00:10:09.500 --> 00:10:11.390
+There's not going to be
+any more plist cache.
+
+00:10:11.390 --> 00:10:14.340
+Some of you may have run into problems
+with that getting a little bit out of
+
+00:10:14.400 --> 00:10:16.160
+sync and having to manually delete that.
+
+00:10:16.170 --> 00:10:18.700
+We're hoping that you're
+never going to see that again.
+
+00:10:18.700 --> 00:10:21.810
+We're moving to a small cache
+that's just going to have identifier
+
+00:10:22.160 --> 00:10:25.320
+version and path so that we can look
+up KEXTs by bundle ID and get to
+
+00:10:25.320 --> 00:10:27.070
+their bundle on disk very quickly.
+
+00:10:27.240 --> 00:10:31.230
+And then we're going to have a
+separate cache for IOCit personalities.
+
+00:10:34.020 --> 00:10:47.930
+So we're going to have a separate
+cache for IOCit personalities.
+
+00:10:49.610 --> 00:10:51.180
+Other changes coming along.
+
+00:10:51.180 --> 00:10:52.580
+And this is the big one.
+
+00:10:52.580 --> 00:10:55.290
+We're going to be talking about it a
+little bit more in detail as we go along.
+
+00:10:55.290 --> 00:11:00.920
+SnowLeopard KEXT loads are now atomic
+between the user and kernel space.
+
+00:11:01.200 --> 00:11:05.670
+If you've ever looked into any of the
+code or have dealt with these problems,
+
+00:11:05.750 --> 00:11:10.260
+the operation of loading a KEXT from
+user space on Leopard and prior involves
+
+00:11:10.270 --> 00:11:14.840
+many MIG calls down to the kernel for
+each KEXT in the dependency graph.
+
+00:11:15.020 --> 00:11:18.940
+We had to allocate the memory in
+the kernel to get the link address,
+
+00:11:18.970 --> 00:11:21.530
+and then we had to do
+the link in user space,
+
+00:11:21.530 --> 00:11:24.490
+and then copy the
+relocated executable down,
+
+00:11:24.500 --> 00:11:27.790
+and then set up all of the
+relationships between the dependencies,
+
+00:11:27.790 --> 00:11:29.470
+and each of those is a MIG call.
+
+00:11:29.480 --> 00:11:31.180
+What we're doing now is we're going to be
+using the MIG call to do the same thing.
+
+00:11:31.180 --> 00:11:33.900
+We're going to roll up that entire
+load graph into a Mach message,
+
+00:11:33.990 --> 00:11:36.330
+send it down to the kernel,
+and it's going to do all of that
+
+00:11:36.330 --> 00:11:37.670
+work down in the kernel now.
+
+00:11:39.480 --> 00:11:41.820
+That said,
+kextutil is still going to allow
+
+00:11:41.820 --> 00:11:45.400
+for KEXTs not to be started or for
+personalities not to be sent when
+
+00:11:45.400 --> 00:11:48.750
+you do that developer load operation,
+so that you'll be able to set
+
+00:11:48.760 --> 00:11:50.850
+up debug points and whatnot
+for your start routines,
+
+00:11:50.900 --> 00:11:53.550
+and this is particularly
+important for non-IO kit KEXTs.
+
+00:11:53.580 --> 00:11:56.600
+In addition,
+there's no more Mach.sim file.
+
+00:11:56.600 --> 00:11:59.400
+The kernel's link state is
+maintained in kernel memory.
+
+00:11:59.400 --> 00:12:01.510
+We can do everything
+down in the kernel now,
+
+00:12:01.510 --> 00:12:03.560
+so we don't have to
+write things out on disk,
+
+00:12:03.630 --> 00:12:07.480
+and we don't have to wonder which
+kernel we're actually linking against.
+
+00:12:08.730 --> 00:12:11.360
+Also, the UUID checks,
+you may have seen warnings about
+
+00:12:11.360 --> 00:12:15.150
+if you've been developing KEXTs and
+replaced families or your own KEXT.
+
+00:12:15.150 --> 00:12:18.100
+You may have seen warnings
+saying you can't load because
+
+00:12:18.100 --> 00:12:19.720
+a different UUID is loaded.
+
+00:12:19.720 --> 00:12:21.720
+We actually won't have
+to do that anymore,
+
+00:12:21.770 --> 00:12:25.060
+because the libraries in the
+KEXT will also have their link state.
+
+00:12:25.060 --> 00:12:27.090
+We're going to talk about that more.
+
+00:12:27.100 --> 00:12:32.040
+So it will be possible to load against
+a dependency that's changed on disk.
+
+00:12:32.040 --> 00:12:33.670
+I want to repeat that.
+
+00:12:33.850 --> 00:12:37.350
+If you update a family on disk,
+or someone runs a software update,
+
+00:12:37.710 --> 00:12:42.000
+or if you have a KEXT that does that,
+you used to have to reboot because we
+
+00:12:42.000 --> 00:12:45.830
+lost the executable on disk that we
+needed to do the link in user land.
+
+00:12:45.840 --> 00:12:49.830
+Since that's all done in the kernel now,
+we can continue to load KEXTs as
+
+00:12:49.830 --> 00:12:52.680
+long as they're compatible
+without forcing a reboot.
+
+00:12:57.770 --> 00:13:00.440
+The UUID is still there in
+KEXTs built with the new tools.
+
+00:13:00.440 --> 00:13:01.980
+We may be using it for other purposes.
+
+00:13:02.000 --> 00:13:04.350
+It does have its uses,
+but we don't have to do it
+
+00:13:04.350 --> 00:13:05.940
+for this particular purpose.
+
+00:13:09.430 --> 00:13:11.740
+Now we're going to get into
+some upcoming features.
+
+00:13:11.840 --> 00:13:14.820
+One of the little ones that I've been
+hoping to do pretty soon is doing
+
+00:13:14.900 --> 00:13:16.580
+some enhancements to KEXT stats.
+
+00:13:16.650 --> 00:13:19.500
+So you can list additional properties,
+perhaps including that UUID,
+
+00:13:19.540 --> 00:13:22.240
+so you can verify that the KEXT you're
+debugging is the one you have
+
+00:13:22.240 --> 00:13:24.980
+on disk and you're working with,
+and not have to constantly
+
+00:13:24.980 --> 00:13:26.520
+update the version.
+
+00:13:26.520 --> 00:13:30.990
+We might also add the ability to list the
+OS object classes that your KEXT defines,
+
+00:13:31.080 --> 00:13:35.920
+or that an arbitrary KEXT defines,
+just to see which classes are where.
+
+00:13:36.300 --> 00:13:39.820
+In addition,
+we're hoping to add a C API at long
+
+00:13:39.820 --> 00:13:41.430
+last for KEXT loading and unloading.
+
+00:13:41.440 --> 00:13:43.450
+It will be an RPC to kexty,
+and it will take care of
+
+00:13:43.450 --> 00:13:44.540
+that communication process.
+
+00:13:44.540 --> 00:13:47.940
+So you will not have to fork
+and exec KEXT load just to load
+
+00:13:47.940 --> 00:13:49.130
+a KEXT from your application.
+
+00:13:51.360 --> 00:13:53.580
+We're probably going to have the same
+authentication requirements for kextload,
+
+00:13:53.580 --> 00:13:55.850
+but we're looking into ways to do that.
+
+00:13:55.950 --> 00:14:00.380
+So your process will have to be running
+as root or probably an admin user,
+
+00:14:00.380 --> 00:14:02.840
+but we're going to look into how
+relaxed we can be about that and
+
+00:14:02.840 --> 00:14:04.490
+what sorts of verification we can do.
+
+00:14:04.500 --> 00:14:08.490
+And then finally, much more tentatively,
+since we have to talk to
+
+00:14:08.600 --> 00:14:10.600
+another team about this,
+we're hoping to integrate
+
+00:14:10.600 --> 00:14:12.220
+things with the dev tools more.
+
+00:14:12.220 --> 00:14:16.260
+For example,
+it really should be possible from
+
+00:14:16.260 --> 00:14:19.400
+GDB to just have it figure out
+the addresses of the loaded KEXTs,
+
+00:14:19.720 --> 00:14:22.230
+generate the symbols for you,
+and automatically load them.
+
+00:14:22.240 --> 00:14:25.110
+We really want this to be possible,
+so we're going to talk to
+
+00:14:25.120 --> 00:14:27.140
+the dev tools team and see if
+we can have something added.
+
+00:14:27.140 --> 00:14:31.250
+For now, what you'll do is you'll run
+kextutil-s and use the addkext
+
+00:14:31.250 --> 00:14:33.290
+command as you currently do.
+
+00:14:33.300 --> 00:14:36.410
+And similarly,
+what we would like for Xcode is to
+
+00:14:36.430 --> 00:14:39.990
+have it automatically generate your
+OS bundle libraries declaration so that
+
+00:14:40.010 --> 00:14:43.570
+you don't have to go rooting through
+headers to figure out which libraries.
+
+00:14:43.580 --> 00:14:46.400
+Now back in Leopard,
+I introduced the kextlibs command,
+
+00:14:46.400 --> 00:14:48.380
+so you can run that on an arbitrary KEXT.
+
+00:14:48.700 --> 00:14:51.940
+It ignores the OS bundle libraries
+property and actually goes and
+
+00:14:51.940 --> 00:14:55.380
+looks in every library for symbols
+that match your undefined symbols,
+
+00:14:55.380 --> 00:14:56.450
+and it prints a list of those.
+
+00:14:56.460 --> 00:14:58.680
+It tells you which ones
+occur in multiple KEXTs,
+
+00:14:58.690 --> 00:15:00.760
+and you'll have to make a decision there.
+
+00:15:00.760 --> 00:15:03.590
+But if everything works out and you
+really don't have any conflicts,
+
+00:15:03.630 --> 00:15:06.370
+you can just run kextlibs-xml,
+pipe it to pbcopy,
+
+00:15:06.480 --> 00:15:08.240
+and then paste it into your plist.
+
+00:15:08.320 --> 00:15:10.150
+That's what you can do for now.
+
+00:15:12.910 --> 00:15:14.950
+On to KEXT bundles,
+the changes to the format,
+
+00:15:15.060 --> 00:15:18.580
+in particular the info dictionaries,
+we have added one big feature that is
+
+00:15:18.580 --> 00:15:21.230
+actually there in SnowLeopard right now,
+and that is
+
+00:15:21.420 --> 00:15:23.080
+architecture-specific properties.
+
+00:15:23.080 --> 00:15:30.370
+So if you have to link against different
+libraries on x86-64 versus i386 or PPC,
+
+00:15:30.370 --> 00:15:35.070
+you'll just tag on the architecture
+to the end of the property,
+
+00:15:35.190 --> 00:15:39.660
+right here as the example,
+os-bundle-libraries under bar x86-64.
+
+00:15:39.660 --> 00:15:42.840
+When we're linking your
+KEXT for that architecture,
+
+00:15:42.870 --> 00:15:45.060
+and we need to look up the
+os-bundle-libraries property,
+
+00:15:45.060 --> 00:15:48.090
+we will tag on that architecture,
+look that up, and if it exists,
+
+00:15:48.190 --> 00:15:48.590
+we'll use it.
+
+00:15:48.690 --> 00:15:51.460
+If it doesn't, we'll fall back to the
+base key and use that.
+
+00:15:51.620 --> 00:15:54.690
+So that's a technique you may be
+able to use to make your KEXT more
+
+00:15:54.690 --> 00:15:56.640
+compatible across some releases.
+
+00:15:56.640 --> 00:15:59.040
+As I mentioned,
+we're going to look up that
+
+00:15:59.040 --> 00:16:02.650
+base key so you can use that for
+backward compatibility by adding
+
+00:16:02.660 --> 00:16:06.560
+an architecture-specific property
+for some specific thing that you
+
+00:16:06.560 --> 00:16:09.160
+know will only work on SnowLeopard,
+and then the base key for the
+
+00:16:09.270 --> 00:16:09.620
+architecture-specific property.
+
+00:16:09.660 --> 00:16:11.780
+The base key will then be used
+for Leopard and prior releases.
+
+00:16:11.780 --> 00:16:16.650
+This is good for any top-level property
+except the CFBundle properties and,
+
+00:16:16.650 --> 00:16:19.340
+of course, for os-kernel resources.
+
+00:16:19.340 --> 00:16:20.760
+That's reserved for system KEXTs.
+
+00:16:20.790 --> 00:16:24.330
+And because this is an
+addition specific to KEXTs,
+
+00:16:24.330 --> 00:16:27.460
+you will never see this used by CFBundle.
+
+00:16:27.460 --> 00:16:29.640
+This is something we only
+do internally in our stuff.
+
+00:16:34.080 --> 00:16:37.700
+Speaking of libraries, for 32-bit KEXTs,
+things haven't changed too much.
+
+00:16:37.700 --> 00:16:40.980
+OS bundle libraries,
+for those who don't know,
+
+00:16:40.980 --> 00:16:45.120
+is the list of KEXTs that you need to
+link against in order to load properly.
+
+00:16:45.120 --> 00:16:47.400
+We haven't really changed
+those for SnowLeopard.
+
+00:16:47.400 --> 00:16:50.220
+The supported 32-bit
+KPIs have not changed.
+
+00:16:50.380 --> 00:16:56.430
+We have a new link model that
+includes every symbol in the kernel,
+
+00:16:56.430 --> 00:17:02.040
+but that's the old link model,
+and we're still supporting it
+
+00:17:02.040 --> 00:17:05.820
+on SnowLeopard for 32-bit KEXTs.
+
+00:17:05.880 --> 00:17:09.280
+Unsupported KPI has had
+some symbols removed.
+
+00:17:09.440 --> 00:17:12.320
+They are unsupported,
+and we have removed some,
+
+00:17:12.320 --> 00:17:16.020
+and we're adding a KPI,
+com.apple.kpi.private.
+
+00:17:16.040 --> 00:17:19.240
+This has symbols that aren't
+available for third-party KEXTs,
+
+00:17:19.260 --> 00:17:20.350
+and you really shouldn't use them.
+
+00:17:20.380 --> 00:17:20.420
+Thank you.
+
+00:17:21.870 --> 00:17:26.880
+and Andrew Myrick are going to be
+working on the kernel extension.
+
+00:17:26.880 --> 00:17:28.800
+We're going to be enforcing that
+private ability at some point,
+
+00:17:28.800 --> 00:17:28.800
+so don't use that.
+
+00:17:28.800 --> 00:17:31.870
+In 64-bit land,
+there has been some KPI cleanup,
+
+00:17:31.870 --> 00:17:34.800
+which you've probably seen if
+you've been to the earlier talks.
+
+00:17:34.800 --> 00:17:37.800
+More specifically,
+coms.apple.kernelstar is not there.
+
+00:17:37.800 --> 00:17:41.800
+This is really an old compatibility
+link model that Andrew will
+
+00:17:41.800 --> 00:17:42.800
+probably talk about a little bit.
+
+00:17:42.800 --> 00:17:45.800
+It's not there, and in fact,
+due to a bug in the seed,
+
+00:17:45.800 --> 00:17:48.220
+if you link against them,
+you're actually going to get
+
+00:17:48.220 --> 00:17:49.800
+a really quick kernel panic.
+
+00:17:49.800 --> 00:17:53.800
+So make sure you update your OS bundle
+libraries before you port to 64-bit.
+
+00:17:53.820 --> 00:17:57.800
+Also, coms.apple.kpi.unsupported,
+not there anymore,
+
+00:17:57.800 --> 00:18:01.790
+and coms.apple.kpi.private,
+not available.
+
+00:18:01.800 --> 00:18:06.230
+If you were here before lunch,
+you saw Jay Towsley talk about the
+
+00:18:06.310 --> 00:18:10.730
+porting ability for various things,
+and then there was also session 338,
+
+00:18:10.770 --> 00:18:13.800
+the whole kernel architecture
+and kernel extension transition.
+
+00:18:16.620 --> 00:18:18.420
+Another feature that
+we're looking into adding,
+
+00:18:18.420 --> 00:18:20.530
+not there yet,
+but we have had some requests for this,
+
+00:18:20.530 --> 00:18:21.750
+so we're going to look into it.
+
+00:18:21.880 --> 00:18:25.660
+Resource files for KEXTs,
+specifically for things
+
+00:18:25.680 --> 00:18:26.440
+like device firmware.
+
+00:18:26.440 --> 00:18:30.380
+Any large thing that you need
+to get and download to a device,
+
+00:18:30.440 --> 00:18:32.460
+but then don't need to keep
+around in kernel memory,
+
+00:18:32.460 --> 00:18:35.390
+this is the target audience for that.
+
+00:18:35.720 --> 00:18:39.130
+Right now, if you want to do downloadable
+firmware or similar things,
+
+00:18:39.130 --> 00:18:42.520
+you either have to embed it in
+your IOCit driver personality,
+
+00:18:42.520 --> 00:18:46.310
+which means it remains resident in
+kernel-wired memory pretty much forever,
+
+00:18:46.620 --> 00:18:49.460
+or you have to do some rendezvous
+with a user space process,
+
+00:18:49.580 --> 00:18:51.480
+both of which are kind of painful.
+
+00:18:51.480 --> 00:18:56.620
+So what we're going to do is we're going
+to support CF Bundle's resource feature,
+
+00:18:56.620 --> 00:18:59.760
+and your KEXT in the
+kernel will be able to say,
+
+00:18:59.760 --> 00:19:01.470
+get me the resource with this name.
+
+00:19:01.480 --> 00:19:04.980
+And what we're going to do is either
+get it immediately at boot time,
+
+00:19:04.980 --> 00:19:07.750
+we'll have some way of
+marking these with a property,
+
+00:19:07.750 --> 00:19:10.940
+something like OS Bundle required,
+which you use to specify
+
+00:19:10.940 --> 00:19:12.260
+KEXT needed at boot time.
+
+00:19:12.260 --> 00:19:16.480
+If you do that, you'll name some
+resources that are needed.
+
+00:19:16.500 --> 00:19:18.960
+The booter will copy them into memory.
+
+00:19:18.960 --> 00:19:21.190
+The mkext format will also include those.
+
+00:19:21.240 --> 00:19:24.820
+And then they'll be available
+immediately if you request them by name.
+
+00:19:24.820 --> 00:19:27.270
+Past early boot,
+those things are going to be flushed
+
+00:19:27.270 --> 00:19:29.400
+from memory to save kernel-wired memory.
+
+00:19:29.400 --> 00:19:32.170
+And if you request them,
+that request will be routed up to kexty,
+
+00:19:32.170 --> 00:19:34.380
+and that may be synchronous
+or asynchronous.
+
+00:19:34.380 --> 00:19:35.410
+We're still looking into that.
+
+00:19:37.130 --> 00:19:40.720
+All that said,
+these are static resource files.
+
+00:19:40.780 --> 00:19:42.000
+These are part of your bundle.
+
+00:19:42.220 --> 00:19:43.800
+They should be read-only.
+
+00:19:43.860 --> 00:19:45.780
+They will be cached,
+and you shouldn't be using
+
+00:19:45.780 --> 00:19:46.720
+them for configuration.
+
+00:19:46.720 --> 00:19:49.380
+They're not a place to store preferences.
+
+00:19:52.260 --> 00:19:54.040
+on to the kernel itself.
+
+00:19:54.350 --> 00:19:58.160
+This is where everything really happens.
+
+00:19:58.160 --> 00:20:01.900
+The big news is that kernel is now really
+properly claiming ownership of KEXTs.
+
+00:20:01.900 --> 00:20:05.380
+It used to be sort of a split
+duty between the kernel and
+
+00:20:05.380 --> 00:20:07.700
+the user space KEXT framework.
+
+00:20:07.760 --> 00:20:12.480
+Now all KEXTs are going to be
+linked and loaded inside the kernel.
+
+00:20:12.800 --> 00:20:15.810
+The user space tools just take
+the raw executables and plists
+
+00:20:15.850 --> 00:20:18.770
+and whatever else might be needed,
+build up that dependency graph,
+
+00:20:18.770 --> 00:20:20.800
+and send that down to the
+kernel in one message.
+
+00:20:20.840 --> 00:20:22.780
+As I mentioned earlier,
+it's going to be an atomic
+
+00:20:22.830 --> 00:20:24.410
+operation with regard to user space.
+
+00:20:24.440 --> 00:20:25.510
+It's one call.
+
+00:20:26.700 --> 00:20:30.280
+Library KEXTs maintain some
+state down in the kernel that
+
+00:20:30.280 --> 00:20:32.280
+allows further links to happen.
+
+00:20:32.280 --> 00:20:34.320
+The relocated executable
+itself isn't quite enough,
+
+00:20:34.320 --> 00:20:36.620
+so there's going to be a little
+bit of extra memory we keep,
+
+00:20:36.770 --> 00:20:38.420
+but we're going to put it
+in pageable memory so that
+
+00:20:38.420 --> 00:20:39.660
+we're not taxing the system.
+
+00:20:40.720 --> 00:20:43.560
+And as I mentioned before,
+it will now be possible to update
+
+00:20:43.570 --> 00:20:46.640
+a library on disk and still link
+against the loaded old version
+
+00:20:46.640 --> 00:20:48.010
+because we have that link state.
+
+00:20:48.140 --> 00:20:51.530
+If the new KEXT that you're loading
+is compatible with that library,
+
+00:20:51.530 --> 00:20:53.280
+then everything will just work.
+
+00:20:57.500 --> 00:22:03.200
+[Transcript missing]
+
+00:22:04.850 --> 00:22:05.800
+On to features again.
+
+00:22:05.800 --> 00:22:09.710
+In the kernel, what we're hoping to do is
+take care of auto-unload,
+
+00:22:09.710 --> 00:22:13.830
+and in particular for this instance,
+if any of you have ever tried to
+
+00:22:13.830 --> 00:22:18.520
+write a non-IoKit KEXT that uses C++,
+and particularly uses libcurrent C++,
+
+00:22:18.520 --> 00:22:20.450
+you've probably run into problems.
+
+00:22:20.460 --> 00:22:24.790
+And one of the reasons for that is that
+the automatic unload mechanism used by
+
+00:22:24.790 --> 00:22:29.300
+I/O Kit is pretty much predicated on
+the presence of any OS object subclass.
+
+00:22:29.790 --> 00:22:32.620
+So what we're doing now is we're
+hoping to make it safer to use
+
+00:22:32.710 --> 00:22:37.080
+libcurrent C++ on SnowLeopard
+in that when a KEXT gets loaded,
+
+00:22:37.080 --> 00:22:40.620
+we're going to look for subclasses
+of iOS service rather than OS object,
+
+00:22:40.700 --> 00:22:43.250
+and only if that's the
+case do we mark the KEXT as
+
+00:22:43.360 --> 00:22:45.400
+eligible for automatic unload.
+
+00:22:46.810 --> 00:22:49.520
+Also, very few of you have ever
+probably run into this,
+
+00:22:49.640 --> 00:22:53.180
+but the stop routine for the KEXT,
+this is not a driver stop function,
+
+00:22:53.180 --> 00:22:55.350
+but this is the stop routine
+for the KEXT as a whole.
+
+00:22:55.360 --> 00:22:57.000
+We're going to call that now.
+
+00:22:57.040 --> 00:23:00.610
+I/O Kit KEXTs don't have a stop routine,
+so the automatic unload mechanism
+
+00:23:00.610 --> 00:23:03.820
+for I/O Kit KEXTs would just
+unload them from memory.
+
+00:23:03.820 --> 00:23:07.160
+We're going to call that stop
+routine to do a clean shutdown,
+
+00:23:07.250 --> 00:23:09.720
+and then everything should work fine.
+
+00:23:09.720 --> 00:23:13.430
+None of this should affect I/O Kit KEXTs,
+so if this doesn't apply to you,
+
+00:23:13.430 --> 00:23:14.710
+you can pretty much
+forget the whole slide.
+
+00:23:16.890 --> 00:23:18.160
+This is another big one.
+
+00:23:18.200 --> 00:23:20.550
+Internal for now,
+but this is coming along.
+
+00:23:20.750 --> 00:23:24.610
+We have a class in libkern
+now called OS KEXT,
+
+00:23:24.720 --> 00:23:30.940
+and this is the new thing that manages
+loaded copies of KEXT bundles from disk.
+
+00:23:31.590 --> 00:23:34.530
+It reads KEXTs from the booter
+data or from the mkexts at boot
+
+00:23:34.580 --> 00:23:37.980
+time and builds up an internal
+database of which KEXTs are available
+
+00:23:37.980 --> 00:23:41.090
+and fields the requests to load,
+start, stop,
+
+00:23:41.090 --> 00:23:44.240
+and unload at boot time as well as later.
+
+00:23:44.240 --> 00:23:49.510
+It tracks the defined OS object
+subclasses via OS metaclass.
+
+00:23:49.560 --> 00:23:53.410
+This all used to be done in OS metaclass,
+but we're moving the bits of that
+
+00:23:53.410 --> 00:23:55.620
+that are proper into OS KEXT.
+
+00:23:55.620 --> 00:23:58.870
+It also takes care of adding
+and removing personalities
+
+00:23:58.870 --> 00:24:01.260
+into and out of the IO catalog.
+
+00:24:01.500 --> 00:24:05.270
+Most of this is internal detail
+that shouldn't affect you.
+
+00:24:05.330 --> 00:24:08.120
+But it's the basis for
+upcoming new features.
+
+00:24:08.120 --> 00:24:09.850
+It's the bottom slide there.
+
+00:24:10.140 --> 00:24:12.020
+And it provides the services.
+
+00:24:13.450 --> 00:24:15.800
+to the user space
+KEXT system and the kernel,
+
+00:24:15.810 --> 00:24:17.460
+as well as to running KEXTs.
+
+00:24:17.480 --> 00:24:20.730
+We're hoping to add some functions
+to this class and make them
+
+00:24:20.730 --> 00:24:24.620
+available to you so that you can,
+for example, in your running code, say,
+
+00:24:24.620 --> 00:24:25.890
+my KEXT to do something.
+
+00:24:25.900 --> 00:24:29.710
+And getting the resource file is
+going to be one of those things.
+
+00:24:30.910 --> 00:24:33.620
+Also for non-IoK KEXTs,
+we're looking into actually
+
+00:24:33.840 --> 00:24:35.460
+enabling automatic unload.
+
+00:24:35.460 --> 00:24:38.200
+Rather than preventing it,
+we want to make it possible to do
+
+00:24:38.300 --> 00:24:42.400
+in a way that makes sense for you
+so that when your KEXT that is not
+
+00:24:42.400 --> 00:24:46.350
+an Iok KEXT is no longer needed,
+it can be cleanly unloaded
+
+00:24:46.350 --> 00:24:50.440
+automatically without you having
+to call KEXT unload in user space.
+
+00:24:50.720 --> 00:24:54.470
+The way we're going to do this is
+we're going to have an opt-in ref
+
+00:24:54.470 --> 00:24:56.530
+count on the underlying OS KEXT.
+
+00:24:56.530 --> 00:25:00.460
+So when you call the first retain,
+your KEXT immediately becomes
+
+00:25:00.460 --> 00:25:04.740
+eligible for automatic unload
+when that retain count hits zero.
+
+00:25:04.740 --> 00:25:06.670
+Every now and again,
+there's going to be a
+
+00:25:06.670 --> 00:25:09.620
+sweep of the loaded KEXT,
+and anything that is eligible and has a
+
+00:25:09.620 --> 00:25:11.720
+zero ref count will be unloaded cleanly.
+
+00:25:13.150 --> 00:25:16.820
+We're also considering
+automatic load for KEXTs.
+
+00:25:16.830 --> 00:25:19.960
+We've had some requests from people
+writing file system plugins and
+
+00:25:20.040 --> 00:25:23.560
+network kernel extensions for some
+kind of automatic load mechanism,
+
+00:25:23.590 --> 00:25:24.530
+and we're talking to you.
+
+00:25:24.540 --> 00:25:27.210
+If you want to talk more about that,
+definitely come see
+
+00:25:27.300 --> 00:25:28.460
+us after this session.
+
+00:25:28.500 --> 00:25:31.480
+We don't know that it's gonna
+happen because the requirements
+
+00:25:31.480 --> 00:25:34.020
+so far have been really vague,
+but if we can nail down something
+
+00:25:34.020 --> 00:25:37.420
+really concrete that will work
+across a wide variety of KEXTs,
+
+00:25:37.460 --> 00:25:39.400
+that's what we're gonna do.
+
+00:25:40.450 --> 00:25:46.140
+Also, the kunk execute thing or
+facility that some of you may be
+
+00:25:46.140 --> 00:25:47.740
+using is going to be replaced.
+
+00:25:47.740 --> 00:25:50.140
+It's never been properly
+supported for quite some time,
+
+00:25:50.140 --> 00:25:50.620
+rather.
+
+00:25:50.620 --> 00:25:54.930
+So we're looking into a new mechanism
+based on OS KEXT that will allow
+
+00:25:54.930 --> 00:25:58.980
+you to request a user space program
+to be run by an absolute path or
+
+00:25:59.080 --> 00:26:01.340
+a path within your KEXT bundle.
+
+00:26:01.340 --> 00:26:05.140
+So you'll be able to maybe launch a
+daemon or run some kind of utility or
+
+00:26:05.200 --> 00:26:07.440
+fire up a GUI config tool of some kind.
+
+00:26:08.090 --> 00:26:10.020
+The request will be
+routed through Kexting,
+
+00:26:10.020 --> 00:26:12.140
+executed in user land.
+
+00:26:12.280 --> 00:26:15.980
+We're probably going to allow that
+to be synchronous or asynchronous,
+
+00:26:15.980 --> 00:26:18.960
+depending on what your needs are,
+but we're still evaluating the
+
+00:26:18.960 --> 00:26:22.310
+security considerations of that,
+so it's not there yet.
+
+00:26:22.340 --> 00:26:26.420
+We don't have any plans to
+replace Kunk user notification.
+
+00:26:26.420 --> 00:26:31.260
+If you want to present some kind of
+user dialogue or alert from the kernel,
+
+00:26:31.260 --> 00:26:34.210
+you'll run the new action
+request and just have a program
+
+00:26:34.210 --> 00:26:35.570
+that puts that panel up.
+
+00:26:35.640 --> 00:26:40.670
+And we're going to get into the
+details of the linker now with Andrew.
+
+00:26:42.200 --> 00:26:45.090
+There you go.
+
+00:26:46.850 --> 00:26:47.500
+Hello, everyone.
+
+00:26:47.600 --> 00:26:48.300
+Hope you're having fun.
+
+00:26:48.300 --> 00:26:52.330
+My name is Andrew Myrick,
+and I am the KEXT linker engineer.
+
+00:26:52.340 --> 00:26:54.720
+And as a little sidebar
+before we get started,
+
+00:26:54.720 --> 00:26:57.150
+this started for me a
+couple of years ago.
+
+00:26:57.160 --> 00:26:59.810
+In the summer of 2006,
+I was actually a bright-eyed and
+
+00:26:59.880 --> 00:27:05.120
+bushy-tailed intern working for Apple,
+who thought, hey, need a new KEXT linker.
+
+00:27:05.120 --> 00:27:06.560
+That sure sounds like fun.
+
+00:27:06.560 --> 00:27:09.710
+Well, while fun is only one of
+many words I would use to
+
+00:27:09.710 --> 00:27:14.580
+describe the kernel linker,
+I'm very happy to announce that we're
+
+00:27:14.600 --> 00:27:18.260
+bringing a new KEXT linker to SnowLeopard
+as part of the new KEXT management stack.
+
+00:27:19.650 --> 00:27:21.520
+So first a little background.
+
+00:27:21.570 --> 00:27:23.100
+What is a KEXT linker?
+
+00:27:23.170 --> 00:27:27.740
+Well, the KEXT linker is the utility
+in the kernel that takes kernel
+
+00:27:27.840 --> 00:27:31.060
+extensions and binds them into
+the kernel's address space.
+
+00:27:31.210 --> 00:27:34.840
+Kernel extensions are just binary
+kernel plug-ins that live in the kernel
+
+00:27:34.840 --> 00:27:40.320
+address space and interact with the
+core kernel and other kernel extensions.
+
+00:27:40.320 --> 00:27:44.000
+The KEXT linker's job is to
+resolve references to those
+
+00:27:44.000 --> 00:27:48.290
+kernel functions and interfaces,
+resolve references to other KEXTs,
+
+00:27:48.780 --> 00:27:52.390
+export the KEXT functions for
+use by other kernel extensions,
+
+00:27:52.390 --> 00:27:57.050
+and then also provide binary
+compatibility for kernel extensions
+
+00:27:57.050 --> 00:28:00.430
+written for older OS X systems.
+
+00:28:01.300 --> 00:30:17.200
+[Transcript missing]
+
+00:30:17.900 --> 00:30:22.070
+To go a little more into the details
+of the limitations caused by KLD,
+
+00:30:22.210 --> 00:30:23.900
+well, KLD is pretty heavyweight.
+
+00:30:23.930 --> 00:30:30.800
+It's designed to do a whole
+slew of things in user space,
+
+00:30:30.800 --> 00:30:34.840
+like link dynamic and static libraries,
+many things that we
+
+00:30:34.840 --> 00:30:35.990
+don't need in the kernel.
+
+00:30:36.000 --> 00:30:39.370
+As I mentioned,
+it doesn't clean up its memory.
+
+00:30:39.380 --> 00:30:42.850
+It has to relink all of the
+KEXT dependencies before
+
+00:30:42.850 --> 00:30:46.440
+it can link an actual KEXT,
+so it redoes a lot of work.
+
+00:30:46.560 --> 00:30:50.920
+And we have this external Vtable patcher,
+this external module that takes
+
+00:30:51.100 --> 00:30:53.440
+care of our binary compatibility.
+
+00:30:53.750 --> 00:30:58.900
+Finally, LD and KLD had conflicting
+development directions.
+
+00:30:59.040 --> 00:31:01.540
+In the kernel,
+we want to add certain features
+
+00:31:01.540 --> 00:31:04.700
+for kernel linking that aren't
+necessarily applicable to user space.
+
+00:31:04.710 --> 00:31:07.820
+And as I already mentioned,
+LD had a lot of features that we
+
+00:31:07.820 --> 00:31:09.700
+just didn't need in the kernel.
+
+00:31:09.830 --> 00:31:14.230
+Trying to reconcile those diverging
+directions made it difficult to
+
+00:31:14.230 --> 00:31:18.330
+get all the new things into the
+kernel that we wanted to add.
+
+00:31:19.030 --> 00:31:21.440
+So we have KLD and KXLD.
+
+00:31:21.440 --> 00:31:25.860
+One of our biggest goals
+for KXLD was performance.
+
+00:31:25.860 --> 00:31:30.420
+The old kernel linker had to go
+back to disk every time it needed
+
+00:31:30.420 --> 00:31:33.810
+to relink because it had to go
+and fetch all of the dependencies.
+
+00:31:33.810 --> 00:31:35.520
+We wanted to avoid that.
+
+00:31:35.520 --> 00:31:38.150
+We wanted to avoid having
+to relink old KEXTs at all.
+
+00:31:38.960 --> 00:31:42.320
+So the way we did this is with
+something we call a link state object.
+
+00:31:42.320 --> 00:31:48.950
+The link state object is a piece of
+intermediate link data that tracks
+
+00:31:48.950 --> 00:31:53.860
+all of the symbols and functions
+that a kernel extension exports.
+
+00:31:53.950 --> 00:32:00.050
+It also keeps track of all of the
+publicly accessible V tables that
+
+00:32:00.050 --> 00:32:07.530
+are required by its dependent kernel
+extensions for binary compatibility.
+
+00:32:07.980 --> 00:32:11.430
+These link state objects are stored
+in pageable memory so that they
+
+00:32:11.430 --> 00:32:15.460
+don't use any wired kernel resources,
+and they allow us to link
+
+00:32:15.460 --> 00:32:17.400
+a single KEXT only once.
+
+00:32:17.470 --> 00:32:22.600
+We then cache those link state objects
+in the kernel as pageable memory
+
+00:32:22.690 --> 00:32:26.400
+away from the rest of the system so
+that when we need to link a new KEXT,
+
+00:32:26.570 --> 00:32:30.000
+we can pull them up
+and link very quickly.
+
+00:32:30.090 --> 00:32:34.710
+To illustrate this, let's take a look at
+how this actually works.
+
+00:32:36.040 --> 00:32:39.990
+The kernel linker starts out by
+just taking in a KEXT and adding
+
+00:32:39.990 --> 00:32:44.280
+in all of these pageable link state
+object files that that KEXT needs
+
+00:32:44.750 --> 00:32:48.120
+to be linked into the kernel.
+
+00:32:48.350 --> 00:32:50.780
+This linker then generates
+a new link state object,
+
+00:32:50.840 --> 00:32:54.060
+exporting that kext's public
+functions and V tables,
+
+00:32:54.130 --> 00:32:57.480
+and adds that to the pool of
+pageable link state objects.
+
+00:32:57.520 --> 00:33:00.590
+It then also exports the
+relocated KEXT binary,
+
+00:33:00.630 --> 00:33:05.980
+which it then injects and initializes
+in the kernel's address space,
+
+00:33:06.140 --> 00:33:08.900
+taking care of all of the linking.
+
+00:33:09.460 --> 00:33:12.470
+So let's talk about what this means.
+
+00:33:12.690 --> 00:33:16.300
+Did we achieve our goal of
+getting high performance?
+
+00:33:16.340 --> 00:33:19.490
+Well, I can certainly say that the link
+state object and the algorithms
+
+00:33:19.580 --> 00:33:23.300
+we were able to design around it
+greatly improved linking performance.
+
+00:33:23.470 --> 00:33:25.300
+First of all,
+just looking at memory reuse,
+
+00:33:25.300 --> 00:33:27.800
+we were actually able to
+reuse a lot of memory.
+
+00:33:27.850 --> 00:33:31.200
+The old linker allocated and freed
+roughly 90 megabytes on startup,
+
+00:33:31.630 --> 00:33:34.230
+and unoptimized KXLE is
+already down to 60.
+
+00:33:34.340 --> 00:33:37.300
+We hope to get that down to about 15.
+
+00:33:37.530 --> 00:33:42.000
+But the real performance gains
+came in actual linking time.
+
+00:33:42.580 --> 00:33:46.700
+ATI Radion X2000 KEXT is a
+kernel extension that drives
+
+00:33:46.740 --> 00:33:48.680
+the latest graphics cards.
+
+00:33:48.740 --> 00:33:52.350
+The old linker took 210
+milliseconds to link that KEXT.
+
+00:33:52.600 --> 00:33:55.870
+KXLE takes only 25 milliseconds.
+
+00:34:00.810 --> 00:34:05.100
+So what does all this
+mean for you developers?
+
+00:34:05.140 --> 00:34:09.110
+Well, first of all,
+to make sure that we link
+
+00:34:09.240 --> 00:34:11.340
+kernel extensions the way we
+can rely on in the future,
+
+00:34:11.340 --> 00:34:13.840
+we've changed the KEXT memory layout.
+
+00:34:13.860 --> 00:34:16.570
+In the past,
+kernel extensions were laid out just as
+
+00:34:16.570 --> 00:34:20.480
+they were in their Mako object files,
+which is just one section, one segment,
+
+00:34:20.480 --> 00:34:22.170
+right after the other.
+
+00:34:22.320 --> 00:34:25.160
+In the new model,
+we now separate all of the
+
+00:34:25.180 --> 00:34:28.540
+segments into page-aligned segments
+as they originally intended,
+
+00:34:28.680 --> 00:34:33.360
+which allows us to implement proper
+VM protections on those segments.
+
+00:34:33.520 --> 00:34:36.890
+This means we can write
+protect the text segments,
+
+00:34:37.070 --> 00:34:41.000
+execute protect the data segments,
+and in general provide better security.
+
+00:34:41.120 --> 00:34:43.380
+We haven't enabled this
+yet on SnowLeopard,
+
+00:34:43.380 --> 00:34:45.110
+but it will be there in the GM.
+
+00:34:45.730 --> 00:34:48.920
+Now this means that symbol
+generation has changed,
+
+00:34:49.000 --> 00:34:52.670
+because the layout of kernel
+extensions has changed.
+
+00:34:53.420 --> 00:34:57.580
+So to generate symbols for older systems,
+for Leopard and earlier systems,
+
+00:34:57.580 --> 00:35:01.430
+we've added a flag to
+kextutil called legacy layout,
+
+00:35:01.430 --> 00:35:04.950
+which will emulate the old kernel
+extension layout for generating
+
+00:35:04.950 --> 00:35:06.450
+symbols for those older systems.
+
+00:35:06.490 --> 00:35:08.700
+We're looking at automatically
+detecting this at runtime
+
+00:35:08.700 --> 00:35:10.950
+based on the kernel's version,
+but we're not there yet.
+
+00:35:10.980 --> 00:35:16.020
+An important note is that Leopard
+systems in earlier cannot generate
+
+00:35:16.020 --> 00:35:18.790
+symbols for SnowLeopard systems.
+
+00:35:19.380 --> 00:35:21.480
+It's important to keep in mind,
+if you need symbols for
+
+00:35:21.480 --> 00:35:24.200
+a SnowLeopard system,
+use a SnowLeopard system
+
+00:35:24.200 --> 00:35:25.520
+to get those symbols.
+
+00:35:28.230 --> 00:35:31.780
+Another thing that Nik already
+mentioned is cross-architecture linking.
+
+00:35:31.860 --> 00:35:35.770
+SnowLeopard can link for any
+architecture that OS X runs on.
+
+00:35:36.380 --> 00:35:39.830
+PowerPC is even supported,
+even though the seed
+
+00:35:40.030 --> 00:35:41.960
+doesn't support PowerPC.
+
+00:35:42.140 --> 00:35:45.120
+So if you have a PowerPC system
+running Leopard earlier,
+
+00:35:45.260 --> 00:35:47.740
+just make sure you use legacy layout
+to get the right symbol generation.
+
+00:35:47.740 --> 00:35:50.590
+This applies to both symbol
+generation and when the
+
+00:35:50.590 --> 00:35:54.000
+pre-linked kernel comes along,
+it'll apply to that too.
+
+00:35:54.000 --> 00:35:56.730
+So any SnowLeopard system,
+32-bit or 64-bit,
+
+00:35:56.730 --> 00:35:59.180
+will be able to generate
+symbols for any other.
+
+00:36:01.720 --> 00:36:03.880
+So what else are we looking at?
+
+00:36:03.930 --> 00:36:06.260
+Well, we know a lot of you
+have wanted weak linking.
+
+00:36:06.300 --> 00:36:12.370
+And weak linking is pretty tricky,
+especially thinking about C++, V tables,
+
+00:36:12.500 --> 00:36:13.170
+how all that works.
+
+00:36:13.190 --> 00:36:17.260
+But we really want to get weak
+linking in at least for C symbols.
+
+00:36:18.300 --> 00:36:22.070
+We're going to try and do
+this in as seamless a way as
+
+00:36:22.070 --> 00:36:26.810
+possible as user space does,
+using existing GCC attributes,
+
+00:36:26.810 --> 00:36:30.180
+specifically the weak import attribute.
+
+00:36:30.190 --> 00:36:33.570
+Add this to our headers,
+much the way that the availability
+
+00:36:33.570 --> 00:36:35.250
+macros in user space work.
+
+00:36:37.170 --> 00:36:43.060
+Then when you need to access and find
+out if a symbol is ready to be used,
+
+00:36:43.060 --> 00:36:46.280
+if it's available at runtime,
+we'll have a function similar
+
+00:36:46.280 --> 00:36:49.980
+to what's listed up here,
+OSMetaClassIsWeeklyDefined,
+
+00:36:49.980 --> 00:36:52.570
+which will return null
+if it doesn't exist,
+
+00:36:52.570 --> 00:36:54.820
+and the symbol's address if it does.
+
+00:36:55.210 --> 00:36:58.120
+We'll also try and add some
+logic for unresolved weak symbol
+
+00:36:58.130 --> 00:37:01.910
+dereferences so that not only-- so
+instead of just getting a panic,
+
+00:37:02.040 --> 00:37:10.200
+you'll get a panic that says,
+this KEXT accessed this symbol,
+
+00:37:10.200 --> 00:37:10.200
+and it wasn't-- it was weakly
+defined but unresolved.
+
+00:37:10.550 --> 00:37:13.300
+Specifically,
+we're really looking for some feedback
+
+00:37:13.300 --> 00:37:15.320
+on what you all want to weak link.
+
+00:37:15.350 --> 00:37:18.960
+So if you have some suggestions,
+some things that you're
+
+00:37:18.960 --> 00:37:21.920
+really looking for,
+please contact us afterwards.
+
+00:37:21.920 --> 00:37:25.740
+There will be an email address I'll put
+up shortly with information of how to
+
+00:37:25.740 --> 00:37:28.040
+get in touch with us about weak linking.
+
+00:37:30.270 --> 00:37:33.200
+Another feature we're looking to
+add is better symbol generation,
+
+00:37:33.200 --> 00:37:35.200
+which Nik touched on earlier.
+
+00:37:35.250 --> 00:37:38.210
+We already have cross-architecture,
+but there are a couple of other
+
+00:37:38.880 --> 00:37:41.000
+features we're looking to add.
+
+00:37:41.080 --> 00:37:43.000
+First is the KeepSims bootarg.
+
+00:37:43.060 --> 00:37:48.110
+Some of you may know that if you set
+KeepSims equal to 1 as a bootarg,
+
+00:37:48.520 --> 00:37:51.470
+The system will--the kernel will
+keep its symbols in memory so that
+
+00:37:51.930 --> 00:37:56.400
+the panic that's printed on screen
+will be symbolicated automatically.
+
+00:37:56.560 --> 00:38:00.630
+And we're looking at storing the
+KEXT symbols in the system as well so
+
+00:38:00.630 --> 00:38:06.400
+that you won't just get this black hole
+of functions in the kernel stack trace.
+
+00:38:06.430 --> 00:38:10.400
+You'll actually get all
+the symbols there as well.
+
+00:38:10.400 --> 00:38:14.850
+And we're looking at integrating
+that with GDB so that add KEXT would
+
+00:38:14.850 --> 00:38:18.400
+either grab symbols from the
+save symbols and keep sims,
+
+00:38:18.550 --> 00:38:21.830
+or just call out to the new
+kernel extension management
+
+00:38:21.830 --> 00:38:26.220
+library that Nik has worked on to
+generate those symbols for you.
+
+00:38:26.450 --> 00:38:31.070
+Really, we know that 14 steps to generate
+and load symbols on a system to
+
+00:38:31.160 --> 00:38:36.210
+debug a kernel extension is a lot,
+and we're just trying to cut that down.
+
+00:38:37.970 --> 00:38:40.900
+So for more information,
+you can talk to Craig Keithley.
+
+00:38:40.960 --> 00:38:43.140
+His contact information is there.
+
+00:38:43.180 --> 00:38:47.400
+There's also the guide,
+Kernel Extension Programming Topics,
+
+00:38:47.430 --> 00:38:50.600
+available on developer.apple.com.
+
+00:38:50.640 --> 00:38:53.940
+Also, we've requested feedback for a
+number of things in this talk,
+
+00:38:53.940 --> 00:38:56.330
+and if you have any to give us,
+you can email
+
+00:38:56.510 --> 00:39:01.060
+kext-feedback@group.apple.com
+to give us more information.
+
+00:39:01.940 --> 00:39:04.100
+Some related sessions that
+hopefully you all got to see,
+
+00:39:04.240 --> 00:39:06.180
+but if you didn't,
+you can eventually see them
+
+00:39:06.180 --> 00:39:11.580
+through the attendee website,
+was the 64-bit session,
+
+00:39:11.670 --> 00:39:16.300
+Mac OS X 64-bit Kernel Architecture and
+Kernel Extension Transition,
+
+00:39:16.300 --> 00:39:19.100
+getting started with the I/O Kit,
+device drivers in Mac OS X,
+
+00:39:19.100 --> 00:39:22.140
+which is this morning,
+and also maximizing platform
+
+00:39:22.430 --> 00:39:26.660
+compatibility of I/O Kit drivers,
+also this morning.
+
+00:39:27.100 --> 00:39:29.770
+So to summarize,
+we completely reworked KEXT management
+
+00:39:29.970 --> 00:39:34.350
+for SnowLeopard in as binary of
+compatible ways we possibly could.
+
+00:39:34.900 --> 00:39:37.800
+Most of the new features that
+we're bringing are opt-in,
+
+00:39:37.800 --> 00:39:41.510
+and some,
+like the new speed of the KEXT linker,
+
+00:39:41.690 --> 00:39:42.670
+you'll just get for free.
+
+00:39:42.700 --> 00:39:48.390
+Porting to K64 requires a few changes,
+and the details are subject to change,
+
+00:39:48.390 --> 00:39:50.330
+but in general,
+we hope that this all works
+
+00:39:50.900 --> 00:39:52.230
+pretty seamlessly for you all.
+
+00:39:52.260 --> 00:39:54.870
+So thank you very much,
+and open this up for questions.

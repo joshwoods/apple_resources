@@ -1,0 +1,2784 @@
+WEBVTT
+
+00:00:12.710 --> 00:00:14.089
+>> Good morning.
+
+00:00:14.089 --> 00:00:18.429
+This is the second session on OpenCL this morning.
+
+00:00:18.429 --> 00:00:24.219
+Last hour we talked about the OpenCL
+APIs and the OpenCL C kernel language.
+
+00:00:24.219 --> 00:00:28.750
+Which is a small extension on the C for
+new features that you might want to do,
+
+00:00:28.750 --> 00:00:33.140
+use in the kernel to expose more
+parallelism in your, in your code.
+
+00:00:33.140 --> 00:00:38.399
+This hour we're going to see how well
+we managed to predict your questions
+
+00:00:38.399 --> 00:00:40.979
+from last hour and answer them as best we can.
+
+00:00:40.979 --> 00:00:46.169
+So I'm going to talk about, I'm sorry, my
+name is Ian Ollmann in case you're wondering.
+
+00:00:46.170 --> 00:00:55.530
+So I'm going to talk about a couple of examples where I
+work through performance optimization problems in OpenCL.
+
+00:00:55.530 --> 00:01:02.070
+There is, the first example is the box filter, which we
+had a couple of questions about at the end of last hour.
+
+00:01:02.070 --> 00:01:10.870
+And then I'm also going to explore performance tuning with
+OpenCL API using the conversion performance test for OpenCL.
+
+00:01:10.870 --> 00:01:16.240
+And, and later on Andrew Brownsword will come and talk
+about his experience importing his application to OpenCL.
+
+00:01:16.239 --> 00:01:21.819
+So first of all I want to start off with the box filter.
+
+00:01:21.819 --> 00:01:29.419
+And I'm using the box filter to just sort of put OpenCL
+in context and show why, why OpenCL is actually necessary.
+
+00:01:29.420 --> 00:01:32.750
+OpenCL is a little different from most frameworks.
+
+00:01:32.750 --> 00:01:35.439
+Most frameworks you know provide
+a series of canned routines.
+
+00:01:35.439 --> 00:01:41.030
+They might play a movie or, do FFT for
+you or do a number of other things.
+
+00:01:41.030 --> 00:01:49.920
+But OpenCL is more of a tool chain, its peers are more
+like pthreads and GCC or maybe OpenGL in a shader compiler.
+
+00:01:49.920 --> 00:01:57.170
+So we want to make sure that when we're introducing
+a new, a new set of tools in this ecosystem
+
+00:01:57.170 --> 00:02:00.210
+that it is performance competitive with these things
+
+00:02:00.209 --> 00:02:03.979
+and that you can actually deliver the
+stuff that you need to deliver on OpenCL.
+
+00:02:03.980 --> 00:02:09.400
+So one example that I'm sure all of you
+are familiar with are pthreads and GCC.
+
+00:02:09.400 --> 00:02:14.770
+Standard technology for writing applications, CPU only,
+but it's great because you get predictable results
+
+00:02:14.770 --> 00:02:17.100
+out of the arithmetic and it's pretty flexible.
+
+00:02:17.099 --> 00:02:19.460
+You can do just about anything you want in C.
+
+00:02:19.460 --> 00:02:26.670
+Some of you may also use OpenGL with a shader
+compiler, which is OpenGL shaders are C like languages.
+
+00:02:26.669 --> 00:02:31.019
+There's also OpenGLR, which is
+kind of an assembly like thing.
+
+00:02:31.020 --> 00:02:33.500
+And that's a wonderful technology for image processing.
+
+00:02:33.500 --> 00:02:36.669
+You can do CPU and GPU on there.
+
+00:02:36.669 --> 00:02:39.219
+So GPU acceleration is obviously nothing new.
+
+00:02:39.219 --> 00:02:44.379
+And in fact, there's a whole community
+of general purpose GPU stuff that's grown
+
+00:02:44.379 --> 00:02:49.430
+up in the last few years using these shader
+compilers to do general purpose work.
+
+00:02:49.430 --> 00:02:55.770
+But you know when you go try to do that sort of thing,
+you find out that the arithmetic you get out of OpenGL
+
+00:02:55.770 --> 00:02:59.050
+and shader compilers is hardware dependant.
+
+00:02:59.050 --> 00:03:05.860
+And it's also less flexible because the shader languages
+force you to present your algorithm as a graphics operation.
+
+00:03:05.860 --> 00:03:08.700
+And there are certain things that you just can't do.
+
+00:03:08.699 --> 00:03:18.560
+So being a bit lazy, I did not write complete
+examples of a box filter using these technologies.
+
+00:03:18.560 --> 00:03:21.800
+If I had, it would've taken a while to tune them up.
+
+00:03:21.800 --> 00:03:24.620
+So I leveraged the work of some of my colleagues at Apple.
+
+00:03:24.620 --> 00:03:32.450
+So I have a couple of frameworks, which use these tools
+that you all have probably been using for some time.
+
+00:03:32.449 --> 00:03:40.629
+And they're pretty mature, well optimized and I will call
+them framework A and framework B to protect the innocent
+
+00:03:40.629 --> 00:03:45.009
+since we're really talking about tool chains here.
+
+00:03:45.009 --> 00:03:51.009
+If you missed the session last hour, you're wondering what
+is a box filter, maybe you don't do much image processing.
+
+00:03:51.009 --> 00:03:56.590
+It's really just an average over pixels
+over a nearby pixels in an image.
+
+00:03:56.590 --> 00:04:02.129
+So if you started with an image like this, you
+could calculate a pixel based on the average
+
+00:04:02.129 --> 00:04:07.099
+of that larger square grid on the left and the
+next pixel is the next square grid and so forth.
+
+00:04:07.099 --> 00:04:09.759
+So it's nothing fancy.
+
+00:04:09.759 --> 00:04:16.589
+And there are actually much better ways to do blurs,
+but this is an interesting, easy to understand example.
+
+00:04:16.589 --> 00:04:23.989
+And here is a sample kernel that does the
+box filter, which you saw last hour also.
+
+00:04:23.990 --> 00:04:29.460
+And the notable parts of it, you know we start off at
+the top figuring out which pixel we're going to operate
+
+00:04:29.459 --> 00:04:31.599
+on which is what that GetGlobalID stuff is about.
+
+00:04:31.600 --> 00:04:38.520
+And then we loop over adjacent kernels,
+reading in pixels and adding them up.
+
+00:04:38.519 --> 00:04:42.879
+And then we might divide by the
+number of pixels in the, in the grid.
+
+00:04:42.879 --> 00:04:45.740
+And then write out the result.
+
+00:04:45.740 --> 00:04:54.910
+And that is a very simple example and I
+have some code, which does that, right here.
+
+00:04:54.910 --> 00:05:01.730
+This is an application, which plays
+a 780p movie file through QuickTime.
+
+00:05:01.730 --> 00:05:07.520
+As you can see here, I've got a little
+time indicator that's how many milliseconds
+
+00:05:07.519 --> 00:05:09.969
+of image processing we're doing on this thing.
+
+00:05:09.970 --> 00:05:15.010
+Right now, we aren't actually doing any, this is just a
+little bit of color correction, which slides into the time.
+
+00:05:15.009 --> 00:05:17.740
+And this is CPU utilization.
+
+00:05:17.740 --> 00:05:22.199
+Right now, we're using 78% of one CPU.
+
+00:05:22.199 --> 00:05:26.509
+So we can turn on OpenCL and apply the box filter.
+
+00:05:26.509 --> 00:05:30.709
+And we discover that oh no, we're not running in real time.
+
+00:05:30.709 --> 00:05:33.500
+And this is a central point about OpenCL.
+
+00:05:33.500 --> 00:05:39.019
+OpenCL is a toolkit for moving your code
+and your data onto discreet devices.
+
+00:05:39.019 --> 00:05:40.819
+And getting really great performance out of it.
+
+00:05:40.819 --> 00:05:45.139
+But the magic in the end comes from you.
+
+00:05:45.139 --> 00:05:52.019
+Whereas a framework, a standard framework which
+has canned libraries may do FFTs or show a movie,
+
+00:05:52.019 --> 00:05:56.180
+you'll believe when you write your application
+you have something particular that you want to do
+
+00:05:56.180 --> 00:05:59.400
+that makes your application your application.
+
+00:05:59.399 --> 00:06:05.279
+And there's always been hard to do is find a high
+performance framework that's going to let you fill
+
+00:06:05.279 --> 00:06:10.369
+in the gaps between all of that carefully hand tuned
+Apple code and your own code in a way that's going
+
+00:06:10.370 --> 00:06:13.100
+to be able to run in a very high throughput way.
+
+00:06:13.100 --> 00:06:16.660
+And you often had to work pretty hard to do that.
+
+00:06:16.660 --> 00:06:22.110
+So here, we've done that, but the performance
+is not great, so what did we do wrong?
+
+00:06:22.110 --> 00:06:26.009
+Well, it's not really OpenCL's fault or so I dissert.
+
+00:06:26.009 --> 00:06:32.300
+The problem is we're just using the wrong algorithm.
+
+00:06:32.300 --> 00:06:36.319
+And every year I get up here and I
+start talking about optimizing code.
+
+00:06:36.319 --> 00:06:40.430
+And I always have to make a point that before
+you get started doing any kind of tuning,
+
+00:06:40.430 --> 00:06:42.889
+you got to make sure you're using the right algorithm.
+
+00:06:42.889 --> 00:06:46.000
+Now there are obvious faster ways to do a box filter.
+
+00:06:46.000 --> 00:06:51.410
+For example, if I was doing a 5 by 5 box
+filter, I would have to add up 25 pixels.
+
+00:06:51.410 --> 00:06:56.830
+But if we look at it carefully and we realize
+that really that matrix of 1s is the product
+
+00:06:56.829 --> 00:06:59.779
+of 2 smaller matrices, I can do this as a two pass filter.
+
+00:06:59.779 --> 00:07:02.500
+Each that do 4 adds.
+
+00:07:02.500 --> 00:07:03.519
+So a total of 8 adds.
+
+00:07:03.519 --> 00:07:09.120
+So for a simple 5 by 5 filter, I might
+have saved 3X on the arithmetic cost.
+
+00:07:09.120 --> 00:07:13.290
+And the savings goes up rather
+dramatically as, as the filters get larger.
+
+00:07:13.290 --> 00:07:18.800
+And so what we can do is split our OpenCL
+kernel to do this in a more sensible way.
+
+00:07:18.800 --> 00:07:23.490
+We have one that goes in the horizontal dimension
+and one that goes in the vertical dimension.
+
+00:07:23.490 --> 00:07:28.960
+And the only real difference that I've done, change I've
+made here is that rather than having a doubly nested loop,
+
+00:07:28.959 --> 00:07:32.889
+I have a singly nested one because
+I'm only operating in one dimension.
+
+00:07:32.889 --> 00:07:37.919
+And we can see that right now we're you know
+running at about 3 clips, frames per second.
+
+00:07:37.920 --> 00:07:42.509
+But I can switch over to something that uses
+separable filters and all of a sudden we're running
+
+00:07:42.509 --> 00:07:46.699
+at 18 frames per second which is you know starting
+to approach real time, but obviously not there.
+
+00:07:46.699 --> 00:07:57.649
+Also, the amount of time that we used in the filter dropped
+from what was 270 milliseconds down to 40 milliseconds.
+
+00:07:57.649 --> 00:07:59.669
+This is all on the CPU.
+
+00:07:59.670 --> 00:08:01.100
+So there's quite a lot of things.
+
+00:08:01.100 --> 00:08:03.600
+And this is just an algorithmic improvement that we've done.
+
+00:08:03.600 --> 00:08:06.540
+So you always want to make sure you have the best algorithm.
+
+00:08:06.540 --> 00:08:11.160
+And in fact, the way I wrote it, those
+of you that were paying attention,
+
+00:08:11.160 --> 00:08:14.710
+I used read_image which is an insert
+into an opaque image type.
+
+00:08:14.709 --> 00:08:21.349
+And read image is a great function for
+getting faster access to images on the GPU.
+
+00:08:21.350 --> 00:08:24.290
+There is a lot of hardware there
+to make that thing run fast.
+
+00:08:24.290 --> 00:08:26.450
+They're called texture units.
+
+00:08:26.449 --> 00:08:30.990
+And it's a wonderful thing to do.
+
+00:08:30.990 --> 00:08:32.799
+But on CPU, there is no such hardware.
+
+00:08:32.799 --> 00:08:35.199
+So all this stuff is being emulated in the software.
+
+00:08:35.200 --> 00:08:37.860
+So that feature is not doing it any favors.
+
+00:08:37.860 --> 00:08:42.909
+And so we could switch over our basic buffer,
+our basic image container to a flat buffer.
+
+00:08:42.909 --> 00:08:46.019
+And all this thing is is just a standard C array.
+
+00:08:46.019 --> 00:08:51.189
+And if we do that then the address arithmetic for
+finding all of our data becomes a lot simpler.
+
+00:08:51.190 --> 00:08:58.560
+And we just click that on and now we're running
+in 12 milliseconds and it's running in real time.
+
+00:08:58.559 --> 00:09:04.269
+And of course, we could vectorize it
+and get it down to 6 milliseconds.
+
+00:09:04.269 --> 00:09:06.669
+But we're still getting pretty good CPU utilization.
+
+00:09:06.669 --> 00:09:11.539
+We're getting about 7 CPUs running at a time.
+
+00:09:11.539 --> 00:09:18.549
+But, and we can see how we compare with
+framework D which is an OpenGLR based framework.
+
+00:09:18.549 --> 00:09:20.849
+And we can see that we're actually doing pretty well.
+
+00:09:20.850 --> 00:09:27.790
+So we're running a bit faster and, and
+performance is actually not too much slower
+
+00:09:27.789 --> 00:09:31.139
+than running it on the GPU on that, on that framework.
+
+00:09:31.139 --> 00:09:34.830
+Well, how do we compare to framework
+A which used GCC and pthreads?
+
+00:09:34.830 --> 00:09:37.639
+And as you see, hand tuned assembly.
+
+00:09:37.639 --> 00:09:41.620
+Oh dear, it's beating us.
+
+00:09:41.620 --> 00:09:44.470
+Well, what did we do wrong?
+
+00:09:47.289 --> 00:09:50.110
+The important thing is that you use the best algorithms.
+
+00:09:50.110 --> 00:09:52.529
+Sometimes good isn't good enough.
+
+00:09:52.529 --> 00:09:56.139
+And the guys who write framework A are using C.
+
+00:09:56.139 --> 00:09:57.590
+They can do whatever they want.
+
+00:09:57.590 --> 00:10:06.639
+And if you actually look at this problem a little bit more
+carefully as one of our questionnaires alluded to last hour,
+
+00:10:06.639 --> 00:10:13.319
+you can see that you know the average
+is a sum of 7 pixels, so for result 3,
+
+00:10:13.320 --> 00:10:15.410
+you know we add those up, result 4 we add those up.
+
+00:10:15.409 --> 00:10:19.370
+But the region in the middle is the same, so
+there's no reason to recompute that partial sum.
+
+00:10:19.370 --> 00:10:26.360
+And in fact, we can actually calculate result 4 from
+result 3 simply by adding on the pixel on the right,
+
+00:10:26.360 --> 00:10:31.350
+removing the pixel on the left, correcting
+for some of the normalization that goes on.
+
+00:10:31.350 --> 00:10:32.470
+And this is a great way to do it.
+
+00:10:32.470 --> 00:10:39.649
+It's actually constant cost because no matter how wide we
+make the filter, the region that's the same scales with it,
+
+00:10:39.649 --> 00:10:44.209
+so all we ever have to do is add one pixel and remove
+one pixel regardless of how big that filter is.
+
+00:10:44.210 --> 00:10:47.519
+So rather than being an N square
+algorithm, it's now constant cost.
+
+00:10:47.519 --> 00:10:51.289
+But you can't do this on an OpenGL shader language.
+
+00:10:51.289 --> 00:10:58.370
+So if you want to run this code on a GPU, that
+algorithm was not you know unless you use one
+
+00:10:58.370 --> 00:11:03.029
+of the special GPU languages available to you.
+
+00:11:03.029 --> 00:11:05.389
+But we can do this in OpenCL.
+
+00:11:05.389 --> 00:11:09.879
+And again switch over to use the best algorithm
+which is now running in 3 milliseconds,
+
+00:11:09.879 --> 00:11:13.439
+which is faster than what the GPU
+was doing under the OpenGLR.
+
+00:11:13.440 --> 00:11:16.390
+And we're running on the CPU in this case.
+
+00:11:16.389 --> 00:11:24.840
+So OpenCL among other things is brings you sort of a new
+world of algorithms that you can actually deploy on the GPU.
+
+00:11:24.840 --> 00:11:28.259
+For many of you the GPU is the new thing, for many
+of you you've already used the GPU for a while.
+
+00:11:28.259 --> 00:11:30.379
+But now you can do more stuff.
+
+00:11:30.379 --> 00:11:32.460
+And it does in a portable fashion.
+
+00:11:32.460 --> 00:11:33.340
+[ Period of silence ]
+
+00:11:33.340 --> 00:11:39.620
+So next, I want to talk about performance
+tuning with OpenCL API.
+
+00:11:39.620 --> 00:11:42.679
+I'm going to talk about the conversions conformance test.
+
+00:11:42.679 --> 00:11:45.839
+This is the conformance test for
+OpenCL that tests conversions.
+
+00:11:45.840 --> 00:11:54.660
+We support standard scalar casts but you
+know kind of in using them over the years,
+
+00:11:54.659 --> 00:12:01.069
+you kind of run into little edge cases where it's like
+well maybe C left a little bit too much undefined here.
+
+00:12:01.070 --> 00:12:07.560
+Also, we wanted to extend them out to cover all
+of the vector sizes that we added to OpenCL.
+
+00:12:07.559 --> 00:12:11.479
+We wanted to give you some control over the rounding
+of those because I know a lot of you like to round
+
+00:12:11.480 --> 00:12:15.009
+to the nearest integer rather than
+rounding down all the time.
+
+00:12:15.009 --> 00:12:20.950
+And then also different architectures handle overflow
+differently, so if you read the float to an integer
+
+00:12:20.950 --> 00:12:26.120
+and the float was really big, what you
+get out of it is very hardware dependant.
+
+00:12:26.120 --> 00:12:30.039
+And it's really much nicer to have some certainty,
+especially when you're trying to write portable code.
+
+00:12:30.039 --> 00:12:34.490
+What's going to happen there it's nice you can rely on it.
+
+00:12:34.490 --> 00:12:40.519
+So we also have a test philosophy that if it's
+possible, we're going to test every number through here.
+
+00:12:40.519 --> 00:12:45.319
+Which can get to be a lot, a lot of numbers.
+
+00:12:45.320 --> 00:12:48.770
+And in fact, on average it's about 2.6 billion values.
+
+00:12:48.769 --> 00:12:53.019
+So at the end of the day, we had
+about 12 trillion values to test.
+
+00:12:53.019 --> 00:12:54.210
+Which is a lot.
+
+00:12:54.210 --> 00:12:59.050
+And it's a good thing we have a high
+performance framework to work with.
+
+00:12:59.049 --> 00:13:04.689
+So earlier when I said I was going to talk about
+the conformance test for conversions for OpenCL,
+
+00:13:04.690 --> 00:13:07.680
+I knew there was a question burning in your, in your mind.
+
+00:13:07.679 --> 00:13:10.709
+And that was what could possibly be
+interesting about a conformance test?
+
+00:13:10.710 --> 00:13:12.170
+I hate these things.
+
+00:13:12.169 --> 00:13:14.110
+And the answer really is it has to finish.
+
+00:13:14.110 --> 00:13:15.870
+We can't ship OpenCL until we're conformant.
+
+00:13:15.870 --> 00:13:18.399
+So we have to pass that test.
+
+00:13:18.399 --> 00:13:21.259
+And it's really terrible to run it all the
+way through and discover you have one bug
+
+00:13:21.259 --> 00:13:24.460
+and then you're always, oh I have to run it again.
+
+00:13:24.460 --> 00:13:29.680
+So, this is actually something that's very
+interesting to us over the last month.
+
+00:13:29.679 --> 00:13:32.829
+And so I thought I would show you our work on it here.
+
+00:13:32.830 --> 00:13:35.860
+The starting algorithm is nothing fancy.
+
+00:13:35.860 --> 00:13:39.970
+We init a series of numbers to be tested
+for a particular conversion function.
+
+00:13:39.970 --> 00:13:43.500
+We call clEnqueueWriteBuffer to copy that up to the device.
+
+00:13:43.500 --> 00:13:50.970
+And then for each vector size, we call up WriteBuffer
+again to override the destination buffer with garbage
+
+00:13:50.970 --> 00:13:53.340
+to make sure the kernel actually did something.
+
+00:13:53.340 --> 00:13:56.629
+And then we incur it EnqueueAKernel to do the test.
+
+00:13:56.629 --> 00:14:00.960
+The kernel is extremely simple, this is far simpler
+than anything you'd want to write in your own code.
+
+00:14:00.960 --> 00:14:07.610
+All it does is read the data out of a global array and
+write it to the destination after doing a conversion.
+
+00:14:07.610 --> 00:14:10.840
+And we call clFlush to get OpenCL moving.
+
+00:14:10.840 --> 00:14:17.550
+And we calculate the reference answer that
+we're expecting to see in the main thread.
+
+00:14:17.549 --> 00:14:23.419
+And for each vector size, we then sort of
+read back the data and then read through it
+
+00:14:23.419 --> 00:14:25.519
+with MemCompare to make sure we got the right answer.
+
+00:14:25.519 --> 00:14:29.389
+And if we didn't, we report an error.
+
+00:14:29.389 --> 00:14:40.970
+And for a particular benchmark conversion function, that
+takes about 4 minutes to get through 4 billion numbers.
+
+00:14:40.970 --> 00:14:45.580
+And the time is about the same on a CPU and GPU.
+
+00:14:45.580 --> 00:14:47.930
+And we can run Shark on this.
+
+00:14:47.929 --> 00:14:52.379
+And the top thing on Shark is long_copy.
+
+00:14:52.379 --> 00:14:57.730
+Anybody who's used Shark before will know
+that sometimes the symbol names alias,
+
+00:14:57.730 --> 00:15:01.240
+well the long copy is actually a code for MemCopy.
+
+00:15:01.240 --> 00:15:07.299
+And so we're spending about 30% of
+our time just copying data around.
+
+00:15:07.299 --> 00:15:09.229
+Well what can we do about that?
+
+00:15:09.230 --> 00:15:10.759
+And where does that come from?
+
+00:15:10.759 --> 00:15:15.210
+Well if you call up clEnqueueWriteBuffer,
+your application is copying data over OpenCL.
+
+00:15:15.210 --> 00:15:21.530
+And if you call clEnqueueReadBuffer,
+OpenCL copies the data back to you.
+
+00:15:21.529 --> 00:15:25.350
+So every time we put data into OpenCL
+and get it back, we're doing a copy.
+
+00:15:25.350 --> 00:15:27.340
+And that's where all that time comes from.
+
+00:15:27.340 --> 00:15:28.820
+Well there's another way to do this.
+
+00:15:28.820 --> 00:15:36.330
+We have a clEnqueueMapBuffer which lets you
+go inspect memory in OpenCL as it is in place.
+
+00:15:36.330 --> 00:15:38.300
+So you can avoid all these copies.
+
+00:15:38.299 --> 00:15:46.089
+And when you're done, you can call UnmapMemObject and tell
+OpenCL you're done and then it can go on its merry way.
+
+00:15:46.090 --> 00:15:48.530
+So we can change my usage of the API.
+
+00:15:48.529 --> 00:15:53.629
+I remove the WriteBuffer that I was doing.
+
+00:15:53.629 --> 00:16:01.700
+And I can change the read to a map,
+so I can look at the data in place.
+
+00:16:01.700 --> 00:16:06.810
+And then before I'm done I'll just refill the
+results buffer with garbage again for the next time
+
+00:16:06.809 --> 00:16:09.379
+around and then tell OpenCL I'm done reading.
+
+00:16:09.379 --> 00:16:15.539
+And when I did that, I got about a 40% improvement
+on the GPU and an 80% improvement on the CPU.
+
+00:16:15.539 --> 00:16:18.379
+So then, I thought well why don't
+I run a Shark system trace on this?
+
+00:16:18.379 --> 00:16:20.100
+And the system trace is a little bit different.
+
+00:16:20.100 --> 00:16:24.800
+You pull down the little menu in
+the middle of the Shark control bar.
+
+00:16:24.799 --> 00:16:29.750
+And what it does is it records a time stamp and
+stack dot track every time a system call is made.
+
+00:16:29.750 --> 00:16:34.360
+And you get back a report which looks little bit like this.
+
+00:16:34.360 --> 00:16:36.909
+These are threads going across on the horizontal dimension.
+
+00:16:36.909 --> 00:16:38.850
+This is time.
+
+00:16:38.850 --> 00:16:43.029
+And each one of these little telephones are system calls.
+
+00:16:43.029 --> 00:16:44.879
+And they reported back trace.
+
+00:16:44.879 --> 00:16:49.570
+In this case, if you squint you can see
+clEnqueueNDRangeKernel, which is one of our interfaces.
+
+00:16:49.570 --> 00:16:54.900
+So you can figure out using this you can kind of
+back figure out what all these blocks of time are,
+
+00:16:54.899 --> 00:17:00.779
+so we start off with initializing the data,
+then we have this sort of parallel section
+
+00:17:00.779 --> 00:17:04.009
+where OpenCL is actually running
+our kernels to do the computation.
+
+00:17:04.009 --> 00:17:08.079
+And then we spend a lot of time in
+the main thread verifying our results.
+
+00:17:08.079 --> 00:17:13.659
+So you can kind of use Shark system trace to get a
+detailed view of exactly what OpenCL is doing when.
+
+00:17:13.660 --> 00:17:18.620
+In this case, I notice that there's a little
+chunk here where the main thread is idle.
+
+00:17:18.619 --> 00:17:22.039
+And the main thread is also sort
+of the long bar we've got to get
+
+00:17:22.039 --> 00:17:24.299
+through before we can turn this
+over and run the next set of data.
+
+00:17:24.299 --> 00:17:30.000
+So that's, if we want to make things go faster, that's
+the thing we've got to collapse, at least right now.
+
+00:17:30.000 --> 00:17:31.750
+Well, why is it idle there?
+
+00:17:31.750 --> 00:17:32.329
+I don't know.
+
+00:17:32.329 --> 00:17:35.750
+I went and looked at it and it turns out
+that the part we need on the main thread,
+
+00:17:35.750 --> 00:17:38.089
+the data for that is being created in the box on the left.
+
+00:17:38.089 --> 00:17:40.559
+So we didn't actually need to wait.
+
+00:17:40.559 --> 00:17:43.460
+So I must have made a mistake when I wrote my code.
+
+00:17:43.460 --> 00:17:55.509
+And it turns out that the buffer EnqueueMapBuffer
+that I issued was enqueued after I enqueued 5 kernels.
+
+00:17:55.509 --> 00:18:01.710
+But I really only needed to wait till the first
+one was done in order to start checking the data.
+
+00:18:01.710 --> 00:18:03.430
+So there's no reason for you to do that.
+
+00:18:03.430 --> 00:18:09.039
+So I can set this to nonblocking so that we don't have to
+wait till I'm done mapping in order to run the next kernel.
+
+00:18:09.039 --> 00:18:10.279
+And move this up there.
+
+00:18:10.279 --> 00:18:15.440
+So now in the loop I EnqueueKernel and then I enqueue
+a map operation right after it to get the results back,
+
+00:18:15.440 --> 00:18:18.150
+loop again and queue the next kernel
+and queue the next map operation.
+
+00:18:18.150 --> 00:18:23.210
+Because the map is nonblocking, I
+don't have to wait for the next kernel.
+
+00:18:23.210 --> 00:18:27.690
+I don't have to wait for that before
+I enqueue the next kernel.
+
+00:18:27.690 --> 00:18:31.750
+And instead, because it's nonblocking,
+I have to wait for the event it produces
+
+00:18:31.750 --> 00:18:34.480
+so that I know it's done in my check code later on.
+
+00:18:34.480 --> 00:18:42.480
+And when I did that, I found I got a little bit of
+improvement on the CPU; GPU it didn't move very much.
+
+00:18:42.480 --> 00:18:46.809
+And when I go run the Shark system
+trace, I can see that the little window
+
+00:18:46.809 --> 00:18:50.429
+of time where nothing was happening is now gone.
+
+00:18:50.430 --> 00:18:53.700
+You can see a region where I'm running kernels
+and a region where I verify the kernels
+
+00:18:53.700 --> 00:18:56.480
+in the main thread, they overlap which is what I wanted.
+
+00:18:56.480 --> 00:18:58.940
+So I got pretty much what I wanted there.
+
+00:18:58.940 --> 00:19:00.860
+Except what's that?
+
+00:19:00.859 --> 00:19:04.879
+There's like this region where it doesn't
+look like I'm making any system calls.
+
+00:19:04.880 --> 00:19:09.290
+So I'm not really calling OpenCL.
+
+00:19:09.289 --> 00:19:11.859
+What, what was I doing there?
+
+00:19:11.859 --> 00:19:19.799
+And when I go take a look at it, turns out I had put in a
+blocking call to write buffer right at the top of my thing.
+
+00:19:19.799 --> 00:19:23.919
+That's telling OpenCL to block my
+main thread until the write is done.
+
+00:19:23.920 --> 00:19:25.490
+But this is all called in a big loop.
+
+00:19:25.490 --> 00:19:28.549
+The only reason you'd want to block until
+the write is done is because you want
+
+00:19:28.549 --> 00:19:30.559
+to free the buffer after you're done with it.
+
+00:19:30.559 --> 00:19:33.869
+But in this case, I'm calling a big
+loop, I don't intend to free the buffer.
+
+00:19:33.869 --> 00:19:37.849
+So I'm just going to reuse it, so there's no
+reason to block and wait for that to happen.
+
+00:19:37.849 --> 00:19:43.629
+The OpenCL queue will manage all of the stuff
+I've enqueued, so we'll be sure that the kernels
+
+00:19:43.630 --> 00:19:49.170
+that I've enqueued will wait until that write is done, but
+there's no reason why I need to block the main thread too.
+
+00:19:49.170 --> 00:19:57.570
+So what I did was I switched it over to map to
+hopefully save a copy and I double buffered it to so
+
+00:19:57.569 --> 00:20:03.069
+that I could do that concurrently with other work.
+
+00:20:03.069 --> 00:20:09.480
+And I found that when I did that, my performance actually
+got worse on the CPU but it got a little better on the GPU.
+
+00:20:09.480 --> 00:20:12.539
+Well, that wasn't what I quite had in mind.
+
+00:20:12.539 --> 00:20:15.240
+And the thing is I really didn't do my homework.
+
+00:20:15.240 --> 00:20:18.370
+When you're looking at system traces, you
+should also be looking at time traces.
+
+00:20:18.369 --> 00:20:21.929
+Because you can't save any time
+if there's any time to be saved.
+
+00:20:21.930 --> 00:20:26.380
+And in this case, the MemCopy call I was
+trying to get rid of was only 5% to begin with.
+
+00:20:26.380 --> 00:20:29.750
+The other mistake I made is I double buffered
+it so actually touching more memory now.
+
+00:20:29.750 --> 00:20:35.589
+And that seems to be a compensating for
+any performance I might have gotten.
+
+00:20:35.589 --> 00:20:38.329
+So it was just a wash.
+
+00:20:38.329 --> 00:20:40.759
+So you have to pay attention.
+
+00:20:40.759 --> 00:20:46.700
+But I can look at where I'm standing now, indeed
+I've now got something happening in OpenCL
+
+00:20:46.700 --> 00:20:48.400
+at the same time I'm trying to verify results.
+
+00:20:48.400 --> 00:20:51.519
+That's the map call.
+
+00:20:51.519 --> 00:20:56.849
+But this isn't really satisfactory, I mean
+I'm not really getting much out of the CPU.
+
+00:20:56.849 --> 00:21:00.689
+And this is my fault, I'm doing all the verification
+code in single threaded mode in the main app.
+
+00:21:00.690 --> 00:21:02.660
+But this is also a conformance test.
+
+00:21:02.660 --> 00:21:04.840
+It has to be ported to other applications.
+
+00:21:04.839 --> 00:21:08.740
+This is anybody who wants to write OpenCL runs this test.
+
+00:21:08.740 --> 00:21:11.500
+So I have to come up with some way to parallelize this thing
+
+00:21:11.500 --> 00:21:15.190
+that ports you know Windows and
+Linux and all those other things.
+
+00:21:15.190 --> 00:21:18.220
+And I'm sitting there thinking oh
+man, how am I going to do that?
+
+00:21:18.220 --> 00:21:24.850
+But it turns out that I have portable high
+throughput, very parallel library right here.
+
+00:21:24.849 --> 00:21:28.740
+I can use OpenCL to accelerate OpenCL testing.
+
+00:21:30.490 --> 00:21:35.210
+So yeah, you got to get up really early in the
+morning sometimes to think of these things.
+
+00:21:35.210 --> 00:21:39.740
+So what I imagine is that if I parallelize these things,
+I'm going to take all this time here shown in red
+
+00:21:39.740 --> 00:21:44.019
+and kind of paralyze it that way,
+and collapse down the time.
+
+00:21:44.019 --> 00:21:47.129
+And you know maybe I'd every get like
+a 40% win or something out of this.
+
+00:21:47.130 --> 00:21:48.620
+So I can do that.
+
+00:21:48.619 --> 00:21:52.169
+Instead of calling MemCompare, I've
+written a kernel to do MemCompare.
+
+00:21:52.170 --> 00:21:54.710
+And you know this is a simple kernel.
+
+00:21:54.710 --> 00:22:00.370
+It just sort of runs through the list of bytes and if any
+of them are nips, then it then it sets an error somewhere
+
+00:22:00.369 --> 00:22:04.309
+and later one we check to see if the error was set.
+
+00:22:04.309 --> 00:22:10.059
+But when I ran it, I got an improvement.
+
+00:22:10.059 --> 00:22:12.649
+But it wasn't quite the huge win I wanted.
+
+00:22:12.650 --> 00:22:19.710
+You know 88% to 2.2X kind of looks big, but we have a
+change of units here so it's actually not that great.
+
+00:22:19.710 --> 00:22:23.460
+And really, the problem is that the
+verification stages took longer than I thought.
+
+00:22:23.460 --> 00:22:25.600
+I didn't really imagine it would take that long.
+
+00:22:25.599 --> 00:22:27.139
+But it didn't.
+
+00:22:27.140 --> 00:22:30.150
+Well, what'd I do wrong?
+
+00:22:30.150 --> 00:22:35.440
+Well, what I ended up doing was replacing
+MemCompare which is hand tuned vector assembly code
+
+00:22:35.440 --> 00:22:39.890
+in libsystem with my cheesy MemCopy kernel.
+
+00:22:39.890 --> 00:22:42.330
+Which lazily written does one byte at a time.
+
+00:22:42.329 --> 00:22:45.949
+So I traded you know this is a four
+way CPU that I did this test on.
+
+00:22:45.950 --> 00:22:51.230
+So I traded 16 at a time in a vector in one
+thread for one byte at a time across four threads.
+
+00:22:51.230 --> 00:22:53.930
+Well that's not a very good exchange.
+
+00:22:53.930 --> 00:22:56.519
+Also, there are other problems here.
+
+00:22:56.519 --> 00:23:04.220
+When I run my code on a multicore CPU, if you've got
+one of these things that actually has 2 CPUs on there
+
+00:23:04.220 --> 00:23:09.230
+with multiple cores in each, each of
+those packages has a separate cache on it.
+
+00:23:09.230 --> 00:23:14.019
+So you know 0 through 3 might be in
+one and have the cache that's in green.
+
+00:23:14.019 --> 00:23:18.710
+And 0, and 4 through 7 might be in
+another one and has a cache in blue.
+
+00:23:18.710 --> 00:23:25.600
+And when I run the second kernel, there's
+no real control over where the data goes
+
+00:23:25.599 --> 00:23:29.980
+because which workgroup runs on
+which core is not under your control.
+
+00:23:29.980 --> 00:23:32.120
+So this can actually be a fairly chaotic process.
+
+00:23:32.119 --> 00:23:35.759
+And the reason why it's chaotic is
+that we have to schedule our work
+
+00:23:35.759 --> 00:23:37.720
+around everything else that's happening in the system.
+
+00:23:37.720 --> 00:23:43.140
+So the particular CPU you might have thought that you might
+like to run on might be available, but there's one over here
+
+00:23:43.140 --> 00:23:44.700
+and you've kind of got this difficult decision
+
+00:23:44.700 --> 00:23:45.650
+Do I run over there?
+
+00:23:45.650 --> 00:23:49.670
+Or do I wait however long it takes until that CPU is ready?
+
+00:23:49.670 --> 00:23:52.150
+So we just run it.
+
+00:23:52.150 --> 00:23:56.990
+So you get the situation where you're ping ponging
+data between caches, which is a little slow.
+
+00:23:56.990 --> 00:24:00.069
+For GPU it can actually be worse.
+
+00:24:00.069 --> 00:24:02.179
+You're taking an extra trip to global memory and back.
+
+00:24:02.180 --> 00:24:07.840
+There's no persistent state except in global
+memory between kernel implementations.
+
+00:24:07.839 --> 00:24:12.609
+So because I split it up into two kernels, I actually
+have to save them, raise those up to global memory,
+
+00:24:12.609 --> 00:24:20.199
+then load them back in and memory throughput is
+often the slowest part of any kernel in the GPU.
+
+00:24:20.200 --> 00:24:22.890
+So what I could do is just combine the kernels into one.
+
+00:24:22.890 --> 00:24:26.230
+I mean, hey I've got the result, might
+as well check it while I've got it.
+
+00:24:26.230 --> 00:24:28.539
+And now I've got one kernel that, that does both things.
+
+00:24:28.539 --> 00:24:32.670
+I call the convert function and if
+the reference result that I passed
+
+00:24:32.670 --> 00:24:36.289
+into the function doesn't match,
+then I set an error condition.
+
+00:24:36.289 --> 00:24:38.129
+And this really does two things for me.
+
+00:24:38.130 --> 00:24:41.620
+I convert the kernel, so I don't
+have all this memory traffic.
+
+00:24:41.619 --> 00:24:46.039
+But it also means that I never had to
+write the results back to the global buffer
+
+00:24:46.039 --> 00:24:49.960
+for the CPU to later check on the main thread.
+
+00:24:49.960 --> 00:24:53.660
+So I might save some bus traffic there.
+
+00:24:53.660 --> 00:24:54.769
+And we can see how we're doing now.
+
+00:24:54.769 --> 00:24:57.460
+I mean I've got a nice performance
+window on that, I'm running twice as fast
+
+00:24:57.460 --> 00:25:00.130
+on the CPU and a good bit faster on the GPU.
+
+00:25:00.130 --> 00:25:04.640
+And when we look at Shark in the system trace,
+we can see that I've got very nice parallelism,
+
+00:25:04.640 --> 00:25:08.080
+there aren't too many little windows
+where I'm not doing work.
+
+00:25:08.079 --> 00:25:10.649
+And things are starting to get pretty nice.
+
+00:25:10.650 --> 00:25:12.810
+But of course, the work is still split up.
+
+00:25:12.809 --> 00:25:19.460
+I mean I've got a scalar kernel and an N2 kernel and
+an N4r kernel and an NA, these are all vector links.
+
+00:25:19.460 --> 00:25:21.079
+Why don't I just do them altogether?
+
+00:25:21.079 --> 00:25:24.740
+I mean after all, they all have to read the same
+input data stream, why am I reading it five times?
+
+00:25:24.740 --> 00:25:29.059
+I could just read it once and then
+split it up in the kernel.
+
+00:25:29.059 --> 00:25:34.690
+Another thing that might have tipped me off that my kernels
+were too small is that I'm spending an appreciable amount
+
+00:25:34.690 --> 00:25:36.750
+of time in seal the execworkfile on the CPU.
+
+00:25:36.750 --> 00:25:38.839
+This is the function that calls your kernel.
+
+00:25:38.839 --> 00:25:41.619
+It has a little tight loop that just calls 0 kernel.
+
+00:25:41.619 --> 00:25:47.409
+So if you're spending a lot of time in there, in that loop,
+then you're probably spending, your kernels are too small.
+
+00:25:47.410 --> 00:25:53.050
+We could even look at the kernel in disassembly
+in Shark, it's 12 instructions, too small.
+
+00:25:53.049 --> 00:25:57.109
+So I can throw everything in one kernel.
+
+00:25:57.109 --> 00:26:03.750
+We load in 16 wide vector and then each of these
+nested loops, we break it down into halves,
+
+00:26:03.750 --> 00:26:08.269
+all the way down to scalar and test every
+conversion for every vector type all the way down.
+
+00:26:08.269 --> 00:26:10.200
+Now, that looks like a bit of work.
+
+00:26:10.200 --> 00:26:11.809
+And indeed, it is.
+
+00:26:11.809 --> 00:26:17.279
+And when we run it, we find that we're running almost
+10 times faster now on the CPU than when we started.
+
+00:26:17.279 --> 00:26:20.789
+And about 7 times faster on the GPU than when we started.
+
+00:26:20.789 --> 00:26:24.299
+And also we're getting really good utilization here.
+
+00:26:24.299 --> 00:26:30.139
+We spend some time in the main third calculating the
+next set of input data and results we're expecting,
+
+00:26:30.140 --> 00:26:37.960
+but we finish early so we can jump over and the CPU will
+start running one of, doing some of the work in OpenCL.
+
+00:26:37.960 --> 00:26:40.980
+So it's all very efficient.
+
+00:26:40.980 --> 00:26:45.440
+So while I was working on this, tried to sum up my findings.
+
+00:26:45.440 --> 00:26:48.539
+There were some things I tried
+which didn't work out so well.
+
+00:26:48.539 --> 00:26:51.019
+I tried moving around work to fill in holes.
+
+00:26:51.019 --> 00:26:53.460
+One time it worked, a couple times it didn't really.
+
+00:26:53.460 --> 00:27:00.700
+You always have to keep in mind
+what's in the Shark time profile.
+
+00:27:00.700 --> 00:27:06.809
+Also tried replacing vectorized single threaded
+out code with unvectorized OpenCL code.
+
+00:27:06.809 --> 00:27:10.259
+That was not a good idea.
+
+00:27:10.259 --> 00:27:13.299
+And but there were some things that worked.
+
+00:27:13.299 --> 00:27:20.039
+I got great speed ups, 2X, 3X, 4X,
+sometimes eliminating copies and other work.
+
+00:27:20.039 --> 00:27:25.250
+I got a great speed up moving my
+application code to the OpenCL kernel,
+
+00:27:25.250 --> 00:27:31.640
+but I had to do a good job just replacing MemCopy
+with something brain dead wasn't such a good idea.
+
+00:27:31.640 --> 00:27:40.220
+And I had merging multiple kernels into one kernel to
+reduce global memory accesses was a great performance win.
+
+00:27:40.220 --> 00:27:45.160
+And so that leads me to a short discussion
+about vectorization versus multithreading.
+
+00:27:45.160 --> 00:27:46.500
+You can do both obviously.
+
+00:27:46.500 --> 00:27:49.650
+With multi, with OpenCL multithreading just happens.
+
+00:27:49.650 --> 00:27:53.460
+You actually have to you know be very careful to prevent it.
+
+00:27:53.460 --> 00:27:55.809
+But you still have to write the vector code.
+
+00:27:55.809 --> 00:27:57.839
+We tried to make that as easy as possible for you.
+
+00:27:57.839 --> 00:28:02.309
+Now have a portable vector program language, standard types,
+
+00:28:02.309 --> 00:28:09.970
+we manage the details like between whether
+you're on SSE3 or SSE4.1 or SSE4.2 for you.
+
+00:28:09.970 --> 00:28:14.210
+We'll just use the hardware instruction if
+your machine supports it and if it doesn't,
+
+00:28:14.210 --> 00:28:18.690
+then we have a software fallback which
+usually you know a couple of instructions.
+
+00:28:18.690 --> 00:28:23.580
+And it's got shared consistent
+operators between scalar and vectors.
+
+00:28:23.579 --> 00:28:28.649
+So you're no longer writing MM_add_PS, you just use a +.
+
+00:28:28.650 --> 00:28:31.750
+And it's portable.
+
+00:28:31.750 --> 00:28:38.529
+So you put your investment in vector code and chances are
+it'll still work when the next machine comes down the road.
+
+00:28:40.089 --> 00:28:42.779
+Multithreading is not a replacement for vectorization.
+
+00:28:42.779 --> 00:28:47.710
+Using more cores just uses that much
+more power which means less battery life
+
+00:28:47.710 --> 00:28:51.120
+and less processing power available to other apps.
+
+00:28:51.119 --> 00:28:56.939
+Vectorizing code saves power because we
+merged a bunch of work into one vector.
+
+00:28:56.940 --> 00:28:59.299
+That's one instruction doing all that work.
+
+00:28:59.299 --> 00:29:02.159
+So there's many fewer instructions to decode.
+
+00:29:02.160 --> 00:29:11.190
+And it usually is a result of vectorizing your code, you'll
+find that sometimes you reorganize your memory a little bit
+
+00:29:11.190 --> 00:29:15.500
+for more linear data access just so you can
+get stuffed loaded conveniently in the vectors
+
+00:29:15.500 --> 00:29:19.150
+and that in turn actually can lead to
+a pretty good performance improvement.
+
+00:29:19.150 --> 00:29:23.680
+I've had many cases where I've changed my
+data layout so that I can vectorize my code
+
+00:29:23.680 --> 00:29:26.860
+and the scalar code starts to run twice as fast.
+
+00:29:28.630 --> 00:29:31.120
+And it's using the GPU, can save a lot of power.
+
+00:29:31.119 --> 00:29:34.409
+All the processing elements on the GPU
+are generally much smaller and cheaper.
+
+00:29:34.410 --> 00:29:36.310
+They may be running at a lower clock.
+
+00:29:36.309 --> 00:29:36.789
+Power is.
+
+00:29:36.789 --> 00:29:46.029
+So got to run a higher, higher voltage
+to get those gates to flip faster.
+
+00:29:46.029 --> 00:29:51.519
+And vectorizing can in certain
+cases make the GPU run faster.
+
+00:29:51.519 --> 00:30:00.339
+Bigger types help with coalesce memory accesses and
+more parallel work can help with scheduling some times.
+
+00:30:00.339 --> 00:30:05.909
+So I'd like to invite Andrew Brownsword
+to continue the talk to give you his story
+
+00:30:05.910 --> 00:30:09.710
+of integrating OpenCL into his application.
+
+00:30:09.710 --> 00:30:11.200
+>> Thank you Ian.
+
+00:30:11.200 --> 00:30:13.920
+So I'm Andrew Brownsword from Electronic Arts BlackBox.
+
+00:30:13.920 --> 00:30:18.240
+So you might be wondering why I'm here.
+
+00:30:18.240 --> 00:30:23.700
+Last year when Apple introduced the idea of OpenCL and
+said they were building this thing and offered to Kronos
+
+00:30:23.700 --> 00:30:28.269
+to standardize, we were very interested because
+we've been dealing with this sort of hardware,
+
+00:30:28.269 --> 00:30:31.049
+highly concurrent hardware for about 5 years now.
+
+00:30:31.049 --> 00:30:35.740
+And looking forward, the hardware we expect to
+come, the problem is only going to get worse.
+
+00:30:35.740 --> 00:30:41.900
+And it sounded like OpenCL would be the kind of
+thing that would help us address this problem.
+
+00:30:41.900 --> 00:30:48.370
+So we went and looked at the list of companies that were
+involved in Kronos and who are participating in OpenCL.
+
+00:30:48.369 --> 00:30:52.709
+And we noticed that low and behold there
+were no software application developers.
+
+00:30:52.710 --> 00:30:57.850
+And we thought this was a bit of a shortcoming because
+when you're developing applications you tend to have a bit
+
+00:30:57.849 --> 00:31:02.889
+of a different perspective on things than perhaps when
+you're a hardware vendor or an operating system vendor.
+
+00:31:02.890 --> 00:31:09.190
+So we thought our input would actually be useful and
+the feedback we've gotten so far is indeed it has been.
+
+00:31:09.190 --> 00:31:12.680
+And one of the things that software
+guys do is write software.
+
+00:31:12.680 --> 00:31:19.789
+So when I finally got my hands on an actual early
+implementation of OpenCL, my natural tendency was
+
+00:31:19.789 --> 00:31:22.200
+to start bringing some of our code over to it.
+
+00:31:22.200 --> 00:31:26.039
+So why am I doing this?
+
+00:31:26.039 --> 00:31:32.629
+Well, OpenCL is important to us because it supports
+a very wide variety of computational resources.
+
+00:31:32.630 --> 00:31:38.250
+And right now we're struggling with several kinds
+and in the future, we see more and wider variety
+
+00:31:38.250 --> 00:31:43.029
+and increasingly different sorts of concurrent hardware.
+
+00:31:43.029 --> 00:31:48.099
+OpenCL provides a nice uniform
+programming API to all of this.
+
+00:31:48.099 --> 00:31:55.289
+Second, it's an open standard which means it'll be
+portable, it'll be on multiple platforms, and the,
+
+00:31:55.289 --> 00:32:00.920
+the open nature of the standard means that anybody can
+implement it, anybody can sign on board and if the platform
+
+00:32:00.920 --> 00:32:05.980
+that you're aiming for doesn't have it, perhaps
+there'll be an open source implementation,
+
+00:32:05.980 --> 00:32:07.819
+perhaps you can do one yourself.
+
+00:32:07.819 --> 00:32:15.889
+And third, it provides a concurrent programming model,
+something which is sadly lacking in C++ or C for example.
+
+00:32:15.890 --> 00:32:18.330
+They basically are used from a concurrency point
+
+00:32:18.329 --> 00:32:23.629
+of view are using the same programming model
+that has been in use since the late 60s.
+
+00:32:23.630 --> 00:32:31.070
+So it's time we get some concurrency into our
+programming languages and OpenCL does this.
+
+00:32:31.069 --> 00:32:37.539
+So when I got my hands on the first implementation,
+I decided I would take some actual code and bring it
+
+00:32:37.539 --> 00:32:44.079
+into OpenCL environment and the environment I had of course
+was an early release of Snow Leopard on the Macintosh,
+
+00:32:44.079 --> 00:32:46.309
+so I took some code out of one of our games.
+
+00:32:46.309 --> 00:32:52.220
+In this case from Skate 2 and I selected the character
+scheming code and the clock physics because it was a set
+
+00:32:52.220 --> 00:32:56.870
+of code I was familiar with, a set of code we highly
+optimized and it was a nice self contained piece
+
+00:32:56.869 --> 00:32:59.759
+that I could just sort of pry out of the
+game engine and steal some of the assets
+
+00:32:59.759 --> 00:33:03.400
+from the game and turn into an actual working demo.
+
+00:33:03.400 --> 00:33:08.610
+The goal was to see what happens to the actual
+game code when you try to introduce OpenCL.
+
+00:33:08.609 --> 00:33:09.659
+What do you have to do?
+
+00:33:09.660 --> 00:33:12.340
+How badly do you have to mutilate it?
+
+00:33:12.339 --> 00:33:20.009
+So what the demo actually does, let's see.
+
+00:33:20.009 --> 00:33:28.710
+[ Period of silence ]
+
+00:33:28.710 --> 00:33:30.549
+There we are.
+
+00:33:30.549 --> 00:33:35.129
+What the demo actually does is take
+an animation and a character model
+
+00:33:35.130 --> 00:33:37.810
+that we captured straight out of the game and play it back.
+
+00:33:37.809 --> 00:33:45.909
+It skins the model of the character to the
+recorded animation which is the skeleton pose.
+
+00:33:45.910 --> 00:33:47.960
+And then it applies cloth physics to the shirt.
+
+00:33:47.960 --> 00:33:52.160
+And the cloth physics represents a few
+algorithms that allow the cloth to move according
+
+00:33:52.160 --> 00:33:56.050
+to gravity and acceleration and what not.
+
+00:33:56.049 --> 00:34:03.419
+So I built the demo and what you see running here
+is the original C++ code, running single threaded.
+
+00:34:03.420 --> 00:34:07.090
+And then of course I did an OpenCL implementation
+
+00:34:07.089 --> 00:34:13.730
+and what you now see is OpenCL code
+also running single threaded on the CPU.
+
+00:34:13.730 --> 00:34:20.079
+And I did some variations that allow it to be data parallel.
+
+00:34:20.079 --> 00:34:23.769
+So now, it's running on all 8 CPUs.
+
+00:34:23.769 --> 00:34:27.969
+And now in fact it's running on the GPU.
+
+00:34:27.969 --> 00:34:31.849
+And you can see the profiling bar over
+on the right hand side of the screen.
+
+00:34:31.849 --> 00:34:37.009
+It's only using a tiny little bit of one CPU
+and it's running faster than it was before.
+
+00:34:37.010 --> 00:34:42.600
+[ Period of silence ]
+
+00:34:42.599 --> 00:34:48.190
+[ Applause ]
+
+00:34:48.190 --> 00:34:51.750
+So what's going on under the hood?
+
+00:34:51.750 --> 00:34:54.630
+So we have a very simple task graph in this application.
+
+00:34:54.630 --> 00:34:58.430
+It's extracted out of a game which
+has a much, much larger task graph.
+
+00:34:58.429 --> 00:35:02.829
+And the intention bringing it across was to
+try to leave the original code undisturbed.
+
+00:35:02.829 --> 00:35:08.460
+So conceptually, I didn't want to change the
+fact that it was a piece of a task graph.
+
+00:35:08.460 --> 00:35:13.780
+The task graph is actually just 5 kernels that run one
+after another and so they're dependant on the previous one.
+
+00:35:13.780 --> 00:35:17.590
+And the full game is a very broad graph, it's a full DAG.
+
+00:35:17.590 --> 00:35:19.539
+And this is just one slice out of it.
+
+00:35:19.539 --> 00:35:25.219
+But since I didn't want to actually change that model,
+I just left it intact and bring it across to OpenCL
+
+00:35:25.219 --> 00:35:29.069
+and the OpenCL task model happens
+to map very well to the task model
+
+00:35:29.070 --> 00:35:31.630
+that we've settled on for use internally to our games.
+
+00:35:31.630 --> 00:35:36.019
+It's a directed encyclical graph where
+tasks are dependant on preceding tasks.
+
+00:35:36.019 --> 00:35:39.570
+And you just toss stuff into the, into the queue
+
+00:35:39.570 --> 00:35:44.820
+and it executes wherever a computing resource
+comes along and has time to compute it.
+
+00:35:44.820 --> 00:35:49.220
+So in the task graph here, it's a
+simple in order queue and these things,
+
+00:35:49.219 --> 00:35:51.869
+each of them is independent individually data parallel.
+
+00:35:51.869 --> 00:35:54.719
+And then the outputs are sent to the renderer.
+
+00:35:54.719 --> 00:36:01.299
+So making the change to OpenCL, one of the
+really important things was in the original code,
+
+00:36:01.300 --> 00:36:06.210
+each of these boxes in that graph is a single
+algorithm, it's a single function call.
+
+00:36:06.210 --> 00:36:09.480
+You call it, by the time it returns,
+the data has been computed.
+
+00:36:09.480 --> 00:36:10.789
+It's a change in OpenCL.
+
+00:36:10.789 --> 00:36:16.150
+Isn't that what you're doing is you're
+enqueueing an operation to happen asynchronously.
+
+00:36:16.150 --> 00:36:22.000
+So the way I did that in minimizing the disruption to the
+original code was I introduced this notion of functers
+
+00:36:22.000 --> 00:36:29.190
+which is more or less a function pointer that embodies
+some additional state and that allows me to extract
+
+00:36:29.190 --> 00:36:34.920
+out all the OpenCL details so that the
+original code actually doesn't know anything
+
+00:36:34.920 --> 00:36:36.650
+about how the work is being done.
+
+00:36:36.650 --> 00:36:39.039
+That's encapsulated inside the functers.
+
+00:36:39.039 --> 00:36:46.059
+The major change actually is a semantic change that when
+the functer returns, the work hasn't been finished yet.
+
+00:36:46.059 --> 00:36:50.509
+So to manage that, you can pass in
+an event parameter that says hey,
+
+00:36:50.510 --> 00:36:53.170
+this functer is going to run when that one has finished.
+
+00:36:53.170 --> 00:36:57.440
+And it returns an event that says, that represents itself.
+
+00:36:57.440 --> 00:37:01.860
+Internally the functers enqueue at kernel for OpenCL.
+
+00:37:01.860 --> 00:37:05.309
+So a code that looks like this, the integrate call,
+
+00:37:05.309 --> 00:37:11.409
+now looks like if we have a functer call
+it passing the previous event we got,
+
+00:37:11.409 --> 00:37:17.170
+return the event that represents this one, and if we don't
+have a functer, now we modify things slightly to deal
+
+00:37:17.170 --> 00:37:20.940
+with the data management, we lock some
+buffers, we call the original function call.
+
+00:37:20.940 --> 00:37:22.220
+And then we unlock them again.
+
+00:37:22.219 --> 00:37:27.759
+This allows me to take in and out the OpenCL
+version and leave the original version intact,
+
+00:37:27.760 --> 00:37:31.040
+which for us for testing purposes
+is a really important thing.
+
+00:37:31.039 --> 00:37:35.420
+So the data buffers.
+
+00:37:35.420 --> 00:37:41.690
+So in OpenCL, your data is encapsulated
+inside of cl_mem_objects.
+
+00:37:41.690 --> 00:37:45.700
+Now it's not quite right to say it's
+encapsulated inside of cl_mem_objects.
+
+00:37:45.699 --> 00:37:48.919
+The cl_mem_objects represent to OpenCL your data.
+
+00:37:48.920 --> 00:37:55.809
+And in fact there is a feature, a flag you can use when
+creating a cl_mem_objects called CL_Mem_Use_Host_Ptr
+
+00:37:55.809 --> 00:37:59.789
+that avoids having additional allocations
+and avoids copying from the buffer
+
+00:37:59.789 --> 00:38:02.940
+that you have to the buffer that OpenCL created.
+
+00:38:02.940 --> 00:38:07.030
+Basically, it says use my buffer right then and there.
+
+00:38:07.030 --> 00:38:10.690
+To game developers, that's really important because
+we're really fussy about how our memory is laid out
+
+00:38:10.690 --> 00:38:12.769
+and how much data copying happens is going around.
+
+00:38:12.769 --> 00:38:14.259
+So we like to own our memory.
+
+00:38:14.260 --> 00:38:18.030
+So at least when using the CPU device,
+this is a very, very useful thing.
+
+00:38:18.030 --> 00:38:20.390
+I'm going to come back to that a little later.
+
+00:38:20.389 --> 00:38:25.019
+And the other thing that's useful is there
+is a extension that is OpenGL CL UserOp.
+
+00:38:25.019 --> 00:38:29.349
+And what this allows you to do is it allows
+you to take buffers created in OpenGL,
+
+00:38:29.349 --> 00:38:35.139
+vertex buffers in my case and turn
+them into CL, cl_mem_objects.
+
+00:38:35.139 --> 00:38:41.799
+So my demo has these data buffers and
+I'm not really going to go through them
+
+00:38:41.800 --> 00:38:44.539
+in detail, but there's quite a few of them.
+
+00:38:45.809 --> 00:38:47.920
+And they're used like that.
+
+00:38:47.920 --> 00:38:52.530
+So this is the game task graph decorated with the
+various buffers that the various kernels are using.
+
+00:38:52.530 --> 00:38:57.130
+So basically, what's going on is the host
+queues up everything and then execution starts.
+
+00:38:57.130 --> 00:39:01.410
+The skin model kernel runs and it takes in the
+pose, which is the current frame of animation.
+
+00:39:01.409 --> 00:39:03.190
+And it takes in the source vertices.
+
+00:39:03.190 --> 00:39:06.650
+And it computes the destination vertices.
+
+00:39:06.650 --> 00:39:07.820
+That's the output vertex buffer.
+
+00:39:07.820 --> 00:39:12.809
+And it also queue computes these things called
+drivers which are inputs to a later algorithm.
+
+00:39:12.809 --> 00:39:16.549
+The next algorithm that runs is the integrated
+and what it really is doing is applying gravity.
+
+00:39:16.550 --> 00:39:20.450
+So it causes all the cloth particles to fall, excuse me.
+
+00:39:21.530 --> 00:39:25.930
+And it's operating on another buffer that's the
+particle buffer which is retaining the current state
+
+00:39:25.929 --> 00:39:28.059
+of the particles, where they are, where they were.
+
+00:39:28.059 --> 00:39:32.929
+And then the distance constraint runs.
+
+00:39:32.929 --> 00:39:38.960
+And what it's doing is it's a spring map
+system between all the particles of cloth.
+
+00:39:38.960 --> 00:39:41.670
+[ Period of silence ]
+
+00:39:41.670 --> 00:39:47.099
+The springs are described by a constraint
+array which is in the constraints buffer.
+
+00:39:47.099 --> 00:39:53.509
+It also modifies the particle buffer and then after its
+run, it calls the driver con, or it doesn't call it.
+
+00:39:53.510 --> 00:39:56.250
+It's followed by the driver constraint kernel.
+
+00:39:56.250 --> 00:39:59.739
+Which then takes the driver input,
+makes some more changes to the particles
+
+00:39:59.739 --> 00:40:06.329
+and what that's doing is its keeping the cloth
+close to where the underlying skater's body is.
+
+00:40:06.329 --> 00:40:09.480
+So it doesn't get too far away from the skater's torso.
+
+00:40:09.480 --> 00:40:12.070
+And when all of that's finished, it
+goes through a write back kernel.
+
+00:40:12.070 --> 00:40:15.870
+And the job of the write back kernel is to
+extract all the computed cloth positions
+
+00:40:15.869 --> 00:40:19.179
+and stuff them back into the output vertex buffer.
+
+00:40:19.179 --> 00:40:25.699
+And then finally that vertex buffer is handed
+off to OpenGL and fired out to the display.
+
+00:40:25.699 --> 00:40:29.779
+The nice thing is for all of these
+kernels, OpenCL is managing the movement
+
+00:40:29.780 --> 00:40:31.980
+of data between the kernels if it needs to move.
+
+00:40:31.980 --> 00:40:35.639
+If it's all on one device, it typically
+doesn't need to move.
+
+00:40:35.639 --> 00:40:42.739
+So by the time I'm finished, I've actually add,
+injected a few other commands into the command queue.
+
+00:40:42.739 --> 00:40:48.259
+Before the skin model can run, it has to write the pose.
+
+00:40:48.260 --> 00:40:56.160
+It has to take the pose data from the animation buffer
+in memory and it has to move it into the OpenCL buffer
+
+00:40:56.159 --> 00:40:58.349
+where the skin kernel is going to find it.
+
+00:40:58.349 --> 00:41:03.079
+It needs to acquire the vertex buffer
+from OpenGL so that it can modify it.
+
+00:41:03.079 --> 00:41:09.279
+Then it needs to run the other kernels and then after
+the write back is done, it releases the GL kernel.
+
+00:41:09.280 --> 00:41:11.510
+And this is a slightly outdated diagram.
+
+00:41:11.510 --> 00:41:16.290
+I used to acquire and release and then acquire and release
+the GL buffer, but it turned out that it was better just
+
+00:41:16.289 --> 00:41:18.610
+to hang onto the GL buffer the whole time.
+
+00:41:18.610 --> 00:41:25.349
+So the GL interop extension manages
+the movement of data between CL and GL.
+
+00:41:25.349 --> 00:41:27.989
+And by injecting these commands into the command stream,
+
+00:41:27.989 --> 00:41:34.699
+you can say to the system exactly
+when these things pass back and forth.
+
+00:41:34.699 --> 00:41:37.739
+So what are the kernels?
+
+00:41:37.739 --> 00:41:43.459
+So skinning is taking the vertex buffer
+and computing the output vertex buffer.
+
+00:41:43.460 --> 00:41:47.500
+So it's the source model and it's just a
+guy standing at a buying pose like this.
+
+00:41:47.500 --> 00:41:53.530
+And it combines it with the pose and it generates from
+that the vertex buffer that's going to get rendered.
+
+00:41:53.530 --> 00:42:02.130
+And it also generates the drivers which are another input
+to the cloth system, integrator causes the cloth to fall,
+
+00:42:02.130 --> 00:42:06.550
+the springs cause individual cloth particles
+to move apart or move together in order
+
+00:42:06.550 --> 00:42:09.850
+to sort of maintain the shape of the cloth.
+
+00:42:09.849 --> 00:42:18.049
+The driver constraint keeps it outside the guy's body and
+the write back fires it back out so OpenGL can then draw it.
+
+00:42:18.050 --> 00:42:21.670
+So it turns out that I actually wrote
+two versions of most of the kernels.
+
+00:42:21.670 --> 00:42:25.210
+A wrote a scalar version initially
+and then I wrote a vector version.
+
+00:42:25.210 --> 00:42:30.900
+And the vector version actually I did for the
+game consoles that we actually shipped on.
+
+00:42:30.900 --> 00:42:35.930
+And for those consoles, vectorization
+is actually very, very important.
+
+00:42:35.929 --> 00:42:39.889
+Some hardware does extremely well with same D optimization.
+
+00:42:39.889 --> 00:42:42.250
+We're talking order of magnitude improvement.
+
+00:42:42.250 --> 00:42:49.360
+On the X86 hardware that you currently find on the Mac
+platform, the speed up is quite a bit less than that
+
+00:42:49.360 --> 00:42:56.700
+but looking forward future X86 hardware is likely
+to benefit a great deal more from vectorization.
+
+00:42:56.699 --> 00:43:03.259
+And depending on your kernel right now you can
+get very substantial speed ups from doing this.
+
+00:43:03.260 --> 00:43:08.780
+The vector kernel really boils down to
+doing math in structure of array style.
+
+00:43:08.780 --> 00:43:15.350
+What that means is instead of having a single
+float4 in OpenCL C notation, that contains
+
+00:43:15.349 --> 00:43:19.610
+and XYZW coordinate if you're talking 3D coordinates here.
+
+00:43:19.610 --> 00:43:25.160
+Instead of having sort of a heterogeneous semantically
+heterogeneous value in your single variable,
+
+00:43:25.159 --> 00:43:28.109
+structure of array says OK, well we're
+going to do four things at a time.
+
+00:43:28.110 --> 00:43:30.690
+And we're going to have a variable
+that contains all the Xs and a variable
+
+00:43:30.690 --> 00:43:33.099
+that contains all the Ys, one for
+the zeds and one for the Ws.
+
+00:43:33.099 --> 00:43:38.699
+And then you can write your code pretty much as if it
+were scalar code except you do four things at once.
+
+00:43:38.699 --> 00:43:42.349
+To actually achieve this, I used two key techniques.
+
+00:43:42.349 --> 00:43:44.199
+The transpose and the select.
+
+00:43:44.199 --> 00:43:50.669
+So the important thing about the transpose
+is that I didn't change the memory layout.
+
+00:43:50.670 --> 00:43:54.200
+So the data is still all stored
+in array of structures format.
+
+00:43:54.199 --> 00:43:58.529
+So the vertex buffer is an array of structures
+in memory and when I want to operate on it,
+
+00:43:58.530 --> 00:44:03.590
+I need to pull out the 3D coordinate that happens
+to be the position inside the vertex buffer.
+
+00:44:03.590 --> 00:44:07.630
+And it comes in as a float4 from
+memory which contains an XYZW,
+
+00:44:07.630 --> 00:44:10.240
+which is not how the vector version wants to operate on it.
+
+00:44:10.239 --> 00:44:16.279
+So what I do is I collect up four of these things from
+four vertices and then you can see it on the left there,
+
+00:44:16.280 --> 00:44:19.550
+we have four variables that are heterogeneous in nature.
+
+00:44:19.550 --> 00:44:26.200
+And by applying a 4 by 4 transpose, that turns it into 4
+separate variables which are each semantically uniform,
+
+00:44:26.199 --> 00:44:29.000
+all the Xs in one, Ys in the other and so forth.
+
+00:44:29.000 --> 00:44:34.340
+Now in OpenCL that little code
+snippet there, which you can see,
+
+00:44:34.340 --> 00:44:39.050
+shows how expressive the swizzle notation
+that's in the OpenCL C language is.
+
+00:44:39.050 --> 00:44:45.080
+Now I happen to have formatted these things as float16s
+and it's very easy to build a float 16 from four float 4s
+
+00:44:45.079 --> 00:44:49.799
+and the compiler does a very good job
+under the hood of actually achieving that.
+
+00:44:49.800 --> 00:44:57.019
+And then you go ahead and write these four lines of code
+that do the even odd min, sorry even odd high low thing
+
+00:44:57.019 --> 00:45:02.230
+and presto it comes out the backend is
+another float 16 that is transposed.
+
+00:45:02.230 --> 00:45:05.900
+The other thing to do is eliminate the branches.
+
+00:45:05.900 --> 00:45:10.460
+Branches are very bad for performance, they
+cause scheduling problems for the compiler,
+
+00:45:10.460 --> 00:45:13.150
+they cause pipeline stalls when they happen.
+
+00:45:13.150 --> 00:45:15.599
+And they just don't work well with SIMD because the idea
+
+00:45:15.599 --> 00:45:19.299
+with SIMD is you're doing the same thing
+to every single element in your vector.
+
+00:45:19.300 --> 00:45:25.789
+And if you're busy changing your code path on every
+single element in your vector, you're not doing SIMD.
+
+00:45:25.789 --> 00:45:33.170
+So the way to eliminate branches is basically to do both
+sides of the if and when you have the results from both,
+
+00:45:33.170 --> 00:45:36.130
+then you make a comparison that says do I want per element,
+
+00:45:36.130 --> 00:45:40.579
+do I want the one from the left or
+do I want the one from the right.
+
+00:45:40.579 --> 00:45:47.920
+To do this comparison, it's just like in AltaVec
+or assetC, you can issue an isgreaterthan,
+
+00:45:47.920 --> 00:45:54.400
+feed it the two element wise vectors that
+you want to compare and it generates a mask
+
+00:45:54.400 --> 00:46:00.480
+that is then used to select between the two.
+
+00:46:00.480 --> 00:46:02.909
+So here's my scalar integrator
+
+00:46:02.909 --> 00:46:09.190
+Details aren't particularly important, OpenCLC
+code, it's all pretty standard C++ stuff or C stuff.
+
+00:46:09.190 --> 00:46:13.579
+The reason I put it up is because I want to compare
+it to the vector integrator which is much denser
+
+00:46:13.579 --> 00:46:16.119
+because it's doing four at the same time.
+
+00:46:16.119 --> 00:46:20.949
+And in here, you can see that when I load the
+data, I then transpose it and then I do my math
+
+00:46:20.949 --> 00:46:27.969
+and then I do the selectcompare operations and
+then I transpose it back and I write it out.
+
+00:46:27.969 --> 00:46:31.069
+So that was vectorization.
+
+00:46:31.070 --> 00:46:34.100
+So how did concurrency show up in OpenCL?
+
+00:46:34.099 --> 00:46:38.099
+Core wise, parallelism shows up as work items.
+
+00:46:38.099 --> 00:46:42.159
+You take your problem space and
+you chop it into an index space.
+
+00:46:42.159 --> 00:46:48.569
+What I've drawn here is an array of 20
+work items grouped into 5 workgroups.
+
+00:46:50.719 --> 00:46:56.339
+The maximum workgroup size that you can select is actually
+limited by the combination of the device and the kernels.
+
+00:46:56.340 --> 00:47:01.470
+So on a given device, given a particular
+kernel, you find that you can find
+
+00:47:01.469 --> 00:47:07.779
+out by querying the API how big your workgroups can be.
+
+00:47:07.780 --> 00:47:11.050
+Now each workgroup shares local memory barriers and fences.
+
+00:47:11.050 --> 00:47:15.660
+So within the workgroup you can use
+these things but not between workgroups.
+
+00:47:15.659 --> 00:47:21.119
+So in the demo all my kernels happen to be one dimensional.
+
+00:47:21.119 --> 00:47:27.500
+In the case of the skinning, it's the vertex buffer
+and I just index the vertex buffer with the index space
+
+00:47:27.500 --> 00:47:31.869
+in the integrator's particle array, driver
+constraint the driver array constraints array
+
+00:47:31.869 --> 00:47:33.750
+for the distance vertex buffer
+
+00:47:33.750 --> 00:47:37.989
+Again, for the write back.
+
+00:47:37.989 --> 00:47:38.439
+[ Period of silence ]
+
+00:47:38.440 --> 00:47:42.860
+It's interesting to note here that there doesn't
+have to be a 1 to 1 correspondence between indices
+
+00:47:42.860 --> 00:47:45.059
+in your index space and indices in your vertex array.
+
+00:47:45.059 --> 00:47:49.489
+And this can actually be an important
+optimization depending on your device.
+
+00:47:49.489 --> 00:47:55.649
+You might want to have a single work item
+operate on multiple indices in your array.
+
+00:47:55.650 --> 00:47:59.240
+So don't limit yourself to thinking
+about I have a thousand elements
+
+00:47:59.239 --> 00:48:04.579
+in my data array so I must have a thousand work items.
+
+00:48:04.579 --> 00:48:07.360
+So the interesting case is the spring mass system.
+
+00:48:07.360 --> 00:48:10.079
+It's interesting because it has limited parallelism.
+
+00:48:10.079 --> 00:48:14.059
+Turns out that each spring mentions two particles and it has
+
+00:48:14.059 --> 00:48:17.329
+to update those two particles according
+to how far apart they are.
+
+00:48:17.329 --> 00:48:18.059
+[ Period of silence ]
+
+00:48:18.059 --> 00:48:26.029
+And bad things happen if you try to run two of them at
+the same time which happen to modify the same particle.
+
+00:48:26.030 --> 00:48:32.130
+You end up in a data race condition and you,
+you get unpredictable, in deterministic results.
+
+00:48:32.130 --> 00:48:38.720
+So the way I got around that in the original
+code was to organize the data so that sets of 8,
+
+00:48:38.719 --> 00:48:42.519
+which I called octets never mentioned
+the same particle more than once.
+
+00:48:42.519 --> 00:48:45.980
+And I could compute 8 of them completely in parallel.
+
+00:48:45.980 --> 00:48:52.159
+Unfortunately, when you bring it to OpenCL and you try
+running it on a GPU, 8 at once is virtually nothing.
+
+00:48:52.159 --> 00:48:54.460
+It's the same as scalar from the GPU's perspective.
+
+00:48:54.460 --> 00:48:58.659
+The GPU wants to operate on thousands at the same time.
+
+00:48:58.659 --> 00:49:01.109
+I'll come back to that in a moment.
+
+00:49:01.110 --> 00:49:07.150
+But first, I want to show you what happened
+when I implemented all these things in OpenCL.
+
+00:49:07.150 --> 00:49:11.789
+These numbers are from a latest generation Mac Pro.
+
+00:49:11.789 --> 00:49:15.009
+You can see the scalar and vector columns
+and the interesting thing to note is
+
+00:49:15.010 --> 00:49:18.040
+that the vector is not always a win on these machines.
+
+00:49:18.039 --> 00:49:20.989
+And with these particular algorithms, the integrator case
+
+00:49:20.989 --> 00:49:27.279
+in particular is very much bandwidth
+bound and executing a lot more code.
+
+00:49:27.280 --> 00:49:31.470
+There's more code involved and for various
+other reasons because you're doing a swizzling
+
+00:49:31.469 --> 00:49:34.189
+and what not, the vector version ends up being slower.
+
+00:49:34.190 --> 00:49:39.050
+I created it primarily to show it because
+it's the small that fits on the slide.
+
+00:49:39.050 --> 00:49:44.230
+And some of the other kernels are limited in different ways.
+
+00:49:44.230 --> 00:49:50.300
+The skinning is a pretty big win compared to a
+scalar task because it's completely data parallel.
+
+00:49:50.300 --> 00:50:01.350
+So when we run it on the GPU, and compare it to the best
+score from the CPU, it's faster than the original host code.
+
+00:50:01.349 --> 00:50:06.039
+It's about 4.1 times faster on this high end graphics card.
+
+00:50:06.039 --> 00:50:08.320
+But that's kind of underwhelming.
+
+00:50:08.320 --> 00:50:12.620
+The main CPU 8 cores, actually I believe that's an error.
+
+00:50:12.619 --> 00:50:19.809
+I think that number is from a 4 core latest generation
+MacPro but it outperformed the, the GPU by quite a margin.
+
+00:50:19.809 --> 00:50:23.509
+So what can we do about that?
+
+00:50:23.510 --> 00:50:25.160
+Well OpenCL is a low level API.
+
+00:50:25.159 --> 00:50:29.019
+It's not protecting you from having to do optimizations,
+it's providing you a better environment in which
+
+00:50:29.019 --> 00:50:36.320
+to do optimizations and like Ian said, the first
+important optimization is to use the right algorithm.
+
+00:50:36.320 --> 00:50:42.420
+The distance constraint in particular is crippled by
+the fact that only 8 of them can happen simultaneously
+
+00:50:42.420 --> 00:50:49.780
+and by reordering my data, I found that instead of having
+sets of 8 I could have sets of 56 or 54, whatever itT is.
+
+00:50:49.780 --> 00:50:52.170
+And that actually helped quite a bit.
+
+00:50:52.170 --> 00:50:57.119
+However, that's still relatively limited and the GPU
+wasn't doing particularly well on that algorithm.
+
+00:50:57.119 --> 00:51:02.799
+So what I should do if I was pursuing this
+demo is go back to basics and identify whether
+
+00:51:02.800 --> 00:51:07.610
+or not I can find a spring mass system that
+doesn't have the same fundamental limitation.
+
+00:51:07.610 --> 00:51:13.780
+The next optimization is to do as much as you can per task.
+
+00:51:13.780 --> 00:51:18.640
+And really, the skater is about 1000
+particles, couple of thousand vertices.
+
+00:51:18.639 --> 00:51:21.569
+That's really not a whole lot of
+work from the GPUs perspective.
+
+00:51:21.570 --> 00:51:24.519
+So a larger dataset is really important.
+
+00:51:24.519 --> 00:51:29.849
+Now, in a real game that means taking a whole bunch
+of the characters and batching them all into one.
+
+00:51:29.849 --> 00:51:41.610
+In the demo, what it means is just replicating the
+data and creating your own little skater army here.
+
+00:51:41.610 --> 00:51:43.650
+[ Laughter ]
+
+00:51:43.650 --> 00:51:45.720
+And simulate them all.
+
+00:51:47.000 --> 00:51:58.840
+[ Period of silence ]
+
+00:51:58.840 --> 00:52:02.760
+And then optimizations bandwidth.
+
+00:52:02.760 --> 00:52:04.780
+These machines are heavily bandwidth bound.
+
+00:52:04.780 --> 00:52:06.950
+They are not computationally limited.
+
+00:52:06.949 --> 00:52:12.259
+Virtually all kernels you're going to write unless you
+have a really, really computationally aggressive kernel,
+
+00:52:12.260 --> 00:52:14.650
+almost all of them are going to be bandwidth limited.
+
+00:52:14.650 --> 00:52:17.090
+So there's a few ways we address that in the demo.
+
+00:52:17.090 --> 00:52:25.280
+The first was the OpenGL CL integration because what that
+allows us to do is leave the data right up on the GPU
+
+00:52:25.280 --> 00:52:30.060
+and that means it doesn't have to get copied
+back and forth and that saves some time.
+
+00:52:30.059 --> 00:52:35.029
+The other thing was switch from use host
+pointer to copy from the host pointer
+
+00:52:35.030 --> 00:52:36.720
+which is the different mode on the MemObjects.
+
+00:52:36.719 --> 00:52:40.529
+And that allows the data for the
+GPU to be resident in DREMM.
+
+00:52:40.530 --> 00:52:47.640
+And then the other problem was the access pattern.
+
+00:52:47.639 --> 00:52:50.230
+How the kernels were actually accessing the memory.
+
+00:52:50.230 --> 00:52:57.750
+So it turns out that current GPUs are
+optimized for graphics surprisingly enough.
+
+00:52:57.750 --> 00:53:00.920
+And the way to get performance
+is to do burst reads from memory.
+
+00:53:00.920 --> 00:53:06.809
+This is true of CPUs as well as GPUs but
+it's more extreme on the, on the GPUs.
+
+00:53:06.809 --> 00:53:09.190
+Bursts only happen on sequential accesses.
+
+00:53:09.190 --> 00:53:16.460
+They are created by coalescing smaller reads and current
+hardware typically can only coalesce relatively small reads.
+
+00:53:16.460 --> 00:53:22.250
+So if you're reading more than about 16 bytes or
+more than the actual particular sizes in fact,
+
+00:53:22.250 --> 00:53:25.739
+the coalescing is not going to
+happen and you won't get any bursts.
+
+00:53:25.739 --> 00:53:32.449
+And coalescing has to happen within a workgroup and
+it happens across the work items in a workgroup.
+
+00:53:32.449 --> 00:53:34.849
+[ Period of silence ]
+
+00:53:34.849 --> 00:53:38.199
+So you sort of need to explicitly code for this pattern.
+
+00:53:38.199 --> 00:53:44.409
+And array of structure acts sort of works against this
+pattern because it tends to cause things to get loaded
+
+00:53:44.409 --> 00:53:47.869
+out of global memory, not according to that pattern.
+
+00:53:47.869 --> 00:53:50.650
+So my vertex buffer for example is 80 bytes.
+
+00:53:50.650 --> 00:53:55.570
+So it's clearly larger than the
+size that is currently coalesced.
+
+00:53:55.570 --> 00:54:01.450
+So the solution is to actually read it into local memory
+and access it there because local memory doesn't suffer
+
+00:54:01.449 --> 00:54:04.589
+from the same kind of problem that
+accessing global memory does.
+
+00:54:04.590 --> 00:54:09.150
+The, these things don't have to coalesce nearly so much.
+
+00:54:09.150 --> 00:54:14.930
+So the newest GPUs can do better, but in the short term
+when we might see compiler improvement, it'll help.
+
+00:54:14.929 --> 00:54:23.679
+But in the short term, what we needed to do was figure
+out how to read the vertexes I need in an efficient way.
+
+00:54:23.679 --> 00:54:32.849
+So this animation is showing is rather than each work
+item simply accessing the individual 80 byte vertex,
+
+00:54:32.849 --> 00:54:40.960
+what they do at the beginning of the work item is they gang
+together, the entire workgroup works on transferring the set
+
+00:54:40.960 --> 00:54:48.250
+of vertices that those work items are going to operate on
+into local memory and then it can operate on them locally.
+
+00:54:49.599 --> 00:54:55.039
+So it turns out that the intrinsics built into
+the language provide the Async workgroup copy
+
+00:54:55.039 --> 00:54:57.900
+and these are exactly that kind of a gang to transfer.
+
+00:54:57.900 --> 00:55:03.470
+So you can use that at the beginning
+of your kernel to get your data
+
+00:55:03.469 --> 00:55:06.799
+into local memory and this is essentially what we did.
+
+00:55:06.800 --> 00:55:10.720
+And the performance speed up was dramatic.
+
+00:55:10.719 --> 00:55:20.750
+On my machine, it was from 50 milliseconds on a
+particular test case down to 6 by the time we were down.
+
+00:55:20.750 --> 00:55:25.090
+So we're talking order of magnitude speed
+up by doing this memory optimization.
+
+00:55:26.969 --> 00:55:32.429
+And on the machine that we had here for testing,
+this demo machine here is the speed up that results.
+
+00:55:32.429 --> 00:55:41.769
+So you can see it went from 4.39 times faster 9than the host
+to 83 times faster than the host for the skinning algorithm.
+
+00:55:41.769 --> 00:55:45.659
+And that was the only algorithm since
+that's the dominate algorithm in the demo.
+
+00:55:45.659 --> 00:55:47.839
+That was the only one we had time to optimize for.
+
+00:55:47.840 --> 00:55:51.980
+We could apply similar optimizations to the other
+kernels because they're all bandwidth bound.
+
+00:55:51.980 --> 00:55:55.460
+[ Period of silence ]
+
+00:55:55.460 --> 00:56:02.780
+So in summary, the performance and this graph is per
+kernel and they're all normalized to the fastest device.
+
+00:56:02.780 --> 00:56:07.470
+And you can see what I have here is a Core 2 Duo host.
+
+00:56:07.469 --> 00:56:15.789
+The OpenCLC implementation on the Core 2
+Duo and 8800 was in the Core 2 Duo machine.
+
+00:56:15.789 --> 00:56:23.889
+And then the I7 processor, again the host,
+the OpenCLC CPU implementation and its GPU.
+
+00:56:23.889 --> 00:56:28.339
+And you can see that the latest GPU
+is indeed very, very, very, very fast.
+
+00:56:28.340 --> 00:56:28.809
+I want one.
+
+00:56:28.809 --> 00:56:30.679
+[ Laughter ]
+
+00:56:30.679 --> 00:56:32.599
+So there's a few take aways from this.
+
+00:56:32.599 --> 00:56:35.009
+The first is that performance tuning is essential.
+
+00:56:35.010 --> 00:56:37.020
+You can't get away without it.
+
+00:56:37.019 --> 00:56:40.900
+OpenCL is a low level API with
+a minimalist abstraction layer
+
+00:56:40.900 --> 00:56:43.690
+so that we can do the kind of performance tuning we need.
+
+00:56:43.690 --> 00:56:48.200
+It can also act as a foundation layer and I'm
+hoping to see other technologies built on top of it.
+
+00:56:48.199 --> 00:56:51.449
+But it provides a foundation layer for us to work in.
+
+00:56:51.449 --> 00:56:56.230
+Second, the abstraction layer is not trying to hide
+the performance characteristics of the machines.
+
+00:56:56.230 --> 00:57:00.869
+So you have to know about the kind
+of hardware you're operating on.
+
+00:57:00.869 --> 00:57:06.920
+And third, you should expect to write multiple variations of
+your kernels unless you have a very, very specific target.
+
+00:57:06.920 --> 00:57:14.250
+For us we address all sorts of hardware platforms on our
+target platforms which we don't know what the hardware is,
+
+00:57:14.250 --> 00:57:20.070
+then we need to provide cases that deal with
+the likely variations we're going to expect.
+
+00:57:20.070 --> 00:57:27.539
+I would expect to see a very small handful of kernels that
+address the dominant classes of hardware that you see.
+
+00:57:27.539 --> 00:57:35.039
+So you're not going to need to implement for the
+particular nVidia chip and that particular nVidia chip.
+
+00:57:35.039 --> 00:57:37.849
+Instead, they'll probably be lumped into classes.
+
+00:57:37.849 --> 00:57:40.589
+And you'll have some number of kernels.
+
+00:57:40.590 --> 00:57:44.230
+And that's it.

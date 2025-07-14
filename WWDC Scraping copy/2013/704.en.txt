@@ -1,0 +1,293 @@
+---
+Title:  Building Efficient OS X Apps
+Year:   2013
+Web:    https://nonstrict.eu/wwdcindex/wwdc2013/704/
+
+[!] This transcript has potential transcription errors.
+---
+
+Good afternoon. My name is Anthony Chivetta. And I'm an engineer in the OS X performance team. And I'd like to talk to you about building efficient OS X apps and cover some advanced topics in resource management. Now most of you are probably familiar with performance testing in some form, whereby you evaluate how long it takes your application to perform a specific action. What I want to talk to you today is not about performance optimization, but about resource optimization. Looking at-- whether looking at latency of an action, how much resources it consumes to achieve its goal.
+
+Now, one of the problems that we face in resource management in OS X is that it's fundamentally a multitasking operating system. If you're coming over from iOS, you're coming from an environment where there's one application that a user is actively using at a time. And so, that application can be provided the full use of the system's resources. On OS X, however, a user may be running multiple apps simultaneously. And so, those apps, consumption of system resources can affect each other's performance.
+
+As a result, it's very important that your app uses system resources efficiently in order to help create a great user experience. So today, we'll cover a couple of topics about resource efficiency including how to profile and reduce your app's memory footprint, how to optimize your access of a disk, and how to do work in the background without impacting system responsiveness.
+
+So I want to talk first about memory. And let's take a look at a simplified view of a system. So we have a OS X system with a number of apps running, and some of those apps have been provided in memory. There's also memory that is currently unused. And this isn't really providing any value to the system, it's just sitting there. And some memory has been devoted to caching the contents of files on disk. Now, as apps request more memory, we'll first provide the unused memory to those applications.
+
+Now, apps can continue to request memory and will continue to provide the unused memory until there's no more unused memory available on the system. And this isn't a problem. Unused memory wasn't providing us any value in the past. But if apps continue to consume more memory, we'll eventually need to start providing them the contents the disk cache. And this is relatively efficient because the disk cache is just holding data that's already stored on disk. So it can simply discard it, turn it into unused memory which is then provided to an application.
+
+But we now no longer have that cache data in memory which means access to disk by application to the system may take longer. This is where we'll begin to see the responsiveness of the user system decrease. Now, where things get really bad is when apps continue to request memory.
+
+In this case, we'll need to do something called swapping. We'll take the contents of memory from one app and save it to disk, and then provide that memory to a different app. Now, the problem is this takes a long time because we have to write out the contents of memory to disk. And if the original app tries to access that memory again, we'll have to pull that memory and back off disk. And both of these actions can introduce large latencies and cause responsiveness problems for users.
+
+But let's take a look under the hood at how this works in practice. So every app on a system or a process has an address space. If you're a 64-bit app, this is the 64-bit range that your pointers use. And that address space is broken into 4 kilobyte pages. And of course, the system also has some amount of actual physical memory.
+
+And virtual memory allows us to establish a mapping from that address space to a physical memory. Now, when we need to swap, what virtual memory allows us to do is disconnect one of those physical pages from the virtual page that it's currently backing. And then we can use that memory somewhere else.
+
+But if the app wants to access that location memory again, it will cause what's called a page fault. The operating system will then be able to pull the data back off disk, place it somewhere else in the RAM, and reconnect that page in the virtual memory mapping. Now, what's important to understand here is that this happens as soon as the application tries to access that memory which means that executing any code could potentially cause a page fault. And this is what makes swapping so dangerous.
+
+The application has no control over when these accesses to disk happen or what thread they happen on. And as a result, it's very important to try to lower the memory footprint of your app. This can help reduce the chance that your memory will be swapped when the system is under low memory situations. It means that more memory will be available to you quickly when you need it, and it improves overall system performance.
+
+Now, the first step in this is going to simply be to profile and reduce your app's memory use. And instruments come with two templates that can be of great help here. The first is the allocations template. And this can profile the objects that your app allocates so that you can find targets for optimization. This might include large objects that you want to make smaller, or objects that are allocated frequently which you can try to reduce the quantity of their allocations.
+
+There's also the leaks template, and this helps you look for objects that are leaked. Leaked objects, objects to which there's no longer any references, and so you cannot release them anymore. They're simply going to stay in memory until your app is terminated. If your app is not running, this can cause unconstrained memory growth. And so, the Leaks tool can help you find leaks in your application and then analyze those leaks to understand their cause and fix them.
+
+Now, both these tools will be covered in much more depth in the Fixing Memory Issues talk and I highly recommend you attend. What I want to discuss are some more advanced tools and techniques you can use that helps keep your memory-- your application's memory usage small and continue to have efficient applications over time.
+
+And the first thing you should consider doing is automating memory testing of your application. Hopefully, you do some sort of regular testing, whether that's a nightly test suite, unit tests, functional tests, continuous integration, or simply just a set of actions you confirm continue to work before you ship your app.
+
+Whatever it may be, integrating memory testing into that can give you a quick barometer as to whether a particular change in your app has introduced any memory regressions. And you really want to look for two things. You want to look for increases in memory consumption that you don't expect, and any new leaks in your application.
+
+And you want to consider any leaks that you find to be a bug you should immediately fix because this is important to reducing engineering debt. Fixing leaks in old code that you don't maintain familiarity with can be incredibly difficult. But, if you're able to find and fix leaks immediately, you can help prevent incurring an engineering debt over time.
+
+There's a couple of tools we provide that can help you automate this process. And the first I want to talk about is the Heap tool. This is similar to the allocations instrument. But you can run it in an automated fashion from the command-line. So the first thing you want to do is simply run your app and put it through its paces and then run the Heap tool and provide the name of your application.
+
+The tool will then analyze the running application in memory and provide you a list of all the objects that that application has allocated including how many times a particular object has been allocated, and the total amount of memory used by that type of object. Now, you can compare this between multiple releases of your app to understand whether you've caused memory regressions and look for changes in the memory use of your applications. If you look at the [inaudible], there are also a number of other options that can help you dive deeper. Now, on the leaks side of things, we also provide a leaks command-line tool which you can use to automatically detect leaks in your application.
+
+And when you run it, the first thing you want to do is turn on MallocStackLogging. You can do this with the scheme editor in Xcode by checking the stack logging box or setting the MallocStackLogging equals 1 environment variable. Then, run your app as you might when running heap.
+
+But instead, we'll now use the Leaks tool and leaks will then provide us a couple of pieces of output. The first is how many objects were leaked by your application and what size and memory they consume. And then for each leak, the address of the object and the type of object.
+
+In this case, we leaked MyLeakedClass, an Objective-C object from MyApp. And then because we're using MallocStackLogging, we'll also get the full call stack that allocated the object which can help you narrow down where the object came from and then provides you a starting point for future analysis, perhaps interactively an instrument with the Leaks tool.
+
+Now, you may have already eliminated the leaks in your app, ensured that you don't see any unbound heap growth and optimized there. But one other place you can look for additional memory use that you can slim is duplicated objects. Your application probably pulls in data from the network, or the files on disk, or accepts information from the user. And it's easy to accidentally produce extra copies of that data.
+
+The stringdups tool can analyze your application and let you know when you have duplicated C strings, NSStrings, and other types of objects. To run it, you'll simply go on stringdups and provide the process ID of your app. And there are two modes that you might want to consider. The first is the No Stacks Mode. It simply gives you a listing of all the duplicated objects in your application. This is really helpful for deciding what things you want to target to as far as slim down.
+
+Now notice when you do this, you'll see that there's a lot of strings from localization and frameworks that you'll find duplicated. And those are simply result of how those frameworks work. What you want to look for are large numbers of duplicates and strings that your application has created that contain for example content specific to your app. Then once you've picked a duplicated object, if you want to dive deeper into, you can use the call stacks view and this will show you all of the locations in your app, where that particular object was allocated.
+
+Now, you may have done all these things to try to slim down your app. But sometimes you're still going to get into a low memory situation. We refer this as being under memory pressure. I want to talk about what the system-- what you can do to help the system behave better in this case. So let's look at just a single app.
+
+Now, the first thing that we want to be aware is that the system internally has a gauge memory pressure. This is roughly, an approximation of how difficult it is for the system to create new free memory when it's requested by an application. And there are two tools you can use to help the system alleviate memory pressure and restore the system to full responsiveness. The first is NSCache.
+
+This is like a container for objects that the system can automatically evict and allow to be reclaimed. And, purgeable memory which are regions of memory that the system can reclaim automatically without having to interact with your app. So in this case, if our app requests memory, the system can, rather than swapping, acquire memory from the NSCache in a purgeable memory region.
+
+[ Pause ]
+
+So let's dive into this a little more deeply. The first thing I want to talk about is NSPurgeableData. This is how we expose purgeable memory through the Cocoa APIs. And as purgeable data, it's similar to NSData but it has the property that its contents can be discarded automatically when the system is under memory pressure.
+
+So in this case, we have NSPurgeableData object that points to a purgeable memory region. When a system gets under memory pressure, the purgeable memory region is reclaimed by the system. But the NSPurgeableData object stays around. So this can query for the status of that memory region later. Let's look at an example of how this works.
+
+So in this case, first create an NSPurgeableData using some array of bytes we have in our code already. And then we indicate that we're done using it by calling endContentAccess. Sometime later, if we want to access that data again, we call beginContentAccess and look at the return value.
+
+If the return value is No, then the data has been purged from memory and we'll need to regenerate that data. For example, by reparsing a file or redownloading it from network depending on where the original data came from. If the answer is Yes, then we can continue to use the data. And eventually we'll want to call endContentAccess again to indicate to the system that we're no longer using it. By bracketing your use of the purgeable data with begin and endContentAccess, you ensure the system will never remove it from underneath you.
+
+Now, the other approach I mentioned is NSCache. NSCache is a key value store like an NSMutableDictionary. But it also has the advantage that it's thread-safe, meaning, you can use it from any thread in your application without requiring additional synchronization. But the special property of NSCache is that it's capable of automatically evicting objects on memory pressure. This means that you can put as much data into the NSCache as you'd like and it will automatically size itself to an appropriate size given the current system conditions.
+
+It does this by simply releasing its strong reference to your objects upon eviction. So once you have another reference to any of your objects, you can be sure they won't disappear from behind you. And it uses a version of least recently used eviction. Should expect the contents of an NSCache will eventually be evicted if not accessed. Now, you can actually combine NSPurgeableData and NSCache. And this can make working purgeable data objects a little bit easier. NSCache gives aware of when NSPurgeableData objects have been purged from memory. And so, in this case, we placed an NSPurgeableData object in our NSCache.
+
+The system reclaims the purgeable memory region. And then the NSCache will evict the NSPurgeableData object. So future look ups for its key will not return any object. So I mentioned memory regions. Well, what exactly is a memory region? Purgeable memory regions are one type. But there's a variety of types of memory regions on a system. Let's go back to our view of virtual memory. I mentioned that a process address space is divided into 4 kilobyte pages.
+
+Well, there's actually one more level of obstruction here. The process of address space will first be divided into a number of regions. These regions, each are then subdivided into 4 kilobyte pages, and those pages inherit a variety of properties from the region. For example, the region can be read-only or read and rewritable, it may be backed by a file, might be shared between processes, and these things are all defined at their region level.
+
+And then of course, these individual pages may or may not be backed with physical memory. And we've been talking mostly so far about objects that exist in your process' heap. But there are a variety of other types of regions that consume memory inside of your process. Now, I want to talk a little bit about those.
+
+So first of all, is this actually an important thing to be aware of? Well, I did some analysis of a couple of example applications. The first was a media player app. And in this case, only 34 percent of the memory consumed by the media player application was actually due to heap memory, the rest came from other types of regions. Now, graphics memory is often not part of the heap. And so, a simple game might have less than 10 percent of its memory actually allocated in its heap.
+
+So what are these other non-heap memory regions? Well, the first thing is going to be anonymous memory regions. Now, these are things like the heap that store data just for the lifetime of your process. They're private to your process, and our tools have the ability to name them. So as you're looking through the anonymous memory regions, these are some examples that you might see.
+
+Malloc size, they're like Malloc tiny, Malloc large, those are going to be used for the heap. You'll also find Image IO regions in your process. And these are used to store or decode an image data. What makes these interesting is that the actual object in your heap might be very small but it will contain a reference to an Image IO region in memory. So leaking that object will, from the perspective of the Leaks tool, show only a very small leak. But because you've also leaked the reference to a memory region, your app has leaked much more memory in practice.
+
+There's also CA layers, restore the contents of rasterized layer-backed views. And these will actually have annotations giving you the name of the delegate of that layer. And to learn more about this, you should see the optimizing, drawing, and scrolling on OS X talk which we'll go in-depth in the layer backing of your views.
+
+There's also file-backed memory. And these are regions whose contents are backed by a file on disk. And what's interesting about these regions is that we will populate them with the contents of that file only when you access the region for the first time and cause a page fault. This means that the data will only be resident if it's been accessed. And so, you might have a very large file backed region with only a very small amount of data resident.
+
+And these are commonly used for things like decoding your application or data files that you want to randomly reference. And so, in this case, our app has file-backed memory region for each of these. And as it begins to execute its code, it will fault that code in from disk. And then, as it accesses a data file, will pull that data file in from disk as well.
+
+So let's zoom in on that data file region. So imagine this is our data file region and it's writable. When we created that region, we specified we wanted to be able to write to it, and we set it shared, meaning that the changes we make should be written back up to disk. Now, in this case, our region isn't entirely resident in memory because we haven't accessed all the data.
+
+And you can see here some of the pages just simply aren't populated. Now, if we go and try to modify that memory, we're going to dirty it. We refer to clean memory as memory that whose contents match that on disk and dirty memory as memory where we have made changes.
+
+So now, we have dirty memory in our app. And if the system would like to turn that back into clean memory, it will have to write those pages back out to disk. Now, what makes a dirty memory interesting is that it's much more expensive to reclaim the clean memory.
+
+If we need to reclaim clean memory to provide it to another app, we could simply throw that memory away and use it for a different purpose. On the other hand, dirty memory needs to be written back out to disk so it's more kind of swapping in that sense.
+
+Now, given all these types of memory regions your app might have, how do you get inside into what your app is actually doing? Well, as of OS 10.9 in iOS 7, the allocations instrument is capable of showing the memory regions used by your app. But what you'll notice is that there's a new allocation type selector in the allocations instrument that you can choose whether you want to see all allocations, just heap allocations which is what you would have seen in previous versions, or just the new VM regions that are being tracked.
+
+So in this case, we're looking at all allocations. And you can see that some of these allocations start with a VM con and then provide the name of that allocation, when it's known. And you can then drill down to understand where these allocations come from. And in many cases, see a stack trace of the code that created that object.
+
+This can then help you understand why does this exist. And there's the only thing I can do to change its size or prevent it from being created. Now, there's also the VM Tracker tool. And this tool will-- it can take a snapshot at a regular interval of all of the virtual interval regions in your app. It can then determine a residency information and how much of that data is dirty or clean.
+
+You can also look at the region MapView. And the region map will show you simply a listing of all the regions of your application and you can drill down to get per page data about residency status and whether it's clean or dirty. Now, given all of these types of memory, you're probably asking yourself, "How do I just get a simple number for the amount of memory my application is using?"
+
+Well, this is something we've tried to address in Mavericks. We've run a new tool called Footprint. To run Footprint, simply specify the name of the process you would like to analyze. And in this case, we're also going to run it the -swapped and -categories flags. This will provide some of-- just additional information about our application. It link it out for the look something like this.
+
+And what we can see here is that our application has a 12-megabyte footprint. This is our estimate of what the impact of having that application running is on the system. We can then see a breakdown of what types of memory are contributed to that footprint. So in this case, we can see we have over 5 megabytes of private, dirty memory. For example, heap memory in our application. And 2 megabytes of that has been swapped already.
+
+This is probably an indication that the system was under memory pressure at some point. Now, one wrinkle in this is shared memory. Memory regions can be shared between multiple processes. You'll most commonly see this for graphics memory or in multi-process applications. For example, an application in a bundled XPC Service.
+
+And these shared regions may not be visible in the allocations instrument depending on how they're created. But we have a tool that can help you understand the amount of memory shared by multiple processes. And this is once again, the footprint tool. But instead, we're going to run it with 2 proc arguments and specify both processes that we want to analyze.
+
+And here we can see that we have memory shared with the Windows server, and at the bottom of the output, we get a total footprint of all the processes we specified. If you're developing an app that is a bundled XPC Service, you can use this to get a footprint number for both your app and that XPC Service together.
+
+All right. So now, given all of this new test memory, what is our picture of a system under memory pressure look like? So I want to walk through what a system will do to satisfy demand for new memory given these different types of memory? Now of course, the first thing the system will do when it's under memory pressure is start evicting objects from NSCaches and reclaiming the contents of purgeable memory regions.
+
+Well, this is important because these are the things that applications on a system have said that they want to be reclaimed first when under memory pressure. And so, it's the tool that you'll use to help make sure your application is well-behaved and that you control which user memory will be taken from you.
+
+Now, once that memory has been reclaimed, the system will start aggressively writing the contents of dirty memory to disk so that that memory can become clean again and can be easily reclaimed when needed. Then, we'll start taking the contents of file-backed memory. And once the amount of file-backed memory has decreased, we'll begin also taking memory from anonymous VM regions and from the heap of applications. And this is the point at which you'll see the system performance really begin to decline.
+
+Now, in Mavericks, there's one more part of this. And that's compressed memory. Compressed memory allows us to, before swapping memory out to disk, first, compress it in RAM. And because compressed memory consumes a lot of space, as we compress memory, we free up pages which can then be put to another use. Now of course, once we-- at some point, we may still need to swap out that memory to disk. And then we'll have reclaimed the full contents of that memory.
+
+Now, given that all these behaviors a system can do to create new memory, sometimes it's hard to get a good system-wide picture of what's going on. And so, in Mavericks, we've improved activity monitor, and now have a few more high level numbers that you can use to understand where memory is being used on your system.
+
+We will look at the bottom of activity monitor in the memory tab. On the right side, you can see a breakdown of where memory is being used in your system. App memory refers to anonymous memory regions like heap and the framework allocate memory regions. The file cache refers to any file-backed region.
+
+Wire memory is memory that the operating system has wired down, consumed for its own purposes and can't easily be reclaimed. And then finally, compressed memory is the memory being used to store other anonymous compressed pages. Now, if you want to dive even deeper, the VMStat tool has also been improved in Mavericks. And this is just a subset of the output you'll get from running VMStat. For this case, we're going to run it with a single argument, 1. And that specifies the interval at which we wanted to report data. Here, we're seeing data every one second.
+
+Now, some of these column headers are a little cryptic. But if you run VMStat without any arguments, you'll get longer titles for each of those headers. And so, we can see here, we have a couple statistics that cover where a memory is currently being allocated and this match roughly what you're seeing activity monitor. In this case, we can see how much memory is used for file-backed or anonymous memory.
+
+And then how much memory we've compressed and how much memory is being used to store compressed pages. And then we can also look at, over time, the change in memory use on a system. So these values represent when pages are moving in and out of the compressor, to and from file-backed memory regions, and from the compressor to disk and back.
+
+Now, one question you might have is, how do I know if my app is being affected by swapping or other memory pressure activity? Well, we can do this with the time profiler instrument. You're going to want to run it with two options. The first is to record waiting threads. And this will record threads even if they're blocked trying to swap data in from disk. And then, you want to record both user and kernel stacks. So you can see what the kernel is doing in response to a page fault.
+
+Then, runtime profilers, you normally would against your app. And you want to look for the VM Fault Frame. This is the frame that you'll see in the kernel anytime it takes a page fault as a result of memory access your app does. You can then dive even deeper than that to understand whether it's hitting disk or decompressing data.
+
+And in this case, you can see we're spending 2 percent of our time in VM Fault, that's actually a lot of time. Really, any more than a few samples you find at VM Fault should be taken as in occasion that your app is seeing the effects of memory pressure.
+
+And it means that you should begin to look at your apps memory use and how you can improve your app's performance under memory pressure. Now, one problem with this technique is that it requires you to be able to reproduce the problem. And unfortunately, memory pressure-related problems typically depend on what's going on in the system, what other apps are running, and could be very difficult to reproduce.
+
+So we provided something called sysdiagnose. This is a tool that can automatically collect a wide variety of performance diagnostic information from the system. You could simply run it from the command-line, pseudo sysdiagnose, and then provide an app name that you like to target for data collection. It will then run a bunch of diagnostic commands and archive the output under VAR/TMP and a sysdiagnose archive including a timestamp. And this includes things like a spindump which is a sample or time profiler like profiling of all apps on a system, heap, leaks, footprint, VMStat, and FS usage which I'll cover in a little bit.
+
+You can also trigger this with the Shift Control option command period key chord, if you can manage to mash those keys in time. But this isn't going to collect as much detailed information about your specific application. And so anytime you can use the command-line form, it will provide more actionable data about what your app was doing. All right.
+
+So just a recap, we'll be talking about memory. You want to make sure that when you're looking at the memory usage of your application, you're paying attention to the entire footprint of your app, not just the usage of your heap. When trying to reduce your memory usage, consider things like leaks and heap growth. Look for unnecessary VM regions and check for instances of duplicate memory.
+
+Consider adopting purgeable memory or NSCache for anything which you can easily regenerate as this will allow you to direct the system as to how best take memory from your application in low memory situations. And remember, the larger memory footprint your app has, the more likely it's to slow down when under memory pressure.
+
+[ Pause ]
+
+So I want to talk about disk access. Well, why is disk access important? Well, I did some testing with two scenarios that you probably care about in your app. And what that app launch and the time it takes to open a document. And we'll look at these in cases where a system was totally idle and a case where there was another app on system that was trying to do IO. And when you have multiple apps contending to use the disk, AppLaunch easily regressed 70 percent. And this is a huge increase in time that's really going to impact your users. Open document, increased 55 percent.
+
+And so, it's important that you do IO in the most efficient way possible to make sure that you're-- that one, you're being performant. And two, that you're not going to be affected by other process on the system that want to compete with you for bandwidth to devices. Well what exactly are we talking about with IO. Well, there's a variety of layers at the storage stack that all interact together to help you load data from disk.
+
+Of course, we have your app but in-- your app is going to use some set of frameworks to help it do IO, but ultimately, all access to the disk are going to fall through one of two interfaces in the kernel. Either Memory Mapped IO, and these are file-backed regions like we talked about earlier, or the virtual file system interfaces. And these are the open, read, write and close system calls of which you might be familiar.
+
+And then on the other end, the kernel is going to use a file system to organize data on disk. Now, of course, we have to have some sort of device driver. But then at the end, you'll have either a spinning magnetic hard disk drive or solid-state flash storage to which your data is actually going to be persisted to.
+
+Now, it's interesting that today we see customers with both kinds of storage, hard drives and flash storage. And so, it's important that you consider both types of storage when you're profiling and performance testing your application. And the reasons that they have incredibly different performance characteristics, for example, the solid-state drive has no seek penalty.
+
+On the other hand, a hard drive, because it uses rotating media and must first seek to the correct location on disk before it can read or write data, can experience up to 10 milliseconds of latency every time you access a new location on disk. This thing is that while an SSD might be capable between 3 and 30,000 IO operations per second, a hard drive is only going to be capable of maybe 80 to 100.
+
+Solid-state drives also have better sequential speed. But the difference there is much less pronounced. But there's other differences too. An SSD is capable of some limited degree of parallelism. This means it's important to provide multiple IOs to the SSD's queue at a time to take advantage of that parallelism. On the other hand, a hard drive is only ever going to be able to do one IO request at a time. And so, it's not as important to keep the queue on a hard drive field.
+
+Finally, on a solid-state drive, writes are significantly more expensive than reads. Wherein a hard drive, those had relatively symmetric costs. This meant in the past you might mostly have focused on what reads your application was doing. So these tend to be more likely to block what the user's experience of your application. On the other hand, with a solid-state drive, writes become a lot more important as these compete with reads much more heavily for disk bandwidth.
+
+Now, what I really want you to take away from this is that the difference-- different performance profile of these devices mean that you should be testing your application on both. If you're developing on a new machine with a solid-state drive, your customers are going to have a very different experience when running on a hard drive. And also, high performance IO is difficult to do well. You need to avoid causing trash in your hard drives, keep the queue field for SSDs, use appropriate buffer sizes, compute on data concurrently with IO, and avoid making extra copies of the data.
+
+So, we provided an API to help encapsulate some of these best practices for doing IO. And that comes in the form of dispatch IO. Dispatch IO is an API that's part of Grand Central Dispatch. It's been available since 10.7. And it provides a declarative API for file access. What this means is that rather than telling a system how to access data, you tell it what data it should access.
+
+This allows it to automatically encapsulate best practices and do things in the most performant way possible. Now, I want to talk through two examples of how to use this API that where doing these things with the file system calls directly would be significantly more difficult. The first is processing a large file in a streaming manner.
+
+This might be a transcoding media searching for a string in a file or anything where you want to do a sequential read and do computation concurrently with IO. So let's take a look at that example. And the first thing we're going to do is create a serial dispatch queue that we want our computation to run on.
+
+We'll then create a dispatch IO object by providing a path and informing dispatch IO that we want to read this data. We can then set a high watermark. And what this means is that we would like to be provided opportunity to compute on data no larger than this size. So in this example, we want to see data every 32 kilobytes.
+
+And so, the block we provided dispatch will be called with data smaller than this amount. And then finally, we issue the read. And the read, we will provide a block to call every time data is available. In this case, we can simply use especially to apply to operate on those buffers.
+
+And this will do the appropriate thing involving non-blocking IO to ensure that you can have as little data and memory as possible while still concurrently computing on data and bringing in more data from the drive. If you never tried to use FileDescriptors with the O NONBLOCK option to this, you understand that it can be a little harried to implement yourself.
+
+Now, this is what you might want to do if you're reading one large file. But what if you have a lot of small files? Let's say for example you want to read in a couple of hundred thumbnails from a disk? Well, dispatch IO can help you do that correctly too.
+
+In this case, rather than using a single serial queue to call our blocks on, we're going to provide a global concurrent queue. And then for every image whose thumbnail we want to read in, we're going to again, create a dispatch IO object. But instead of setting a high watermark, we're going to use low watermark. And we're going to set it to size max.
+
+This informs dispatch IO that we want the entire file contents all at once. Then, we issue the read and in our callback, we can use the dispatch data provided to instantiate for example NSImage. Now, as of Mavericks, dispatch data is bridged automatically to NSData. On older systems, you'll need to use some other dispatch data APIs to extract those contents.
+
+Now, what's important about this is that if you were trying implement it yourself, you have to answer questions like, how many of these operations should I have running concurrently? Simply putting them all on a concurrent queue would probably run out of threads and trying to do it yourself means you have to understand the performance of the underlying hardware. Using dispatch data lets the system make choices like that for you.
+
+And regardless of how you're doing IO. You need to organize data on disk. And what's important to understand is that using large numbers of small files can be very expensive. And you should consider using Core Data or SQLite any time you have a large number of objects to store.
+
+Now, just how expensive is it? Well, imagine we want to insert 100,000 objects. Storing each of those objects as a small file on disk, say, 100-- couple of 100 bytes would take almost 25 seconds, whereas inserting them to an SQLite database takes just about half a second. This can be a huge performance difference and ensures that they're going to be less susceptible to contention from other processes. Of course, using a database provides other benefits like control over atomicity so you can put multiple operations in a single transaction. It's more space efficient and gives you better querying capabilities. Now, one thing you need to think about as you're doing IO is write buffering.
+
+This is our typical open, write, and close set of system calls we might do if we want to write it into a file. But what might surprise some of you is that data is actually issued when we close the file. For smaller [inaudible], the system isn't going to actually flash the data to disk until the FileDescriptor is closed. And there's a couple of system calls that can cause this kind of write flushing to happen. If you're using the VFS interfaces, it's anytime you close or fsync a file descriptor. And if you have Memory Mapped IO, it's going to be anytime you use msync.
+
+And what's important to think about here is how often am I pushing data app to disk, and am I going to be pushing data app to disk more often than necessary? If you can combine multiple writes into a single flushing of data, that can help improve the IO performance of your application and make you less susceptible to contention.
+
+Now, of course, if you have consistency guarantees that you need, for example, you want to make sure that a file is completely on disk in a stable storage, these APIs won't solve that problem. And instead, you should be considering a database like Core Data or SQLite which can help-- which can automatically journal your changes and ensure that data is consistent on disk.
+
+Now I mentioned before the file cache, some amount of memory is devoted to caching the contents of files on disk. And accessing from the file cache can be over 100 times faster than even the fastest solid-state drives. But the file cache competes with-- for memory with the rest of the system. This means that as applications memory usage grows, less will be available for the file cache. And any time you pull new data into the file cache, other data is going to need to be evicted.
+
+You can control whether this happens for a particular IO you do by using non-cached IO. This tells the system, "Please don't hold on to this data and throw it away as soon as you're done doing the IO so that you can keep more important data on memory." You might want to do this if you're, for example, reading an archive to extract it or streaming a large multimedia file. And you don't want to impact the rest of the file cache on the process.
+
+Now, there are a couple of different APIs you can use to indicate to the system that you want to do non-cached IO. If you're using NSData, you can use the NSDataReadingUncached option. And that will automatically use non-cached IO. On the other hand, if you're using the virtual file system interfaces, the f-- no cache f control can indicate any IO on a particular FileDescriptor should be done without caching. Now of course, you can still use that with dispatch IO by then providing such a FileDescriptor to dispatch IO create.
+
+Now I also mentioned in the memory section, file-backed memory regions. And this is-- this can be used to do Memory Mapped IO. What's great about Memory Mapped IO is that it avoids creating any additional copy of the data. If you're using traditional Read commands, you'll have to first, pull data into the file cache and then copy it into a buffer in your application. And for small IO, this is fine. But if you're doing random accesses to a large file, Memory Mapped IO can avoid that extra copy of data.
+
+It's ideal for random accesses because it lets the system control whether or not a particular piece of data is kept in memory or can be evicted automatically under memory pressure. And when doing Memory Mapped IO, you can use the madvice system call to indicate future needs allowing prefetching or eviction of data as necessary.
+
+Now if you're using the NSData APIs, you can use the NSData reading map to a safe option to automatically use Memory Mapped IO or you can use the mmap system call to map a file into memory. Now, regardless of how you do IO and what data you're writing to where, there's one very, very important thing that you should remember and that is to never do IO on the main thread.
+
+And hopefully, you've all heard this before but it's important to keep in mind as you're running your applications that a wide variety of our frameworks are going to need to do some IO to accomplish the work you've asked of them. And in low memory situations, any memory access can potentially involve a page fault and access to the disk.
+
+Now, this is all very important because any time your main thread has to block waiting on IO, the IO could take a very long time to complete. And this will result in a spinning application which is a very poor experience for your users. So you should aggressively consider moving work off of a main thread of your app and on to for example, a dispatch queue whenever possible.
+
+Now, of course, it's-- none of these things are important until you understand what IO your application is actually doing, so you can target the biggest offenders in your application for improvement. And the FS usage command-line tool can help you do this. It provides a listing of system call and IO operations on a system.
+
+It provides a couple of options for filtering. For example, you can use the -f files as option to filter to just files as events or disk IO to get just access to the disk. And you also want to consider the -wflag to get as much data as possible. Let's take a look at what FS usage looks like in practice.
+
+In this case, we're going to filter just file system events. And this is just a couple events from my system when I was sitting here writing these slides. And we can see a couple of things. The first thing we can create is the time that a particular event completed. But, this is important. These are ordered by when the events completed, not issued. We then see what the event itself is, have some data about the event, the duration the event lasted for, and finally, the process and thread ID that performed the operation.
+
+Now, because these are ordered by completion time, you can use that fact to find matching events. So in this case, we have a read data command and that indicates that we actually pulled data from the device into memory. And then we see a pread system call that completed immediately after on the same thread. This is a good indication that that read data was a result of the pread command. And to help you see these when you're looking at FS' output, we'll indent commands like read data automatically.
+
+Now I want to talk a little bit more about that read data command because that's the actual IO to a storage device that you want to be focusing on optimizing. And so, if we look at just the disk IO commands, by using the -f disk IO option, we can get a sense of what type of IO we're doing.
+
+So the command name will include things like whether it's a write or a read, whether it's file system data, or metadata about files on disk, whether it's a page in or page out from a file-backed region, and whether it's non-cached. If you see an N inside brackets that indicates that the IO was done non-cached. You'll then get the file offset on disk, the size of the IO, the device it was to, and in some cases, a file name. Now, given this data, you then want to try to find ways you can improve the performance of your app.
+
+This includes things like simply don't do any IOs unnecessary. And looking at what IOs your application is doing with FS users can be a great place to find this or do it less. Could you potentially read or write less data for a particular operation? Do it later. If you're looking at something like AppLaunch, any IO that you do during AppLaunch is potentially something that could increase the AppLaunch time of your app significantly. Try to defer those to a less critical time especially if it's the time that won't contend with other operations your user might be doing. And for your hard drive-based users, try to do IO sequentially. Avoid accessing lots of different files in a random order.
+
+Now, one thing that you want to think about when using FS usage is what impact the disk cache is going to have on the app that you see. If you're doing at the -f disk IO option, you're only going to see accesses that go to the actual hard drive itself. Anything that has the disk cache won't be printed. So, for example, this is a case of a warm AppLaunch.
+
+There we go. And by warm, I mean that the things that this application needs are already in memory. If I haven't run the app recently, and instead I get a cold AppLaunch, it looks a little more like this. And this doesn't quite fit in the slide so let me scroll through it for you.
+
+[ Pause ]
+
+Now this is potentially a little bit of an extreme example. But I expect that if you were to go home and try this on your app, you'll see something similar. Launching your app for the first time when it's-- the files it needs aren't cached, it's significantly more expensive than subsequent launches but it is already cached. Now, as a result, it's important to profile in different warm states for your app.
+
+This means you want to run your app once and then use the purge command to evict caches and try running it again. Now, remember that some data might be automatically cached by the operating system at boot. So you'll need to do at least one cycle of running your app and then using purge to throw away the contents of the disk cache before you'll get good data.
+
+[ Pause ]
+
+So just to recap some points about disk IO, the best practice for doing especially IO to large files or large number of files is to usually dispatch IO APIs. When profiling your disk accesses, make sure to do it in different warm states. Consider adopting non-cached IO for any large file access where you don't want to evict other data from the cache. Pay attention to when your data is flushed to disk, and never ever do IO on the main thread. Now last I'd like to talk about working in the background.
+
+Your app may do some sort of work that isn't directly required by the user at the time it's done. This can include refreshing data from the network, syncing a user's data with some sort of server, indexing or backing up a user's files, making extra copies of data, whatever it might be, anything that you do that isn't directly relevant to what the user has currently requested has the potential to hurt system responsiveness by contending with other operations the user is doing on the system.
+
+Backgrounding is a technique that you can use to limit the resource use of your app when performing these operations. Now, the keynote, you heard about App Nap. And this is a kind of similar technique whereas App Nap is designed to automatically put your apps in a nap state when they're not being used. Backgrounding is a way you can explicitly specify that a particular piece of work is background. These things work together and so you may still need to adopt APIs about App Nap at the same time as using backgrounding.
+
+But what exactly does backgrounding do? Well, the first thing it's going to do is hint to the entire system that this work is backgrounded, and whenever possible do it more efficiently. It will be used by a variety of places in the system to make choices on about how to do your work.
+
+It will lower your CPU's scheduling priority ensuring that other things can run first on the system. And finally, it will apply something called IO throttling to any accesses that you try to make to the disk. Now, let's look at that in a little more detail. Imagine we have an application the user is actively using. And some sort of background task.
+
+The background task wants to let's say, copy a file. And so, it's doing lots of IO. Then the application tries to do an IO itself. IO throttling will automatically hold off the background task giving the application full access to the disk to allow its IO to complete quickly.
+
+If the application tries to do more IOs, then IO throttling helps base out the IOs of the background task in order to continue to give the application as much bandwidth as possible. All right. So how do we actually accomplish this? Let's imagine you just have one block of code in your application you like to background. This is probably the easiest case. And you can simply background that block by dispatching it to the background priority queue.
+
+Anything you dispatch there will run backgrounded but it's important to run where that code shouldn't take locks or any way block any code that you need to execute in response to UI operations. Things that you run in the background may take an unbounded amount of time to complete and will try to complete them as fast as possible. You don't want them to cause a priority inversion with your user interface.
+
+Now, you can also use XPC to background larger tasks. There's a new XPC activity API that was discussed a few hours ago on the efficient design with XPC Talk that you can use to allow the system to tell you when to perform your background activities. Any blocks you provide to the XPC activity API will also get run on the background priority queue.
+
+You can also use an XPC Service as an adaptive Daemon. So an XPC Service as of 10.9 will be backgrounded by default and then it will be taken out of the background only in response to requests from an application. This is an easy way to do things that might need to take locks required by an application. If you separate that out from other process, you can use this boosting mechanism to unbackground tasks so that they complete quickly and service the user interface. And again, these are discussed in more depth in efficient design with XPC.
+
+Finally, if you have a legacy service, for example, a Launch Daemon or Launch Agent, you can use the new process type launched plist key to specify that that process should always run backgrounded or you can use the set priority system call to background a particular process or thread.
+
+There were rules of how you adapt backgrounding. There are a couple of tools you can use to debug to make sure your backgrounding is working as expected. The first is PS which is normally list process on the system. But if you provide the aMX options, you can see the scheduling priority of every thread. And in this case, backgrounded things are running in a priority of four. And that-- So that indicates that all the threads in this particular process have been appropriately backgrounded.
+
+You can also use the spindump tool. This is similar to time profiler sample. But it has the advantage that it will also show you the priority of a particular process. So in this case, we can see that our accounts-- the process is running at the background priority. Now, you also want to look for the throttle low pry IO frame. This frame is where you'll see a process sit if its IO is being throttled. And you can see that in the kernel stacks in the time profiler, or using spindump.
+
+There's a new task policy command which is similar to the Unix nice command. And it can allow you to run a particular process as backgrounded. This is great if you want to test what happens when you background a process or application. And finally, FS users can show you which IOs were issued by a backgrounded process or a thread. And you'll see this with the capital T after disk IO commands.
+
+Now, one of the things that's been a constant theme here is that your users will experience different performance based on what type of system they're working on. And so, as you're testing your application, you should consider using multiple types of systems. But for most of us, setting up an entire QA lab with different systems is a very big task. And so, you can at least as a first start, simulate resource constraints system in a variety of ways.
+
+If you want a test running with less memory, you can use the maxmem boot-arg to specify how much memory your system should have. In this case, we're eliminating a system that had 2 gigabytes. Now, to revert this, you'll want to run the [inaudible] command but remove the maxmem equals 2048 part.
+
+You can also use an external Thunderbolt drive to simulate different drive speeds. A Thunderbolt-attached hard drive is going to have similar performance to an internal hard drive. And so, if you're running on an SSD configuration, this is a great way to experience what it's like for a hard drive user.
+
+Simply run the OS installer and install a separate OS to your external hard drive and then you can boot off that by holding option at boot to get the BootPicker. Finally, you can use the instruments preferences, just limit the number of CPUs in use by the system. And this will be-- this will automatically go back to all CPUs whenever you restart.
+
+Now, if you have questions, you can contact our developer evangelists, Paul Danbold or David Delong, or see our Apple Developer Forums. There's also a variety of related sessions you might want to check out. This morning, we had Maximizing Battery Life on OS X and Efficient Design with XPC.
+
+But you should also look at Improving Power Efficiency with App Nap to learn how App Nap will affect your app and how you can work best with it. Optimizing Drawing and Scrolling on OS X to learn about layerbacking. Energy Best Practices will talk about how to use the CPU most efficiently and give the CPU form of this talk. And finally, Fixing Memory Issues can show you how to dive in with instruments to understand the memory uses of your application.
+
+So just to summarize some key takeaways, remember to regularly profile and optimize your app, not just the performance of your app, but also the resources it consumes while carrying out its actions. Remember that your users may have a variety of different systems. And so, just because a particular operation works well on your well-equipped developed machine doesn't mean that the users will have a good experience. And ensure your app is a good citizen with shared system resources so that users enjoy using your app and don't feel they need to quit. Thanks.
+
+[ Applause ]
+
+[ Silence ]

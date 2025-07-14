@@ -1,0 +1,137 @@
+---
+Title:  Service Management in Mac OS X
+Year:   2004
+Web:    https://nonstrict.eu/wwdcindex/wwdc2004/106/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Good morning. This is the Service Management for Mac OS X talk or as I like to call it, writing modern daemons in Mac OS X. So what does that mean? Let's jump into some terminology. What is a daemon? A daemon is a long running background process. People don't tend to see it. It's not in their immediate view like the finder or Safari.
+
+Well, we don't just have daemon on the system. We have super daemon, too. What is a super daemon? A super daemon is a daemon that proxies work on behalf of other daemons to make their lives easier. We also have a notion of an agent, which is more specifically a daemon that runs in the context of a user.
+
+After you log in, something like the iChat agent might run in the background to help iChat out. Finally, something that's very important for this talk is the notion of a communication handle. We talk about this a lot. Communication handles a file descriptor or a Mach port, something you use to talk to somebody else, be it near or far.
+
+also some assumptions I'd really like to assume that most of you have prior experience in writing a Mach or Unix daemon. Also some familiarity with the Mach or Unix system calls to be very helpful. Let's jump right in. So what is this session about? It's all about background processes.
+
+You do work on behalf of a user either directly, let's say like someone telnet's in, the telnet server's launched, or indirectly. A thing like lookupd which is doing queries on behalf of applications to look up users or internet hosts or whatnot. And finally, your code needs to get running at some point. You have work to do. How do we know when to run you, if at all?
+
+Now, what's wrong with the status quo? I believe and we believe that daemons deserve better treatment. In both the UNIX and Mac OS world, daemons were just processes which disassociated themselves from the user. They might say core graphics, nope, don't need you. They'd call functions to remove yourself from the user's context.
+
+In the Mac OS 9 world, we call these faceless background applications. Again, they were just programs which said, nope, don't need this. Don't need that. Oh, yeah, don't need this subsystem over there. That's not the way to go. The solution? We're going to provide a new super daemon to manage all the daemons on the system. It's designed to do work for you. It's designed to be flexible. It's designed to support messaging and control. And finally, we're going to call it LaunchD.
+
+A major component of this since we want all daemon to be used this is that LaunchD will be open source. This is a critical objective of ours. We want Unix daemon to adopt this technology. Things like Apache and Bind and you name it. Any Unix daemon we'd like to adopt this technology. We want to have it be open source. We want to have it run on FreeBSD and Linux and Solaris and all those Unixes. It's in everybody's best interest.
+
+So what are you going to learn in this session? The issues a modern daemon writer faces, things that affect you as a developer, what LaunchD will provide for you, what it won't provide for you, and how to port an existing daemon to LaunchD. Also, I'll talk briefly about how to write a savvy daemon.
+
+So let's talk about some history. Why do we need to write a new daemon? Well, in the Unix world, the classic super daemon is INEDD. INEDD is responsible for things like running the Telnet server or the FTP server, you name it. Well, why was it created? It was created because there was the observation was made that every daemon bit did basically the same thing.
+
+It opened a socket and sat there waiting on accept and then forked a child and then had the child deal with the client. Well, if they're all doing the same thing, we can have one daemon do that for them and not have 20 daemons all running at the same time.
+
+Now, in hindsight, INetD was IP-centric. It also assumed that there was only one communication handle per daemon. This is definitely not true these days with the invention of things like SSL. Almost every daemon these days is listening on at least two ports, one to handle SSL traffic, one to handle non-SSL traffic.
+
+Also, in the UNIX world we had something called a NIT. A NIT was centric to a different kind of technology. It was centric to TTYs, things like the console login session or a login session running on a serial port off on the side. That was all fine and dandy, but it was only specific towards a specific technology.
+
+Also, to handle different kinds of daemons we had this callout starting from ETSI RC. When the system booted we had a shell script run. It would then in turn run other things. Eventually a script of yours would be run that would let your daemon be launched. Well, this is very, very static. This only happens at boot. There's no notion of the world might change. We turn the system off. I mean, we put it to sleep and woke it back up. It would be up somewhere else. And it also didn't deal with shutdown very well.
+
+Finally, they also had cron, at, and batch. They were time-centric. That's great, but maybe you want to run for a different reason. Maybe you want to be like sendmail and run once an hour to deal with spooled mail, but you also want to deal with incoming connections on port 25.
+
+In the Mach world, they had something similar to INDD called Mockinit. Mockinit can launch daemons on demand based on Mach port IPC. That's great, but it's only for Mach ports. What about file descriptors? Maybe you need both. So that brings us to today's problems. There's missing functionality. First of all, INED doesn't handle Unix domain sockets despite them being file descriptors. We have file system events to trigger a daemon launch.
+
+Maybe your daemon just sits waiting for a mail spool to fill up and then try and drain it periodically. Well, we'd like to be able to run your daemon when that spool directory gets files in it. Also, INED and INID don't support user-supplied jobs. Why can't a normal user just submit a job to INED saying, "Hey, when somebody connects to port 54321, run my little custom daemon." You can't do that today.
+
+because the config file is in /etc and only root can write to that file. That's a shame. Also multiple event sources, like we talked about with inetd, it only allows you to have one communication port. That's just not practical these days. Worse still, some daemons listen on both Mach and Unix file descriptors. Something like the multicast DNS responders listening on a Mach port to handle requests from the GUI apps, but also listening on a file descriptor to handle the network events.
+
+There's no reason why we can't launch that daemon on demand today except that our super daemons only support one technology. Ultimately, we believe that time, file system, IPC events, all these various event sources need to be supported in the same super daemon. We need to be able to launch it on demand whenever any of your events happen.
+
+: Also, a critical request by many people is that their daemon automatically be restarted if they inadvertently exit or die for whatever reason. So that's something else we'd like to support that not all the super daemons support. So the future. We're going to have one daemon to rule them all.
+
+It's support for transferable-based event sources at the moment. We support most file descriptors. And we will support Mach ports. Also, support for user supplied jobs is, we believe, a very critical feature. We want users to be able to run their own daemons to support their own needs, and not need to run their own super daemon just when we already have one running on the system. So what does this mean?
+
+First of all, we want to save you work. In the Unix world, you need to fork. You need to call setSid. You need to close stray file descriptors, reopen standard I/O as dev null. It's just a mess. Again, it goes back to the, we were a user process.
+
+Now we need to disassociate ourself from the user input. And these are some of the items you need to do. And nobody likes trying to keep on top of any new API they need to call just to disassociate themselves from the user input. What are we going to do? When you hit main, your program will be pre-daemonized. You can check in and go.
+
+We're also going to support launching on demand. This helps you help us save system resources. We will have your communication handles open and alive even when you're not running. And should someone connect to them, we will then launch you. It also improves the system boot up. If we don't need to run your entire executable, if we just need to open your communication handle, that's less work we need to do at boot and our users will appreciate a faster boot up.
+
+It also means we can do a parallel load-a-boot. We plan or actually we do implement the registration of all the communication handles of all the daemons all at once. That means that if daemon A needs to talk to daemon B, we don't really have a dependency problem because that dependency is implicit by their communication through a file descriptor or a Mach port. If we register them at the same time, we don't need to worry about which one gets launched first.
+
+which helps us to, if you're used to StartupItems, the little external dependencies we've been listing there. You don't need to track them anymore. You don't even need to list them. Also, since we want to support user-supplied jobs, we can support something called user agents. We're going to standardize the way background processes run for users. It allows them also to launch those on demand. We've never been able to launch user agents on demand in any standardized way. This will help our log-in performance, which our users will appreciate.
+
+Finally, this is something I'm really excited about. We're going to support messaging. Things like, you know, hey, Apple file server, tell me about yourself. Tell me how many people are connected. Tell me, you know, who they are. Tell me about them. We'd also like to support controlling daemons. Things like, hey, AFP server, why do you disconnect that user? They're done now. Or please shut down. And the daemon can come back to us and say, okay, I'm ready to shut down now. I've written out my log files. I've closed and cleaned all my state.
+
+Thank you. I'm done now. We believe this is very important for things like database servers, which might have a lot of work to do before they shut down. The old way in the Unix world was just to send a signal, cross your fingers, and hope that they exit someday.
+
+You know, that's not great. We need to be better than that. The number of messages that we can support are potentially endless and we look forward to feedback from you on what kinds of messages you'd like to see sent to you or messages you'd like to send to us. What would you like to tell us about yourself?
+
+Now, let's talk about some case studies. The real world is what matters. We have something called CUPSD on the system. It's the Common Unix Printing System. They have a daemon. Today, what they did to support restarting is they used some Mach APIs to check in with Mockinet and tell it, "Hey, restart me if I die." That was extra code they needed to add just to get restarted in case they exit. With LaunchD, there's no extra code. We know you want to keep running. You're a daemon. You exist to serve other people.
+
+This simplifies their port to Mac OS X and makes life a lot easier for them. Something I brought up earlier is the multicast DNS responder. It uses both Mach ports and Unix file descriptors. We'd like to be able to launch that on demand, but today we have INED on the right, just supporting file descriptors, and we have Mockinit on the left holding just Mach ports. They don't know anything about each other.
+
+One could launch MDNS responder based on communication on one type of technology but not the other, leaving a problem for the MDNS responder if they want to launch on demand. Launch de-handles both. Nothing else does for launch on demand, and we're very excited about this support for multiple technologies.
+
+Also, back to the user side, let's bring another case study example. The SSH agent is a classic example of a command line process that people want to run to support their SSH activities. A lot of people usually end up creating these complicated statements at the beginning of their shell startup just to make sure that they have only one SSH agent running on the system.
+
+So they'll create lock files, then they'll try and see if they already have an agent running, and if not, run it, and then unlock the whole state that they've built up. Well, with LaunchD, you can just drop an XMLP list into a directory in your home directory, and at login time, we will register the SSH agent to launch on demand the next time you talk to it. And only one of them for your login session, which means all that complicated locking and checking to see if one's running, nope. Don't need to do that. We're very excited about this for user agents, and we... hope to see more cases where people use it.
+
+Also, the changes to SSH agent were very simple. This is something we're excited about because it means less work for you guys. We know pretty much how daemons operate their state engines. We know what information they need in order to get running. We can get that to you right at the beginning of your process. And again, you're pre-daemonized, so you just take your check-in information and you can get running.
+
+So, okay, I've told you about what LaunchD does, but what doesn't it do? Well, there's a lot of other kinds of events on the system. We have configD's database of key value pairs or configD's events. We have the NetInfo database of key value pairs which can come and go as the system runs.
+
+We also have the Rendezvous service advertisements. Some people want to launch on demand just by virtue of another entity showing up on the network. We also, a very popular one is the I/O Kit namespace which is built on top of Mach ports. And I/O Kit events, again, built on top of infrastructure already which is built on top of Mach ports.
+
+Now, I'm going to talk a little bit about : We wait, you know, not I/O Kit events? Well, we have things like the Bluetooth daemon. It wants to launch when Bluetooth devices show up. We, Apple, have our own needs. We know you have your needs. So this list that I just gave of things we don't support is subject to change. We're probably most likely add those subsystems in the future as we figure out how to deal with technologies that are built on top of each other.
+
+Now, porting. Let's start jumping into the meat of things. We have a simple, very simple IPC API and a very simple RTTI-based object system to support the message passing that we want to use to communicate between LaunchD and your daemon. Now, what does the IPC API look like? Well, it's kind of, sort of Core Foundation. Well, why not Core Foundation? Portability. Just about what we talked about earlier. LaunchD is open source. This is a very important goal for us to drive adoption and minimizing our dependencies helps make adoption easier.
+
+Also, a stumbling block is the Mach port and file descriptor passing is not supported by Core Foundation at the moment. It's very few people requested. It was just easier for us to implement a simple object graph ourself and support serializing it and sending it across to the other side. Finally, really all we need is RTTI, dictionaries and arrays. We're just sending messages back and forth.
+
+So to give you an example of how simple it is, this is what the two basic C APIs look like. We have LaunchMessage, which supports sending an object graph and getting an object graph in response. And if you're going to be doing any kind of asynchronous programming, we have a simple API to get the file descriptor that we're using on the back end to communicate with LaunchD and add it to your own run loop. If you're using KQ, Select, it's up to you. We can give you the file descriptor, you can add it, and you can call LaunchMessage when messages are available to read.
+
+Now, to jump more into the meat of it, a launch data T represents an object graph. It can be anything. You know, we have the RTTI. That's what makes it fun. And you can introspect it as you get a response back or you can send just about any message you want.
+
+Also, launch message, while it appears synchronous for the common case, it actually, well, launch message is synchronous for the common case. It returns null and sets error, no, and failure, plain and simple for the simple case. Now, if you do send a message requesting that asynchronous messages be sent in response, you can then call launch message with no message to send by using null as a parameter.
+
+And then you'll get any asynchronous message back. And you can keep calling and keep calling and keep calling until you get null back. And if error no is equal to zero, then there's no more asynchronous messages. And if it's obviously equal to something not equal to zero, then there's a problem.
+
+Now let's talk about those messages we're sending back and forth. You know, RTTI and container classes are fun. We have dictionaries, we have arrays, and we have some basic objects to match the C basic types. We have file descriptors, Mach ports, integers, real numbers, booleans, strings, and finally opaque data should we need it.
+
+Now, again, it's just enough for IPC and no more. We have get and set operations for the basic types, and in the case of dictionaries, we allow insertion, lookup, removal, and iterate. Again, all we need for IPC. For arrays, get and set index and get count. It's enough to introspect and set up an object graph. That's all we need.
+
+Now to understand the object graphs we're going to be sending back and forth, let's talk about the XMLP list that you'll use to configure a daemon for us to run at a later point in the system. You're going to have something like a label to uniquely identify your job, and that really is the unique key.
+
+This is in case someone wants to control your daemon, the label is what they're going to use to send it, you know, turn it on, turn it off, change some attribute of it. That's the important key. You can have things like the username that you want the daemon to run as, the group name, program name, and pretty much any kind of environmental setup you need to get the daemon running. You know, I want the daemon to run in that working directory, I want to have this argument and this environment variable. Any kind of setup detail we plan on supporting.
+
+Now, if you notice at the bottom of the list back there we had something called Event Sources. They're all about the details of how to set up file descriptors in the Mach ports. You know, who to connect to, you know, where to listen. Particularly file descriptors can be very complicated since there are different technologies that can back them. You've got IPv4, IPv6, Unix domain sockets. It could be a new type of technology that we don't know about that requires different APIs to set up the file descriptor. And we need all these details put in one place. So this is what the Event Sources are.
+
+Now, before we send an XMLP list over to LaunchD, we actually do some data distillation. We're going to turn those usernames into UIDs, the group names into GIDs, and we're going to take all those event sources and actually translate them down to the file descriptors and Mach ports that back them.
+
+And then the resulting object graph is much, much simpler. It requires no lookups by LaunchD to find out the actual details of anything. And the great thing is, since we've translated things to file descriptors, any kind of security check the kernel would do, we don't need to replicate.
+
+Now, let's look at some example messages. Life's pretty simple. You might want to submit a job and then you're going to have that translated XMLP list. You might want to remove a job. Well, then you just need the label. You might want to get the jobs. You might want to introspect launch D. You might want to find out what daemons are running on the system. That'll get you a big dictionary coming back. You might want to check in. You're a daemon.
+
+You can send a check in message and the file descriptors and Mach ports that you have allocated to you will come back and you can proceed with them as you wish. And finally, something that supports for things like the SSH agent is we need a notion of getting, unsetting, and querying an environment that isn't directly tied to your shell.
+
+Now, something that we're still working on is becoming launch-d savvy. If you remember, I talked to you about sending messages to control it. Tell me about the users you have connected to you. Please, I want to disconnect this user over here. We're still figuring this stuff out. We look forward to your feedback and definitely some updated documentation for you in the Tiger timeframe so that way you can understand what introspection and control operations we supply.
+
+Now let's hash things out again. So predaymonization, we believe this is very, very important for you. It means, again, you're going to hit main and your daemon is ready to run. You don't need to worry about disassociating yourself from any kind of subsystem on the system, be it the graphics or maybe Apple script. I actually don't program at that level, but at least in the Unix world, no forking, no call set SID, no closing stray file descriptors left behind. But who knows what shell? Life's good. Now you just need to check in and go.
+
+Also, again, we automatically support restarting. So should you decide that your configuration file changed and you want to rerun, just exit. We'll launch you again the next time someone connects to you. Also, something we hope you will take advantage of is the multiple event sources. You might have a file descriptor or 20 file descriptors. We can listen on all of them on your behalf and run you whenever activity happens on any one of them. If you listen on a few Mach ports, sure, tell us about them. We'll launch you when activity happens on them too.
+
+We also, those user agents are very excited about, should you have a foreground slash background application combination? Well, maybe you don't want, maybe the user doesn't want the foreground application to necessarily run every time at login, but they still want the background activity to run. The example I like to continuously point back to is the iChat agent.
+
+You have the menu link. It supports showing you which users are connected, but maybe you don't want iChat running at login, but you do want the menu, you do want to log in. Well, with LaunchD, we can run the iChat agent at login without running the foreground application.
+
+So to give you an example demo, I would like to show the SSH agent running under LaunchD, and I would like to show our debug daemon running under LaunchD and acting as a pseudo web server to tell you about LaunchD itself by doing the introspection that I talked about. So to show you, let's show you the web server. I have -- this is a representation of the object graph coming back from LaunchD.
+
+shows you that here's our key. We have the com.apple.launch debugd. We run it on demand. There's a Boolean set to true. It's got a PID of 328. If I reload this web page, you'll see, you know, we keep launching it on demand because this number is changing. We have some, you know, various setup details in which UID to run it as. If you notice, it's running as me, the user. Finally, there's two file descriptors we're listening on. They happen to represent the IPv4 and IPv6 socket that were set up by the user.
+
+And also, look at this. We have an SSH agent. It's also running on demand. It doesn't have a PID set yet because no one's tried to talk to him yet. And this is the Unix domain socket he's listening on. So if we go back to the terminal, we can run SSHAd. And now if we go back here and run it again, we see that the SSH agent launched on demand.
+
+How did this all happen? Well, it goes back to the simple plist we talked about dropping on the system. If you see in tilde library launch agents, we have a couple plists. There's that launch debug D that I talked about and the SSH agent. And they're pretty simple files. We got com open SSH.
+
+All we have is again here's that label, here's the program arguments and the listeners which the event sources which get distilled down to an actual file descriptor. So in this case we have a little secure socket with an environmental key which if you're using SSH agent you're familiar with and the socket type we need.
+
+Now, that can show you how simple it can be to -- oh, I might as well show the -- I So here's the debug daemon, for example. It just listens on a port 12345, happens to be a passive socket, and it's a SOC stream. And what ends up happening, if you're familiar with the get adder info API, is we take these details, we throw it a get adder info, and take whatever adder info structures come back and allocate a file descriptor for each one of them, and then send it over to launchd, and it just listens on them.
+
+So in this case, IPv4 and IPv6 sockets came back, and that can change in the future, and your daemon wouldn't even need to know about it. A new type of communication technology might come out, and you don't care. As long as it's a file descriptor and it comes back to you, you can get events off of it and handle them. So we're very excited about this. And I believe it's time for Q&A now. Yeah. Oh, also for more information you can talk to Jason and yeah. And this source will be on the developer website, the Darwin developer website.

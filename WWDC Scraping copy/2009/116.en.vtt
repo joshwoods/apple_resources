@@ -1,0 +1,2937 @@
+WEBVTT
+
+00:00:12.779 --> 00:00:13.750
+>> My name is Tony Parker.
+
+00:00:13.750 --> 00:00:18.149
+I'm an engineer on the Cocoa Frameworks
+team, but that's enough about me.
+
+00:00:18.149 --> 00:00:20.149
+Let's talk about you guys.
+
+00:00:20.149 --> 00:00:21.169
+Who's out there.
+
+00:00:21.170 --> 00:00:24.650
+So, I know that the sign on the outside says intermediate
+
+00:00:24.649 --> 00:00:28.320
+but we have a wide variety of developers
+in the audience today.
+
+00:00:28.320 --> 00:00:30.140
+Some of you might be just starting out.
+
+00:00:30.140 --> 00:00:34.859
+And for some of you guys, we have a beginner level
+tips and tricks and you can identify those by looking
+
+00:00:34.859 --> 00:00:38.740
+for the 1 cup of cocoa icon on the following sites.
+
+00:00:39.750 --> 00:00:40.729
+[Laughter] Oh, it's get better.
+
+00:00:40.729 --> 00:00:44.179
+For intermediate developers, we have 2 cups of cocoa.
+
+00:00:44.179 --> 00:00:47.829
+And for you advanced developers, we
+have some expert tips and tricks,
+
+00:00:47.829 --> 00:00:49.829
+and those are marked with 3 cups of cocoa, of course.
+
+00:00:49.829 --> 00:00:54.759
+OK, so let's see what we're going to talk about today.
+
+00:00:54.759 --> 00:00:56.849
+First we're going to talk about Zombies.
+
+00:00:56.850 --> 00:01:02.789
+Zombies help you find memory management errors in
+your application early in the development life cycle.
+
+00:01:02.789 --> 00:01:09.629
+After that, we'll talk about some debugging tips and
+tricks and this is going to include both gdb and dtrace.
+
+00:01:09.629 --> 00:01:14.819
+Then we'll talk about overlay views, which let you
+easily add overlapping view drawing to your application.
+
+00:01:14.819 --> 00:01:18.959
+And then finally we'll talk about
+key-value observing and concurrency,
+
+00:01:18.959 --> 00:01:21.390
+and some of the challenges that you'll encounter there.
+
+00:01:21.390 --> 00:01:26.989
+OK, so let's go ahead and get started
+with Zombies, but first the pop quiz.
+
+00:01:26.989 --> 00:01:31.089
+So, you've been at the conference for a week
+now and I expect you've learned something.
+
+00:01:31.090 --> 00:01:34.140
+So, we are going to give you a
+quiz and it only has one question.
+
+00:01:34.140 --> 00:01:36.189
+What do the following have in common?
+
+00:01:36.189 --> 00:01:42.709
+This crash in objc_msgSend, you can
+identify that by looking at the back trace.
+
+00:01:42.709 --> 00:01:45.989
+Here in the top frame 0, you see
+that we have objc_msgSend of course.
+
+00:01:45.989 --> 00:01:52.189
+And right below that in our some of our
+codes, ZombieAppDelegate in this case.
+
+00:01:52.189 --> 00:01:58.399
+Next, a crash in the Notification Send, so you can identify
+this by looking for the words notification in the back trace
+
+00:01:58.400 --> 00:02:00.400
+and there's objc_msgSend again at the top.
+
+00:02:00.400 --> 00:02:05.050
+How about this crash in an autorelease pool pop?
+
+00:02:05.049 --> 00:02:10.550
+CFAutoreleasePoolPop, NSAutoreleasePool
+drain or perhaps NSAutoreleasePool release,
+
+00:02:10.550 --> 00:02:14.450
+and our old friend, the objc_msgSend again.
+
+00:02:14.449 --> 00:02:16.319
+And this crash in the delegate callback,
+
+00:02:16.319 --> 00:02:22.840
+objc_msgSend_vtable5 which is objc_msgSend,
+and NSTextfield textShouldBeginEditing.
+
+00:02:22.840 --> 00:02:27.900
+And finally, all of these disappointed
+users [laughter] including this guy
+
+00:02:27.900 --> 00:02:31.000
+who was actually trying to make your application crash.
+
+00:02:32.030 --> 00:02:34.229
+Well, the answer is pretty obvious, right?
+
+00:02:34.229 --> 00:02:39.569
+Right there on the top of everyone in those back
+traces, objc_msgSend, that thing sure is buggy, right?
+
+00:02:39.569 --> 00:02:41.629
+[Laughter]
+
+00:02:41.629 --> 00:02:43.000
+>>Yeah
+
+00:02:43.000 --> 00:02:45.680
+[Applause]
+
+00:02:45.680 --> 00:02:46.490
+>>Well, no.
+
+00:02:46.490 --> 00:02:54.379
+The answer is actually that these are usually the result
+of accessing over-released memory in your application,
+
+00:02:54.379 --> 00:03:00.509
+but I can argue with you, some of you in the back, saying
+"But tell me only the first one of those was in my code."
+
+00:03:00.509 --> 00:03:06.219
+And to explain why, unfortunately some of these crashes
+might be the result of something in your application.
+
+00:03:06.219 --> 00:03:10.469
+At first, can you explain what the difference
+between a library and a framework is?
+
+00:03:10.469 --> 00:03:13.710
+So, let's take this pretty standard greeting function.
+
+00:03:13.710 --> 00:03:16.050
+It calls printf with the usual thing.
+
+00:03:16.050 --> 00:03:20.450
+Now when you call this greeting function
+from MyApp, then you go to printf,
+
+00:03:20.449 --> 00:03:25.750
+control the transfer from MyApp
+to libc where printf resides.
+
+00:03:25.750 --> 00:03:28.840
+And then when printf is done printing that usual thing,
+
+00:03:28.840 --> 00:03:32.719
+control of course returns back to
+MyApp and that greeting function.
+
+00:03:32.719 --> 00:03:37.159
+Now in contrast, let's look at this
+delegate method, textShouldBeginEditing,
+
+00:03:37.159 --> 00:03:40.520
+which returns whether or not the time is right.
+
+00:03:40.520 --> 00:03:43.650
+In this case, the AppKit perhaps is handling some event.
+
+00:03:43.650 --> 00:03:49.050
+And in the course of handling that event, maybe
+a key-down event, it is going to transfer control
+
+00:03:49.050 --> 00:03:52.830
+to MyApplication as textShouldBeginEditing.
+
+00:03:52.830 --> 00:03:56.530
+And when the answers comes back, we go
+back to handling that event in the AppKit.
+
+00:03:56.530 --> 00:04:02.390
+And this difference between libraries and frameworks is
+sometimes called the Hollywood principle or "Don't call us.
+
+00:04:02.389 --> 00:04:04.319
+We'll call you."
+
+00:04:04.319 --> 00:04:11.349
+Now, with all of these places in Cocoa Frameworks, we reuse
+the Hollywood principle, archiving, key-value observing,
+
+00:04:11.349 --> 00:04:16.569
+drag and drop, et cetera, how do you of any hope
+whatsoever of determining if an over-released crash
+
+00:04:16.569 --> 00:04:20.480
+like the ones we've seen is the result
+of something in your application?
+
+00:04:20.480 --> 00:04:22.640
+Well, luckily we have a tool to help you with that.
+
+00:04:22.639 --> 00:04:25.370
+It's another Hollywood favorite, Zombies.
+
+00:04:25.370 --> 00:04:27.620
+So, what's a Zombie?
+
+00:04:27.620 --> 00:04:33.920
+It's a special class which stops the execution of your
+program when a message is sent to a deallocated object.
+
+00:04:33.920 --> 00:04:39.259
+And you enable it by setting this environment
+variable, NSZombieEnabled, to a value of YES.
+
+00:04:39.259 --> 00:04:43.719
+Let's talk about how Zombies actually work.
+
+00:04:43.720 --> 00:04:49.620
+So, I'm going to create an object doing the usual
+thing, going back to Cocoa memory management 101 here,
+
+00:04:49.620 --> 00:04:54.530
+and the result of this alloc init is
+a new object with a retain count of 1.
+
+00:04:54.529 --> 00:04:59.489
+Now, when someone decides to take ownership of
+that object as well, they call retain of course,
+
+00:04:59.490 --> 00:05:02.550
+and the retain count is incremented to 2.
+
+00:05:02.550 --> 00:05:06.139
+And then they release it and the
+retain count is decremented back to 1.
+
+00:05:06.139 --> 00:05:08.939
+Now, when this object gets another release message,
+
+00:05:08.939 --> 00:05:12.589
+because the retain count is 1, this
+object is going to be deallocated.
+
+00:05:12.589 --> 00:05:16.000
+At that point, the retain count doesn't matter anymore.
+
+00:05:16.000 --> 00:05:20.480
+But if we have ZombiesEnabled, we're
+going to zombify that object, that is,
+
+00:05:20.480 --> 00:05:25.090
+swap out the class that it was for our Zombie class.
+
+00:05:25.089 --> 00:05:30.709
+At that point, if someone decided to send a
+message to this object, ah, doStuff, for example,
+
+00:05:30.709 --> 00:05:37.669
+your application will stop giving you a chance perhaps
+in gdb to investigate what went wrong and perhaps fix it.
+
+00:05:37.670 --> 00:05:41.660
+So, let's see a quick demo.
+
+00:05:41.660 --> 00:05:46.890
+OK, so here I've got an application called Zombie and
+it's designed to crash in all kinds of interesting ways,
+
+00:05:46.889 --> 00:05:50.019
+so please don't go looking for it at the attendee site.
+
+00:05:50.019 --> 00:05:52.899
+But there's two crashes in particular
+that I want to show you.
+
+00:05:52.899 --> 00:05:55.079
+The first is a crash in a delegate call.
+
+00:05:55.079 --> 00:05:59.060
+So when I click this button, I'm going to
+over-release the delegate, and there we go.
+
+00:05:59.060 --> 00:06:01.160
+But you can see we haven't actually crashed yet,
+
+00:06:01.160 --> 00:06:05.490
+that's because we don't actually
+crash until I type in that text field.
+
+00:06:05.490 --> 00:06:07.430
+And here we are in the debugger.
+
+00:06:07.430 --> 00:06:16.350
+I want to bring up the window here and you can see there's
+objc_msgSend_vtable5 and NSTextField textShouldBeginEditing.
+
+00:06:16.350 --> 00:06:17.629
+Let's restart this application.
+
+00:06:17.629 --> 00:06:22.730
+And the second crash is this crash in objc_msgSend.
+
+00:06:22.730 --> 00:06:27.930
+And when I click this button, I'm not only going to
+over-release an object, but access it right away.
+
+00:06:27.930 --> 00:06:29.150
+So it's going to crash, right?
+
+00:06:29.149 --> 00:06:35.509
+Well, no. And that's because the memory that
+that object was using has not been reused
+
+00:06:35.509 --> 00:06:37.379
+and that object is still living there.
+
+00:06:37.379 --> 00:06:43.000
+But there is still an error in this application, and Zombies
+can help you find that error before your customers do.
+
+00:06:43.000 --> 00:06:46.629
+[Pause]
+
+00:06:46.629 --> 00:06:49.170
+>>OK, so I'm going back to Xcode now and
+over here on the left side of the window,
+
+00:06:49.170 --> 00:06:51.370
+you can see under the executable section.
+
+00:06:51.370 --> 00:06:56.389
+I'm going to double click on Zombie and
+that brings up this helpful info window.
+
+00:06:56.389 --> 00:07:00.439
+The second section is what I'm interested
+in, variables to be set in the environment.
+
+00:07:00.439 --> 00:07:07.029
+That would be an environment variable, and that's
+NSZombieEnabled and set that to a value of YES.
+
+00:07:07.029 --> 00:07:10.869
+Zoom out again here.
+
+00:07:10.870 --> 00:07:13.910
+Now, I'm going to run our application again.
+
+00:07:13.910 --> 00:07:20.480
+And this time when I click on that second
+button, we stop right away in the debugger.
+
+00:07:20.480 --> 00:07:23.629
+And you can see we got a message
+there, it tells us what object,
+
+00:07:23.629 --> 00:07:26.629
+what message and the pointer to
+the instance that was deallocated.
+
+00:07:26.629 --> 00:07:29.319
+And this is really useful information for debugging.
+
+00:07:29.319 --> 00:07:32.689
+So, also new in Snow Leopard, there's
+another way to enable Zombies.
+
+00:07:32.689 --> 00:07:36.180
+I'm going to quit this here, and that's to use instruments.
+
+00:07:36.180 --> 00:07:42.079
+So, I'm going to go to run, choose run a
+performance tool, and then the Zombies instrument,
+
+00:07:42.079 --> 00:07:48.870
+and there's instruments, and here's our Zombie application.
+
+00:07:48.870 --> 00:07:50.990
+So, this time I'm going to press the first button.
+
+00:07:50.990 --> 00:07:56.350
+Here we go, and then type in that field
+and you can see, YES, Zombie quit.
+
+00:07:56.350 --> 00:08:00.610
+And right here, instruments has
+told us a Zombie was messaged
+
+00:08:00.610 --> 00:08:04.230
+and this message looks pretty much similar
+to what we saw in the Xcode debugger.
+
+00:08:04.230 --> 00:08:06.980
+But the interesting part is this little arrow right here.
+
+00:08:06.980 --> 00:08:14.420
+When I click that, you can see that we have a
+list of every retain, release and autorelease
+
+00:08:14.420 --> 00:08:17.430
+that they happen on that object that was just accessed.
+
+00:08:17.430 --> 00:08:21.209
+And this is a great way to match up
+retains and releases in your application.
+
+00:08:21.209 --> 00:08:23.889
+Also, if you click this View button
+and go to extended detail,
+
+00:08:23.889 --> 00:08:27.379
+you get a full back trace for each one of those events.
+
+00:08:27.379 --> 00:08:29.350
+So, this is a handy tool to know about.
+
+00:08:29.350 --> 00:08:32.159
+OK, let's go back to our slides.
+
+00:08:32.159 --> 00:08:34.120
+All right.
+
+00:08:34.120 --> 00:08:36.659
+So that was Zombie.
+
+00:08:36.659 --> 00:08:41.899
+To help you detect problems early in the development
+cycle of your application, enable them when you're testing
+
+00:08:41.899 --> 00:08:47.069
+and see if you have any errors lurking in your
+application like I had in my objc_msgSend button.
+
+00:08:47.070 --> 00:08:50.200
+Remember, you enable them with NSZombieEnabled set to YES,
+
+00:08:50.200 --> 00:08:55.500
+or use the new Zombies instrument
+from within Xcode or instruments.
+
+00:08:55.500 --> 00:08:59.500
+And finally a note, Zombies aren't
+used in garbage-collected applications.
+
+00:08:59.500 --> 00:09:03.610
+OK, let's move on but first a fun fact.
+
+00:09:03.610 --> 00:09:06.810
+And the fun fact is bugs happen, OK.
+
+00:09:06.809 --> 00:09:11.669
+Not a fun fact, but it is a fact, and
+sometimes bugs even happen in Apple frameworks.
+
+00:09:11.669 --> 00:09:16.769
+So, a question we get pretty often is, I think I
+found a bug in an Apple framework, what do I do?
+
+00:09:16.769 --> 00:09:22.220
+Do I post a message to CocoaDev, perhaps start
+a new topic on this Snow Leopard develop forums
+
+00:09:22.220 --> 00:09:25.050
+Well, those are both great places
+to get help about your issue
+
+00:09:25.049 --> 00:09:28.679
+But if you found a bug in an Apple
+framework, we really want to hear about it.
+
+00:09:28.679 --> 00:09:32.539
+So, file a bug report at bugreport.apple.com.
+
+00:09:32.539 --> 00:09:37.129
+And what I'd like to point out to you is that
+we will really like you to include a few things.
+
+00:09:37.129 --> 00:09:40.409
+A system configuration-- it could be the
+case that we're gathering information
+
+00:09:40.409 --> 00:09:43.669
+about what configuration does this
+particular bug reproduces on,
+
+00:09:43.669 --> 00:09:48.299
+or perhaps you've already fixed
+the bug and we can tell you that.
+
+00:09:48.299 --> 00:09:53.839
+Also regression information, something is simple as "It
+worked great on the last Snow Leopard developer scene,
+
+00:09:53.840 --> 00:09:56.590
+but it doesn't work at all on this
+Snow Leopard developer scene."
+
+00:09:56.590 --> 00:10:00.680
+That information can really help us
+narrow down the source of the problem.
+
+00:10:00.679 --> 00:10:05.709
+Steps to reproduce, sometimes to get the bug
+to happen it requires some level of nuance.
+
+00:10:05.710 --> 00:10:09.280
+When you include these steps, we
+know exactly how to make it happen.
+
+00:10:09.279 --> 00:10:13.679
+And finally, a test case, now a test case
+is like the ultimate steps to reproduce.
+
+00:10:13.679 --> 00:10:18.989
+>> When you include a test case, we know if we fixed
+your issue because we can run the test case and find out.
+
+00:10:18.990 --> 00:10:24.279
+But it's also useful because if you make a test case,
+sometimes you find that the problem actually isn't
+
+00:10:24.279 --> 00:10:28.490
+in an Apple framework but in your
+application and you can fix it right away.
+
+00:10:28.490 --> 00:10:32.690
+Also if there is a bug in our code, when you
+have a test case, you more easily know how
+
+00:10:32.690 --> 00:10:36.120
+to work around it while we work on fixing it.
+
+00:10:36.120 --> 00:10:41.610
+Of course, at the end of the day, when you take
+time out of your busy schedule to file a bug report
+
+00:10:41.610 --> 00:10:44.950
+and include these things, you're doing us
+a huge favor and we really appreciate it.
+
+00:10:44.950 --> 00:10:48.190
+We take every bug report we get
+very seriously, so thank you.
+
+00:10:48.190 --> 00:10:51.000
+OK, next some debugging tips and tricks.
+
+00:10:51.000 --> 00:10:53.629
+[Pause]
+
+00:10:53.629 --> 00:10:58.490
+>>So you probably already know some things about gdb
+or the Xcode debugger which is built on top of gdb.
+
+00:10:58.490 --> 00:11:04.279
+You know how to control the execution of your
+application using these handy buttons in the toolbar,
+
+00:11:04.279 --> 00:11:07.610
+for example restart, continue, step, et cetera.
+
+00:11:07.610 --> 00:11:12.110
+You probably also know about the print-object
+command or po even if you only use it
+
+00:11:12.110 --> 00:11:15.870
+through Xcode's variable display interface.
+
+00:11:15.870 --> 00:11:19.889
+Now print-object of course calls the
+debug description method on any object.
+
+00:11:19.889 --> 00:11:23.960
+And if debugDescription is implemented then
+we're going to go ahead and call description.
+
+00:11:23.960 --> 00:11:26.870
+And we recommend you implement description on your objects.
+
+00:11:26.870 --> 00:11:32.710
+This is because when you're debugging with gdb, having
+a snapshot of the state of your object is really useful.
+
+00:11:32.710 --> 00:11:36.960
+And also if your object is in a collection like array
+or dictionary, when you print out the description
+
+00:11:36.960 --> 00:11:40.920
+of that collection, you also get
+the descriptions of your objects.
+
+00:11:40.919 --> 00:11:44.799
+But there's so much more you can do with gdb.
+
+00:11:44.799 --> 00:11:50.000
+For example calling other methods in functions, not
+just description, you can call pretty much anything.
+
+00:11:50.000 --> 00:11:53.539
+You can change the state of your
+application by changing memory.
+
+00:11:53.539 --> 00:11:55.309
+You can execute alternate branches.
+
+00:11:55.309 --> 00:11:58.379
+One reason to use this is maybe
+you've got some error handling code
+
+00:11:58.379 --> 00:12:01.549
+in your application that's hard to make execute.
+
+00:12:01.549 --> 00:12:05.419
+Using gdb, you can make sure that that
+works correctly when you need it most.
+
+00:12:05.419 --> 00:12:12.139
+You can run debugger commands automatically or conditionally
+using Breakpoint commands and Breakpoint conditions.
+
+00:12:12.139 --> 00:12:16.970
+So I think the best way to learn about some
+of these gdb tips is to see someone use them.
+
+00:12:16.970 --> 00:12:20.740
+So what I've done is I channeled our little
+double-horns guy from the Zombie section
+
+00:12:20.740 --> 00:12:24.350
+and inserted 2 bugs into the sketch sample application.
+
+00:12:24.350 --> 00:12:29.790
+Then I shifted far and wide and got back some bug
+reports, so I'm going to show you these 2 bug reports
+
+00:12:29.789 --> 00:12:34.319
+and then show you how I've discovered what
+the problems are and fix them using gdb.
+
+00:12:34.320 --> 00:12:35.780
+So here is the first one.
+
+00:12:35.779 --> 00:12:38.980
+"Sometimes when I move shapes around
+in Sketch, they don't draw right.
+
+00:12:38.980 --> 00:12:40.759
+Help! I have a school assignment due tomorrow!"
+
+00:12:40.759 --> 00:12:44.399
+That's from a registered ADC developer, SketchKid2002.
+
+00:12:44.399 --> 00:12:47.519
+Yeah, they get younger every year, right?
+
+00:12:47.519 --> 00:12:51.299
+[Laughter] But we take bug reports from
+even our youngest developers seriously,
+
+00:12:51.299 --> 00:12:53.959
+so let's use gdb and find out what's going on.
+
+00:12:53.960 --> 00:13:00.879
+I have a document here opened in Sketch which
+exhibits the problem reported in that bug.
+
+00:13:00.879 --> 00:13:03.820
+And if I take the circle and I
+drag it on top of the rectangle,
+
+00:13:03.820 --> 00:13:08.629
+you can see that something is not
+quite right there and vice versa.
+
+00:13:08.629 --> 00:13:11.549
+So how are we going to investigate this problem?
+
+00:13:11.549 --> 00:13:13.429
+Well, where does drawing happen?
+
+00:13:13.429 --> 00:13:16.529
+It happens in drawRect, so that seems
+like a great place to set a Breakpoint.
+
+00:13:16.529 --> 00:13:17.740
+So let's go ahead and do that.
+
+00:13:17.740 --> 00:13:23.970
+Let me switch to Xcode and actually sketch, there we go.
+
+00:13:23.970 --> 00:13:28.060
+And let's go to the SKTGraphicView class where
+the drawing happens, and here's drawRect.
+
+00:13:28.059 --> 00:13:34.539
+And let's go down a little bit
+further in drawRect here to this line.
+
+00:13:34.539 --> 00:13:38.339
+And that's where each graphic in
+the document is actually drawn.
+
+00:13:38.340 --> 00:13:44.379
+So, I think that when the circle overlaps
+the rectangle, they should both be drawn.
+
+00:13:44.379 --> 00:13:47.659
+But if they're not overlapping, then
+only one of them should be drawn.
+
+00:13:47.659 --> 00:13:51.740
+So I'm going to find that out by putting the
+Breakpoint here and let's go back to Sketch.
+
+00:13:51.740 --> 00:13:57.320
+And if I drag that and-- well, I've stopped but the circle
+isn't on top of the rectangle yet, so I know what I'll do.
+
+00:13:57.320 --> 00:14:02.980
+I'll just continue and we're stopped again, and clearly this
+isn't going to work, drawRect is called far too many times
+
+00:14:02.980 --> 00:14:05.500
+for just putting a Breakpoint there to be useful.
+
+00:14:05.500 --> 00:14:08.330
+So what I'm going to do is actually
+use a Breakpoint command.
+
+00:14:08.330 --> 00:14:15.070
+And what I'm interested in is what's being drawn
+and maybe what coordinates it's being drawn at.
+
+00:14:15.070 --> 00:14:17.690
+So I'm going to double click on that Breakpoint.
+
+00:14:17.690 --> 00:14:23.170
+And if we look here at the right side of this
+Breakpoint inspector, when you see that little +
+
+00:14:23.169 --> 00:14:26.629
+that's where we add Breakpoint
+commands within the Xcode interface.
+
+00:14:26.629 --> 00:14:29.610
+And what I'm going to put in there is a printf.
+
+00:14:29.610 --> 00:14:32.570
+Yes, gdb has a printf just like the one you're used to.
+
+00:14:32.570 --> 00:14:38.310
+And what I'm going to print is a string and I get
+that string from the description of the class.
+
+00:14:38.309 --> 00:14:44.559
+We already know we can call description, but also I'm
+going to print the origin of the shape that's been drawn,
+
+00:14:44.559 --> 00:14:49.599
+and I get that by calling this graphic bounds
+method and grabbing some values out of it.
+
+00:14:49.600 --> 00:14:54.100
+Now, I don't want to stop every time in drawRect
+of course, so I'm going to also check this button
+
+00:14:54.100 --> 00:14:56.590
+up here in the corner which means "continue."
+
+00:14:56.590 --> 00:15:02.139
+There we go, and we're going to go
+ahead and do that now, continue.
+
+00:15:02.139 --> 00:15:04.980
+And I'm also going to close that and I'm
+also going to show the console which is
+
+00:15:04.980 --> 00:15:08.810
+where those messages will be drawn back to sketch.
+
+00:15:08.809 --> 00:15:12.149
+Now, if I drag this circle around,
+yeah OK, the circle is being drawn.
+
+00:15:12.149 --> 00:15:14.129
+And if I drag the rectangle, there is the rectangle.
+
+00:15:14.129 --> 00:15:20.840
+And if I drag them on top of each other just the circle, so
+clearly the rectangle isn't being drawn when it should be.
+
+00:15:20.840 --> 00:15:25.470
+OK, let's go back to gdb now, I'm sorry, Xcode.
+
+00:15:25.470 --> 00:15:29.500
+So if I look at this code, you can see what I'm
+doing here is getting all the list of graphics
+
+00:15:29.500 --> 00:15:33.100
+out of this sketch document and then I'm looping over them.
+
+00:15:33.100 --> 00:15:38.050
+And then this statement right here controls
+if that graphic is going to be drawn or not.
+
+00:15:38.049 --> 00:15:40.699
+And it says if NSContainsRect.
+
+00:15:40.700 --> 00:15:45.940
+But if I look a few lines up, you see, draw every
+graphic that intersects the rectangle to be drawn,
+
+00:15:45.940 --> 00:15:49.670
+I think this should probably say NSIntersectsRect.
+
+00:15:49.669 --> 00:15:56.669
+Now, I can of course just change the code, rebuild it,
+rerun it again and try to get my problem to reproduce.
+
+00:15:56.669 --> 00:16:00.559
+But often you need a technique you can use
+when you don't have access to the source code
+
+00:16:00.559 --> 00:16:02.779
+or perhaps you just want to try something out.
+
+00:16:02.779 --> 00:16:07.970
+So what I'm going to do is set another Breakpoint
+here right before that if statement executes.
+
+00:16:07.970 --> 00:16:11.690
+And I'm going to use another Breakpoint
+technique, a Breakpoint condition.
+
+00:16:11.690 --> 00:16:18.460
+So this means that when this condition is true, gdb
+will execute this Breakpoint and the command I'm going
+
+00:16:18.460 --> 00:16:22.889
+to put there is the NSIntersectsRect
+that I think should be happening here.
+
+00:16:22.889 --> 00:16:28.669
+And the command will be to jump into the if statement.
+
+00:16:28.669 --> 00:16:33.919
+So I'm going to control the execution of
+my program and execute a different branch.
+
+00:16:33.919 --> 00:16:37.559
+And I don't want to stop every time
+again, so I click that Continue button.
+
+00:16:37.559 --> 00:16:45.729
+Now back to sketch, and if I-- let's cause that to-- OK, now
+if I drag this on top, you see it's working correctly now.
+
+00:16:45.730 --> 00:16:48.120
+And remember, I didn't even stop the application.
+
+00:16:48.120 --> 00:16:50.200
+I just did this entirely within gdb.
+
+00:16:50.200 --> 00:16:54.750
+So when you have a hard to reproduce problem
+that's caught in gdb, you can use this technique
+
+00:16:54.750 --> 00:16:59.240
+to investigate the cause without having to restart.
+
+00:16:59.240 --> 00:17:05.329
+Let's actually make that change, NS, NSIntersectsRect,
+
+00:17:05.329 --> 00:17:12.509
+and I don't need these Breakpoints any
+longer so let's get rid of them, rerun it.
+
+00:17:12.509 --> 00:17:14.000
+Yes.
+
+00:17:14.000 --> 00:17:18.529
+[ Pause ]
+
+00:17:18.529 --> 00:17:21.700
+>>Open our rectangles document and there we go.
+
+00:17:21.700 --> 00:17:24.000
+Great. Thank you.
+
+00:17:24.000 --> 00:17:28.049
+[ Applause ]
+
+00:17:28.049 --> 00:17:31.339
+>>OK, so I said 2 bugs, what's the second one?
+
+00:17:31.339 --> 00:17:40.569
+Here we go, I'm not going to try and read that but I
+think it says something like "when I make lolcat pictures
+
+00:17:40.569 --> 00:17:43.629
+with Sketch, the pictures are sometimes drawn upside down.
+
+00:17:43.630 --> 00:17:47.330
+Sketch has this feature that lets you draw images.
+
+00:17:47.329 --> 00:17:53.549
+And it turns out that people drawing lolcat
+images is-- Sketch is largest user demographic.
+
+00:17:53.549 --> 00:18:00.000
+Don't want to annoy them, so let's use some more gdb
+tips and tricks and find out how to fix this one.
+
+00:18:00.000 --> 00:18:03.309
+[ Pause ]
+
+00:18:03.309 --> 00:18:05.970
+>>OK, we don't need that one anymore.
+
+00:18:05.970 --> 00:18:09.630
+So I have a file here which seems to exhibit the problem.
+
+00:18:09.630 --> 00:18:13.450
+I didn't have any cats handy but
+I do have a dog, there he is.
+
+00:18:13.450 --> 00:18:17.920
+And right away, we can tell it looks fine
+to me because the pig is right side up.
+
+00:18:18.970 --> 00:18:20.970
+[Laughter] Yeah.
+
+00:18:20.970 --> 00:18:22.470
+OK, but the dog is upside down.
+
+00:18:22.470 --> 00:18:27.329
+It is probably what they were complaining about,
+so let's figure out how to fix this thing as well.
+
+00:18:27.329 --> 00:18:29.849
+So we need a plan of attack.
+
+00:18:29.849 --> 00:18:35.859
+Now sketches are document-based application
+and perhaps we can use that to our advantage
+
+00:18:35.859 --> 00:18:39.599
+and get to the actual image data in this document
+
+00:18:39.599 --> 00:18:43.689
+and see if the image data itself is upside
+down, like it was saved incorrectly.
+
+00:18:43.690 --> 00:18:46.059
+So to do that, back to Xcode.
+
+00:18:46.059 --> 00:18:48.509
+I'm going to bring up the Xcode console again.
+
+00:18:48.509 --> 00:18:51.269
+Sometimes for some of the more advanced
+gdb techniques you'll need to drop
+
+00:18:51.269 --> 00:18:53.460
+down into the console like I'm doing here.
+
+00:18:53.460 --> 00:19:00.470
+I'm going to do control C to stop sketch and we're going
+to go ahead and print the shared document controller.
+
+00:19:00.470 --> 00:19:04.059
+So I'm just going to call another
+Objective-C method here and get the value.
+
+00:19:04.059 --> 00:19:11.339
+And we've got a pointer here and also this $1, which means
+gdb has assigned that value to a place in our history.
+
+00:19:11.339 --> 00:19:19.250
+And we can use that $1 in further commands to avoid
+retyping that pointer, which is handy so I'll do it now,
+
+00:19:19.250 --> 00:19:23.079
+and get the list of documents in the Sketch application.
+
+00:19:23.079 --> 00:19:27.399
+As expected, we have one window open
+and one document and there it is.
+
+00:19:27.400 --> 00:19:30.009
+Let's go ahead and get the value out of that array.
+
+00:19:30.009 --> 00:19:40.400
+Here I'm using set to assign my own name for a gdb variable,
+$doc, and I'm just going to grab the first document, OK.
+
+00:19:40.400 --> 00:19:45.430
+Next, every sketch document are-- every
+sketch document has, or excuse me,
+
+00:19:45.430 --> 00:19:49.200
+the sketch document class has a method
+called Images, and that returns a list
+
+00:19:49.200 --> 00:19:53.120
+of the SKTImage classes that are in that document.
+
+00:19:53.119 --> 00:19:57.379
+So I'm going to go ahead and ask the list of images and
+grab the first one since there's only one image there,
+
+00:19:57.380 --> 00:20:01.730
+and you can see we have our result, $2 SKTImage.
+
+00:20:01.730 --> 00:20:09.529
+So SKTImage has an instance variable called contents and
+that variable holds an NSImage which has our dog in it.
+
+00:20:09.529 --> 00:20:16.730
+So let's go ahead and grab that by just
+dereferencing that pointer, and there is our NSImage.
+
+00:20:16.730 --> 00:20:21.589
+>> All right, so now that we have been here for a
+while together, I'll let you in on a little secret.
+
+00:20:21.589 --> 00:20:25.720
+Gdb is great for a lot of things, but
+displaying image data is just not one of them.
+
+00:20:25.720 --> 00:20:31.079
+So, we're going to need some alternate way
+to look at the contents of this NSImage.
+
+00:20:31.079 --> 00:20:33.909
+So what I'm going to do is use a few more method calls.
+
+00:20:33.910 --> 00:20:37.460
+NSImage has a method called TIFFRepresentation
+
+00:20:37.460 --> 00:20:41.590
+And that returns the contents of that
+image in TIFF form and an NSData.
+
+00:20:41.589 --> 00:20:48.949
+And an NSData has a method called writeToFile:atomically
+that let's us write any NSData out to disc.
+
+00:20:48.950 --> 00:20:52.440
+So I'm going to go ahead and do
+that by just calling those methods.
+
+00:20:52.440 --> 00:20:54.250
+I'm putting the file in /temp.
+
+00:20:54.250 --> 00:20:57.519
+Result was 1, that means it worked.
+
+00:20:57.519 --> 00:20:58.569
+Now how do we get at it?
+
+00:20:58.569 --> 00:21:02.319
+Well, the gdb shell has another command called shell,
+
+00:21:02.319 --> 00:21:06.109
+and that let's you execute any shell
+command straight from within gdb.
+
+00:21:06.109 --> 00:21:11.019
+I'm going to open the preview application and
+just point it at the image data we just wrote out.
+
+00:21:11.019 --> 00:21:15.470
+There you go, OK, pig upside down, dog
+right side up, so image right side up.
+
+00:21:15.470 --> 00:21:19.910
+So that wasn't root cause of the
+issue, it's probably something else.
+
+00:21:19.910 --> 00:21:21.740
+Let's close preview here.
+
+00:21:21.740 --> 00:21:28.839
+So let's see, SKTImage has another instance
+variable called isFlippedVertically.
+
+00:21:28.839 --> 00:21:31.439
+And if that's true, it will draw the image upside down.
+
+00:21:31.440 --> 00:21:34.200
+I probably should have thought of that first.
+
+00:21:34.200 --> 00:21:37.000
+Well, let's see what the value is.
+
+00:21:37.000 --> 00:21:39.180
+There we go, print the value and it's 1.
+
+00:21:39.180 --> 00:21:41.660
+OK, so that's probably why it's upside down.
+
+00:21:41.660 --> 00:21:45.060
+Let's verify that by going ahead and
+changing the state of that variable
+
+00:21:45.059 --> 00:21:50.139
+by setting-- using setVar to set the value to 0.
+
+00:21:50.140 --> 00:21:52.400
+Now we'll continue back to Sketch.
+
+00:21:52.400 --> 00:21:55.730
+If I cause that to redraw, there we go, it's right side up.
+
+00:21:55.730 --> 00:22:02.240
+OK, so now we know why it's upside down but we don't
+know why it was set to be upside down in the first place.
+
+00:22:02.240 --> 00:22:07.470
+Luckily, gdb has another technique we can use to
+investigate that and that's called watchpoints.
+
+00:22:07.470 --> 00:22:11.860
+Go back to our SKT source here.
+
+00:22:11.859 --> 00:22:15.519
+We're going to bring up the SKTImage class.
+
+00:22:15.519 --> 00:22:24.400
+So every SKT document when it's read in, since it's
+an NSDocument class, it reads in some data from disc.
+
+00:22:24.400 --> 00:22:29.490
+And what it does with that data is gets a property
+list out of it and those property lists that it gets
+
+00:22:29.490 --> 00:22:35.960
+out of the data describe every SKTGraphic
+class in the document, including SKTImages.
+
+00:22:35.960 --> 00:22:40.019
+And then it calls SKTImage initWithProperties
+for example here.
+
+00:22:40.019 --> 00:22:47.019
+So this seems like a great place to watch the instance or
+the-- yeah, the instance variable of the SKTImage class.
+
+00:22:47.019 --> 00:22:54.230
+Now we want to watch every class, so we can
+do that by using another Breakpoint command.
+
+00:22:54.230 --> 00:22:55.190
+I'll set a Breakpoint here.
+
+00:22:55.190 --> 00:22:59.690
+This seems to be pretty early when an SKTImage is created.
+
+00:22:59.690 --> 00:23:01.990
+Set a command here and that command is going
+
+00:23:01.990 --> 00:23:08.579
+to be watchSelfIsFlippedVertically,
+so I'm watching these images ivar.
+
+00:23:08.579 --> 00:23:16.470
+And again, I don't really care to stop
+here so I'm going to click that button.
+
+00:23:16.470 --> 00:23:26.660
+Now let's go back to sketch, excuse me, sketch,
+and we'll close this and reopen it and there we go.
+
+00:23:26.660 --> 00:23:30.480
+So gdb has told us the new value is 1, the old value is 0.
+
+00:23:30.480 --> 00:23:34.079
+So we know that that variable was
+set, now we got to find out how.
+
+00:23:34.079 --> 00:23:40.319
+So it looks like-- OK, here we are, the instruction
+pointer will be put right after the set happening,
+
+00:23:40.319 --> 00:23:43.039
+and that is that line right there, isFlippedVertically.
+
+00:23:43.039 --> 00:23:48.539
+And which gets from this NSNumber, and if we look up a
+little bit, it says isFlippedVertically number is set
+
+00:23:48.539 --> 00:23:52.490
+to the isFlippedHorizontally key out of this property list.
+
+00:23:52.490 --> 00:23:58.480
+And actually if I look up a little further, the horizontally
+one has got the vertically key, so I've swapped them.
+
+00:23:58.480 --> 00:24:07.000
+This time, we're just going to go ahead and change the
+source code, that up there and that goes down here.
+
+00:24:07.000 --> 00:24:12.849
+[ Pause ]
+
+00:24:12.849 --> 00:24:16.000
+Let's run this again to give you that Breakpoint first.
+
+00:24:16.000 --> 00:24:22.140
+[ Pause ]
+
+00:24:22.140 --> 00:24:27.000
+>> And there you go, pig upside down, dog
+right side up, so document right side up.
+
+00:24:27.000 --> 00:24:31.650
+[ Applause ]
+
+00:24:31.650 --> 00:24:36.800
+>>OK. I know all those lolcat users
+are going to be very happy now.
+
+00:24:36.799 --> 00:24:43.000
+OK, so there's couple other gdb tips
+and tricks I'd like to tell you as well.
+
+00:24:43.000 --> 00:24:45.210
+You can actually enable Breakpoints from other Breakpoints.
+
+00:24:45.210 --> 00:24:49.430
+So in the case of the drawRect, for example,
+maybe you don't have a concrete condition
+
+00:24:49.430 --> 00:24:52.150
+at which to set up a condition of Breakpoint.
+
+00:24:52.150 --> 00:24:58.019
+You just know that you want to stop there after something
+else earlier happens, and you can do this pretty easily.
+
+00:24:58.019 --> 00:25:05.569
+In the gdb console again here, I set a Breakpoint up
+at my earlier event, EarlyFunc, and I get Breakpoint 1.
+
+00:25:05.569 --> 00:25:11.579
+Then I set the Breakpoint at the later function,
+maybe drawRect, maybe something else, Breakpoint #2.
+
+00:25:11.579 --> 00:25:14.730
+Then I disable the second Breakpoints since
+we don't want to stop there right away.
+
+00:25:14.730 --> 00:25:16.910
+And in the command list for the first Breakpoint--
+
+00:25:16.910 --> 00:25:20.460
+this is equivalent to what you are doing
+within the Xcode interface a minute ago--
+
+00:25:20.460 --> 00:25:23.819
+I enabled the second Breakpoint and then continue.
+
+00:25:23.819 --> 00:25:29.039
+And then in the command list for the second Breakpoint,
+it disables itself but does not continue because we want
+
+00:25:29.039 --> 00:25:33.210
+to stop there and investigate what happened.
+
+00:25:33.210 --> 00:25:36.259
+Here's one, you can play a sound at the Breakpoint.
+
+00:25:36.259 --> 00:25:38.589
+Just use that sound pop-up.
+
+00:25:38.589 --> 00:25:40.009
+And why must you want to do this?
+
+00:25:40.009 --> 00:25:45.440
+Well, you can see there I put a Breakpoint at
+textStorageDidProcessEditing, which is a delegate method.
+
+00:25:45.440 --> 00:25:49.049
+Maybe you want to hear every time
+a delegate method is called.
+
+00:25:49.049 --> 00:25:53.480
+So you use that sound thing and hit that check
+box for it to continue and get a cacophony
+
+00:25:53.480 --> 00:25:57.079
+of audio feedback when you run your application.
+
+00:25:58.480 --> 00:26:02.940
+I already mentioned you can call pretty
+much any method in the Cocoa frameworks,
+
+00:26:02.940 --> 00:26:05.509
+and that includes archiving and unarchiving.
+
+00:26:05.509 --> 00:26:12.819
+So I'm going to call the NSKeyedArchivers archive
+object to file method and put a whole object graph
+
+00:26:12.819 --> 00:26:16.019
+and NSCoding compliant objects out on disc.
+
+00:26:16.019 --> 00:26:20.230
+Then maybe I'll continue execution, stop,
+go get coffee, come back later, whatever.
+
+00:26:20.230 --> 00:26:24.309
+And I will restore that data back into
+my application by setting set var foo
+
+00:26:24.309 --> 00:26:30.940
+with the NSKeyedUnarchiver method
+unArchiveObjectWithFile and I point it at that data.
+
+00:26:30.940 --> 00:26:34.840
+OK, a few words of caution when
+using gdb like I've described today.
+
+00:26:34.839 --> 00:26:39.259
+First of all, gdb doesn't solve every thread in your
+application when you're executing these methods.
+
+00:26:39.259 --> 00:26:41.680
+The kernel controls the execution
+of your application, not gdb.
+
+00:26:41.680 --> 00:26:47.420
+If you have a method that reenters as
+a result of calling it from within gdb,
+
+00:26:47.420 --> 00:26:50.750
+you need to make sure that that
+method is safe for re-entrancy.
+
+00:26:50.750 --> 00:26:53.240
+Otherwise you might have unexpected side effects.
+
+00:26:53.240 --> 00:27:01.450
+In a similar vein, if you take a lock, then execute a
+method in gdb that attempts to take that same lock again,
+
+00:27:01.450 --> 00:27:05.330
+you might wind up in a deadlock
+situation, so watch out for that.
+
+00:27:05.329 --> 00:27:08.429
+The bottom line of course is you need to
+understand what your application is doing
+
+00:27:08.430 --> 00:27:14.570
+and what these methods you're calling are doing
+and understanding your application as a whole.
+
+00:27:14.569 --> 00:27:16.990
+OK, so quick summary of gdb.
+
+00:27:16.990 --> 00:27:20.180
+You just call other methods and
+functions, not just description.
+
+00:27:20.180 --> 00:27:21.950
+Change the state of your application.
+
+00:27:21.950 --> 00:27:28.569
+I changed that isFlippedVertically
+instance variable from 1 to 0.
+
+00:27:28.569 --> 00:27:36.389
+Execute alternate branches, maybe jumping into a branch that
+you, based on a Breakpoint condition like I did in Sketch,
+
+00:27:36.390 --> 00:27:38.800
+and run debugger commands automatically or conditionally.
+
+00:27:38.799 --> 00:27:43.940
+I did that all over the place with
+Breakpoint conditions and Breakpoint commands.
+
+00:27:43.940 --> 00:27:46.470
+OK, let's talk about dtrace.
+
+00:27:46.470 --> 00:27:50.400
+So dtrace is often built as a low level
+system debugging and profiling utility
+
+00:27:50.400 --> 00:27:53.070
+which is available of course starting in Leopard.
+
+00:27:53.069 --> 00:27:55.839
+But thanks to the Obj-C provider, dtrace is useful
+
+00:27:55.839 --> 00:28:00.179
+for investigating higher level applications
+as well like your Cocoa application.
+
+00:28:00.180 --> 00:28:06.120
+And you can use it via Instruments which is built
+on top of dtrace of course, or the dtrace utility.
+
+00:28:06.119 --> 00:28:09.699
+And I'm going to use the dtrace utility
+to investigate one problem in particular,
+
+00:28:09.700 --> 00:28:13.420
+and that is the archiving time of sketch documents.
+
+00:28:13.420 --> 00:28:16.759
+So let's create a sketch, I'm sorry, a dtrace script.
+
+00:28:16.759 --> 00:28:20.279
+And in that scripting I'm going to put some dtrace approach.
+
+00:28:20.279 --> 00:28:25.200
+Here I'm using the Obj-C provider so that goes up first,
+then I'm going to use $1 which is the first argument
+
+00:28:25.200 --> 00:28:30.299
+to this script, and that's going to
+be the pid of the sketch process.
+
+00:28:30.299 --> 00:28:38.119
+Next, I need to tell dtrace what in the Obj-C
+provider what class I'm interested in observing.
+
+00:28:38.119 --> 00:28:39.719
+In this case it's SKTDocument.
+
+00:28:39.720 --> 00:28:43.140
+And the method on that class is dataOfType?error?
+
+00:28:43.140 --> 00:28:45.180
+where the archiving happens.
+
+00:28:45.180 --> 00:28:50.600
+Now Objective-C method names often have colons in
+them, and as you can tell, dtrace also uses colons
+
+00:28:50.599 --> 00:28:53.230
+to separate the fields of this probe specification.
+
+00:28:53.230 --> 00:28:57.299
+So we need to substitute the colons and
+the method name with something else.
+
+00:28:57.299 --> 00:29:02.029
+And in this case, that something else is a
+question mark which is a one character wildcard.
+
+00:29:02.029 --> 00:29:05.349
+Incidentally if you use instruments,
+it takes care of this for you.
+
+00:29:05.349 --> 00:29:09.250
+OK, and I'm interested in the entry point of this method.
+
+00:29:09.250 --> 00:29:11.960
+There I'm going to record a timestamp.
+
+00:29:11.960 --> 00:29:16.509
+I'm using this dtrace facility, vtimestamp,
+gives me a high accuracy kernel timer.
+
+00:29:16.509 --> 00:29:20.859
+And I record it in some thread local storage,
+that's what the self is and it's called enterTime.
+
+00:29:20.859 --> 00:29:28.189
+One timestamp is great but in order to get time, elapsed
+time we need 2, so we look at the return of this method
+
+00:29:28.190 --> 00:29:34.950
+and there we're going to calculate the elapsed time
+by subtracting the start time from the current time,
+
+00:29:34.950 --> 00:29:38.259
+and sort of that some probe local storage, this->totalTime.
+
+00:29:38.259 --> 00:29:41.619
+And then I'm just going to print that out to the screen.
+
+00:29:41.619 --> 00:29:43.000
+So let's see that in action.
+
+00:29:43.000 --> 00:29:46.549
+[ Pause ]
+
+00:29:46.549 --> 00:29:48.000
+>>Let's bring up a terminal window here.
+
+00:29:48.000 --> 00:29:51.910
+[ Pause ]
+
+00:29:51.910 --> 00:29:53.850
+>>And here I'm going to run my dtrace script
+
+00:29:53.849 --> 00:29:56.490
+and I have a little shell script there
+to grab the current pid of the sketch.
+
+00:29:56.490 --> 00:29:59.000
+Let's go back to Sketch, excuse me, Sketch.
+
+00:29:59.000 --> 00:30:02.569
+[ Pause ]
+
+00:30:02.569 --> 00:30:05.919
+>>OK, so I have an untitled document open here.
+
+00:30:05.920 --> 00:30:11.370
+Let's save it, the desktop sounds fine
+and you see, we get a result there.
+
+00:30:11.369 --> 00:30:12.529
+But that's not very interesting.
+
+00:30:12.529 --> 00:30:16.680
+>> What if we have a rectangle in there, another result.
+
+00:30:16.680 --> 00:30:21.710
+OK. How about if I have 2 rectangles
+and there's another result.
+
+00:30:21.710 --> 00:30:24.490
+Well, you know, 1 or 2 answers is fine.
+
+00:30:24.490 --> 00:30:26.769
+But, I'm interested in a trend.
+
+00:30:26.769 --> 00:30:32.450
+So, how does the archiving time sketch increase
+as I add graphic elements to this document?
+
+00:30:32.450 --> 00:30:36.269
+Is it linear or perhaps increase exponentially?
+
+00:30:36.269 --> 00:30:39.529
+And these are important questions you
+might have when you're investigating.
+
+00:30:39.529 --> 00:30:45.240
+In this case maybe, can I allow users to add thousands
+and thousands of graphics to a sketch document?
+
+00:30:45.240 --> 00:30:46.680
+So let's find out.
+
+00:30:46.680 --> 00:30:53.380
+I'll just draw another rectangle, and another
+rectangle, and I could be here all day adding rectangles.
+
+00:30:53.380 --> 00:30:59.650
+But fortunately, Sketch has another feature which is
+also useful for you to implement in your applications.
+
+00:30:59.650 --> 00:31:05.890
+They'll help you with testing and investigating with dtrace
+like I'm doing here, and that is that sketch is scriptable.
+
+00:31:05.890 --> 00:31:09.259
+So I have a script handy right here.
+
+00:31:09.259 --> 00:31:16.390
+And this script will add a random shape to
+the frontmost Sketch document, then save,
+
+00:31:16.390 --> 00:31:19.550
+and do that a hundred times, pretty straightforward.
+
+00:31:19.549 --> 00:31:21.289
+Let's run it.
+
+00:31:21.289 --> 00:31:24.420
+Here we go, lots of shapes and lots of results from dtrace.
+
+00:31:24.420 --> 00:31:29.000
+OK? So now we have a lot of numbers,
+let's find out with that trend is.
+
+00:31:29.000 --> 00:31:34.839
+[ Pause ]
+
+00:31:34.839 --> 00:31:39.769
+>> There we go, looks mostly linear,
+interesting pattern that we got going on there.
+
+00:31:39.769 --> 00:31:45.839
+But, so dtrace allowed us to really quickly
+get information about a question we had,
+
+00:31:45.839 --> 00:31:49.470
+in this case what was the archiving time?
+
+00:31:49.470 --> 00:31:53.000
+OK, let's go back to our slides.
+
+00:31:53.000 --> 00:31:58.440
+[ Applause ]
+
+00:31:58.440 --> 00:31:59.330
+>> Thank you.
+
+00:31:59.329 --> 00:32:04.589
+OK. So, I have some other dtrace tips as well.
+
+00:32:04.589 --> 00:32:07.519
+You can actually stop your application from within dtrace.
+
+00:32:07.519 --> 00:32:13.180
+Here I've got a W parameter, that means distructive of
+which stop in your application is certainly one of these.
+
+00:32:13.180 --> 00:32:18.060
+And then, I'm going to put a probe on this
+new static probe that we have introduced
+
+00:32:18.059 --> 00:32:19.839
+into the Cocoa framework in Snow Leopard.
+
+00:32:19.839 --> 00:32:21.789
+It's called error_no_pool.
+
+00:32:21.789 --> 00:32:26.149
+So, this one will be fired when an object is
+autoreleased with no AutoreleasePool in place.
+
+00:32:26.150 --> 00:32:32.509
+You can get more information on this one and a couple
+others in NS debug.h. So, here what I'm going to do is stop
+
+00:32:32.509 --> 00:32:39.129
+when that happens and you can see if I run my dtrace
+script against that application and attach to it in gdb,
+
+00:32:39.130 --> 00:32:43.070
+I get a SIGSTOP and NSAutoreleaseNoPool as expected.
+
+00:32:43.069 --> 00:32:45.259
+You can poke around in gdb or continue.
+
+00:32:45.259 --> 00:32:52.470
+You can log the method entry in your class, here's
+something you see pretty often, #if DEBUG NSLog.
+
+00:32:52.470 --> 00:32:56.190
+I'm in methods 2 and if, and you
+see that in every method in a class.
+
+00:32:56.190 --> 00:32:57.610
+Dtrace can do that for you.
+
+00:32:57.609 --> 00:33:03.149
+Here I put a probe on every method in SKTDocument,
+that's what that star is, a wildcard for any number
+
+00:33:03.150 --> 00:33:05.920
+of characters, and I'm going to printf there.
+
+00:33:05.920 --> 00:33:08.990
+And probefunc here for the Obj-C
+provider will be the name of the method
+
+00:33:08.990 --> 00:33:11.000
+and you get a result that looks something like this.
+
+00:33:11.000 --> 00:33:13.880
+[ Pause ]
+
+00:33:13.880 --> 00:33:16.780
+>>Here's a more complicated one,
+slightly more advanced thing.
+
+00:33:16.779 --> 00:33:19.509
+I want to debug a certain kind
+of deadlock in an application.
+
+00:33:19.509 --> 00:33:24.700
+I'm using Obj-C provider once more, and I'm
+interested in the NSLock class and 2 methods
+
+00:33:24.700 --> 00:33:28.470
+in particular on NSLock that is lock and unlock.
+
+00:33:28.470 --> 00:33:33.120
+And now, each of those I'm interested
+in entry and return of those methods.
+
+00:33:33.119 --> 00:33:40.169
+So what I'm going to do is in entry to lock, I'm going
+to record arg0 which is self in an Obj-C provider.
+
+00:33:40.170 --> 00:33:43.900
+So I want to know what NSLock this
+method is being called on.
+
+00:33:43.900 --> 00:33:49.590
+Then, when that lock method returns, that lock has
+been locked and I want to print that message out.
+
+00:33:49.589 --> 00:33:55.019
+That some particular thread identifier,
+that's tid has locked a lock instance.
+
+00:33:55.019 --> 00:34:01.250
+Also, I'm going to keep that information
+around in this dtrace associative array.
+
+00:34:01.250 --> 00:34:07.740
+So here I'm mapping the instances of NSLock to
+the threads which owned them or have them locked.
+
+00:34:07.740 --> 00:34:11.469
+And also, when we enter lock, I'm
+going to print a message saying
+
+00:34:11.469 --> 00:34:17.109
+that some particular thread has attempted
+to lock some particular NSLock instance.
+
+00:34:17.110 --> 00:34:21.599
+And if it is currently that NSLock is currently locked
+by some other thread, we'll find out right here.
+
+00:34:21.599 --> 00:34:29.360
+And now on the unlock side, on entry I'm again going to
+record the instance that we're calling this method on,
+
+00:34:29.360 --> 00:34:34.110
+and on return, clear our associative
+array of that lock and also print
+
+00:34:34.110 --> 00:34:38.309
+out another message saying that this lock has been unlocked.
+
+00:34:38.309 --> 00:34:43.949
+So, if you run this against the really buggy
+application, you might get something like this--
+
+00:34:43.949 --> 00:34:48.559
+I simplified it a bit for the slides--
+thread 1 attempts to lock A, NSLock A,
+
+00:34:48.559 --> 00:34:52.000
+which is currently owned by nobody, and it gets it.
+
+00:34:52.000 --> 00:34:57.420
+Next, thread 1 attempts to lock NSLock B,
+which is also currently owned by nobody.
+
+00:34:57.420 --> 00:35:02.530
+But before thread 1 has a chance to lock
+that lock, thread 2 gets the chance to run,
+
+00:35:02.530 --> 00:35:06.100
+and thread 2 attempts to lock, lock B as well.
+
+00:35:06.099 --> 00:35:10.469
+And here you see it is not yet owned by
+anybody and it goes ahead and gets it.
+
+00:35:10.469 --> 00:35:14.909
+Next, thread 2 attempts to lock A
+which is currently owned by thread 1.
+
+00:35:14.909 --> 00:35:21.279
+So now we have thread 2 waiting on thread 1 and
+thread 1 waiting on thread 2, which is deadlock.
+
+00:35:21.280 --> 00:35:25.440
+The root cause of this of course is
+taking 2 locks in an opposite order.
+
+00:35:26.750 --> 00:35:33.440
+OK. So dtrace, use it to investigate code
+behavior and trends in your application.
+
+00:35:33.440 --> 00:35:40.170
+So a trend I was investigating was what's the archiving time
+as I increase the number of graphics in my Sketch document?
+
+00:35:40.170 --> 00:35:44.869
+Answer questions about your application
+like why is my applications deadlocked?
+
+00:35:44.869 --> 00:35:48.349
+Add hooks almost anywhere in Cocoa with the Obj-C provider.
+
+00:35:48.349 --> 00:35:53.360
+So for the sketch demo and for the
+NSLocking and for everything else in dtrace,
+
+00:35:53.360 --> 00:35:57.370
+I added absolutely no code to Sketch
+or to the Cocoa frameworks.
+
+00:35:57.369 --> 00:35:59.539
+I did it all within a dtrace probe.
+
+00:35:59.539 --> 00:36:07.809
+So it's a very powerful utility for inserting
+your own behavior into an application with dtrace.
+
+00:36:07.809 --> 00:36:10.500
+OK, another fun fact.
+
+00:36:10.500 --> 00:36:15.559
+You can actually attach to a process that
+hasn't launched yet using gdb with this
+
+00:36:15.559 --> 00:36:18.599
+under documented argument, gdb-- waitfor.
+
+00:36:18.599 --> 00:36:23.299
+Here I'm going to wait for TextEdit and you could see
+gdb says "All right, I'll wait for that to launch."
+
+00:36:23.300 --> 00:36:28.530
+And when you launched TextEdit, then
+bingo, you're in a gdb command prompt.
+
+00:36:28.530 --> 00:36:32.110
+Now remember the kernel controls the
+execution of your application, not gdb.
+
+00:36:32.110 --> 00:36:36.400
+So you don't know exactly where you will be
+in the execution of TextEdit in this case.
+
+00:36:36.400 --> 00:36:42.990
+But nonetheless, it's very handy for caching short-lived
+processes or processes that are launched by other processes.
+
+00:36:42.989 --> 00:36:49.449
+And also in Snow Leopard, in Xcode there's another
+way to do this through the Xcode interface.
+
+00:36:49.449 --> 00:36:53.460
+OK, let's move on to our next topic
+and that's overlay views.
+
+00:36:53.460 --> 00:36:57.960
+So here I've got a really great
+interface that I hope you don't copy.
+
+00:36:57.960 --> 00:37:03.030
+But, I wanted to point out a couple of interesting
+things about this Interface Builder window.
+
+00:37:03.030 --> 00:37:08.550
+First you can see at the top there's a handy arrow that
+goes up to the top there, and that points out where
+
+00:37:08.550 --> 00:37:12.390
+that selected control lines up
+with at the top of the window.
+
+00:37:12.389 --> 00:37:19.009
+And also if we look to the left of that button, you can
+see that there's a 215 that tells us how many pixels
+
+00:37:19.010 --> 00:37:21.840
+that button is from the left side of the window.
+
+00:37:21.840 --> 00:37:26.660
+And both of these are joined right on top
+of the views that they are overlapping,
+
+00:37:26.659 --> 00:37:29.549
+that 215 is in on top of the date picker.
+
+00:37:29.550 --> 00:37:32.060
+So we get a common question is how do I do this?
+
+00:37:32.059 --> 00:37:36.199
+And there's a couple of ways, one is an overlay window.
+
+00:37:36.199 --> 00:37:40.960
+Overlay windows have been around for quite some time,
+addChildWindow ordered is the method you're going to use.
+
+00:37:40.960 --> 00:37:45.610
+Create a transparent window that's the same size
+as its parent window and it follows it around.
+
+00:37:45.610 --> 00:37:49.590
+But this is potentially more resource intensive.
+
+00:37:49.590 --> 00:37:52.340
+Now there are a few cases where you
+actually do want to use an overlay window,
+
+00:37:52.340 --> 00:37:56.760
+that's when you want to overlap an
+NSOpenGLView or a layer-backed view for example,
+
+00:37:56.760 --> 00:37:59.550
+also to provide the effect of drawing "outside" a window.
+
+00:37:59.550 --> 00:38:03.480
+So also an Interface Builder when you draw
+a connection from you inspector palette
+
+00:38:03.480 --> 00:38:05.909
+down to something in the document, for example.
+
+00:38:05.909 --> 00:38:11.469
+And there's a session earlier today presenting
+user data with table views and browsers
+
+00:38:11.469 --> 00:38:14.449
+that showed really great examples of using overlay windows.
+
+00:38:14.449 --> 00:38:17.500
+So if you missed it, check that out on
+the video and download the sample code.
+
+00:38:17.500 --> 00:38:20.659
+But I want to talk about an overlay view.
+
+00:38:20.659 --> 00:38:26.869
+So an overlay view is simply a sibling of other
+views, and it's the last subview of a parent.
+
+00:38:26.869 --> 00:38:31.799
+And this behavior that we're going to
+demonstrate, you can use starting in Leopard.
+
+00:38:31.800 --> 00:38:35.390
+They're really simple to implement
+and pretty easy to understand.
+
+00:38:35.389 --> 00:38:38.480
+So let me show you a graphic of how that works.
+
+00:38:38.480 --> 00:38:45.610
+Here's a parent view and inside that parent
+view I've got an NSBox, nice green box.
+
+00:38:45.610 --> 00:38:51.650
+And inside that box, I'm going to put some other
+views, NSButton, TextField and further boxes
+
+00:38:51.650 --> 00:38:54.570
+which have other subviews like a ColorWell.
+
+00:38:54.570 --> 00:38:58.220
+Now my overlay view, I want to overlay all of those things.
+
+00:38:58.219 --> 00:39:03.089
+So I'm going to make it a sibling of that
+green NSBox and a child of the parent view.
+
+00:39:03.090 --> 00:39:07.200
+That is I slide it right there, same size, same place.
+
+00:39:07.199 --> 00:39:09.869
+Let's see how we do this in some code.
+
+00:39:09.869 --> 00:39:14.339
+So in the controller class, I'm going to actually
+create this OverlayView right in the code.
+
+00:39:14.340 --> 00:39:18.809
+You can create it within Interface Builder, but
+sometimes it's hard to manage a big transparent view
+
+00:39:18.809 --> 00:39:21.380
+in Interface Builder so we'll do it here.
+
+00:39:21.380 --> 00:39:27.650
+First, I'm going to create it, and you see that I'm
+calling alloc initWithFrame and viewToOverlay is an outlet
+
+00:39:27.650 --> 00:39:30.680
+that I hooked up within Interface Builder.
+
+00:39:30.679 --> 00:39:34.379
+So I get the same size as the view we're overlaying
+and set up our overlayView in the same way.
+
+00:39:34.380 --> 00:39:40.010
+I also set up the AutoresizingMask so that it
+resized correctly when the window is resizes.
+
+00:39:40.010 --> 00:39:42.160
+Then I set the hidden flag.
+
+00:39:42.159 --> 00:39:46.449
+I don't want my overlayView to show up immediately.
+
+00:39:46.449 --> 00:39:52.469
+And finally I-- Well next, I set up
+the call set overlayView viewToOverlay.
+
+00:39:52.469 --> 00:39:56.849
+So I tell the overlayView which view it is
+overlaying, and we do this for hit test purposes,
+
+00:39:56.849 --> 00:40:00.409
+and you'll see more about that in a second.
+
+00:40:00.409 --> 00:40:08.039
+And finally, we add this overlayView as a
+subview of the viewToOverlays parent view.
+
+00:40:08.039 --> 00:40:14.539
+That means it's a sibling and it's the last sibling,
+so it will be drawn on top of the view to overlay.
+
+00:40:14.539 --> 00:40:19.279
+>> Also, we need to show and hide this
+overlayView, really straightforward.
+
+00:40:19.280 --> 00:40:21.600
+We just set the hidden flag.
+
+00:40:21.599 --> 00:40:28.349
+And in the overlayView itself, we are going to show
+you drawRect and mouseMoved, Down, and Dragged.
+
+00:40:28.349 --> 00:40:33.469
+And the reason we're implementing these is because
+we want to sort of imitate Interface Builder a bit
+
+00:40:33.469 --> 00:40:38.769
+and let users drag around views in the window.
+
+00:40:38.769 --> 00:40:41.099
+OK, let's do another demo.
+
+00:40:41.099 --> 00:40:44.880
+OK, so here is our overlay view code.
+
+00:40:44.880 --> 00:40:47.840
+I already showed you the controller
+code so let's look at the view itself.
+
+00:40:47.840 --> 00:40:52.650
+First, I want to show you initWithFrame.
+
+00:40:52.650 --> 00:40:57.460
+So here you can see I've used a
+tracking area to set up mouseMoved events
+
+00:40:57.460 --> 00:41:00.030
+and this is available of course also on Leopard.
+
+00:41:00.030 --> 00:41:04.190
+And if you're going to get mouseMoved events on Leopard
+later, we really recommend that you use a tracking area,
+
+00:41:04.190 --> 00:41:07.929
+and you can see it's really simple to
+set up, it's only a few lines of code.
+
+00:41:07.929 --> 00:41:13.079
+So speaking of mouse events, let's look
+at mouseMoved and mouseDown down here.
+
+00:41:13.079 --> 00:41:16.779
+And these will call this method called selectViewForEvent.
+
+00:41:16.780 --> 00:41:21.910
+We are interested in what view happens to be
+underneath the mouse when these things happen.
+
+00:41:21.909 --> 00:41:26.670
+If I command double click there, it will just
+go straight to the implementation like this.
+
+00:41:26.670 --> 00:41:33.539
+And here I'm going to do a hit test
+right there on the view that is overlaid.
+
+00:41:33.539 --> 00:41:37.929
+So I'm making sure to convert the
+coordinates of the mouse event
+
+00:41:37.929 --> 00:41:42.289
+into the right coordinate space using this code right here.
+
+00:41:42.289 --> 00:41:45.400
+And then I just call hit test to find
+out what view is underneath the mouse.
+
+00:41:45.400 --> 00:41:48.389
+There is some special handling in this for NSBoxes
+and scroll views and you can investigate that later.
+
+00:41:48.389 --> 00:41:49.889
+This code is available for download from the attendee site.
+
+00:41:49.889 --> 00:41:50.969
+And then I'm going to set selected view.
+
+00:41:50.969 --> 00:41:53.129
+And this basically means I'm going to keep
+track of which view is currently selected,
+
+00:41:53.130 --> 00:41:55.140
+and also make sure to invalidate the
+proper rectangles in this overlay view
+
+00:41:55.139 --> 00:41:57.000
+so it's redrawn correctly when the selection changes.
+
+00:41:57.000 --> 00:42:10.659
+[ Pause ]
+
+00:42:10.659 --> 00:42:20.119
+>>Next let's look at mouseDragged, and here I'm going to
+calculate a delta X and Y based on where the mouse event is
+
+00:42:20.119 --> 00:42:23.869
+to allow the user again to drag views around in the demo.
+
+00:42:23.869 --> 00:42:29.269
+And then I just set the frame here and that line
+right there is where I set the frame specifically.
+
+00:42:29.269 --> 00:42:32.920
+And again, I make sure to invalidate
+the proper rectangles in the overlayView
+
+00:42:32.920 --> 00:42:35.860
+so that it redraws, gets overlays correctly.
+
+00:42:35.860 --> 00:42:39.640
+And finally, let's look at the drawRects method itself.
+
+00:42:39.639 --> 00:42:45.059
+I'm going to fill this overlay view
+with mostly transparent color just
+
+00:42:45.059 --> 00:42:48.489
+for demo purposes so it's more easy to see where it is.
+
+00:42:48.489 --> 00:42:55.709
+But also, I calculated rectangle to surround the
+currently selected view and I draw that here.
+
+00:42:55.710 --> 00:42:58.429
+Then I'm going to draw those dimension lines.
+
+00:42:58.429 --> 00:43:04.559
+Those are the ones that go from the selected view to
+the edges of the superview and print out the number
+
+00:43:04.559 --> 00:43:07.769
+which tells me how many pixels it is from that edge.
+
+00:43:07.769 --> 00:43:10.610
+And again, I'm not going to go into the
+implementation of these specifically
+
+00:43:10.610 --> 00:43:13.340
+but download the code and check that out as well.
+
+00:43:13.340 --> 00:43:16.000
+OK, let's run this and see what it looks like.
+
+00:43:16.000 --> 00:43:21.969
+[ Pause ]
+
+00:43:21.969 --> 00:43:24.309
+>>OK, so here is our overlay view.
+
+00:43:24.309 --> 00:43:29.409
+You can see these pretty standard views, I can
+select things or delete that, maybe check some boxes
+
+00:43:29.409 --> 00:43:32.670
+or even change the value of that color well.
+
+00:43:32.670 --> 00:43:37.139
+When I check this edit button, your overlay view
+has been shown now, it's got that fill color.
+
+00:43:37.139 --> 00:43:44.509
+Now if I move my mouse over view in that view
+that it's overlaying, we get our selection box
+
+00:43:44.510 --> 00:43:47.760
+and also those lines to the edges which are guidelines.
+
+00:43:47.760 --> 00:43:52.010
+And because I implemented those mouseMoved
+events, I can actually drag these around as well
+
+00:43:52.010 --> 00:43:55.780
+to get an effect just like Interface Builder has.
+
+00:43:55.780 --> 00:43:58.769
+And we can-- say move that there, there.
+
+00:43:58.769 --> 00:44:04.809
+And you could see here also, it works within subviews
+as well and I've got dimensions to the edges of that box
+
+00:44:04.809 --> 00:44:10.239
+and I'll uncheck that edit box and you know, these
+work again just like you would expect them to.
+
+00:44:10.239 --> 00:44:15.000
+So it's powerful technique for
+drawing on top of other views, OK.
+
+00:44:15.000 --> 00:44:21.110
+[ Applause ]
+
+00:44:21.110 --> 00:44:21.840
+>>Thank you.
+
+00:44:21.840 --> 00:44:27.850
+OK, so use overlay views to draw on
+top of overlapping sibling views.
+
+00:44:27.849 --> 00:44:31.039
+And remember that what makes it draw on
+top here is that it's the last subview
+
+00:44:31.039 --> 00:44:35.389
+of a parent view and the use is starting in Leopard.
+
+00:44:35.389 --> 00:44:40.940
+And finally I mentioned this, download the overlay
+view example from the Cocoa tips and tricks section
+
+00:44:40.940 --> 00:44:45.950
+and you can get that code, but not
+now because we have another fun fact.
+
+00:44:45.949 --> 00:44:49.369
+That fun fact is something that is an oldie but
+a goodie but since we've been talking so much
+
+00:44:49.369 --> 00:44:53.179
+about views lately, I feel I need to point it out again.
+
+00:44:53.179 --> 00:44:58.279
+So when you're debugging, get a list of view
+information by calling this special description method,
+
+00:44:58.280 --> 00:45:01.680
+and that is subtreeDescription with an under bar in front.
+
+00:45:01.679 --> 00:45:07.399
+And the result is I'll put like this, you
+get a whole slew of really useful information
+
+00:45:07.400 --> 00:45:11.860
+about the view you've called this on
+and all of its subviews, the whole tree.
+
+00:45:11.860 --> 00:45:16.610
+And you can see we got information about
+autoresizing, what exact class those are,
+
+00:45:16.610 --> 00:45:19.289
+pointers to them, frame sizes, et cetera.
+
+00:45:19.289 --> 00:45:25.170
+So one caveat, please don't parse the
+output of _subtreeDescription, yeah,
+
+00:45:25.170 --> 00:45:27.599
+or use it in your application, your shipping application.
+
+00:45:27.599 --> 00:45:32.659
+We really want to be able to update this method
+with new information as we add it to Mac OS.
+
+00:45:32.659 --> 00:45:39.719
+But it's great for debugging, get a really
+insightful view into what your views are doing.
+
+00:45:39.719 --> 00:45:46.189
+OK, on to our last topic, that's
+Key-Value Observing and Concurrency.
+
+00:45:46.190 --> 00:45:49.300
+So first let's do a quick overview of KVO.
+
+00:45:49.300 --> 00:45:55.700
+It basically allows objects to be notified
+of changes to properties in other objects.
+
+00:45:55.699 --> 00:46:00.579
+So here's a model and that model has 4 observers.
+
+00:46:00.579 --> 00:46:06.610
+Now when I change a property on that model, let's say
+the value property, observeValueForKeyPath will be called
+
+00:46:06.610 --> 00:46:12.269
+on each one of the registered observers
+of that model and property.
+
+00:46:12.269 --> 00:46:15.030
+So KVO saves you from writing that code right there.
+
+00:46:15.030 --> 00:46:18.500
+And it's a really powerful tool so a
+lot of people take advantage of it.
+
+00:46:18.500 --> 00:46:27.619
+Now, a completely natural thing to do as a result of a model
+property changing is to update a view, like an AppKit view.
+
+00:46:27.619 --> 00:46:29.599
+But here is the gotcha.
+
+00:46:29.599 --> 00:46:37.139
+If this model value property changes on a background thread,
+um, 42, then the observeValueForKeyPath will also happen
+
+00:46:37.139 --> 00:46:43.809
+on that same background thread, and that means this update
+of the user interface will happen on a background thread.
+
+00:46:43.809 --> 00:46:50.679
+But as I'm sure you already know, AppKit views
+typically should only be updated on the main thread.
+
+00:46:50.679 --> 00:46:55.659
+So a common question we get is "How do I connect
+those two things, how do I update a model object
+
+00:46:55.659 --> 00:47:02.059
+on the background thread but make my user
+interface update as a result of that?"
+
+00:47:02.059 --> 00:47:05.670
+The technique I like to show you
+today is a KVO Receptionist.
+
+00:47:05.670 --> 00:47:11.090
+So we've talked about the Receptionist before at
+earlier WWDCs, 2006, and also earlier this week
+
+00:47:11.090 --> 00:47:14.910
+in the designing your Cocoa application
+for concurrency talk.
+
+00:47:14.909 --> 00:47:18.619
+But here I'm going to use it basically
+as a thread middleman.
+
+00:47:18.619 --> 00:47:23.529
+And what I mean by that is that it's going to receive
+a change notification on the background thread
+
+00:47:23.530 --> 00:47:30.060
+and then execute some task on another operation
+queue, perhaps the main operation queue.
+
+00:47:30.059 --> 00:47:34.989
+Now how do we define a task and
+the data that that task needs?
+
+00:47:34.989 --> 00:47:38.669
+We're going to use the new Snow
+Leopard feature of block objects.
+
+00:47:38.670 --> 00:47:42.780
+So a couple more diagrams to explain how this works.
+
+00:47:42.780 --> 00:47:47.860
+So I've got my worker thread here and that
+worker thread is going to have a model
+
+00:47:47.860 --> 00:47:50.640
+and that model has a Receptionist object.
+
+00:47:50.639 --> 00:47:55.119
+I'm also going to have a reference
+to the main operation queue.
+
+00:47:55.119 --> 00:47:59.420
+Now when I change a value property on that model object,
+
+00:47:59.420 --> 00:48:03.510
+observeValueForKeyPath will be
+called on the Receptionist object.
+
+00:48:03.510 --> 00:48:10.840
+And as a result of that, the Receptionist will add some
+operation for our task to the main operation queue.
+
+00:48:10.840 --> 00:48:16.890
+And no matter how many times I update that model property on
+the background thread, observeValueForKeyPath will be called
+
+00:48:16.889 --> 00:48:23.109
+on the Receptionist and the Receptionist will
+add that operation to the main operation cue.
+
+00:48:23.110 --> 00:48:29.079
+Let's zoom out a bit to the whole
+application and look at the main thread.
+
+00:48:29.079 --> 00:48:33.420
+Now here I'm going to ask something to
+start, and what I mean by that is I'm going
+
+00:48:33.420 --> 00:48:36.610
+to create an operation queue for background work.
+
+00:48:36.610 --> 00:48:42.340
+And the background work itself, I'm going
+to encapsulate in some NSOperations.
+
+00:48:42.340 --> 00:48:50.190
+Those operations go on to the operation queue, and that
+operation queue is free of course in Snow Leopard using GCD,
+
+00:48:50.190 --> 00:48:53.849
+to split up that work onto multiple background threads.
+
+00:48:53.849 --> 00:49:00.750
+As each of those operations execute in the background,
+they are going to update that model property.
+
+00:49:00.750 --> 00:49:07.019
+And as a result of the model property changing,
+the observer, the receptionist will be notified
+
+00:49:07.019 --> 00:49:13.880
+and the receptionist will enqueue some task on the main
+operation queue where it is executed on the main thread.
+
+00:49:13.880 --> 00:49:17.030
+Let's look at some code.
+
+00:49:17.030 --> 00:49:23.180
+So first the receptionist, let's
+define what that task is first.
+
+00:49:23.179 --> 00:49:29.509
+Here you can see I'm using a block, that's what the
+caret's for, RCTaskBlock, and I'm using a typedef
+
+00:49:29.510 --> 00:49:32.130
+so that the rest of the code is a little bit clearer.
+
+00:49:32.130 --> 00:49:36.480
+And this block takes 3 parameters, and these
+3 parameters should look very familiar to you
+
+00:49:36.480 --> 00:49:38.750
+if you're familiar with key value observing.
+
+00:49:38.750 --> 00:49:43.130
+Those 3 parameters are key path,
+object, and a change dictionary.
+
+00:49:43.130 --> 00:49:48.390
+Next, the receptionist object itself,
+first we have the observedObject,
+
+00:49:48.389 --> 00:49:52.039
+next we have the observedKeyPath on that object.
+
+00:49:52.039 --> 00:49:55.920
+We also have the task which we've been asked to execute,
+
+00:49:55.920 --> 00:50:00.430
+and finally the queue on which we
+are going to execute that task.
+
+00:50:00.429 --> 00:50:02.980
+And finally we need a way to create a receptionist.
+
+00:50:02.980 --> 00:50:08.440
+So here we got receptionistForKeyPath,
+object, queue, and task factory method.
+
+00:50:08.440 --> 00:50:12.210
+Let's see how we implement that method.
+
+00:50:12.210 --> 00:50:15.340
+First, I'm going to create the receptionist object.
+
+00:50:15.340 --> 00:50:17.820
+>> Next I need to copy the task.
+
+00:50:17.820 --> 00:50:22.250
+Now remember, blocks are objects so
+that means I can send it a message.
+
+00:50:22.250 --> 00:50:25.039
+Here I'm sending it the copy message.
+
+00:50:25.039 --> 00:50:32.619
+That's going to move this block from the stack where it
+was created over to the heap where we can reference it
+
+00:50:32.619 --> 00:50:35.839
+keep it around for later when we need to execute it.
+
+00:50:35.840 --> 00:50:41.340
+Next, we copy the observedKeyPath, retain
+the observedObjects and retain the queue
+
+00:50:41.340 --> 00:50:45.970
+on which we are executing our task,
+then add the receptionist
+
+00:50:45.969 --> 00:50:51.049
+as the key value observer of that
+property on the model object.
+
+00:50:51.050 --> 00:50:56.289
+I'm passing NSKeyValueObservingOptionNew and
+Old so that the change dictionary is populated
+
+00:50:56.289 --> 00:50:59.279
+with the correct values for the task to use.
+
+00:50:59.280 --> 00:51:03.640
+Also, no for the context, that's because
+there's no superclass of this Receptionist
+
+00:51:03.639 --> 00:51:06.659
+that is going to observe the model object.
+
+00:51:06.659 --> 00:51:10.289
+And finally, return that new object autorelease.
+
+00:51:10.289 --> 00:51:15.289
+We need to implement observeValueForKeyPath as well.
+
+00:51:15.289 --> 00:51:20.309
+And this is actually really straightforward,
+so I'm going to use this new 10.6 API,
+
+00:51:20.309 --> 00:51:25.389
+addOperationWithBlock on the NSOperationQueue
+which we've been asked to execute our task.
+
+00:51:25.389 --> 00:51:26.710
+So what do we do in the block?
+
+00:51:26.710 --> 00:51:27.849
+Run the task.
+
+00:51:27.849 --> 00:51:34.489
+Keep out object and change, and these few parameters you
+see we've grabbed from the observeValueForKeyPath method.
+
+00:51:34.489 --> 00:51:41.509
+Next in the controller, so how do we actually
+use one of these receptionist objects?
+
+00:51:41.510 --> 00:51:43.550
+Well first, I need to grab a reference to the main queue.
+
+00:51:43.550 --> 00:51:46.860
+This is also a new Snow Leopard API.
+
+00:51:46.860 --> 00:51:53.670
+Next, I'm going to create the receptionist object
+itself, pass in the key path, the model and the queue.
+
+00:51:53.670 --> 00:51:57.800
+And then here's the power of using
+blocks for this receptionist pattern.
+
+00:51:57.800 --> 00:52:01.590
+I put that task right there in line
+where I create the receptionist.
+
+00:52:01.590 --> 00:52:05.170
+That means that it has easy access to any data that we need
+
+00:52:05.170 --> 00:52:09.079
+and the logic is right in line
+with where we expect it to be.
+
+00:52:09.079 --> 00:52:15.139
+No creating other data structures to hold the
+extra pointers, et cetera, really straightforward.
+
+00:52:15.139 --> 00:52:18.549
+And inside that block goes what happens on the main queue.
+
+00:52:18.550 --> 00:52:22.150
+Next we have the worker queue.
+
+00:52:22.150 --> 00:52:27.410
+So this is our background work and
+what goes there, stuff on background.
+
+00:52:27.409 --> 00:52:33.579
+I'm doing one more trick here, and that is that I'm
+having the worker operation actually hold a ref retain
+
+00:52:33.579 --> 00:52:36.639
+on the receptionist object.
+
+00:52:36.639 --> 00:52:38.940
+And blocks makes this possible.
+
+00:52:38.940 --> 00:52:44.220
+I'm retaining the receptionist outside of
+that block and releasing it as the last item
+
+00:52:44.219 --> 00:52:47.739
+in the block I put it on the BackgroundWorker queue.
+
+00:52:47.739 --> 00:52:54.589
+OK, so I want to show you demo, but
+first I need to set it up a bit.
+
+00:52:54.590 --> 00:52:57.920
+So I need a window, OK.
+
+00:52:57.920 --> 00:53:01.599
+Now, inside this window I want a collection
+view and you'll have to take my word
+
+00:53:01.599 --> 00:53:03.489
+for it that there's a collection view there.
+
+00:53:03.489 --> 00:53:09.379
+And then in that collection view, I'm going
+to put a view which represents a model object.
+
+00:53:09.380 --> 00:53:16.860
+So here I've got an NSBox and the model object that
+it represents has one property, and that's color.
+
+00:53:16.860 --> 00:53:20.579
+Now the background work that I want
+done is doing the difficult work
+
+00:53:20.579 --> 00:53:26.110
+of calculating what the next color is
+going to be in a sequence of colors.
+
+00:53:26.110 --> 00:53:31.690
+So as I update that on the background, the
+color of that box will change on the main view
+
+00:53:31.690 --> 00:53:35.480
+because our task will set the fill color of that NSBlock,
+
+00:53:35.480 --> 00:53:40.070
+and of course I have more than
+one operating at the same time.
+
+00:53:40.070 --> 00:53:47.830
+And after each worker operation is done calculating that
+hard work of what the next color is, reaches the end,
+
+00:53:47.829 --> 00:53:53.329
+I want each of these views to disappear
+from our collection view, like so.
+
+00:53:54.349 --> 00:53:57.219
+OK, let's do another demo.
+
+00:53:57.219 --> 00:54:02.099
+Let's look at the receptionist.
+
+00:54:02.099 --> 00:54:03.929
+So, I saw the receptionist code already.
+
+00:54:03.929 --> 00:54:05.119
+Let's look at the controller.
+
+00:54:05.119 --> 00:54:07.909
+Well, actually first, let's look at the model.
+
+00:54:07.909 --> 00:54:11.399
+We can see as promised very simple,
+just one property and that's the color.
+
+00:54:11.400 --> 00:54:21.400
+And in the receptionist app delegate here, I'm going
+to create some number of those boxes in this 4 loop.
+
+00:54:21.400 --> 00:54:27.780
+So in there, I am going to first-- here I go--
+create the model, set its initial color to something,
+
+00:54:27.780 --> 00:54:32.800
+then create the receptionist that watches that model object.
+
+00:54:32.800 --> 00:54:39.600
+Here in line is the task which I wanted to execute
+which basically boils down to this one line right here,
+
+00:54:39.599 --> 00:54:43.869
+where I set the fill color of the NSBox view.
+
+00:54:43.869 --> 00:54:52.190
+The rest of this is some paperwork, if you will,
+to look up the view a little bit more quickly.
+
+00:54:52.190 --> 00:54:56.420
+And down here I actually need to create the
+worker operation, that's the thing that's going
+
+00:54:56.420 --> 00:55:00.079
+to update the model on the background thread.
+
+00:55:00.079 --> 00:55:04.250
+And that boils down to this line right
+here where I set the model value.
+
+00:55:04.250 --> 00:55:08.429
+And I told you a white lie, this isn't
+actually very hard so I put a sleep in there.
+
+00:55:08.429 --> 00:55:11.929
+Hopefully you have more meaningful
+work to do on your background threads.
+
+00:55:11.929 --> 00:55:20.879
+And finally, I mentioned of course that I want the
+views disappear when the model is done being modified.
+
+00:55:20.880 --> 00:55:25.800
+Well, one way we can do that is by looking at
+the is finished property of our worker operation.
+
+00:55:25.800 --> 00:55:31.019
+Now if you look at the documentation for
+NSOperation, it warns you, you don't know what thread
+
+00:55:31.019 --> 00:55:34.480
+that is finished property will be changed on.
+
+00:55:34.480 --> 00:55:36.880
+But we have a solution to that of
+course, and that's a receptionist.
+
+00:55:36.880 --> 00:55:42.900
+So I'm going to create one more here, watch
+the is finished property of our operation.
+
+00:55:42.900 --> 00:55:48.539
+The work we want done will happen on the main queue
+and the task is going to be essentially this line
+
+00:55:48.539 --> 00:55:57.279
+which sets the content of our collection view to remove
+that view which represents the model that's finished.
+
+00:55:57.280 --> 00:56:01.510
+Finally, remember we're still on the loop here creating
+our models and adding them to the collection view,
+
+00:56:01.510 --> 00:56:04.430
+and this is where we add them, set content.
+
+00:56:04.429 --> 00:56:11.210
+And then finally at this line is where we actually enqueue
+that background work in our BackgroundWorker queue.
+
+00:56:11.210 --> 00:56:15.000
+Enough talk, let's see it run.
+
+00:56:15.000 --> 00:56:17.559
+[ Pause ]
+
+00:56:17.559 --> 00:56:21.420
+>>Here's my receptionist, and if I
+click that run button, here we go,
+
+00:56:21.420 --> 00:56:26.190
+lots of color properties being updated in the background.
+
+00:56:26.190 --> 00:56:33.309
+Each one of those colors represents a change on background
+thread and that task being executed on the main thread
+
+00:56:33.309 --> 00:56:36.779
+which updates the fill color in this collection view.
+
+00:56:36.780 --> 00:56:37.940
+Let's do it again.
+
+00:56:37.940 --> 00:56:40.800
+Now NSOperations and NSOperationQueues
+are pretty flexible, right?
+
+00:56:40.800 --> 00:56:44.470
+You can add operations pretty much anytime you like.
+
+00:56:44.469 --> 00:56:52.349
+So this, it's a great demo of the power of using an
+NSOperationQueue and NSOperations to move work around,
+
+00:56:52.349 --> 00:56:56.119
+and of course on Snow Leopard using Grand Central Dispatch.
+
+00:56:56.119 --> 00:57:00.000
+OK, let's go back to our slides.
+
+00:57:00.000 --> 00:57:06.960
+[ Applause ]
+
+00:57:06.960 --> 00:57:08.639
+>> So that was a receptionist.
+
+00:57:08.639 --> 00:57:14.799
+It moves a notification to a different queue,
+perhaps the main queue to do user interface updates.
+
+00:57:14.800 --> 00:57:20.220
+It allows the creator to define a task right
+in line in the code with the data that it needs
+
+00:57:20.219 --> 00:57:22.869
+and with the logic exactly where you would expect it to.
+
+00:57:22.869 --> 00:57:24.849
+Using blocks, that's really easy to do.
+
+00:57:24.849 --> 00:57:30.920
+It can be expanded to filter, redirect or more
+pretty much anything you like since you know, you,
+
+00:57:30.920 --> 00:57:33.380
+the creator of the receptionist are defining it.
+
+00:57:33.380 --> 00:57:38.349
+And finally, this example is available for
+download as well from the attendee site,
+
+00:57:38.349 --> 00:57:41.039
+Cocoa tips and tricks, the "Receptionist" is the name.
+
+00:57:41.039 --> 00:57:47.559
+OK, let's go once more of what we talked
+about today, since there was a lot of it.
+
+00:57:47.559 --> 00:57:53.039
+So Zombies, they help you detect memory management errors
+early in the development last cycle of your application.
+
+00:57:53.039 --> 00:57:55.329
+Enable them when you're testing and make sure
+
+00:57:55.329 --> 00:58:01.170
+that your users don't find your
+Objective-C, Obj-C methods then crashes.
+
+00:58:01.170 --> 00:58:03.639
+OK, debugging.
+
+00:58:03.639 --> 00:58:07.909
+Using gdb techniques like I showed you,
+Breakpoint commands, Breakpoint conditions,
+
+00:58:07.909 --> 00:58:15.109
+changing execution of your application by jumping
+or changing the memory of your application,
+
+00:58:15.110 --> 00:58:17.829
+help you find the root cause of an issue very quickly.
+
+00:58:17.829 --> 00:58:21.799
+And dtrace, you can use to investigate
+code behavior or trends.
+
+00:58:21.800 --> 00:58:26.789
+Overlay views let you easily add overlapping view drawing.
+
+00:58:26.789 --> 00:58:30.639
+I used it to make Interface Builder like application.
+
+00:58:30.639 --> 00:58:34.949
+And finally the KVO receptionist, which lets
+you update the model on the background thread
+
+00:58:34.949 --> 00:58:38.909
+but update the user interface on the main thread.
+
+00:58:38.909 --> 00:58:41.000
+Great, for some more information, talk to Matt Drance.
+
+00:58:41.000 --> 00:58:45.889
+I think this is like the tenth title I've seen for him at
+the conference, Application Technologies Evangelist here.
+
+00:58:45.889 --> 00:58:53.009
+Also Zombies, gdb, Creating Custom Instruments with DTrace,
+Key-Value Observing and Concurrency Programming Guide,
+
+00:58:53.010 --> 00:58:54.560
+which is new for Snow Leopard and fantastic.
+
+00:58:54.559 --> 00:58:56.690
+I recommend you check out all of those.
+
+00:58:56.690 --> 00:58:59.550
+So, I hope you find something useful
+in these tips and tricks.
+
+00:58:59.550 --> 00:59:00.810
+Go out and make some great application.

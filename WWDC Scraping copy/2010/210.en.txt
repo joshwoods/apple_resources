@@ -1,0 +1,168 @@
+---
+Title:  Launch-on-Demand
+Year:   2010
+Web:    https://nonstrict.eu/wwdcindex/wwdc2010/210/
+
+[!] This transcript has potential transcription errors.
+---
+
+[Damien Sorresso]
+Good afternoon. Welcome to Launch-on-Demand here at WWDC 2010. I'm Damien Sorresso, I am responsible for launchd and the associated technologies here at Apple. So let's talk a little bit about what Launch-on-Demand is. Launch-on-Demand is Mac OS X's process lifecycle model. So this is how we determine when a process should come alive, when it should go away. All these sorts of things.
+
+And on our platform we manage this lifecycle with launchd. Launchd is our PID 1 or our init -- init equivalent from other platforms. And what we have is an ad-hoc boot strapping model. So we don't bring things on line just because they might be needed sometime in the future. We wait for them to actually be needed.
+
+So what we'll cover today is why Launch-on-Demand is better. We've invested a lot of time across our platform making a bunch of our stuff on-demand compliant. So we want to tell you why we've done that. And we also want to tell you how to become a good citizen of this ecosystem. So how you can write an on demand daemon from Mac OS X that comes on line when it's needed and goes away when it's not.
+
+And in the process we're going to tell you how to use the GCD or Grand Central Dispatch that was introduced in Snow Leopard to make a very highly efficient daemon that uses as few resources as it needs when it's running. And then we'll take this, this basic concepts, and apply it to the concrete example of writing a privileged helper tool for a GUI application. So let's have some historical context about what it was like before launchd came along.
+
+Well, we had a very well-defined start-up order and the defining of this order was done by the holy priesthood of RC scripts. So if you wanted to become part of a start-up procession you had go to go and beg the holy monk to give you a place in line. And you could never alter that place in line. Completely rigid and inflexible.
+
+And what we found is that's just not suited to a modern world where resources can just come and go on a whim. Users plug in hard drives, they unplug hard drives, they travel to different locations where there's different wireless networks available. Things come and go. And a model where we just have to have all these things running all the time isn't sustainable.
+
+So let's cover a few things that we really need to unlearn. Adapting to this or adopting this model requires that we kind of let go of a few concepts that have been very popular in traditional boot strapping models. And the first thing is PID files. PID files are how daemons would say yes, I'm running, it's OK to try and contact me.
+
+But they're inherently racy, they're subject to a time of use versus time of check condition. The second thing is the idea that you have to write code in order to become a daemon. With launchd you don't, you just have a plist. There's no real code for you to call to become a daemon. When your process starts, it's a daemon.
+
+All your work is done for you. And we want to disabuse ourselves of a makefile approach to boot strapping. Since we have this rigid processional order in boot strapping in the prior world, a lot of people have really started -- really become acquainted and really familiar with the approach that we just need to have this service running before this one runs, before this one runs, and that's not how modern operating systems are. They're not makefiles. And finally, we just want to get rid of this notion that services are correlated with processes. So the notion that a process has to be running in order for a service to be accessible is not what we want here.
+
+Because then that means we have to keep things running all the time or the client has to have knowledge of the server's life cycle. So we can sum all this up by just saying we have to learn to let go. So forget about the server's life cycle. That doesn't matter. You're just the client. We really want a trusted entity in the middle that will care about all this stuff for you in a consistent and predictable way.
+
+So once we've let go we're left with a plug-in model where we can just drop things into a folder and you're a daemon, you're up and running. There's no modifying of scripts necessary. And we have pay-as-you-go computing. If you're not using a certain hardware feature that needs to be serviced by a daemon, that daemon doesn't have to be running. And we get rid of a lot of boilerplate code in order for you to become a daemon. And finally, we get rid of that holy priesthood and it's much easier to opt in system.
+
+So what are basic concepts of Launch-on-Demand? On Mac OS X we have two types of on-demand jobs. We have daemons, which are system-wide jobs, and agents, which run on behalf of a particular user. Daemons run in a privileged environment. So they run as root unless you've otherwise specified, and they run in the root mock boot strap.
+
+Agents run in the user environment. And agents are -- it's important to remember that where an agent runs is the canonical user environment on Mac OS X. Simply calling set UID to set UID down to that user's UID is not sufficient to actually become that user in the truest sense of the word.
+
+And both of these types of jobs can advertise services. The only thing that is effected about a service -- a service being advertised is the scope. So services advertised in agents are only available to people in that user session, but daemon services are available system-wide. Now we're talking about services, traditionally, services have been things backed by processes.
+
+In a Launch-on-Demand world they are just virtual end points, they may or may not be backed by a process. And if they are not currently backed by a process the arrival of a request on that service will trigger launchd to kick off the process that's responsible for servicing that request.
+
+And what this lets us do is get rid of an explicit dependency graph. Dependencies just become expressed through IPC. So if I'm dependent on a service advertised by say, com.apple.securityd, the fact that I've sent a message to that service says I'm dependent on that service. I don't have to detail that in a file anywhere. So once we adopt this new model of boot strapping, we get three really key advantages. The first one is obvious.
+
+It's more efficient. We can run a smaller working set of services on an idle system because if it's an idle system the user's not really using many features. So we don't really need to run daemons that are responsible for those features. And features -- daemons come on line as those features are needed. So we have pay-as- you-go computing.
+
+The second one is that it's more reliable. So if we have a model where things come up as needed and then go away when they're not, that means we have daemons which are more or less stateless. And so that means they can recover from crashes. So if I have sent a message to a daemon and it crashes trying to -- after processing my request, somebody else who sends a message to that daemon can just keep sending it, and launchd will keep that daemon alive as long as it has requests outstanding. And finally, we get a more flexible system because we can have many working sets of daemons that are optimal for different usage patterns we end up with a much more flexible system that can adapt to different usage patterns very easily.
+
+So before we get into how to write one of these daemons, let's talk a little bit about Grand Central Dispatch. Grand Central Dispatch is like launchd but for threads. So it exposes a new synchronization primitive called queues. And we're going to use these queues to help write our daemon. Queues are just basically synchronization points that guarantee serialized execution of work. And you just submit work to a queue and it gets executed in the order that it was submitted.
+
+And this makes executing asynchronous work really, really easy and really, really fast. Both from a code-writing standpoint and from an execution standpoint. So what are we most interested in about queues here? GCD is a great technology for parallelism. But from our perspective as daemon writers, we're more interested in the fact that queues act as a run loop primitive, so we don't have to use a higher level framework like Core Foundation to get a run loop, and we don't have to code our own run loop. Queues let us do that. How they work is that dispatch exposes sources. And sources are just listeners that when a certain event happens, schedule an event handler on a queue that you specify.
+
+And sources can monitor for all sorts of events like readability or writability of a file descriptor. So you can effect asynchronous IO just by only writing when there's space in the kernel buffers for that descriptor. We can also monitor for process events. Like if we're interested when another PID exists or when it forks or when it execs we can be told of all these things and invoke an event handler when that happens. We can also monitor for signals, and this one is particularly important because previously there was no way to safely share the receipt of a signal. GCD lets us do that.
+
+And finally we have timers. Invoke an event handler block at a specified interval. GCD makes heavy use of Blocks and in a GCD world Blocks are how work is quantized. So one Block can be treated as one unit of work. And what Blocks are effectively are just inline or anonymous functions.
+
+They implicitly capture any stacked state that has been referenced by them so that you don't have to capture that state yourself, marshall it into a struct that's malloced on the heap, which you then pass as a content pointer to some call that might happen down the line, and then that call has to free -- all this stuff is done for you. So Blocks, what Blocks give you is basically an archive for a function call. So let's take a look at what a Block actually looks like, syntactically.
+
+So we include dispatch/dispatch.h. And we have 3 variables declared here, A, B, and C. Now we have this dispatch async here, and what that does is copy the block to the heap. Now when I say copy to the heap what do I mean? The code itself in the Block isn't actually captured to the heap, but the state that the code is referencing is captured to the heap. So when I try and set and if I -- if I capture A and B, those are captured as const.
+
+So when I try to set A to a different value the compiler emits an error saying that it's a read-only variable. But I've declared C with this __block keyword. And what that does, is when the Block captures all that state, it captures a reference to C and copies it to the heap so that I can safely modify it, even after the Stack Frame has been torn down. So that's the simple crash course in GCD that we're going to use and leverage to write our daemon.
+
+So let's write a daemon that just sits on a socket and listens for messages. It's just going to be called SSD. It's also going to be as close to stateless as possible, because remember we want a very easily recoverable daemon. And if needed, in a more complex scenario, we can archive state to disc. Because crashes will happen. It might not be in your code, it might be in a library that you call, that library might be buggy.
+
+Your program could crash and very well may crash. So we should be prepared to deal with that. And how this daemon is going to work is it's going to do asynchronous HTTP-style request handling. So for each request that comes in, it gets its own connection and that connection is torn down. And then we can handle many of these requests in parallel.
+
+So here's the basics of what's going to happen when -- when your daemon gets a request and is not yet running. So we have launchd running at all times. And it has a table of services that it's listening on. In this case, we have say SSH which is on 422, and our SSD socket, which is on port 1138. So we're going to focus on that one.
+
+A client's going to come along, maybe remote, maybe local, and it's going to want to establish a connection to port 1138 on our host. So when that happens, a new connection is established, and by doing that, we've sent a message to that port. So when that -- when launchd sees that there's a message on that socket it's going to fork and then exec SSD.
+
+And then SSD is going to check in, grab the socket from launchd, dequeue the message and process the request. And when it's done, it's just going to idle exit. So here's the plist we use to get this done. The launchd. plist has a label, a program, and this sockets dictionary here. And here's where we specify that we're going to listen on port 1138.
+
+And when the daemon comes online the first thing it's going to do is check in, and here are the APIs it's going to use to do that. It's going to send a check in request to launchd, and then it's going to parse the response through and grab a file descriptor out of the dictionary of sockets that comes back. Now launchd will give you both IPv4 and v6 sockets. In our case, we just don't care about v6. So we're going to focus on the v4 socket.
+
+So at the end, we've got sock F D, and that's the socket we're going to listen on. So we're going to use GCD to listen on that socket. A note before we go, before we continue, don't use these APIs for anything other than checking in. You may have looked at the header already, and you may be thinking there's a bunch of cool stuff I can do it with. We highly discourage you from doing so. Because there will come -- or if you do there will come a day of reckoning when it will come bite you.
+
+And, as a matter of correctness before we go any further, I haven't been checking any return types that I've been getting or making sure that they're not null. But that doesn't mean you shouldn't. So please always check your return codes and the types of data structures that you're working with.
+
+So a client is going to send a message to the daemon. What is that message going to look like? In our case, it's just going to be really simple. It's going to be prefixed with 4 bytes telling us the length of the message. And then there's going to be an arbitrary number of bytes following. And the encoding we're going to use for that arbitrary number of bytes is a plist.
+
+So we're just going to construct a CF property list using the CF property list APIs. Serialize it, send it over the wire, then the server is going to pick it apart, figure out what our request is, do something, then send a reply back. So we're going to use GCD to do accept.
+
+The first thing we're going to do is set the non block flag on that file descriptor that we got back from the launch APIs. This is because GCD is an asynchronous API and we don't want to risk blocking the queue on which this handler is invoked, if say the client cancelled its connection attempt.
+
+So we come in here and we call accept. And then we get back and a file descriptor from accept that's dedicated to this connection. At that point we again set 0 non block on that descriptor. And then we pass it to a server accept function. And that function just takes the descriptor plus a reference to a queue on which we wish to do further operations. In this case, it's one of GCD's global concurrent queues. So any work submitted to this queue is -- can happen concurrently and won't have any serialization guarantees.
+
+So we'll go into that in just a second. But it's also important to note that GCD requires you to set a cancel handler for this source as well. This cancel handler is fired when GCD is done monitoring the descriptor, and it's safe to close, which we're doing here.
+
+Here's our server accept function. All we do here is basically what we did before, and we create a GCD source that tells us when the descriptor has bytes available to read. But we're going to actually -- we're going to do something other than accept. We're going to actually read bytes and parse them. And we're going to do that with this server read function. Now remember, there's no guarantee when data comes over a socket that it's the complete message.
+
+So we have to keep some state around to tell us how much -- how many bytes were expected and how many bytes we current have. And once you have all of our bytes through multiple invocations of this handler we're going to actually handle the request. And once that's done we're going to cancel this read source. Because we're done in this connection in HTTP style way.
+
+So let's take a look at server read. Once we have all the byte, or once we get bytes to read, we're going to keep track of our size. Read the bytes, and then marshal them together in a pretty standard way. And once we've marshaled them together, we return true from this API.
+
+So you need to be aware of buffer overflows in this case. We're not doing much sanity checking here for the purposes of brevity. But if you have -- if a request comes in telling you I'm only sending you 12 bytes, and it instead sends you 1,000, you need to be prepared to deal with that.
+
+Let's take a look at actually handling the request. This is just a simple example of deserializing the plist and doing something interesting with it. So feel free to insert whatever code you want between these two Blocks here. But let's just pretend that we did something interesting and we put together a reply. And now we need to create data out of it. So we're going to marshal together a binary plist, and then give it back. Do all our release stuff. And then we're going to send a reply.
+
+And here's how we do that. In server send reply we're going to first take our -- the bytes of our CF data plist and stuff them in a buffer so we can place the appropriate header information there. There are more efficient ways to do this than incurring a copy, but again, this is just slide code. And then we're going to create a dispatch source of type -- dispatch source type right. This is like the read source only it fires when there's space available in the kernel buffers to write to this socket.
+
+We're going to continue here in the same function. We're going to take the source, set an event handler on it, and when the event handler fires we call write, and when we've written all of our bytes out to the -- out to the remote requester, we're just going cancel this source because we don't need it any more. Cancellation implies that this event handler will never fire again.
+
+And then in our cancel handler here, we're going to close the file descriptor that we got back from accept, because this is at this point we're done with it, and we don't need it any more. And then we're also going to free the large buffer that we've allocated.
+
+So that's a really efficient server. It's really cool. We can accept a bunch of requests and we're never going to block accepting requests because we do all the request handling on GCD's concurrent queue. And since we've got a nonblocking descriptor we know that accept won't block. So how can we make this more efficient. Well, we have to exit when we're not needed. And to do that we're going to install an idle exit timer. And the first step to do that is declaring these two globals: a timer source and a transaction count.
+
+Transaction counts initialize to zero, but the timer source is initialized by creating a dispatched timer source. And that timer source is going to initially be a 20 second timer. And all it does is call exit if that handler fires. So to get this functionality really working, all we have to do is add the following to server read.
+
+First thing we're going to do is increment the number of transactions we have open. So because we've gotten a request we don't want to exit any more, and we don't want to risk exiting in the middle of that request. So we do an atomic increment. And then if we've gone away from zero we're going to disarm the timer by setting its initial fire date to dispatch time forever.
+
+And then when we're done sending the request we're going to decrement the counter, and if the counter goes to zero we're going to rearm the timer, because we don't have any more outstanding work. And we just do this by setting the new initial fire date to 20 seconds from the current date.
+
+So how can we make this even more efficient? Well in Snow Leopard we have a technology called instant off. What instant off does is it enables very fast system shutdown. We made a lot of really great strides in terms of shutting the computer off very quickly in Snow Leopard. And we did this with instant off. And how that works is that the system has a transaction count for your process.
+
+And when the system goes to shut down, it's going to look at the transaction counts for every process. And whoever has zero outstanding transactions simply gets sig killed. This is so we don't end up invoking SIGTERM handlers that could potentially delay exit. We just want the process to go away.
+
+And to opt into that all you do is add enable transactions to your launchd.plist. And then you've opted into that model. And we're just going to open a new transaction upon receiving each request, and then we're going to close a transaction when we've sent the reply. And here's what this looks like.
+
+When you get a request and open a transaction you just call v_proc_transation_begin. And that's going to give you back an opaque transaction object that you can use to reference that transaction in the future. And when we sent the reply we just call v_proc_transaction_end with that transaction object, and that's all we really need to do. Except, there is one more thing that you have to do.
+
+I mention that if you get a -- if you get -- when the system shutdown time comes around and you have zero transactions, you're going to get sig kills. But what if you have a nonzero number of transactions? Well then you get SIGTERM. And SIGTERM is your signal to unwind your existing transactions and stop accepting new ones. So we want to add a SIGTERM handler. And again, we can do this with GCD.
+
+So we're going to create a dispatch source type signal source, and all we're going to do in this event handler is when we get SIGTERM set a global called G accepting transactions to false. And then we're going to check that global in the -- in the accept function. Now before doing this it's important to note that we have to ignore the default SIGTERM behavior. Because otherwise GCD can't safely catch the signal.
+
+And if we're not accepting new transactions when we get an accept request, then we just close the socket that accept gave us back and we say sorry, no more. So that's how we write a very simple daemon that just accepts requests and can just idle exit and is instant off compliant. It's actually really simple, and that's how you can become a really good citizen of our Launch-on-Demand model. So let's take this and apply it to a very common situation or a relatively common situation among Mac OS X developers.
+
+You have -- let's say you were writing a text editor. And in this text editor you wanted people to use it to edit certain system files, like say, living in /etc, all of those are protected by root. So a GUI application doesn't have permissions to edit them. So you need someone to run on your behalf as root to edit those files for you.
+
+But there's another problem. We want to preserve drag and drop install. We have a fundamental boot strapping issue here. You need to be able to -- in order to run your code as root you need to first put it in the right places for it to run as root. And to do that, you need code running as root. So traditionally, the way to do this has been to use an installer.
+
+And the installer would prompt the user for privilege escalation and lay the right bits down in the right places, and you'd have your daemon there waiting and ready for when you needed it. But we like users being able to take applications and drag them over to the /applications directory, and that's their install. We really like that behavior.
+
+So we need a way to preserve the drag and drop install and allow for these privilege helper tools to be embedded in the application. We also want to avoid set UID tricks. And this was the old way of doing this, where you embed a set UID helper, call in evil authorization API to elevate your privileges, and then basically bless yourself with root.
+
+And of course we want this to be an on demand daemon. This is a perfect use case for a daemon. A trusted, privileged entity running on your behalf to do privileged operations, a very select set of privileged operations. And we also want to take it one step further by establishing a secure handshake.
+
+You don't want to inadvertently end up installing a privileged helper that you didn't -- is not who you thought it was. So how we're going to do this is with the new service management framework in Snow Leopard. It provides API to establish these secure handshakes. And how this handshake works is we take the app and its tool and we tie them together. So how do we tie them together?
+
+We leverage code signing to tie the tools identity to that of the application. And also vice versa. The application says this is what my tool looks like. And these identities, because they're specified through code signing, are verifiable. So on the application side, here's what you're going to do. You're going to add the following to your info.plist.
+
+There's an SM privileged executables dictionary and each key is an identifier for your privileged executable. And it's -- the value it's keyed to is a string. The string is a code signing requirement. And that has its own little language that's documented in our developer documentation. But what we're specifying here is that the identifier of the helper tool or its info.plist CF bundle identifier is com.apple.wwdc.helpertool.
+
+And the certificate which signed it has a subject, a common name of WWDC Developer. So when you've gotten a code signing identity from a certificate authority, they're going to check your identity and make sure you are who you are, and they're not going to issue two certificates with WWDC Developer as the subject common name. So this is a reliable check.
+
+Similarly, on the tool side we're going to specify who the application owning us is. So we have -- so we're going to say the app must be com.apple.wwdc.smapplication. And the certificate which signed it must be -- must have the common name of WWDC Developer again. There are additional criteria you can add through this code signing identity or code signing requirements language to be even more strict about who you're willing to accept and say what certificate root it must be, and whether the root must be trusted. And you can explore all of that in our online documentation.
+
+So here are the requirements for your helper tool. You also need a launchd.plist because this is an on demand daemon. But this plist is going to be a little special. The normally required program or program arguments keys aren't needed because the system installs these helper tools for you, we're going to put them in a known location. So we're just going to fill that in for you.
+
+And we also need both launchd.plist and the info.plist to be part of the tools code signature. And I'm going to show you how we guarantee that in just a sec. And the tools themselves must live in contents, library, launch services inside your app bundle. And finally, the actual name of your tools executable must be the launchd label name that you've given as in your launchd. list. So for our helper tool that we've got now the actual executable will be called com.apple.wwdc.helpertool.
+
+So here's how we guarantee that our plists are actually part of the tools code signature. Because remember, tools are single file binaries. So we need to embed those plists in the actual binary itself. And then when we sign it, any alteration of those bits breaks the code signature. So here's how we do that. We tell the linker to create special sections.
+
+So you get to this sheet through your Xcode build settings, and then you find the Other Linker Flags build setting for your tool. And you specify sectcreate and then __TEXT, followed by __info_plist. And what this tells the linker to do is in the text section of this binary -- sorry, the text segment of this binary create a new section called __info_plist, and then fill it with the contents of this file. In this case, WWDCHelper-info.plist. We're just going do the same for our launchd.plist. Launchd, only we're going to call that new section __launchd_plist. So then we've got a tool that's all ready to go and securely signed.
+
+And then there's one more magic API call you have to make. So you obtain a right from the user using authorization calls into our security framework and the authorization level. And that's going to be the kSMWriteBlessPrivilegedHelperToolWrite. And what this does is say hey, operating system, I want to install this tool as a root owned job, as a daemon.
+
+And once you've got that authorization reference you call SMJobBless, and you pass a domain that says I want this to reside in the privileged system domain followed by an argument specifying the name of the tool you have. We support having multiple helper tools in an application. Normally, there's just one. But we still make you specify it. Then you pass the authRef and an optional error parameter.
+
+And once you check that the result is true then you can issue the request. Now you don't actually have to keep any state around to say, well, have I installed the helper tool or not because you can just do this every time. If the helper is already there we'll just return true to you and we also have automatic versioning. So if you're installing a new version of your helper tool, we'll automatically remove the old one and put the new one in its place.
+
+So that's how you can elevate your privileges easily on Mac OS X with the service management framework and Launch-on-Demand. So wrapping up, what have we covered? We covered the basics of Launch-on-Demand, why it's better, why Apple uses it, why we put so much effort into retooling our system to be fully on demand.
+
+And we covered why Launch-on-Demand is better, as I said. And we also used GCD to write a really efficient helper tool. It's not -- as important that the tool is running efficiently when it is running, as it not running when it doesn't need to be. Those two things are equally important to us. And finally, we applied those lessons to boot strapping, a privileged helper tool, and installing it so that a GUI app on Mac OS X could elevate its privileges.
+
+So we have some related sessions. There was a GCD session yesterday, and it's being repeated tomorrow if you -- and it was pretty packed. So if you couldn't make it I encourage you to go to it and learn more about the details of GCD. And there's also a more iPhone app centered GCD session tomorrow at 10:15. And then we have some sessions from last year that you might be interested in. If you have access to them on iTunes, check out Designing for launchd, which was last year's launchd session, that was a more high level overview of the Launch-on-Demand architecture.
+
+Then we also had Managing User Privileges and Operations with Author Observations Services. If you're new to the authorization APIs. And finally, Assigning your Application an Identity with Code Signing. And this will cover how you can make a reliable code signing identity and the foundations of code signing. For more information in general, you have our contacts here, we encourage you to go to the Dev forums too, and ask your questions there. We regularly check them.
+
+And we have a couple of websites and mailing lists. Both launchd and GCD are open source on Mac OS Forge and if you have questions, you can join the mailing lists for each of those. And we have man pages for documentation on both launchd and GCD. And there's header doc in the service management frameworks header.
+
+And finally, the SSD example that we went through during this presentation is available as sample code on the WWDC sample site. Also there's a service management example showing how to set up your project properly to install a privileged helper tool. And then there's better authorization sample, which is our Leopard compatible way of installing privileged helper tools.

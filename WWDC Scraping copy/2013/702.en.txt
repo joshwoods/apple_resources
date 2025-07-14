@@ -1,0 +1,193 @@
+---
+Title:  Efficient Design with XPC
+Year:   2013
+Web:    https://nonstrict.eu/wwdcindex/wwdc2013/702/
+
+[!] This transcript has potential transcription errors.
+---
+
+Morning. Everyone hear me? All right, welcome to Efficient Design with XPC. Thanks for choosing Russian Hill for your post-lunch siesta. Let's get started. So on the agenda for today, this a talk that's going to focus on performance and the two dimensions of that are going to be architectural design and implementation.
+
+And towards those ends, we're going to be covering some new features in XPC and cover some more advanced and more efficient usage patterns beyond some of the basics that you might have been exposed to over time. So last time we gave a talk on XPC, it was WWDC 2011. So, let's do a short recap.
+
+XPC is combined service bootstrapping and IPC. So, everything relating to getting a service up and running and talking to it, exchanging messages, it's all in the same library. And this enables you to easily factor your app into different services so that one service can be responsible for, say, network communication, they can have additional privilege levels, things like that. And they are all deployed within the App Bundle and they never leave the App Bundle.
+
+So why would you use this? Well, separate address basis provide some key benefits. The first big one is Fault Isolation. So if you have a piece of code that's going to be running in your app, let's say it's dealing with untrusted data and you don't necessarily want bugs in your parser to bring down the entire app.
+
+Putting in another process means that if you do encounter a bug parsing some of that untrusted data, you'll end up crashing, say, the service but the main app is free to try again or display some UI to the user saying, "Sorry, I couldn't do this." And also, on the other side of this coin, you'll have a different set of privilege levels for that same-- for that service.
+
+So your app might have a set of entitlements for example that allow it to, say, talk to iCloud or read the contacts database but the service that's working with untrusted data doesn't necessarily need all of that. So, even if there is a bug in a parser to exploit to get random code running, code running in that process will not be able to really do a whole lot that, say, the main app would be able to do. And this allows you to design with the principle of least required privilege in mind.
+
+And we also provide a completely managed lifecycle for all these services. So, you don't have to worry about spawning them yourself or setting up an idle exit timer so that they exit in an appropriate time. We completely manage all of it for you and there's a lot less boilerplate for you to write.
+
+So we have two ways that XPC is kind of exported to you, the developer. The main one is Bundled Services. These are the things that we were just talking about. They ship in the app. They never leave there. They're completely-- they're meant to be basically stateless on-demand helpers that come up to do something, maybe a service, few more request, and can then be reclaimed by the system later. And that's part of that fully managed lifecycle. And this is the supported way on the App Store to have multiple processes running in your application.
+
+We also support launchd services so that you can XPC to talk to a launchd job that you put on the system. But this requires an additional step for installation. You have to have the launchd plist in either Library LaunchDaemons or Library LaunchAgents. And so the App Store does not like that. We want everything to stay in the bundle. So you can actually use this part of the technology on the Store. But if you have a Gatekeeper app or you're a sysadmin, it's still useful for you.
+
+So all of this means a little more boilerplate code for you to write, but you do get additional capabilities. You can run as root for one, which is not allowed for App Store apps. And you can also run your code independent of the lifecycle of an application. So if you just have some background piece of work that needs to happen every so often, you can use XPC to talk to it, initiate it, and get it running.
+
+So here's what we provide today. All of this is built on top of libobjc which is the Objective C runtime. So-- and XPC is very heavily built on libdispatch, and both of those kinds of objects are actually objc objects in Mountain Lion and later so they can participate in ARC.
+
+And then way up in a space somewhere is NSXPC connection which was introduced in Mountain Lion. And that's a really nice set of Cocoa APIs that aren't just kind of like square bracket wrappers for XPC. They enable a lot of very powerful Cocoa programing idioms that we just really can't do down at the libSystem Layer where the C Library exits.
+
+So let's get started by talking about architecture. So here are our architectural goals with XPC. The first one we want is to avoid long running processes. These are things that just kind of sit around on the system forever. They might be listening for an event. They might be doing periodic work. But we would much rather that they launch on-demand and exit when they're not needed so that there's no risk of them, say, going crazy and starting to consume resources in the background.
+
+We also want to be able to adapt to changes on the system. So, the system's resource availability is changing all the time when the user opens an app, new sets of services come up. The user might log in, more users log out. This means that memory, CPU and Joules are all things that are being shared across the system and we want to be able to say you-- you know, you're part of a-- you're part of a collective and we need to divvy out these resources fairly. And finally, we want things to initialize lazily. So this goes with the on-demand theme. In other words, don't do work unless the user has actually done something where you need to initialize all of that. So, you know, be as on-demand as possible.
+
+So the support list in Lion, we have the technology called XPC Events and this is kind of a-- it's using XPC but without actually having, say, an app messaging you. It's more like the system is a source of demand. And some of those demand sources are IOKit events. So, you can have a launchd job that will kick off whenever changes in the IO Registry happen.
+
+And we support BSD Notifications. So if you're familiar with Notify APIs in libSystem, you can just post a notification and a launchd job kicks off. In Mountain Lion, we all-- sorry, in Sea Lion-- sorry, in [laughter] Mavericks, we also introduced CF Distributed Notifications. So if that's your preferred way to post a notification and kick a job off on-demand, that is now supported by XPC Events.
+
+And-- so, this technology is really only available to launchd services because you need to specify it in your plist. So here's how that works. So in your launchd plist, you have this Launch Events Key and you're going to specify "These are the kinds of events that I want launch be on-demand." In this case, we're going to talk about IOKit Matching. So here we have a dictionary of all the IOKit Events that I want. In this case, it's just the one.
+
+And this is, you know, my company's device was attached. And in this case, it's just a matching dictionary. So you're going to have the product ID, the vendor ID and the provider class all in that matching dictionary and XPC will implicitly install this matching dictionary, listen for it on your behalf, and kick you off when this happens. And for Legacy reasons, you have to add this IOMatchLaunchStream key and set it to true, just do that, I won't explain why.
+
+And once these events are posted, they need to be consumed. And you consume them by setting a handler and this is a lot like a handler on an XPC Connection. So you just call this XPC set of Event Stream Handler API. And the first argument is that com.apple.iokit.matching name which says, "This is the handler for the IOKit Events." And then it takes a dispatch queue and a block. And the block gets invoked on that queue. And then once that block has been invoked, the event has been consumed.
+
+And this event is treated like an IPC message. So if you don't consume the event, say, by not setting a handler, after you'll exit, you'll be relaunched to process it. In the case of the IOKit Notification system, each notification has a payload that allows you to extract the registry ID of the thing of the node that fired and then you can reconstruct it and turn it into an IO service T.
+
+So we've taken this idea of things that can launch you on-demand and extended it to Centralized Task Scheduling. And you interact with this technology through the XPC Activity APIs. And what this let's you do is schedule things kind of on an opportunistic basis. If you have some piece of work, let's say it's a network fetch or doing some random housekeeping, you might not want to have it happen now. You just want it to happen at some point. You don't really care when. And you'd rather just the system-- leave it up to the system and let the system determine when a good time is.
+
+And the idea here is to minimize the disruption of this work to the user experience. So if the user is not using the machine, that might be a good time to do some activity that synchronizes a bunch IO to disk for example. And this allows us to more efficiently utilize the battery because we can take certain tasks that have similar characteristics like, say, run every 15 minutes, and run all of those tasks on the same 15-minute interval rather than letting them run on their own kind of 15-minute intervals. And this is new in Mavericks. So we have two basic activity types. There's maintenance and utility.
+
+Maintenance and stuff like garbage collection. Let's say, you periodically write some files out to disk and you don't really need to keep track of them. These tasks are going to be interrupted when the user starts using the machine. And they're going to be kicked off when the user is basically idle. We also have a utility type which is stuff like fetching network data. So this task is more directly important to the user. So we're only going to interrupt it when resources become scarce.
+
+So the criteria by which you can specify an activity to kick off are things like being on or off AC power. Whether the battery level is at a certain percentage, whether the hard disk is spinning and whether the screen is asleep. So we can actually do your work while the user is, say, not using the machine but it's plugged in to AC power. That might be a great time to do some-- any kind of indexing task that your app might need to do. And this is available to launchd and XPC services. And what's really neat here is that it'll persist across launches.
+
+So, we can interrupt an ongoing activity that you have and then exit your process because it's not a good time to do the activity. But then when a good time to do the activity does come along, we'll launch you on-demand to keep going and potentially complete that task. And everything just kind of picks up where it left off.
+
+So here's how you would just create a basic activity. In this case, the activity criteria are specified in an XPC dictionary and we're going to set a few keys. In this case, we have an interval. So we have a desired interval of every five minutes this thing should go.
+
+And the grace periods, you know, we have a 10-minute slack time. So it's like we'd like every five minutes but it's okay to kind of play with that up to 10 minutes. And then we're going to set this XPC Activity Handler. So you just name your activity, give the criteria and then a Handler Block.
+
+And the Handler Block delivers the activity object that's being invoked to you so that you can figure out which activity you're dealing with, if you have many of them, and where to pick up after you left off. So right now, we've been invoked. So we're going to get some piece of data from somewhere and then we're going to set the activity state to continue. And that just means that, you know, yes, we're going.
+
+And then, as the activity is going, we're going to dispatch Async to the main queue to update a view. And then once that block completes, we say, "Hey, now this activity is done and you don't have to do it anymore." But if that block never gets invoked for whatever reason, let's-- and then let's say the app is killed before it can be invoked, we'll bring you back and then you'll be invoked with this Handler Block again and you'll get another opportunity to try completing that task.
+
+So that's what we have architecturally. This is how to-- this helps you design more efficient apps that play better on the system. So, let's dive into the actual ways you can use the APIs better to get more efficient performance. Let's start by covering what we have a service lifecycle now. So right now, we have an app and we have one of its services there on the right.
+
+The app is going to send some messages to that service. The service gets launched on-demand and it starts doing stuff. While it's doing this stuff, it's protected from sudden termination which means that the system under Memory Refresher won't see that this is something that can be reclaimed. But, as the replies for all those message got sent back, you saw that that green bubble kind of faded away and that means that as soon as the last one goes away or as soon as the last reply is delivered, the system is free to reclaim that service again. So we have the service launched on-demand. The system stops it as needed. These conditions can be Memory Refresher or idleness and lack of use. And we will also tear everything down when the app quits.
+
+So, Sudden Termination as it applies to XPC is automatically handled. So since XPC knows when you're receiving a message or sending a reply to a message, we can disable and enable Sudden Termination as we see those events coming and going. So in this case, we get a message and then we immediately disable Sudden Termination for you.
+
+And then when we see that you've replied to that message, we'll re-enable it. And as soon as all your replies have been sent, you're killable by the system again. So we've taken the same idea and applied it to something called Importance Boosting which is new to Mavericks. And this is the default behavior now for bundled services. And what happens is that they are background by default.
+
+So whatever the service does will by default not interfere with any UI applications that might be running. But, if the UI application does message that service, the service's priority gets promoted temporarily to handle that request. And the idea here is with everything else is to minimize the disruption of your work to the user experience if it's not directly aiding it.
+
+So here's how that lifecycle works. It's very similar to how the transactional lifecycle was managed before. So the app comes up, sends some messages to the service, and then the service gets launched on-demand, and now it's protected but now it's boosted for that entire-- for all three of those messages.
+
+And then once those messages get sent, then the boost goes away. And then any work after that point, any work the service does on its own behalf like, say, from a timer or something like that does not interfere with the app. The app will win any resource contention fights.
+
+So that's bundled XPC services by default. But if you have a launchd job, you can also opt into this. And we have a new plist key called Process Type in Mavericks that you can use on your launchd job to opt into this behavior. And once you've opted in, it all just works basically transparently because through the same mechanisms that we use for tracking, sudden termination.
+
+We also have some other values for that Process Type key. Adaptive is the one we would prefer that you use because it means that you'll only contend with apps when you're doing work on their behalf. And this is useful when you have a launchd job that your app communicates with. If the launchd job never really needs to steal resources away from apps on the system, you can set it to background.
+
+And this is useful if you have a launchd job that's part of the app but doesn't-- the app doesn't really have a dependency on anything that the job does. So it's not supposed to update its UI in response to something that that launchd job is doing. We also have this Interactive key. We'd rather that you simply not use it because it will mean that your service, whatever it does, can always potentially steal resources away from an application and potentially results in a stuttering UI.
+
+And then there's a Standard which is the same as just not specifying something. So if you really just want to have this key in your plist, use that value. So, we do a manner of Automated Boost Tracking, but you might want to persist your boosts. So you might have a work that is going on outside the scope of what XPC can know about.
+
+So when you get a message, by the time you've gotten the boosting message, we've already applied this boost to you. And-- so if you want to persist it, the first thing you're going to do is create a reply of that message. And that means that the boost's lifetime goes from the message that you received into that reply object.
+
+And then we're going to do some work asynchronously. Since we're using ARC in this example, the reply object is captured and retained. And therefore, the boost stays alive until that reply object goes out of scope at the end of this block and then the message gets dropped-- sorry, and then you send the reply with XPC Connection Send Message, and then the runtime asynchronously sends the reply behind the scenes. And then when its final reference gets dropped, the reply-- when the reply message gets de-allocated, you'll end up dropping your boost.
+
+There's another pattern where you might want to say send multiple replies to a single request and also maintain the boost for that duration but the API only directly allows you to send one reply to a message. Well we've got a-- there's a usage pattern where you can actually do this using multiple replies. And you do that by having an anonymous connection. And to create that connection, you just give Null as the first parameter to XPC Connection Create.
+
+So once we've created this, we're going to send it to the other side to the service in a message. And it's just like sending any other key or value. We're just going to send the anonymous connection in a message key to the key back channel. And-- so once we've sent the message, the other side gets it.
+
+And then we're going to setup our end points to receive the replies from that other side. So once we've created the connection, we're going to set an event handler on it and this is going to be a similar kind of event handler to the one that you will set for launchd's job when you use XPC Connection Create with MockService. In this case, we're going to say expect five replies and we're going to expect-- or each invocation of this event handler is going to deliver a connection to me. In this case, I'm only ever going to get one because I've only ever sent it to one person.
+
+So, once I get the new connection in that handler, then I set the message handler on that connection. And that handler gets invoked whenever there's a new reply to send to-- to be given to me and I'm just going to do stuff with that message and then that function will tell me, "Yes, I'm done now." And if that's the case, we just cancel the connection.
+
+So on the other side, when it receives the message containing that anonymous connection, it's going to extract it with XPC Dictionary Create Connection. And then it just sets an event handler on it and resumes it. So this is only-- it's only ever going to be used for sending a message.
+
+So we have an event handler that all it does is just cancel the connect ion. And we need to have some sort of reference to the connection in that block. Otherwise, there will be an implicit cancellation of the connection because ARC will see that the variable has gone out of scope in not referenced from anywhere.
+
+So here's the interesting part where the server is going to send back however many replies to the client it wants. In this case, we're just going to dispatch apply five things on a concurrent dispatch queue. And then we're going to send them all to that connection that we got out of the message the same way we would send to any normal connection that we created with, say, XPC Connection Create.
+
+So we'll do stuff. We'll populate the message. And then we just send the reply or the iterate of reply over to the backchannel connection. And ARC will capture that reply-- sorry, ARC will capture that message object in all five of these blocks. So when the last of them runs and gets-- and goes away, the message will have its last reference released and then your boost drops.
+
+So we've also made some changes to how large chunks of data are handled in XPC. The runtime recognizes very large data objects. And when it sees one of these, it goes down a fast path to avoid copying as much as it can. So what this means to you is that there is now a path you can take to make sure that when you give XPC a large buffer of data that it is never copied from the time that you created data object out of it to the time that the other guy receives it, and it's completely copyless.
+
+So, how this works is that we deal with the VM Object that backs your large buffer and then we just share it as a copy-on-write shared memory. And this is a page granular allocation. So, you can't really share-- since we use VM memory sharing to do this, you can't really share less than a page and you can't share, say, one and a half pages. So it has to be a page-aligned allocation that you own. So a VM allocation that you've actually taken ownership of and created and know the characteristics of. And here's why that part is important.
+
+So let's say we have a process that wants to share some memory. And let's say that this memory-- you got it from malloc. Malloc might have taken this little chunk of memory denoted by the green in that address range and put it on a page and then it gives out that pointer to you.
+
+Now, let's say that you take that pointer and put it in an IPC message to share it to the other side. The VM isn't going to just share that green region there. The VM is going to share everything on that page. And what this means is that if you do this, it will end up leaking random heap data to the other side.
+
+And since XPC-- one of XPC's primary advantages is implementing a more secure architecture, this would kind of defeat the purpose of that since arbitrary code executing in the other process would have access to your heap data or at least a part of it. And there might be a password in there. There could be any number of little gems for a security attacker to take advantage of.
+
+So, now that we've covered how you would safely share a piece of data, let's dive into the nuts and bolts of how you do it or how you this with XPC. The first step you're going to do is create a dispatch data object. And there's a new destructor to dispatch data that you specify which is the MUNMAP Destructor. And, this tells dispatch that, "Hey, this was allocated with either MMAP or MockVM Allocate."
+
+So, you can use this-- you can use the appropriate destructor to free it. And, once you have that dispatch data object, you wrap it in an XPC data. And since we're dealing with objects in this case, we're not copying that buffer locally. So, you're transferring ownership of that large buffer into the dispatch and XPC subsystems.
+
+So here's how you do it in code. So we create that dispatch data object with the MUNMAP Destructor. And we give it a buffer that points to a large chunk of memory that we've allocated using MMAP or MockVM Allocate, the two are equivalent. And we just tell it the size. And the target queue for the destructor to run on. In this case, it doesn't really matter.
+
+So we just use Dispatch Target Queue Default. Once we have that data object, we give it to XPC Data Create with Dispatch Data. And then we just send the XPC data object in the message we've completely avoided any copies of that really large memory region, so it's been transferred much more efficiently.
+
+So this isn't just available to the low level C APIs. Also doable from the NSXPC data-- NSXPC connection layer. And this is now because in Mavericks, dispatch data is toll free bridge with NSData. So you can create a dispatch data object and just cast it to NSData safely to insert it into whatever Cocoa object graph you want.
+
+There are some constraints around this behavior and that subclasses are not going to be toll free bridged here. So if you subclassed NSData, that's not safely interchangeable with dispatch. And you can't have created this data objects with No Copy method. And when you did create this object, any of those following deallocators will work. They just basically say it's a piece of-- it's a VM allocation.
+
+So also new-ish in our last big cat release, we implemented a message receive path and since we didn't have a talk last year, we'll talk about it now. Basically, this is now a much faster. When XPC receives a message, it doesn't actually have to create an entire objects graph out of that message upfront.
+
+So the act of receiving a message in prior releases would end up creating this big storm of allocations and copies while we unserialized everything. Now, we just deal with the message directly in a serialized form. And this let's you drain messages really quickly, you know, and just start processing stuff asynchronously as fast as you can.
+
+So there are certain kinds of messages that we do this-- that we don't do this for. Mainly, those messages are things that contain out-of-line types. So if you have like a file descriptor or a shared memory region inside of the message, then we'll unpack it all upfront. This isn't too bad because the assumption is that if you're sending one of these objects in a message, it's probably to avoid larger data transfers anyway. So, the cost of unpacking, it is pretty trivial. And you're not going to send a whole ton of them. So, they won't be too damaging to your throughput.
+
+You can also take-- there's also things you can do that will wind up forcing the slow path. So, for example, if you get one of these messages and then you start-- and then you say you want to copy it, we have to actually unpack the entire thing in order to create a copy of it.
+
+Similarly, if you use the XPC Dictionary Apply Routine, we have to unpack an XPC object T for every key value pair in that dictionary. So, that will wind up forcing a full unpack of everything. And same thing there, XPC Dictionary Get Value, it returns an XPC object that you can retain independently. So that will actually unpack the entire value associated with that key.
+
+And so, what that means is that if you have a nested container inside of that message object, then we'll unpack the entirety of that container. And then finally, if you modify the dictionary, which is safe, you're totally allowed to do that, but if you modify it, we have to unpack everything to get it into a form where it's safely mutable.
+
+So that's we have new in the runtime. I wanted to also cover the issue of timeouts because there's a lot of disagreement over the best policy here with local machine IPC. You might have noticed that the XPC APIs don't actually have any support for timeouts, and this is very intentional.
+
+They're just really not needed in most cases of the API usage because local machine-- so two processes talking on the same machine and two processes talking on two different machines are actually different. So as software engineers and as computer scientists, we all like to try and consolidate two problem spaces.
+
+This is one area where they're separate and they really should be. And the key differentiator here is that the kernel is not flaky. It's not like the network. It doesn't just kind of like come and go. It's your transport medium and it can actually make a guarantee for message delivery. So once you have this guarantee, there's really no reason that the remote server process shouldn't always be responsive. So here's an example.
+
+Well, here's an example of kind of the bad side of, say, using a timeout in one of the send and reply routines. It will confuse the expectations of the client side. So, for example, if the server end is doing a network operation on your behalf, you might want to attach a timeout to the reply on the client side so that the client says, "Well, if I don't get a reply-- it is a networking operation, so if I don't get a reply within 10 seconds, then that's a timeout." But what that does is it confuses the network operation timing out and the server process having a bug.
+
+So, it might be that the network operation would've succeeded but there's a deadlock in your server or there are some sort-- or there's kind of mismanagement of resources that prevented the server from sending the reply in time. But those two conditions are going to be expressed to the client identically and you as a developer might end up shipping the app with a bug that you didn't actually know existed.
+
+So, how would we optimally handle this case? Well, it's not that the network operations shouldn't have the timeout. That's just kind of a reality of network programming. But you don't want the client side to manage that timeout. You want it to be managed on the thing that's actually doing the network operation.
+
+So the server sets up whatever socket it needs to do that operation, attaches the timeout that it thinks is appropriate and then if that's-- if the server sees that the request has taken too long, then that means it can return-- it will return a message to the client that just has like an E-timed out error in there. And so, the client knows that, you know, the server should always be responsive and if it didn't respond to me then that means I have a bug and I should investigate.
+
+That being said, there are cases where IPC-- local machine IPC timeouts are actually appropriate, but they're not really terribly common. Usually, those cases derive from, say, hard deadlines. And this is also when transit time makes a difference. So the time it takes to send the message to the other side and for the other side to send the reply back, if that actually matters in your use case, you might have a legitimate need for a timeout on the client side.
+
+And usually, this will be some sort of realtime application where your timeout isn't just completely arbitrary. It's not, you know, 10 seconds or my favorite number or whatever. It's actually derived from a desired throughput rate. So if you're measuring things like frames per second or samples of audio process per second, then timeouts are needed so that you can know that an operation won't complete.
+
+And if it can't complete in that amount of time that you've given it, there's really no need to keep waiting for it. You can just move on. But like I said, these are not exactly common use cases. So we don't really have support in the API for timeouts. You can also-- but using the asynchronous APIs, you can implement your own. And I'm sure a lot of you have figured that out.
+
+So, let's also talk a little bit about debugging and what we've got in Mavericks for debugger support. The first big one is that Xcode now transparently supports debugging XPC services. So, you can just take a service, set a breakpoint on the file that's associate-- in a source file that your service uses, and then you can run your app. And then if your app takes a code path where it talks to the service and launches it on-demand, then those breakpoints that you set will be honored. You don't actually have to do any other work. [applause] Yeah.
+
+So, it's important to note that this functionality relies on enhancements to the host that we made. So, it's only available on Mavericks or later. So, yeah, it just works. And also nice, there's a copy files destination now for the XPC services subdirectory in your app. So, you don't have to select wrapper directory and then specify XPC services anymore. We also have a tool for debugging, importance boosting, and leaking of boosts. So if you're running into leak boost, there's this iptrace tool that will tell you why you were boosted and who boosted you.
+
+So in terms of debugging, just debugging tips, a lot-- what a lot of people run into is they will set everything up and they'll run their app the first time. And then, immediately, when they try and talk to their service, they get a connection invalid right away. That almost always indicates that there's been a configuration error. You know, the service isn't in the right place or the bundle isn't structured properly.
+
+But when you see this, just a couple of things to make sure, make sure that the service is a dependency of the app target. So when the app gets run, the service should-- sorry, when the app gets built, the service should also get built before it. And then that service product should be in the copy files build phase of your app so that it winds up in Contents XPC services inside the app. And then the other easy mistake to make is that you might just be using the wrong service identifier.
+
+So the one-- the name of the service that you want to connect to is the CFBundleIdentifier for that service bundle. And sometimes that's easy to confuse because when you view the info plist in Xcode, it will actually be-- it will have dollar, you know, product identifier that gets filled in at build time. So, you want to make sure that you're using-- you're identifying your service consistently.
+
+XPC is also defensive. It's really easily offended. And this is also intentional. So, we do our best to detect noticeable cases of API misuse and then we abort the process with that back trace so that you can fix the bug before actually deploying your app. And so, we'll do this when, you know, we detect conditions that will almost certainly lead to data corruption or where data corruption has clearly happened.
+
+Things like underflowing the retain count, if you're still using manual retain/release on XPC objects and just other examples of obvious API misuse. A lot of this is detailed in the XPC Abort Man Page which is in section three. And you'll-- the tell-tale sign for this is that you'll see an illegal instruction being issued and you're process will terminate.
+
+So, in the case where you got crash report that-- where this has happened, you'll see stuff in the applications specific information telling you why this-- why the process was aborted. But you might be attached to the service or the app with LLDB. In which case, you're not going to get a crash report. You're not going to get applications specific information.
+
+But we provide a debugger specific API called xpc debugger api misuse info that you can call from within the debugger and that will-- the result of that will be a pointer to the string that we would've printed in the application specific information of the crash report. So here's what it would look like in a crash report. You just have the application, specific information and it says API MISUSE: Over-release of an object. So in this case, we called XPC release more times that we have references to the object.
+
+In LLDB, you'll probably see something like Program received EXC BAD INSTRUCTION which is the Mock exception in this case but it maps to SIGILL. And then from the LLDB command line, we just do a p and then call that debugger API that I mentioned before and then it will print the string that's associated that that API would've returned.
+
+And if you're hounding your syslog looking for every little thing that's happening on the system, you might have seen a message that looks like this. This is what it looks like in Mavericks. In previous releases, the part where it says assertion failed says bug. This is cryptic and-- to file a bug because we now how to make sense of it.
+
+If you're curious, it's just the program counter offset from the beginning of the libxpc image in the process where we encountered some weird error that we didn't expect and that last part is the error code that we encountered. Like I said, we know how to make sense of it. If you see of these, file a bug with that log line and any other relevant contextual information that you have and we'll look into it and hopefully fix it.
+
+So, that's pretty much of what we've got. So for more information on any of these technologies, Paul Danbold is the Core OS Technology Evangelist. The documentation for XPC, we have a full suite of man pages in section three. I'm sure there are some great man page viewer apps on the store if you don't like viewing them in the terminal. But I encourage you to read them because they're very well put together. And we also have a full set of HeaderDoc inside the actual headers of XPC. So, look in User Include XPC and then all of those public interfaces are documented with HeaderDoc.
+
+And then the Daemons and Services Programming Guide which is on the developer documentation website covers when you would want to use a launch daemon and the lifecycle of XPC services and all that fun stuff. And if none of these resources can answer your specific question or you still have questions about things that aren't covered there, there's always the Dev Forums where you can just ask us and we occasionally check the Dev Forums as engineers and if we can answer you, we will.
+
+Relatedly, the debugging support for XPC and Xcode that I mentioned is going to be demoed in the Debugging with Xcode session and that's in Pac Heights tomorrow at 2:00. There's also a session later today which also cover some of the architectural things that we talked about like XPC activities, centralized tasks scheduling, and making more efficient apps. And that's Building Efficient OS X Apps. That's in Nob Hill later today. And that's it. Enjoy the rest of the conference.
+
+[ Silence ]

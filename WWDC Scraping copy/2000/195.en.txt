@@ -1,0 +1,297 @@
+---
+Title:  Apple's Performance Tools for Mac OS X
+Year:   2000
+Web:    https://nonstrict.eu/wwdcindex/wwdc2000/195/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Hi, my name is Robert Bowdidge, and I'm a member of Apple's Developer Tools Group. And today I'm going to talk about Murphy's Law Revisited or Apple's Performance Tools for Mac OS X, and hopefully we're actually going to have a demo. So the first question, or the way I'd like to start this, is why are you all here? Why should you actually care about performance tools, especially today?
+
+Well, it turns out that with the changes in Mac OS X, this is a perfect time to be very concerned about the performance of your applications. We're all working on a new operating system where the libraries that we're used to are now working on different system routines and may not behave the way that we're used to them behaving.
+
+As a result, we need to actually take a look at our apps and decide whether the system calls and the library calls that we used to be doing actually have the same performance that they used to, whether there's any changes in their semantics and what operations they do, whether there's changes in how they behave. In addition, some of the algorithms we may have chosen in the past may no longer work as well in Mac OS X. And here's three examples that actually come out of some of my experience at Apple. The first one is the difference in how the heap is done.
+
+For example, in Mac OS X, we no longer have fixed-sized heaps. Instead, the heap will expand as far as it needs to, as long as you keep allocating memory. As a result, the idea of allocating memory and then setting the purgeable bit doesn't make sense anymore because the operating system is never going to bother to purge this memory.
+
+There was one case in the Finder, actually, where they were loading in the background image. They would load the compressed image into a buffer, then they would uncompress it into another buffer, and then they had a third copy for--as a working copy that was marked as purgeable. And the idea was that if the memory was ever needed, that copy would get blown away and it could be recreated easily.
+
+On Mac OS X, at least two of these buffers weren't really necessary. The idea of the purgeable case didn't really make sense because it was never going away. And the copy that was on the version of the file on disk wasn't needed to be copied into memory because we have memory mapped files.
+
+And so with cases like that, you need to worry about exactly what your app's doing with memory. Similarly, the case of pulling--. The case of pulling is much more expensive on a multitask operating system than when you're only expecting one application to really be taking control of the CPU at a time.
+
+If you're sitting around looking out on the network, looking on the file system for a file to appear, waiting for the mouse to move, those are cycles that are being used by the CPU that can't be used for other applications. And so you don't want to pull on Mac OS X because you're going to drag down the performance of all the other things that might be running in the background.
+
+And finally, because we're no longer operating in a single disk, we're operating in a single address space, the idea of inter-process communication becomes a bit more difficult. We can't just sort of pass a pointer and provide another app a sneaky way to look into our memory. Instead, we need to explicitly use one of the real IPC mechanisms such as Mach messaging or TCP/IP or we need to use shared memory. Or we actually need to map memory into both processes using the Mach underlying virtual memory mechanisms.
+
+In addition, many of the tools that we're used to using may no longer work or may not make sense anymore. A good example of this is Even Better Bus Error. This is a quick and dirty tool that will basically make sure that your app is not writing or reading from address zero by putting a bogus value there.
+
+On Mac OS X, this is not necessary anymore because the operating system by default makes sure that for every task, the first page of memory ends up being non-readable, non-writable. If your application tries to read or write to it, boom, it crashes. You get an immediate feedback that you're doing something badly.
+
+Isn't that nice? In other cases, there's new tasks that may be necessary. There's other cases such as understanding about purgeable and non-purgeable that no longer matter. You need to understand different sets of tools. Hopefully, what you'll learn today are some ideas about what tools are out there and perhaps what tools are necessary as some ideas about third party things that can be filled in.
+
+So, as an overview, I'm going to start out by talking about two classes of tools. The first set of tools are a set of Unix-like command line tools that give you information about the low level state of the system. The second set of tools are some graphical and exploratory tools that actually give you a higher level understanding about how your application is running.
+
+Some of these may be familiar to you, such as MallocDebug or Sampler. For each tool, I'm going to try to give you a little bit of background about how it's used, what its purpose is, and also hopefully give you enough excitement to make you want to go off and try these on your own and explore them.
+
+For each of them, I'll also try to give some of the details about how you interpret its data and how to use it to actually analyze your system. However, this is going to be a survey. There's just not enough time to really go into depth about what's going on.
+
+And so, hopefully this will at least spur you to explore and ask questions. Finally, there's two other themes I'm going to try to cover. One is the use of the Unix-like command line tool. The other is the use of the Unix-like command line tool. The other is the use of the Unix-like command line tool. The other is the use of the Unix-like command line tool. The other is the use of the Unix-like command line try to keep going through as I talk.
+
+The first one is that I want to tell you a little about how you might try to approach performance problems. These won't be at a very high level, but hopefully these will be some tricks. The second issue I'm going to try to do is give you some little hints about performance problems that I've seen, such as what I talked about on the last slide.
+
+Once again, I'm not going to be able to go into detail on these. If you're looking for specific details about how to make your calls to, let's say, core foundation more efficient or the Carbon, talking to the people who are responsible for those libraries, going to those sessions, such as the core graphics session yesterday or some of the Carbon sessions or the core foundation sessions, will give you more ideas about some of the obvious things you should be doing to make your app more efficient.
+
+So Scott, how are we doing? OK, so let's start off with command line performance tools. How many of you have experience-- have actually used Unix? Good. Most of you actually will have a leg up. How many of you think the command line tools are the work of the devil? OK.
+
+Thank you, Scott. Well, actually, there's some very good reasons to have these. The first one, the tools that we have here are basically meant to be quick and dirty tools to give you information about the state of your machine. And there's three really good reasons why you want to use them. The first one is that they're minimally invasive.
+
+That is, when you actually use these to analyze your system, you're going to get more of an idea about how your system or how your application is behaving on your computer, as opposed to how the tool is actually affecting how your app runs on the computer. The second thing is that because all these are command line tools, that means you can actually run them remotely. If you don't want to upset the screen, if the machine is hung, you can log in via telnet and you can run these commands and find out what's going on.
+
+And finally, because all of the command line tools are basically just text-based applications, you can use any of the UNIX filter commands to convert the data into a format you like. If you want to see, let's say, every 10 seconds how much memory your application is using, you could easily write a little script that goes around and every 10 seconds pulls one of the tools to actually find out how much memory is being used. And so in this way, you can sort of roll your own without having to do anything too deep.
+
+The first tool that I list here is actually PS, which is a standard UNIX tool. It stands for Process Status. It gives you information about what processes are running on the machine. It tells you about how much memory is used and so on. I'm not actually going to talk about that because it ends up--because there's some other things that might be more useful. Okay, so let's take a look first at TOP. TOP is something that you can use instead of PS to find out about the state of your system.
+
+It's actually something that comes--there's some implementations on top on other Unix like operating systems. This one was specifically written by us. And what it does, as you can see, is it gives you a list of the processes, ranked in basically newest to oldest order. At the top it gives you information about the status of the system. It starts out saying what the load average is, what the average number of runnable tasks happens to be.
+
+It tells you about how many processes there are, how much memory, the line starting with memory shows you how much memory is wired, that is dedicated to uses of the kernel only. The second line shows you how much memory is active, inactive, blah, blah, blah. Below that you can see how much virtual memory there is. There's currently 688 megabytes of memory allocated to virtual memory.
+
+Not all that may actually have memory in it, but that's how much the virtual memory system thinks it has. In addition, it shows how many pages have been put out to disk and brought back in with the page ins and page outs. And the number in parentheses-- The number in parentheses there is important because that's actually a delta. That shows you how many pages have changed in the last second. Why don't we run QuickTime Player so we actually get something interesting here.
+
+And what we'll do is we'll simply run QuickTime Player. And let's think of a hypothetical problem. Let's assume that we're working on the player and we're finding that the frame rate doesn't seem high enough. And we're not sure whether we're correctly throttling it down for some reason or if we're not getting enough CPU. This is actually not a problem as far as I know, but it's a good story.
+
+So what we can see here is on the second line you see LaunchCFMApp. Here's a bit of trivia. The QuickTime Player is actually a PEF executable. It's in the same format that you would have seen on Mac OS 9. And as a result, whenever you try to execute one of those on Mac OS X, the LaunchCFMApp serves as a wrapper to actually load that into memory.
+
+And so that's why you don't actually see QuickTime Player in the list of processes. And what we can see is that the QuickTime Player is using about 25 to 30 percent of the CPU. We get the elapsed time, the number of threads, the number of Mach ports, which is an abstraction for communicating between the kernel and the system and the application.
+
+Other interesting things include the RPrivate, which is the amount of private memory, memory that is only for this particular running version of the application. That's different from all the memory that's needed that can be shared between multiple copies of QuickTime Player if we had multiple ones running or other applications using the same libraries. So the RPrivate is a good measure of how much memory your application is using right now.
+
+and our shared shows how much memory is being used for the application itself, which can be shared, and all the libraries which can be shared, and memory mapped files, and all those things that aren't only dedicated to one application. Now, we can look at this and we can say, gee, we're only using about a third of the CPU. What's going on here? Are we spending too much time on disk?
+
+Are we throttling? Well, one thing we can do is we can look down the list and we can understand whether our application is doing anything bizarre that depends on the rest of the system. And in this case, there certainly is. We see at the bottom, actually, and a lot of people probably, well, can everyone see the line starting with 50, WindowMan?
+
+Never mind, I'll just read it out. Down towards the bottom, there's a line that says "50, window manager." It's using about 20% of the CPU, it's run for about 51 seconds and so on. What's happening here is that the window manager is actually responsible for doing the drawing to the hardware. And so all the applications end up talking to the window manager.
+
+And so it's not too surprising to see execution divided between the two, because the QuickTime player is spending some of its time getting all the images ready, it's shipping them off to the window manager and then the window manager blasts them up on the screen. So we're seeing that we're spending about 50, 60% of the CPU actually doing meaningful computation and filling up the CPU. What's happening with the rest of the time? Well, there's some other tools that we could do.
+
+Let's go on the hypothesis that maybe there's something going on with the disk. There's another tool, and before I end, one of the nice things about Top is that it has a little bit of a different type of tool. It's called the "Top" tool. And it's a little bit more complex than the "Top" tool.
+
+It's a little bit more complex than the "Top" tool. It's a little bit more complex than the "Top" tool. It's a little bit more complex than the "Top" tool. It's a little bit more complex than the "Top" tool. But what it does is that it has a huge number of extra modes and features hidden.
+
+Please check the man page. There's probably some view that's perfect for a performance problem you're trying to track down. But I'm not going to show them all. If we're trying to go to the file system, though, and understand how we're using that, there's another command that might be useful. And that's called "fsusage". With "fsusage" we name either--name an application or we name a process. And we hit return. Actually, just do--let's just do a little quick time play, or actually do everything.
+
+Well, what we're going to do is we're going to get a huge amount of information, and if Scott hits the space bar, we'll start seeing it. And what you're seeing here are all the accesses to the disk that are going on. So you're actually seeing the file system calls being performed.
+
+And we can see what was being done, like read or write, or page ins, page outs, doing the status of a disk, that sort of thing. We find out how much time was elapsed and whether it actually had to give up the CPU to another task to let that transaction finish.
+
+And the application responsible. If Scott actually widens that window, we'll get some more information. We'll know exactly which file handle was accessing that and how many... There we go. It'll actually say what file handle it was in the process and how many bytes. And what we can see here is that the QuickTime player is getting chunks of 16,000 bytes or 32,000 bytes. And we don't see any cases where it's having to wait too long. So that probably means we're not having to do anything too weird with the disk and we're not waiting for stuff to come off the disk.
+
+Maybe. Another thing that we could check out is we could ask about how the memory is laid out. Are we using a lot of malloc space and the like? Or just if we were curious about how applications are laid out in memory in Mac OS X, we might want to have some sort of a tool for visualizing that. And there's another command line tool called VM Map. And what we can do is name VM Map. We can specify the process ID.
+
+or the name of the task, and VM map will give us a listing of all the regions of memory where they start, how much space they are. It'll actually start off telling us only the readable regions or the non-writable, and then it will tell us the writable ones at the end.
+
+And what we can see here of interest is on the first line we see a symbolic name, page zero. We see a starting address, which is zero. It's four kilobytes. Then we see the permissions, which is in the Unix style octal. And everybody knows how I had a redactal, of course.
+
+Oh my. Saying that page zero is actually zero slash zero, which means that it's non-readable, non-writable. That's the thing that's saving us from doing page zero accesses. If you try to dereference a pointer which actually has the value 12, you'll know about it. You'll be able to catch those immediately. You're not going to have to worry about strange memory corruptions and the like.
+
+Below that we can see the application starting at address 1000. There's a couple places that are cut off with the RD, which are guard pages, which are, again, non-readable, non-writable pages at the end of stacks for the various threads, so that if you fill the stack, it's not going to crash the system, or it's not going to trash memory, it's simply going to crash when it hits that. and you can see all the libraries starting at address 4130 and going down. And you can see the names of the files that are being loaded as libraries along the right hand side.
+
+If this is too small, don't worry, try it at home. Hopefully it will make perfect sense. If we go down a little further, we'll actually see the writable regions. And here we can start seeing things like the malloc allocated regions. And so we can find out which pages malloc was placed at. And most of the malloc buffers were actually placed right below the application. Another tool that might be useful is we might be asking ourselves, well, is the application running slow because we're doing some obnoxious system call that's just hanging forever? And there's another tool called SC Usage.
+
+and what SC Usage will do is it's going to look for all the Mach system calls going down into the kernel. It will tell us how fast or which ones we were calling off and how much time we were spending. What you can see here is some information about how often the app got preempted, how often the CPU gave execution time to somebody else. We can find The second section shows us how much time we spent idle and how much time we spent busy.
+
+What we're seeing there is that we're spending a lot of our time in user mode running the application and a fair amount of time waiting in the app, probably because we're doing a lot of disk accesses. Below that, we find the most popular system calls being done, and we find we're actually spending a lot of time on semaphore wait and Mach message overwrite trap.
+
+Okay, you might say, gee, that's weird. Maybe we're locked on a semaphore. That's a very good guess. Unfortunately, it's not completely true because on a lot of applications on Mac OS X, there will be usually one or two threads that are basically waiting for something really bad to happen. They've sent a message off to the system saying, let me know when something bad happens. And they just sit there on Mach message overwrite trap, which is send off a message, overwrite the buffer when it comes back, wait until we get a message back.
+
+And nothing ever comes back, and so they're constantly waiting. So understanding that those are having huge wait times doesn't necessarily buy us anything. However, in some cases, understanding we're spending lots of time doing semaphore signals may tell us something about how our app's running, that we're spending too much time actually waiting on critical sections or something. Let's see, what else do we want to show? I guess that's about it.
+
+Okay, so those are the command line tools. Everyone who had covered their heads because they were afraid of them can now come back up because we're actually going to look at things that look nice and that don't use any nasty technologies. So the next thing I'm going to show you are some graphical tools that tend to give you a little higher level information. They don't give you quite the immediacy, but hopefully will help you understand what's going on. The first of these is called MallocDebug, and the point of MallocDebug is to help you understand how your application is using heap memory.
+
+So what it does is for every allocation that your app is doing, it will keep track of how much memory was created, where that memory was created, and will give you a way of seeing what's currently allocated in the system. It's really good for answering questions like, how much heap memory is my application using? Am I using 500K? Am I using 10 megabytes? Are there any places where I'm using large chunks of memory?
+
+Am I allocating 3 megabyte chunks for some array that I don't realize? Are there places where I'm overrunning or underrunning buffers, preparing, trying to trash somebody else's memory, which is a great way to make subtle memory bugs? Are there cases where I might be leaking memory, where I'm allocating things but forgetting to free them?
+
+So the first thing I'm going to show you is a little bit of a graph. So I'm going to show you a graph of the memory that I'm allocating. And then I'm going to show you a graph of the memory that I'm allocating. And then I'm going to show you a graph of the memory In all cases, what Malloc is going to try to do is give you information about how you're creating memory using Malloc as the core idea.
+
+And unlike some other tools you might be using, what it does is it tries to give you a snapshot of how much memory you're using right now, as opposed to showing you memory that you'd allocated before that's been freed, for example. So it's only a snapshot. The way MallocDebug does this is kind of cool.
+
+What it does is it has its own version of Malloc that's been instrumented, and it slides that version of Malloc under your application when you launch it. And as a result, it makes it very easy to use. You don't have to worry about recompiling your code to make sure that this new library is used.
+
+You don't have to change any source. You don't have to do anything. It just works. And that's one of the advantages of these tools. In addition, because we have our own version of Malloc, what we can do is when Malloc is called, we can actually keep track of the call stack and find out how you actually got there. And because every other allocator in the system, whether that's in core foundation, whether that's in Carbon, whether that's in Objective C, all of those eventually go through Malloc. So this is a single point to actually find out how you're allocating memory. So let's do a demo here.
+
+So here's the MallocDebug window. So Scott can either select the application by pressing the Browse button and going through a browser, or can choose it off a drop-down list. He can then press Launch to actually start it up. Okay, and why don't we update it to see what the current status is. And we find that in this case we're launching simple text. We find that we're actually allocating about 700K to get to the point where we've actually started the application.
+
+and what we see in the window below is basically a call tree. It shows us all the ways that we got down, or that we ended up going to malloc_debug, or calling malloc. So for example, from start we called underbar start and eventually we got down to main after going through some system stuff.
+
+Main called malloc through about four functions, either calling init_cursor or do_initialize or do_event_loop or some strange hexadecimal value there. Actually, let's go through that hexadecimal thing. So 4110 is actually another little secret. As you may know, 411 is information and this actually is the place where you go to load dynamic libraries.
+
+That's where you get information about how to call other functions. Cute, huh? So what happens is that when your application launches, it tries to load all these other libraries and as a result it has to call the initialization routines for each of these libraries. So if you look down inside that call domain, that implicit call that you didn't actually have to make in your code, the initialize_highlevel_toolbox, initialize_quickdraw, initialize_carbon_core all happened automatically. We noticed that they actually allocated about 400K. So a good deal of the memory that was allocated during launch was actually in these initialization routines.
+
+Now going from the top down is sometimes interesting, especially when you know your code, but sometimes it's interesting to see why or how you got down to Malloc and what was happening down at the other end. We can not only show the tree from this side, but we can also invert it, and we can change the style of the tree.
+
+And so now what we're doing is, rather than looking at how we got from Maine and called down through the program down to Malloc, we're going to look at Malloc and we're going to look at the ways that Malloc was called. So for example, if we select Malloc. These are the ways that Malloc was called. AllocateMemory called Malloc, AddUsage called Malloc, GlobalCacheAllocate called Malloc. And for each of these, we can get some idea about how Malloc was called.
+
+Let's go through one little example here. Actually, let's do the Valloc one. It's too bad we didn't actually have the better example, but this will do. We can select Valloc and we see that we actually have a 65,000 byte chunk that was allocated through one of the calls down that way.
+
+And Valloc was called by allocate memory, which was called by allocate zeroed memory, which was called by new handle. I would prefer to have a better example than this, but this one will do. Here's another little bit of trivia. What's happening here is that in Mac OS X, when you create a new handle and create the memory attached to that, handles are actually suballocated.
+
+There's actually a big block of space that's been subdivided into handle size spaces. And somebody's got to create that memory. So what happens is the first time that you call new handle, it actually goes and creates the suballocated field. So that 64K chunk is the place for handles to live.
+
+May not make sense, it's a system level idea, but the idea is that we can actually track down from this call graph what the point of that memory was, especially if you're looking at your own code and not looking at the innards of the memory manager. What we can also do is we can actually go to something a little simpler like Calic.
+
+and why don't you select one of the buffers down below. No, actually, yeah, select a buffer. So, you also get a list of all the allocations. So, not only do you find how you got there, but you find a list of the buffers that were allocated by calling down that way. It'll tell you the address that it was allocated at, the size, and so on. And if we double click on it, we get a memory dump.
+
+So, we can actually look at memory. This is really useful. If you find that you're allocating 6,000 bytes somewhere and you're curious why, now you can double click on it and take a look and try to understand why that memory was allocated. Now, one other thing that you can do, actually press the back button, and is, as I said, actually, can we run the leaked example?
+
+So one of the other things that you can do with MallocDebug, as I mentioned, is that you can actually do a bit of analysis to find cases where you overran or underran buffers. And these are really nasty bugs because they tend to be intermittent, they tend to be really subtle, they tend to only occur after the program's been running for a while and then suddenly it crashes. And so you'd like to track these down. What MallocDebug does, and you can do update and then let's do an inverted, or actually go to trashed.
+
+is you can change the mode from showing all the currently allocated regions to only showing what are called the trashed ones. And if Scott actually selects Start, we see that there's two buffers that are trashed. That is where the--where we know we overran or underran it. And the way we know that is we actually have some guard words on each side and when those get overwritten we know that we did something bad.
+
+If Scott actually double clicks on one of those, you can see the ten bytes, the ten zeroes. Malloc debug then--what it does is when it allocates space, it puts two special strings at either side. It puts the hex value beef dead at the back end of the buffer and then if Scott presses back, you'll see that it puts dead beef at the beginning.
+
+and the last word down at the bottom. And so when those words change, MallocDebug knows you've done something bad. It actually also, in an extremely user-friendly fashion, ends up putting a message out to the console, yes, we need to fix this. But it will actually give you some indications of when it actually notices that something gets trashed. So keep the console window open if you can when you run MallocDebug so you can see this. In addition, let's try leak analysis next.
+
+There's also the idea of leak analysis. For those of you who have used ZoneRanger, ZoneRanger has an idea about leaks. What it considers a leak to be is any memory that you allocate but then don't deallocate in some operation that should have actually been cleaned itself up. For example, opening a document and closing the document.
+
+If you have more memory than you--if you have more memory allocated than you started out with, you've probably got a leak. MallocDebug goes off the definition that's more like Purifies, that any memory that's not--that cannot be reached by a pointer probably can't be referenced and therefore it is leaked.
+
+And so we go with that definition. And the way you can do leak detection is that you can start it up and you can change the selection mode to leaks. And what it does is MallocDebug will now scan through memory looking for anything that looks like a pointer.
+
+And if it's a pointer, it goes and it sees whether that's a pointer or not. And it's a pointer to the beginning of a malloc region or to a handle which points to a memory region or a couple other options. And if it does find a pointer like that, it marks the block as reachable.
+
+If it doesn't find it, then it says it's not reachable and it's probably a leak. And after a little while, it comes back and it shows us only these--the allocations that would have been leaked. And what we can see here if Scott goes down a little further or actually go from the inverted side.
+
+is we find about 182,000 bytes. This is not completely true unfortunately because there's a few cases of false positives in system routines and let me just step through a couple of them. The calls to malloc from the global cache allocate which are from ATS alloc are cases in the font code and this is a case where they're doing some interesting things with pointers that this doesn't detect. And we can basically ignore those out.
+
+Yes, this is ugly. There's an internal version I hope to roll out at Apple real soon now, like in the next week, to get around this problem. It didn't make it on the CD. Hopefully we can put it on the website. But for now, hopefully this will give you some hints on how you can actually look at this stuff and then laugh at me every time. So we can select global cache allocate and we can say, okay, this is immaterial.
+
+Let's select the prune menu, the path item and we can pull that out so we don't have to look at it. So we're only looking at the things we think to be leaks. Similarly, the allocation with new block turns out to be a case in icon services. Prune that out. The case in malloc.
+
+is the handles. We can prune that out. It will be better in the future, yes. And eventually, you get down to the point where the only things left are things that are probably leaks. There's some documentation on this in the release note. Like I said, we'll have a better version that will do this a little better. But this is a way to start looking for memory that might not be reachable. And if you find memory that you allocated in your application that's leaked, this is probably a good indication that you might have a problem.
+
+Okay, let's move on. Hmm? Well, that's probably a good idea. How are we doing on time? So one of the things that's really nice about ZoneRanger's idea is this idea of you allocate memory or you create an object, you destroy it, and hopefully the amount of memory doesn't change. That idea is really nice for understanding the effect of certain operations.
+
+We can do something similar to that. What you can do is you can say, let's say we're having a slow down when we start typing in simple text and we're curious why that's happening. So we can try to see if we're doing a lot of allocations or a lot of work. What we can do is we can select, go back to all, or actually that's fine. What we can do is mark a point in time by pressing mark. We can then go and type into the buffer to do the event that we're trying to watch.
+
+And then what we can do is go over to MallocDebug and we can change to the, show only the new nodes, show only the newly allocated memory. And we'll find, after a moment. Did we actually press mark? Oh there we go. We find that we allocated 400,000 bytes.
+
+Oh my gosh what are we doing? Actually there's a good reason for this. But it's a great example. If Scott actually, actually we should go to standard for this one because it's an easier way to see. This is why it's exploratory. You have to sort of dash around and explore. And it makes it an interesting thing to demo.
+
+What we end up finding is that most of that memory, if we descend down the biggest path, is inside called voices thread. And what's actually happening here is that simple text has been voice enabled so that it actually can do text to speech. And so what happens is that to speed up the load time, which is something good that you should care about for performance of course.
+
+That was one of those performance minutes. In order to speed that up what you want to do is you want to make sure that you do as little as possible when you're launching the app and maybe do the rest later. And this is the case where they're doing that. The they don't bother to actually load the voices until a few seconds after the windows actually appear.
+
+And one of the things that they have to do is load in the voices and do all the data structures to make sure that text to speech actually works. So that's okay that it's delaying things. And that's a cute trick to actually improve the performance of your apps. Thank you very much.
+
+Let's go through a few little moments. One thing I'll point out is the idea of the call trees may be a little weird. As I said, the idea is that every time you do a malloc allocation we get sort of this call stack of all the ways you got down to malloc. They can be thought of as those vertical lines on top or horizontal lines on top.
+
+When you look at the normal tree, what it does is it collapses together all the things at the main end of the tree to overlap the similarities so that you can see how it starts to diverge. And notice this is a tree so we don't pull it back together again at the other end. Similarly, when you do the inverted tree, we do the opposite. We start collapsing things together at the Malloc end to find the ways that we called Malloc that were similar, so we can start seeing where things diverge from that end.
+
+Also, to cover, as another one of the little issues we should probably cover, just to explain MallocDebug, there's also the question of leak detection. As I said, the way that leak detection works is it goes scanning through memory looking for pointers to buffers that are allocated by Malloc.
+
+There are cases where the leaks won't be noticed. This is just part of the problem with doing leak detection. In some cases, there may be a value in memory that looks like a pointer. You may have 5F000000 because you've got a null terminated string. In those cases, the A random value and a pointer to something that's actually a Malloc buffer might not be distinguishable.
+
+You can't tell why that stuff was put into memory. And as a result, you might get cases where things that are actually leaks may not be leaks. Similarly, there's some cases where there may be leaks that don't get detected. This garbage detection algorithm is relatively simple. Anyone who's played with them should immediately see some holes.
+
+One of those is that if you have a list of circularly linked structures, so you've got a big loop of things, every object points to something else. And therefore, all of them are referenced, and so they'll never be detected as a leak. Similarly, a tree of data structures will only have the root of it unreferenced, and therefore you may only see, let's say, a 20-byte leak when you're actually leaking a huge data structure. So always pay attention to even small leaks just in case.
+
+Now, I mentioned that there were a number of problems with various system routines. We're doing clever things with pointers. In general, what was happening is that our definition of leak is that there's a pointer to the beginning of a buffer. And if there's a pointer to the beginning of the buffer, it's reachable.
+
+However, in some cases, in your own code, in others, people will have pointers into the middle of a buffer for various reasons and no pointers to the beginning, usually because they're trying to hide secret information at the beginning. In those cases, MallocDebug is not going to be able to do leak detection correctly. The next version may help.
+
+Another issue to keep in mind is my favorite question or comment. People constantly come to me and say, "This tool is horrible. I use it and all my application ever does is crash." This is actually the same problem that people had with even better bus error. You know, gee, every time I use this, my machine crashes. Why don't you write better software? I love hearing that story from the guy who wrote that.
+
+But what's happening is that MallocDebug is trying to tell you something. It's trying to tell you something extremely loudly. You're doing bad things with pointers. There are a number of cases of operations that can cause subtle and intermittent memory bugs. Examples of those include overrunning or underrunning buffers so you trash somebody else's buffer, or freeing memory and then continuing to use it and modify the values even though somebody else has now got that memory and you're trashing their values. MallocDebug tries to solve both those problems. The first thing it does is that every time that you free memory, it overwrites that memory with 7F to make sure that there's absolute garbage in there and that hopefully if your app tries to read that, you'll notice.
+
+The second thing is that you saw that overruns were guarded with dead beef and underruns with beef dead. And so if you end up trying to access beyond, you're going to get a bogus value also. As a result, you may see your program behaving strangely, you may see odd values in variables that shouldn't be there, or you may find your application crashing when trying to access address 7f, 7f, 7f, 7f.
+
+When you get crashes on your app in MallocDebug that don't happen normally, the first thing to do is that there is a preferences panel that has the clear freed memory option. Turn that off and try it again. If your app runs, then you're doing bad things with freed memory. What you can then do is run the program inside GDB using MallocDebug's special library. There's documentation on this in the release notes and the debugger will drop you off exactly where you should pay attention.
+
+And the final bit of information about MallocDebug is questions about taking its advice. Once again, MallocDebug is primarily a tool for exploring your data. It's a really good tool for the writer to actually look because the writer understands their own code and may be able to say, "Gee, that's odd." There's still uses for this in testing. If you have cases where you're leaking memory, if you've got block underruns or overruns, or you're referencing freed memory, that's a red flag that there's something to be fixed. In terms of exploring, I can't give you very good details about how to explore.
+
+Basically, go off and see what's out there. See if you've got any really big allocations. See if you're allocating a lot of really small things that you didn't expect. Look for odd cases. Look for patterns. The best advice I can give you that's really concrete is I tend to find it much more useful to use the inverted graph rather than the standard one. But that may be because I tend to look at the system libraries a lot more. So, hopefully you'll find this useful.
+
+The second tool that I'd like to show is a tool called Sampler. And you can think of this as a really cheap profiler. What Sampler does is every 20 milliseconds or every 50 milliseconds it stops the program and it says, hey, where are you running? And it actually gets the call stack for all of the threads that are currently running so it knows the current point that it's executing. Like malloc.debug, it provides basically the call stack so that you can browse through those and try to find out exactly how things are running.
+
+Um, Now, the reason why Sampler is good is that it's extremely easy to perform. You use it, it works. You don't need to recompile your application like you would with profiling. You don't need to have special profiled versions of libraries. You don't need to make any changes to the code. It just works. You can run this on any of the applications on the system. And in fact, all these tools are on the CD, so please go out and play with them.
+
+And in addition, because it's only stopping the program every 20 milliseconds or 50 milliseconds, hopefully it will be doing very little to the application's running behavior, as opposed to, let's say, doing full profiling. And so this may be a way to get really cheap data to find performance problems that should be explored in more depth.
+
+I'll also point out, just in passing, there's also a command line tool called Sample, where you just type sample and the process ID or the application name and how many seconds of sample. And so this is a really good tool for that. And it's really good for basically cutting and pasting and putting into a bug report.
+
+And it's really good for basically cutting and pasting and putting into a bug report. And it will put out a text-based report saying where it found the program's execution. This is really good if your application hangs or if it seems slow, so that you can actually track down what the performance problem is. And it's really good for basically cutting and pasting and putting into a bug report. So let's do a demo.
+
+Okay, so here's the Sampler UI. Once again, we can select an application, we can launch it, and let's actually change the sampling rate to 20 milliseconds. And then we can launch and sample it and we can see how simple text launches and what's going on during that. And so eventually the window will come up. There we go. And we can stop sampling.
+
+And now we get a set of call stacks showing what's going on. We'll start off with the extra threads. So thread two, so there were 155 samples, 155 times where it stopped the program that it found execution in thread two. And all those were basically in Mach message overwrite trap.
+
+Okay, so it's basically sitting there waiting for a message. We can ignore that. So we can actually add that to excluded stacks down at the bottom to get it out of our view. Thread one's pretty much the same way, except for about eight samples it's basically sitting there doing nothing. So we can ignore that one also.
+
+And then in thread zero, if we click on the 1000 and start and start and main, now we can start finding out what was going on. So we had 158 samples at 20 milliseconds. That's, what, 10, 3 seconds. Most of the time was being spent in do event loop. The wait next event is pretty trivial. That's just when it's spinning, so we can ignore that.
+
+And the last six, Samples were actually-- you want to go down to that? Actually, you can see the call stack on the far side showing the entire tree. So you can see that we were in doEventLoop, which called handleEvent, which called eventually resume the current event. So that was doing the setup for the app. This is a relatively uninteresting example. Feel free to go off and try your own code, and hopefully you'll find some very interesting things about how your app is running and where it's finding it.
+
+There's also a way that you can invert the call graph so you can look from the bottom up and you can find the common functions that it found it running in. If you find that your functions are listed down here, that probably means you have a tight loop and you're spending all your time there. Often you'll find that the application is stopped in system calls when it was sampled and that's why you're seeing calls to string compare or to Mach message overwrite trap and the like.
+
+Okay, there's one big caveat I should mention. Although I've said that this is a cheap method of profiling, remember, Sampler is not providing comprehensive, accurate data. It's sampling. It's a statistical approach. That means that it's not going to show you all the calls that are actually happening, just the ones that were happening when it decided to stop the app.
+
+Second, the numbers refer to how many times it found it in that function, not how many times that function was called. If we found 150 samples in some arbitrary function, that could mean it was called 150 times, it could mean it was called once, but every time it looked it was in that, or that function could have been called 150,000 times and we just happened to see it when it was in that.
+
+If you're trying to get... If you have small, quick executing functions, those are going to appear statistically based on what percentage of the time they actually take to execute. So with longer sample runs and smaller sample times, you'll start getting better data and you'll start seeing the smaller functions appear. In addition, because this is sampling, there's the question of sampling error. What are we going to see when we stop the program?
+
+Well, because the way Sampler works is it takes control of the CPU and the other process stops, that means that the other application is going to be at preemption points. And so wherever the operating system decides is a good time to stop the thing is going to be where you're going to see it in Sampler.
+
+That could either be because it ran out of time and the operating system took control away, or it could be because the application made a system call and the operating system said, you're never going to finish this in time. I'm just going to give control to someone else while you're waiting for this disk access. And so you may see disk accesses. you may see some of the system calls much more frequently than they really appear.
+
+Okay, let's not worry about ObjectAlloc. Actually, let's just demo it quickly. So another tool that's available is ObjectAlloc. This is a tool that was originally intended for Objective-C, but still can be useful for programming in Carbon, for programming in Basics, in just C. The idea is that this is trying to be a lot more like ZoneRanger. That it's trying to give you ideas about how fast you're adding data, how much data you're using, how quickly it's increasing. And what it does is it shows you a histogram.
+
+What it does is it divides up all the allocations based on the class of the object. You can see how many CFDictionary's you had, how many NSStrings, and in the case of just plain malloc allocations, it just says malloc-46 for 46 byte malloc allocations. What the histograms show you is, first for the darkest bar, it shows you the current number of objects of that type existing in the system.
+
+The next lighter represents the maximum number of objects of this type that ever existed at once, and the final bar shows you how many objects of that type have been allocated. Watching this run can give you an idea about, in general, how your app might be behaving and might give you some hints about objects that you're creating a huge number of that might be performance problems. There are some other features in this and other features in the other tools. Please go play with them.
+
+Let's do one example here. Let's talk about how we'd actually debug something for real. The example I'm going to use is one of my own things, so that I can be very embarrassed. Specifically, it's the MallocDebug leak detection. What happened was that when I actually implemented or added support for Carbon memory, I found that leak detection got much, much, much, much, much slower, about a 10 times slowdown. This was very bad. However, I'd only changed the algorithm in small ways, so I was extremely confused about what was going on. What I needed to do was I needed to use multiple tools to understand exactly what was going on.
+
+This is something you're probably going to find, that you really need to play around and look from different angles to find out why something's behaving less than optimally. The first thing I did was I ran Sampler. I had Sampler look at my process when it was doing, or at the application, when it was doing the leak detection.
+
+What I found was that most of the time it was actually spending in a call known as VM region, which is a system-level call that will tell you about what parts of virtual memory, for a specific process, are actually mapped in, which ones don't exist, whether they're readable, writable.
+
+This was important for being able to identify, when I was checking a pointer, figuring out whether there was anything at the other end, so that I could read that data without knowing that the system was going to crash. Actually, the application was going to crash, because the system won't crash in OS X. Thank God.
+
+The solution was that this data didn't change during the time I was doing analysis. And so I found I could actually cache that and I increased the speed by about a third better than it was. The second thing was that I started listening to my machine. I used my ears, another tool. And I found that the disk was chattering away. Using Top, I looked and I found that I was swapping about 2,000 pages a minute.
+
+So my machine was basically spending all its time throwing pages out to disk and bringing them back in. This is not very efficient unless you happen to be a disk drive. And what I found was that although it was spending all that time swapping around, all the execution was being spent in my code. It wasn't doing other I/O. It was just trying to swap.
+
+And what it turned out to be after commenting certain parts of the code out was that I was checking for pointers in places I shouldn't have been, in places that were only readable memory that you couldn't have had reasonable pointers in. And as a result, I was searching for pointers in places that I shouldn't have been, in places that were only readable. And as a result, I was searching around in a lot of places. And because of the change in algorithm, suddenly I was looking at a lot more pages in random places.
+
+And instead of sort of linearly passing through memory and looking at only a few places, I was looking everywhere randomly and causing huge performance problems. As a result, what I was able to do was minimize the number of out-of-order checks and tighten up the checks on what I was going to look at other pages for. And as a result, got the speed up down to about a factor of two.
+
+And since then, I've looked at my algorithm. And I've gotten it down to like only 10 seconds from 30, which was pretty cool. So the take-home lesson here is plan to use lots of tools, plan to explore lots of parts of the system, and plan to learn a lot of trivia.
+
+Welcome to the world of performance. For those of you that are planning on porting from Carbon, yes, we've heard great testimonials about people who went off for lunch and converted their app over to Carbon. That's really good. In fact, in a lot of cases that's probably good enough.
+
+However, as I gave you examples, there may be places in your code where there actually are mismatches in the algorithms that don't quite match the new world. Porting is only going to be half the work. You're going to have to look at the app, you're going to have to understand how it works, and see if you can find any performance problems. Plan on using these performance tools. Plan on using multiple tools and exploring, as I mentioned before. In addition, remember that one of the things that we're getting with Mac OS X is a huge number of pieces of infrastructure that are really going to help us out.
+
+Plan on looking at them and deciding what you can actually use. Examples include memory mapped files. You don't actually have to read stuff from disk into a buffer. The operating system will kindly just map that file into virtual memory. When you try to touch that page, it will actually map it into memory for you.
+
+You don't actually need to keep multiple buffers around. In fact, if you try to keep those buffers around, you may be being too clever because the operating system may be keeping a copy of the memory mapped file in your address space. Suddenly, you've got two copies. Similarly, we now have Pthreads, a really nice thread implementation.
+
+These are threads at the level of the operating system. They don't have a lot of overhead because they're part of the OS. Plan on looking at Pthreads and seeing if you can exploit those. Finally, we also now have the POSIX file I/O. There may be cases where that's much more useful to you than the standard Mac OS toolkit. Take a look at that and see if that will actually help you in some cases.
+
+In addition, a certain vice president who shall remain nameless hacked on a few weekends. Excuse me, let me rephrase this. Certain people high in the company happened to be very interested in algorithms and happened to be very interested in Malloc. One of the problems on many Mac OS compiler implementations was that the Malloc implementations used to be really bad.
+
+And a lot of people have used sub-allocators instead of going through native memory management because they want extra efficiency or they don't think the performance is going to be that hot. We have a really nice implementation of Malloc thanks to someone's nights and weekends. So think twice about using sub-allocators. Try the new Malloc. It's really efficient. There's some really cool new little features in it.
+
+Go play. And finally, I will repeat again and again and again, polling bad, blocking good. Don't sit and wait for something to happen. Have the OS. Go off and tell you when it's done. Have the OS take control away from you and give it to someone else so that other processes can actually run and you'll have a nice feeling of smoothness all through the app instead of having yours take up CPU.
+
+And as a final warning, in a horrible place, some of these tools do work with PEF binaries. Some of them don't necessarily work so well, and we want to improve that. With MallocDebug and Sampler, they currently do not identify the PEF symbols, and so you're not going to see the symbols in your own application.
+
+If you're running Mac OS native binaries, this isn't a problem. This is something that didn't get onto the CD. Hopefully, we can actually put it out on the developer website so that everybody can use this. But plan that the version on the CD may not do a good job with PEF binaries, that you may not be able to see much about your program.
+
+So, to conclude, Mac OS X is really cool, but the differences between it and how you use it to work has a lot of differences. The algorithms you use are probably going to need to change, so take a look at them, use the performance tools to analyze them, and have a great time with native Mac OS X applications.
+
+If you have questions, or actually if you want to use the tools, they're in /usr/bin for the command line tools. The graphical tools are in System Developer Applications. Documentation is available as man pages for the command line tools. MallocDebug and Sampler have documentation in them, and there's also a nice release note on MallocDebug explaining some of its idiosyncrasies for this particular release. If you've got questions or feedback, if you send mail to macos10/tools/feedback, it goes to, I believe, the entire group.
+
+We'd love to hear your comments, suggestions about other tools that are really necessary, because we're all going to learn what's really needed when moving over to Mac OS X. And if you have any other issues, Godfrey DiGiorgi is our technology manager for the Development Tools Group, and I will bring him up so that he can tell you about the other forums. Male #1: Oops. Male #1: Group.apple.com. Okay, we have about 12 minutes for Q&A, so... Oops.
+
+[Transcript missing]

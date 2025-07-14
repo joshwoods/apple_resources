@@ -1,0 +1,3491 @@
+WEBVTT
+
+00:00:26.300 --> 00:00:29.600
+Welcome back to our advanced
+QuickTime programming techniques topic.
+
+00:00:29.600 --> 00:00:33.190
+So advanced, we brought our own XServe,
+which all our demos will not
+
+00:00:33.190 --> 00:00:35.530
+be running on the XServe,
+in fact.
+
+00:00:35.580 --> 00:00:39.220
+What we're going to be talking
+about today is topics that a lot
+
+00:00:39.220 --> 00:00:41.460
+of people find pretty important.
+
+00:00:41.460 --> 00:00:44.460
+One is thread safety and
+multi-threading in QuickTime.
+
+00:00:44.460 --> 00:00:47.890
+A second topic we're going to cover
+is some integration we've done in
+
+00:00:47.890 --> 00:00:50.560
+QuickTime 6.4 and Panther for ColorSync.
+
+00:00:50.620 --> 00:00:53.470
+And lastly,
+we'll be talking about the complicated
+
+00:00:53.470 --> 00:00:55.510
+topic of Audio-Video Startup Sync.
+
+00:00:56.300 --> 00:01:00.700
+And just an overview of some of the
+technology frameworks we'll cover today.
+
+00:01:00.700 --> 00:01:06.530
+QuickTime, obviously, ColorSync, Quartz,
+Quartz 2D, and Core Services for some
+
+00:01:06.530 --> 00:01:08.020
+of our multi-threading APIs.
+
+00:01:08.020 --> 00:01:12.440
+And now I'd like to introduce Sam Bushell
+to come and talk about multi-threading.
+
+00:01:12.440 --> 00:01:13.820
+Thanks, Tim.
+
+00:01:17.010 --> 00:01:18.140
+Good afternoon.
+
+00:01:18.140 --> 00:01:23.100
+I think I could get in trouble if
+I put my water bottle on that thing.
+
+00:01:24.380 --> 00:01:27.590
+QuickTime's heritage
+on Mac OS versions 6,
+
+00:01:27.590 --> 00:01:30.680
+7, 8,
+and 9 meant that many of its APIs were
+
+00:01:30.680 --> 00:01:34.010
+designed to be run from a single thread.
+
+00:01:34.260 --> 00:01:36.940
+Mac OS X brings us not
+only multiprocessing,
+
+00:01:37.180 --> 00:01:41.280
+the ability to do multiple things
+in multiple applications at once,
+
+00:01:41.310 --> 00:01:43.580
+but also it removes some of
+the traditional limitations on
+
+00:01:43.580 --> 00:01:46.950
+what we could do with multiple
+threads within an application.
+
+00:01:47.130 --> 00:01:50.280
+I'm going to talk about some of the work
+we've been doing inside QuickTime to
+
+00:01:50.280 --> 00:01:55.610
+allow you to use multi-threading with the
+QuickTime APIs to make your application
+
+00:01:55.610 --> 00:01:57.970
+more responsive and more powerful.
+
+00:01:58.690 --> 00:02:02.500
+First, let's talk about the basic
+problem with single-threaded APIs.
+
+00:02:02.550 --> 00:02:06.000
+If everything were instantaneous,
+no one would care.
+
+00:02:06.000 --> 00:02:08.400
+It would be OK if everything
+had to run from the same thread.
+
+00:02:08.400 --> 00:02:10.950
+But many common operations are slow.
+
+00:02:11.210 --> 00:02:14.940
+And it's a bad user experience
+when these slow operations delay
+
+00:02:14.940 --> 00:02:16.940
+application responsiveness.
+
+00:02:17.010 --> 00:02:22.890
+It's inconvenient to users when they
+can't export two movies at once,
+
+00:02:22.890 --> 00:02:25.730
+or export a movie and play
+a movie at the same time.
+
+00:02:25.830 --> 00:02:29.750
+So from our perspective,
+the urgent need is to allow
+
+00:02:29.750 --> 00:02:34.700
+developers to move these slow jobs
+to background threads so they can
+
+00:02:34.720 --> 00:02:40.410
+free up the main thread to provide
+a responsive user interface.
+
+00:02:42.030 --> 00:02:44.520
+In Panther,
+the particular operations we have in
+
+00:02:44.940 --> 00:02:50.340
+mind are still image import and export,
+opening movies, rendering movies,
+
+00:02:50.390 --> 00:02:53.180
+recompressing movies, exporting movies.
+
+00:02:53.340 --> 00:02:56.200
+But in Panther,
+we are not changing the way
+
+00:02:56.200 --> 00:02:58.380
+that movies are played back.
+
+00:02:58.740 --> 00:03:04.240
+Playback is already implemented in a way
+that avoids blocking the user interface.
+
+00:03:04.240 --> 00:03:06.790
+It's been that way since QuickTime 1.0.
+
+00:03:06.980 --> 00:03:10.800
+It's these other operations
+that have become UI hogs.
+
+00:03:10.980 --> 00:03:15.090
+We want to make these things safe
+to perform on background threads.
+
+00:03:19.300 --> 00:03:22.750
+So in Panther,
+the model we're aiming for is to
+
+00:03:22.790 --> 00:03:27.060
+allow independent threads to work on
+disjoint sets of QuickTime objects.
+
+00:03:27.320 --> 00:03:31.940
+This is the most important thing I want
+you to take away from my session today,
+
+00:03:31.940 --> 00:03:33.980
+disjointness.
+
+00:03:33.980 --> 00:03:37.050
+If one thread has its
+set of QuickTime objects,
+
+00:03:37.050 --> 00:03:39.060
+and another thread has its
+own set of QuickTime objects,
+
+00:03:39.060 --> 00:03:42.780
+and never the twain shall meet,
+everything's going to be fine.
+
+00:03:43.040 --> 00:03:46.260
+But we're not making it safe
+for two threads to access the
+
+00:03:46.260 --> 00:03:48.300
+same object simultaneously.
+
+00:03:48.300 --> 00:03:50.400
+If two threads need to
+manipulate the same object,
+
+00:03:50.600 --> 00:03:54.040
+then those threads need to
+perform some kind of negotiation
+
+00:03:54.390 --> 00:03:55.540
+or locking around this.
+
+00:03:55.540 --> 00:03:58.950
+Now this is no different from any
+unprotected data structure you
+
+00:03:58.950 --> 00:04:00.760
+might implement in your own code.
+
+00:04:00.960 --> 00:04:04.340
+You need to have some kind of
+thread protection before you
+
+00:04:04.360 --> 00:04:06.320
+allow simultaneous access.
+
+00:04:07.830 --> 00:04:12.080
+The exception to the disjointness
+rule arrives with the file system.
+
+00:04:12.140 --> 00:04:15.700
+The file system has always been designed
+to allow multiple readers of a file.
+
+00:04:15.890 --> 00:04:20.520
+And so,
+in order to understand this slide,
+
+00:04:20.520 --> 00:04:25.680
+we need to make the
+distinction between a movie,
+
+00:04:25.680 --> 00:04:25.680
+which is a data structure in memory,
+with a capital M,
+
+00:04:26.070 --> 00:04:28.640
+and a movie file which sits
+out on a disk somewhere.
+
+00:04:28.640 --> 00:04:32.000
+It may or may not be a QuickTime movie,
+but maybe of some other format
+
+00:04:32.100 --> 00:04:35.970
+that's been imported and is
+viewed as a QuickTime movie.
+
+00:04:36.400 --> 00:04:41.530
+It's okay for two threads to each
+have their own movie data structure
+
+00:04:41.530 --> 00:04:45.070
+that points to the same movie file.
+
+00:04:45.080 --> 00:04:49.170
+And it's okay for them to be displaying
+or rendering different parts of that
+
+00:04:49.170 --> 00:04:51.570
+movie at the same time and moving around.
+
+00:04:51.580 --> 00:04:54.840
+It may or may not be okay for one of
+those threads to be modifying that file,
+
+00:04:54.850 --> 00:04:57.300
+obviously,
+but that should come as no surprise.
+
+00:04:57.300 --> 00:05:00.770
+So let me repeat this really
+important point again.
+
+00:05:00.780 --> 00:05:04.840
+Don't let two threads work on the
+same QuickTime object at once.
+
+00:05:05.910 --> 00:05:08.720
+It's you as the developer who
+has responsibility for making
+
+00:05:08.720 --> 00:05:10.260
+sure that this is the case.
+
+00:05:11.720 --> 00:05:17.090
+It's also the developer's responsibility
+to avoid going and creating a dialog
+
+00:05:17.230 --> 00:05:19.200
+or a window in a background thread.
+
+00:05:19.280 --> 00:05:21.980
+If you go and look in the headers,
+you'll see that the Human Interface
+
+00:05:21.980 --> 00:05:23.490
+Toolbox is not thread-safe.
+
+00:05:23.580 --> 00:05:26.830
+It's the main run loop
+that receives events.
+
+00:05:26.850 --> 00:05:30.290
+Whether in Carbon or Cocoa,
+UI needs to basically
+
+00:05:30.290 --> 00:05:32.200
+stay in the main thread.
+
+00:05:34.670 --> 00:05:37.110
+One more restriction,
+this stuff is only going to be
+
+00:05:37.110 --> 00:05:41.570
+safe to do from threads in Panther.
+
+00:05:41.710 --> 00:05:45.060
+Even if you install a spanking new
+version of QuickTime on Jaguar,
+
+00:05:45.060 --> 00:05:49.160
+you're still not going to get
+these thread safety improvements.
+
+00:05:49.210 --> 00:05:49.780
+Why not?
+
+00:05:49.970 --> 00:05:53.900
+Because there's a lot of plumbing
+underneath QuickTime that we rely on,
+
+00:05:53.910 --> 00:05:56.610
+a lot of APIs and core services
+that have been improved in
+
+00:05:56.610 --> 00:05:59.240
+order to enable this stuff,
+and that stuff is only
+
+00:05:59.310 --> 00:06:00.520
+available in Panther.
+
+00:06:01.810 --> 00:06:05.260
+So, now that I'm done telling you
+about all these restrictions,
+
+00:06:05.260 --> 00:06:07.820
+it's over to Tim to show
+you how great it is,
+
+00:06:07.820 --> 00:06:12.520
+because it is substantially
+nice to be able to run this
+
+00:06:12.520 --> 00:06:14.180
+stuff from multiple threads.
+
+00:06:14.180 --> 00:06:16.120
+Great, thank you.
+
+00:06:16.120 --> 00:06:20.610
+So, I have three applications I'm
+going to show you demos of,
+
+00:06:20.670 --> 00:06:23.510
+and they're going to be available
+on the Apple Developer Connection
+
+00:06:23.510 --> 00:06:26.060
+website under the QuickTime,
+etc., etc.
+
+00:06:26.060 --> 00:06:28.620
+WWDC will put up some URLs at the end.
+
+00:06:29.210 --> 00:06:30.960
+So,
+what we did was we wanted to be able to
+
+00:06:30.960 --> 00:06:34.370
+make some clear applications that showed
+not only the code that you need to do
+
+00:06:34.370 --> 00:06:37.870
+to make your applications thread-safe,
+but also demonstrate visually
+
+00:06:37.870 --> 00:06:41.240
+so that people could understand
+exactly what we're trying to enable.
+
+00:06:41.240 --> 00:06:45.870
+The first application, Thread Tester Pro,
+is basically trying to emulate
+
+00:06:45.870 --> 00:06:49.330
+what Finder or iPhoto would be
+doing in the preview mode of
+
+00:06:49.330 --> 00:06:53.360
+viewing graphics-imported images,
+and that's what this demo is showing.
+
+00:06:53.360 --> 00:06:55.740
+So,
+what I've done is I've opened a window,
+
+00:06:55.740 --> 00:06:59.120
+and I'm going to open a second
+window of this application.
+
+00:06:59.120 --> 00:07:02.620
+And before I go on,
+I'm going to set each window to use the
+
+00:07:02.620 --> 00:07:05.290
+main thread as opposed to the P thread.
+
+00:07:05.320 --> 00:07:09.640
+So, right now, there's one thread in this
+application that serves both windows.
+
+00:07:09.640 --> 00:07:13.560
+And then I'm going to select
+some images to preview.
+
+00:07:13.580 --> 00:07:18.640
+So, I'm going to pick some smaller images
+that I took when I was on vacation
+
+00:07:18.640 --> 00:07:21.280
+in Southeast Asia far too long ago.
+
+00:07:21.320 --> 00:07:26.040
+And I'm going to select some
+larger images in this other one.
+
+00:07:26.080 --> 00:07:30.640
+And while that one's loading,
+you can see I can basically load up
+
+00:07:30.640 --> 00:07:32.480
+these images and it's fairly responsive.
+
+00:07:32.640 --> 00:07:36.080
+But when I tell it to auto-run,
+which is basically going
+
+00:07:36.130 --> 00:07:38.600
+through every image,
+and I'll tell this one to auto-run,
+
+00:07:38.600 --> 00:07:42.170
+now these large images are
+what effectively are doing,
+
+00:07:42.220 --> 00:07:47.330
+they're blocking the other thread from
+processing that image because the images
+
+00:07:47.330 --> 00:07:50.640
+in the front window are much larger,
+they take longer to decode.
+
+00:07:50.640 --> 00:07:53.570
+And not only is that going on,
+but you can see that the
+
+00:07:53.570 --> 00:07:55.360
+UI is pretty non-responsive.
+
+00:07:55.460 --> 00:07:56.780
+I can't really click.
+
+00:07:56.880 --> 00:07:58.850
+It's kind of like waiting
+for things to get done.
+
+00:07:59.150 --> 00:08:01.670
+So let me stop that.
+
+00:08:02.500 --> 00:09:04.900
+[Transcript missing]
+
+00:09:05.760 --> 00:09:07.640
+So that is the first
+demo I wanted to show.
+
+00:09:07.640 --> 00:09:12.930
+That's graphics importers using the
+same application doing two sets of
+
+00:09:12.930 --> 00:09:14.940
+images on two different threads.
+
+00:09:21.220 --> 00:09:24.600
+So the second demo I'm showing
+is that we've done the same
+
+00:09:24.600 --> 00:09:26.260
+work for graphics exporters.
+
+00:09:26.260 --> 00:09:30.120
+One thing that you'll see here
+is that in the application,
+
+00:09:30.130 --> 00:09:32.420
+there's a menu that says only
+use thread-safe components.
+
+00:09:32.420 --> 00:09:36.300
+So we're able to detect
+through some techniques.
+
+00:09:36.300 --> 00:09:39.520
+Sam will talk about which components
+are thread-safe in the OS.
+
+00:09:39.520 --> 00:09:41.340
+And here I'm going to limit
+it to the ones that are.
+
+00:09:41.340 --> 00:09:43.830
+And again,
+I'm going to switch to the main thread
+
+00:09:43.840 --> 00:09:48.030
+and select the folder Export Files.
+
+00:09:48.040 --> 00:09:51.960
+So now it's loaded in a bunch of images,
+and I'm going to do the same auto-run.
+
+00:09:51.960 --> 00:09:52.880
+It's created a folder.
+
+00:09:52.880 --> 00:09:55.420
+It's basically spewing these
+all out in a different format.
+
+00:09:55.420 --> 00:09:58.980
+And while this is going on,
+you can see it's responsive
+
+00:09:58.980 --> 00:10:01.940
+because the images are small,
+but it's not exactly superb.
+
+00:10:01.940 --> 00:10:06.900
+So let me stop that and
+get rid of that guy.
+
+00:10:10.220 --> 00:10:14.730
+So back to the main thread,
+I'm going to open another window and
+
+00:10:14.730 --> 00:10:18.260
+again select the same export folder.
+
+00:10:18.920 --> 00:10:23.000
+and switch this window to use a Pthread.
+
+00:10:23.000 --> 00:10:26.350
+So now both windows are using Pthreads,
+and let me just get them both going.
+
+00:10:26.360 --> 00:10:32.550
+And again, now we have two applications
+bringing the images and exporting
+
+00:10:32.550 --> 00:10:33.940
+them to different formats.
+
+00:10:34.000 --> 00:10:35.860
+What it's basically doing is
+it's exporting them to all the
+
+00:10:35.860 --> 00:10:36.960
+formats that are shown here.
+
+00:10:36.960 --> 00:10:40.240
+So this is running,
+and we see that there's going
+
+00:10:40.240 --> 00:10:42.110
+to be two folders created here.
+
+00:10:42.120 --> 00:10:48.200
+And let me just stop that
+and stop the other one.
+
+00:10:53.000 --> 00:10:54.270
+and you can see what's done here.
+
+00:10:54.300 --> 00:11:00.660
+Just a couple of these images were
+loaded up in all the different formats.
+
+00:11:00.720 --> 00:11:02.360
+So once again,
+you can think of applications
+
+00:11:02.360 --> 00:11:05.300
+like iPhoto and other applications
+which are exporting images.
+
+00:11:05.300 --> 00:11:07.780
+They can now do these in the background.
+
+00:11:08.970 --> 00:11:15.260
+So that's pretty much the story
+for importing and exporting.
+
+00:11:15.260 --> 00:11:17.400
+And where did my window go?
+
+00:11:17.520 --> 00:11:20.780
+So my last demo is about movies.
+
+00:11:20.870 --> 00:11:24.460
+So with movies,
+you kind of have the same idea.
+
+00:11:24.460 --> 00:11:26.020
+You want to be able to do
+things in the background.
+
+00:11:26.020 --> 00:11:29.740
+You want to be able to do
+multiple operations in your
+
+00:11:29.740 --> 00:11:31.760
+application when you're doing
+things like exporting movies.
+
+00:11:31.800 --> 00:11:38.860
+So again, I have an application
+called Threads Export Movie.
+
+00:11:38.880 --> 00:11:42.250
+And I can select whether I want to
+use the main thread or P thread.
+
+00:11:42.330 --> 00:11:45.700
+In this case, I'm selecting a movie
+using the main thread.
+
+00:11:45.740 --> 00:11:48.190
+And here's the movie.
+
+00:11:49.040 --> 00:11:51.440
+and it's Kevin Mark's son once again.
+
+00:11:51.480 --> 00:11:54.690
+And now I'm gonna export and...
+
+00:11:56.840 --> 00:11:58.820
+Oh, I did that earlier today, no worries.
+
+00:11:59.060 --> 00:12:01.000
+So let me pick the settings.
+
+00:12:01.030 --> 00:12:03.800
+I'm gonna pick CinePack, nice and fast.
+
+00:12:03.850 --> 00:12:05.230
+It's thread safe.
+
+00:12:05.330 --> 00:12:08.500
+So now I'm exporting
+this movie to CinePack,
+
+00:12:08.500 --> 00:12:10.110
+and you can see,
+
+00:12:11.130 --> 00:12:14.660
+It's taking quite some time,
+and while it's doing this thing,
+
+00:12:14.720 --> 00:12:16.190
+I can't do anything with the application.
+
+00:12:16.230 --> 00:12:18.360
+Not very, very good user experience.
+
+00:12:20.350 --> 00:12:21.680
+So let's just wait for this to be up.
+
+00:12:21.810 --> 00:12:24.050
+So what we're going to then do is
+we're going to switch this and be
+
+00:12:24.050 --> 00:12:26.280
+able to do it on background thread.
+
+00:12:26.330 --> 00:12:29.970
+And when you're doing that,
+the application will be responsive.
+
+00:12:30.050 --> 00:12:34.380
+So let's switch this
+guy to be on a P thread.
+
+00:12:34.880 --> 00:12:37.450
+And I'm going to open a new window.
+
+00:12:37.690 --> 00:12:40.320
+This time I'm going to select
+a long version of Andrew.
+
+00:12:40.320 --> 00:12:42.800
+And again, it's using a P thread.
+
+00:12:42.800 --> 00:12:44.400
+So let's export this guy.
+
+00:12:44.400 --> 00:12:46.070
+Test.move.
+
+00:12:46.090 --> 00:12:48.320
+Yes, replace that.
+
+00:12:48.400 --> 00:12:52.380
+And CinePack, the settings are good,
+so I'm going to start exporting that.
+
+00:12:53.070 --> 00:12:56.290
+While I'm doing that,
+I'm going to go back so it's responsive,
+
+00:12:56.290 --> 00:13:00.380
+and I'm going to go and export
+test2.move and replace that one.
+
+00:13:00.380 --> 00:13:02.410
+And again,
+I'm going to use CinePack so you can
+
+00:13:02.410 --> 00:13:04.160
+see that I'm able to do that export.
+
+00:13:04.160 --> 00:13:07.920
+And just for fun,
+I'm going to open a new window,
+
+00:13:08.400 --> 00:13:10.730
+select Andrew, and play this.
+
+00:13:10.740 --> 00:13:15.510
+And just so you can see what's going on,
+we're able to actually export two
+
+00:13:16.020 --> 00:13:20.300
+different movies and play one of
+the same movies at the same time.
+
+00:13:20.440 --> 00:13:22.360
+So basically, multi-threaded.
+
+00:13:22.790 --> 00:13:24.760
+Rendering and multi-threaded.
+
+00:13:24.760 --> 00:13:26.560
+Transcoding in QuickTime 6.4.
+
+00:13:26.560 --> 00:13:27.820
+Thank you.
+
+00:13:27.820 --> 00:13:29.260
+Thank you, guys.
+
+00:13:33.170 --> 00:13:34.100
+Thanks a lot.
+
+00:13:34.100 --> 00:13:35.100
+Perfect.
+
+00:13:35.100 --> 00:13:36.100
+Thank you, Tim.
+
+00:13:36.100 --> 00:13:38.700
+So Tim gets to show
+you all the good news.
+
+00:13:38.920 --> 00:13:42.420
+I get to tell you about the bad news.
+
+00:13:42.420 --> 00:13:43.660
+What's the bad news?
+
+00:13:43.660 --> 00:13:46.530
+Bad news is some components.
+
+00:13:47.400 --> 00:13:49.990
+are not thread safe.
+
+00:13:50.190 --> 00:13:52.830
+Even if we could make every
+component that we ship on
+
+00:13:52.860 --> 00:13:56.940
+QuickTime in Panther thread safe,
+QuickTime is an extensible system.
+
+00:13:56.950 --> 00:13:59.140
+And users can install
+third party components.
+
+00:13:59.140 --> 00:14:00.960
+And they might be last year's components.
+
+00:14:01.000 --> 00:14:04.100
+They may not be thread safe.
+
+00:14:04.770 --> 00:14:07.720
+We're going to have to cope with this
+fact that we have thread-safe code
+
+00:14:07.780 --> 00:14:11.290
+and thread-unsafe code in the system.
+
+00:14:11.930 --> 00:14:15.330
+When you do a high-level
+operation in QuickTime,
+
+00:14:15.630 --> 00:14:19.090
+maybe like opening a movie
+and starting to display it,
+
+00:14:19.090 --> 00:14:21.240
+or converting an image from
+one file format to another,
+
+00:14:21.240 --> 00:14:24.220
+that can involve maybe a
+dozen lower-level components.
+
+00:14:24.220 --> 00:14:27.080
+And often,
+you don't know which components
+
+00:14:27.080 --> 00:14:30.670
+you're going to use until
+you actually try and do it.
+
+00:14:31.350 --> 00:14:36.560
+So that means that some media files
+and some conversions cannot be safely
+
+00:14:36.850 --> 00:14:39.180
+performed from background threads.
+
+00:14:39.210 --> 00:14:45.020
+And your application is going to have to
+cope with finding that out dynamically.
+
+00:14:45.050 --> 00:14:48.390
+Now,
+a bad way for your application to find
+
+00:14:48.390 --> 00:14:53.350
+out dynamically would be for it to
+crash at random on users' machines.
+
+00:14:53.510 --> 00:14:56.500
+A better way is for it to
+get some kind of message.
+
+00:14:56.550 --> 00:15:00.220
+So the new rule is for
+applications who create threads,
+
+00:15:00.260 --> 00:15:04.460
+who call QuickTime,
+is you have to call this API to say,
+
+00:15:04.520 --> 00:15:07.460
+from this thread,
+please don't let me open any
+
+00:15:07.460 --> 00:15:09.580
+non-thread-safe components.
+
+00:15:09.750 --> 00:15:11.190
+It's a component manager call.
+
+00:15:11.200 --> 00:15:13.860
+It's in core services,
+hence the CS prefix.
+
+00:15:13.870 --> 00:15:16.530
+And it's in Panther.
+
+00:15:18.500 --> 00:15:21.790
+If the component manager is
+about to open a component,
+
+00:15:21.790 --> 00:15:24.550
+and it notices the component
+is not thread safe,
+
+00:15:24.770 --> 00:15:28.200
+then it will return-- it
+won't open the component,
+
+00:15:28.200 --> 00:15:31.040
+because even the open call
+might do things that are unsafe.
+
+00:15:31.150 --> 00:15:33.890
+And instead,
+it will return this error code.
+
+00:15:34.170 --> 00:15:40.790
+And that error code is likely to
+propagate back through other APIs to you.
+
+00:15:40.790 --> 00:15:40.790
+And if you receive that error from--
+
+00:15:41.240 --> 00:15:45.440
+Any API in QuickTime,
+then you need to cope with that and
+
+00:15:45.440 --> 00:15:48.670
+shift the work over to the main thread.
+
+00:15:51.300 --> 00:15:54.150
+In the Panther seed,
+there's a mixture of thread-safe
+
+00:15:54.360 --> 00:15:56.700
+and non-thread-safe components.
+
+00:15:56.700 --> 00:15:58.530
+And you can see some
+of those on this chart.
+
+00:15:58.680 --> 00:16:00.350
+Others you'll have to
+work out for yourself.
+
+00:16:00.470 --> 00:16:04.780
+You can test that by checking the
+component thread safety flag just with
+
+00:16:04.780 --> 00:16:07.560
+Find Mix Component or Get Component Info.
+
+00:16:07.620 --> 00:16:11.420
+It's a flag defined in the
+Component Manager header file.
+
+00:16:11.570 --> 00:16:13.880
+So the most important still
+image formats are the ones we've
+
+00:16:13.990 --> 00:16:16.180
+gone and made thread-safe first.
+
+00:16:16.230 --> 00:16:18.400
+Magpaint is not.
+
+00:16:18.970 --> 00:16:24.080
+Not because we hate MacPaint,
+it brings a smile to all of our faces.
+
+00:16:24.510 --> 00:16:28.500
+The real reason is so that you have
+some well-defined test cases for
+
+00:16:28.500 --> 00:16:31.540
+exercising the migration feature.
+
+00:16:31.540 --> 00:16:34.750
+You should use the components
+that are thread-safe to exercise
+
+00:16:34.750 --> 00:16:39.730
+code like Tim demonstrated,
+but you should use the components that
+
+00:16:39.730 --> 00:16:43.480
+are on the right to exercise your code
+so as to make sure that it's safe,
+
+00:16:43.480 --> 00:16:47.010
+even if you encounter media
+that's supported by components
+
+00:16:47.010 --> 00:16:49.330
+that aren't thread-safe.
+
+00:16:51.280 --> 00:16:53.040
+In some situations,
+you're going to want to move
+
+00:16:53.050 --> 00:16:55.560
+a QuickTime object from one
+thread to another thread.
+
+00:16:55.560 --> 00:16:58.020
+Now, with graphics importers
+and graphics exporters,
+
+00:16:58.020 --> 00:17:00.850
+you can manage that with locking
+that you perform on your own.
+
+00:17:00.860 --> 00:17:04.390
+Just make sure that it's only being
+called from one thread at a time.
+
+00:17:04.420 --> 00:17:08.170
+But movies are kind of special
+because of the way that they work.
+
+00:17:08.180 --> 00:17:11.670
+Movies need to know which thread
+they belong to at any given time.
+
+00:17:11.680 --> 00:17:17.960
+And so there's a pair of APIs that you
+call to detach a movie from one thread
+
+00:17:17.960 --> 00:17:20.400
+and then to attach it to another thread.
+
+00:17:25.600 --> 00:17:30.090
+A bunch of QuickTime APIs let
+you install callback routines.
+
+00:17:30.130 --> 00:17:32.060
+These fall into several categories.
+
+00:17:32.210 --> 00:17:35.820
+There are some that have always
+been called back from funny threads.
+
+00:17:35.870 --> 00:17:37.420
+That hasn't changed.
+
+00:17:37.440 --> 00:17:41.590
+But there are other ones that,
+in general, get called back from whatever
+
+00:17:41.590 --> 00:17:43.080
+thread is doing the work.
+
+00:17:43.100 --> 00:17:45.600
+Now, in the past,
+that was always the main thread.
+
+00:17:45.610 --> 00:17:48.340
+But now you might move that
+work to another thread.
+
+00:17:48.360 --> 00:17:51.400
+And if you do,
+you need to take care with your
+
+00:17:51.400 --> 00:17:54.250
+callbacks and rethink whether
+they're actually thread-safe as well.
+
+00:17:55.600 --> 00:17:59.660
+In particular, you should take care with
+your progress callbacks.
+
+00:17:59.690 --> 00:18:02.740
+Don't just call setControlValue
+to adjust a progress slider,
+
+00:18:02.880 --> 00:18:05.560
+because that could cause the
+progress slider to be redrawn.
+
+00:18:05.590 --> 00:18:09.020
+And like I said earlier,
+header files say that the
+
+00:18:09.020 --> 00:18:15.220
+Control Manager and the Dialog
+Manager are not thread-safe.
+
+00:18:15.270 --> 00:18:18.330
+And that could cause-- simply
+calling setControlValue,
+
+00:18:18.340 --> 00:18:20.380
+although we think about it,
+it's just setting a value,
+
+00:18:20.400 --> 00:18:25.560
+it actually would cause quite a lot of
+code to be run in order to draw that.
+
+00:18:26.700 --> 00:18:29.330
+It may not always be immediately
+obvious that the code that you're
+
+00:18:29.330 --> 00:18:30.480
+running is not thread-safe.
+
+00:18:30.600 --> 00:18:36.570
+Thread-safety bugs can be nastily
+tricky and hard to reproduce,
+
+00:18:36.570 --> 00:18:40.800
+and it's better to be safer than sorry.
+
+00:18:41.950 --> 00:18:44.240
+If you're a developer who
+writes QuickTime components,
+
+00:18:44.400 --> 00:18:45.540
+good for you.
+
+00:18:45.800 --> 00:18:49.240
+Please make the next version
+of your component thread safe.
+
+00:18:49.520 --> 00:18:52.950
+And when you do that,
+you should set the thread
+
+00:18:52.950 --> 00:18:55.020
+safety flag on your component.
+
+00:18:55.020 --> 00:18:59.430
+It's just a component
+flag in the global space.
+
+00:18:59.560 --> 00:19:04.280
+What kind of things do you need to do in
+your component to make it thread safe?
+
+00:19:04.920 --> 00:19:07.290
+And what kind of things do you
+need to do in your application
+
+00:19:07.290 --> 00:19:08.230
+to make sure you're thread safe?
+
+00:19:08.310 --> 00:19:13.350
+Well, a bunch of that plumbing that
+I talked about beneath QuickTime,
+
+00:19:13.350 --> 00:19:15.840
+here are some good examples.
+
+00:19:15.840 --> 00:19:21.920
+It's now safe to create G worlds and
+draw in them from preemptive threads.
+
+00:19:22.600 --> 00:19:26.820
+It's now safe to open and close
+components from background threads.
+
+00:19:26.820 --> 00:19:28.590
+It's safe to resolve aliases.
+
+00:19:28.630 --> 00:19:32.020
+It's safe to create and
+manipulate handles from threads.
+
+00:19:32.020 --> 00:19:36.880
+In order to make that work safely,
+we made what was previously a global
+
+00:19:36.880 --> 00:19:40.800
+error variable for the memory manager,
+a mem error.
+
+00:19:40.800 --> 00:19:44.800
+We made that from a global variable
+into a per-thread variable.
+
+00:19:44.800 --> 00:19:48.380
+So the error you get back,
+the error code you get back from
+
+00:19:48.380 --> 00:19:52.340
+an API call on one thread won't
+interfere with the API call.
+
+00:19:52.460 --> 00:19:54.530
+you make on another thread.
+
+00:19:55.130 --> 00:19:58.550
+You may have read advice saying,
+"Stop using handles,
+
+00:19:58.560 --> 00:20:03.280
+use malloc instead." There's a
+little bit of confusion about that.
+
+00:20:03.330 --> 00:20:07.170
+If you're using New Handle to
+allocate private data structures
+
+00:20:07.170 --> 00:20:10.340
+inside your application,
+then it's a good idea to examine
+
+00:20:10.340 --> 00:20:13.920
+those and see if you can switch them
+over to use malloc or caloc instead.
+
+00:20:13.950 --> 00:20:17.700
+If they never change size,
+that might be the right thing to do.
+
+00:20:17.720 --> 00:20:20.120
+Because malloc is faster on Mac OS X.
+
+00:20:20.120 --> 00:20:23.050
+The handle implementation is built
+on top of it and it has to maintain
+
+00:20:23.050 --> 00:20:26.820
+some extra information that isn't
+necessary for malloc and caloc.
+
+00:20:26.820 --> 00:20:29.110
+It has to maintain the
+master pointer blocks,
+
+00:20:29.110 --> 00:20:29.940
+for example.
+
+00:20:30.350 --> 00:20:33.260
+However,
+we use handles in QuickTime and in
+
+00:20:33.260 --> 00:20:38.500
+the Alias Manager and so forth as
+a part of our dialogue of our API.
+
+00:20:38.500 --> 00:20:41.510
+We have over 400 APIs that pass
+handles around in QuickTime,
+
+00:20:41.510 --> 00:20:42.950
+and they're not going away.
+
+00:20:42.970 --> 00:20:45.630
+So your use of handles,
+if you're using it for those purposes,
+
+00:20:45.630 --> 00:20:47.240
+is obviously the right thing to do.
+
+00:20:50.030 --> 00:20:54.660
+There are some other managers and
+APIs that won't be becoming thread-safe.
+
+00:20:54.720 --> 00:20:59.600
+The Resource Manager APIs involve a
+global state called the resource chain.
+
+00:20:59.740 --> 00:21:02.890
+It's a list of open resource files.
+
+00:21:03.510 --> 00:21:07.050
+and effectively it's an implicit
+parameter passed to most of
+
+00:21:07.050 --> 00:21:08.740
+the resource manager APIs.
+
+00:21:08.740 --> 00:21:10.490
+And as such, it's not thread safe.
+
+00:21:10.500 --> 00:21:16.940
+However, the one-shot component manager
+calls that get component resources,
+
+00:21:16.960 --> 00:21:20.420
+such as get component resource,
+get component public resource,
+
+00:21:20.420 --> 00:21:23.870
+get component public resource list,
+these guys are thread safe.
+
+00:21:23.960 --> 00:21:27.500
+So, for example, in your component,
+if you,
+
+00:21:27.500 --> 00:21:31.400
+a common thing that happens in image
+decompressor components is that they
+
+00:21:31.400 --> 00:21:36.220
+need to get the CDCI resource to
+answer the question in get codec info,
+
+00:21:36.220 --> 00:21:38.680
+fill in this codec info slab.
+
+00:21:38.680 --> 00:21:43.700
+And a way that often this has been done
+is by calling open a resource file,
+
+00:21:43.700 --> 00:21:46.840
+get resource, and close a resource file.
+
+00:21:49.400 --> 00:21:51.420
+Because those APIs manipulate
+the resource chain,
+
+00:21:51.420 --> 00:21:52.220
+they're not safe to do.
+
+00:21:52.220 --> 00:21:56.500
+Instead, you can use the one-shot call,
+getComponentResource,
+
+00:21:56.500 --> 00:21:59.140
+and that is actually safe,
+and that's what we recommend you
+
+00:21:59.200 --> 00:22:00.900
+do inside your getCodicInfo call.
+
+00:22:00.900 --> 00:22:03.780
+There are other examples of
+this in other component types.
+
+00:22:08.830 --> 00:22:12.120
+Another common practice in
+components has been to have some
+
+00:22:12.120 --> 00:22:17.530
+shared global state that's shared
+between component instances.
+
+00:22:17.650 --> 00:22:21.920
+and generally people would use
+the component refcon as a way
+
+00:22:21.920 --> 00:22:23.640
+of storing where this state was.
+
+00:22:23.640 --> 00:22:27.820
+Now, when all components were used
+on the same thread and memory
+
+00:22:27.820 --> 00:22:32.440
+was scarce on your Macintosh LC,
+it was a good idea because
+
+00:22:32.770 --> 00:22:34.110
+you wanted to save memory.
+
+00:22:34.140 --> 00:22:37.480
+However, if you want your component to be
+used by multiple threads at once,
+
+00:22:37.480 --> 00:22:40.770
+it's now a bad idea and it's
+time to upgrade that code.
+
+00:22:40.800 --> 00:22:44.640
+Now, if you really need to share dynamic
+state between components and
+
+00:22:44.640 --> 00:22:47.510
+those component instances might be
+
+00:22:48.800 --> 00:23:02.400
+[Transcript missing]
+
+00:23:02.870 --> 00:23:07.460
+On the other hand, if you're using shared
+globals for constant tables,
+
+00:23:07.460 --> 00:23:10.890
+and maybe allocating them once and
+then hanging onto them later on,
+
+00:23:11.020 --> 00:23:16.120
+then the best thing you can
+do is to take those tables,
+
+00:23:16.140 --> 00:23:20.800
+generate some source code
+that builds those tables,
+
+00:23:20.880 --> 00:23:23.570
+label it as const,
+and just build it and put
+
+00:23:23.570 --> 00:23:25.260
+it in your executable.
+
+00:23:25.670 --> 00:23:28.820
+This might seem a little bit
+eager or a little bit weird,
+
+00:23:28.820 --> 00:23:33.940
+but it is actually a better thing
+to do for a number of reasons.
+
+00:23:33.980 --> 00:23:37.090
+If your data is constant
+and you tell a compiler,
+
+00:23:37.300 --> 00:23:40.680
+here's a big constant array,
+then instead of putting it in a place
+
+00:23:40.960 --> 00:23:44.620
+in private memory to one application,
+it'll put it in the read-only
+
+00:23:44.620 --> 00:23:47.620
+section of the executable,
+which for Unix-y reasons
+
+00:23:47.620 --> 00:23:49.140
+is called the text segment.
+
+00:23:49.170 --> 00:23:52.220
+I don't really understand that history.
+
+00:23:52.300 --> 00:23:56.020
+But this is the same place
+where your executable code is.
+
+00:23:56.020 --> 00:23:58.730
+And the nice thing about that
+code is that it can be shared
+
+00:23:58.730 --> 00:24:00.270
+between multiple applications.
+
+00:24:00.400 --> 00:24:04.330
+So as well as sharing these tables
+between multiple instances of a
+
+00:24:04.330 --> 00:24:08.030
+component inside one application,
+these are shared between
+
+00:24:08.030 --> 00:24:11.720
+multiple instances of multiple
+components across applications.
+
+00:24:11.750 --> 00:24:15.380
+That stuff needs only to be
+resident in physical memory once.
+
+00:24:15.380 --> 00:24:19.020
+And even better,
+if that memory needs to be
+
+00:24:19.140 --> 00:24:22.480
+pushed out for paging reasons,
+it doesn't need to be
+
+00:24:22.480 --> 00:24:23.500
+written back to the disk.
+
+00:24:23.500 --> 00:24:27.160
+It doesn't need to take up space in
+swap files because it's read-only.
+
+00:24:27.160 --> 00:24:31.080
+And so the kernel knows that it can
+bring it back any time it wants just by
+
+00:24:31.080 --> 00:24:33.550
+mapping it back from the read-only file.
+
+00:24:33.560 --> 00:24:40.610
+So that's the best thing to do in
+cleaning up your code in that area.
+
+00:24:44.050 --> 00:24:47.100
+So to summarize the thread
+safety part of this talk,
+
+00:24:47.120 --> 00:24:49.920
+we're giving you the opportunity
+to make your applications more
+
+00:24:49.920 --> 00:24:55.070
+responsive and more powerful by
+doing work in background threads.
+
+00:24:55.300 --> 00:24:58.770
+In return, your part of the bargain is
+that you need to structure your
+
+00:24:58.770 --> 00:25:02.100
+code so that it will cope with
+legacy non-threadsafe components.
+
+00:25:02.100 --> 00:25:05.950
+Component developers,
+please make your components
+
+00:25:05.950 --> 00:25:08.990
+threadsafe so that the application
+developers can take advantage of them.
+
+00:25:09.000 --> 00:25:11.400
+And this is a Panther-only feature.
+
+00:25:11.400 --> 00:25:14.400
+Now, there's one thing we haven't
+mentioned on the slide,
+
+00:25:14.400 --> 00:25:17.160
+which is that we have a seed.
+
+00:25:17.160 --> 00:25:19.440
+We have the opportunity
+to seed some of you.
+
+00:25:19.990 --> 00:25:26.780
+And we have set up an address that you
+can send mail to to request involvement,
+
+00:25:26.780 --> 00:25:29.820
+which is qtthreadseed at apple.com.
+
+00:25:29.820 --> 00:25:32.590
+That email address is going to
+be around just for next week.
+
+00:25:32.650 --> 00:25:34.350
+So you should send email
+to us in the next week.
+
+00:25:34.400 --> 00:25:36.700
+I have some reminder cards.
+
+00:25:36.700 --> 00:25:38.230
+You should come up to
+me after the session,
+
+00:25:38.230 --> 00:25:39.600
+and I'll give you a reminder card.
+
+00:25:39.630 --> 00:25:42.740
+And then you can take it back and arrange
+to tell us what you're going to do.
+
+00:25:42.740 --> 00:25:44.010
+And we can see if we can seed you.
+
+00:25:45.740 --> 00:25:50.600
+So now I'd like to
+hand things over to me.
+
+00:25:50.670 --> 00:25:53.900
+So if you've been asleep through the
+multi-threading part of the talk,
+
+00:25:53.900 --> 00:25:56.080
+it's time to wake up again.
+
+00:25:56.390 --> 00:26:00.560
+We're going to talk about QuickTime's
+integration with ColorSync.
+
+00:26:00.560 --> 00:26:04.130
+And I want to begin this
+by taking a sip of water.
+
+00:26:13.660 --> 00:26:16.910
+So let's start with a jargon update.
+
+00:26:17.040 --> 00:26:20.440
+The QuickTime has APIs for
+drawing still image files.
+
+00:26:20.470 --> 00:26:23.260
+And we have APIs for
+writing still image files.
+
+00:26:23.260 --> 00:26:24.550
+We talked about those earlier.
+
+00:26:24.560 --> 00:26:27.900
+They're graphics importers
+and graphics exporters.
+
+00:26:27.940 --> 00:26:31.600
+Colorsync provides services for
+matching colors between profiles.
+
+00:26:31.630 --> 00:26:35.800
+If you haven't heard of these terms,
+
+00:26:36.710 --> 00:26:41.840
+A profile describes how pixel
+values relate to the colors we see.
+
+00:26:41.880 --> 00:26:46.390
+It's a mathematical model
+of this relationship.
+
+00:26:46.630 --> 00:26:51.200
+and different devices like cameras,
+printers, scanners, and monitors.
+
+00:26:51.270 --> 00:26:52.390
+They each have different profiles.
+
+00:26:52.440 --> 00:26:56.600
+It turns out that the relationship
+between a pixel value stored in some
+
+00:26:56.600 --> 00:27:01.080
+kind of buffer and the color you end up
+seeing is going to be different for each
+
+00:27:01.290 --> 00:27:04.960
+of these different kinds of devices and
+often for different individual devices.
+
+00:27:05.610 --> 00:27:08.660
+Color matching,
+the big thing that ColorSync provides,
+
+00:27:08.660 --> 00:27:13.070
+color matching is translating
+pixel values to compensate for
+
+00:27:13.070 --> 00:27:17.890
+the differences between profiles
+so that you see the same color.
+
+00:27:21.070 --> 00:27:25.020
+So many kinds of still image
+files have different ways of
+
+00:27:25.120 --> 00:27:27.160
+embedding Colossing profiles.
+
+00:27:27.280 --> 00:27:30.550
+And part of the Graphics Importer
+and Graphics Exporter APIs since
+
+00:27:30.560 --> 00:27:36.020
+QuickTime 4.0 has been affordances
+to read these profiles and to
+
+00:27:36.050 --> 00:27:38.910
+write these profiles in new files.
+
+00:27:41.030 --> 00:27:43.940
+That was pretty much all we provided.
+
+00:27:43.980 --> 00:27:47.030
+To draw an image with color matching,
+you had to write some extra code.
+
+00:27:47.030 --> 00:27:51.470
+And to preserve a profile when converting
+between one image format and another,
+
+00:27:51.620 --> 00:27:52.900
+you had to write a
+little bit of extra code.
+
+00:27:53.050 --> 00:27:53.900
+It wasn't much.
+
+00:27:53.900 --> 00:27:58.260
+But because ColorSync has often
+been viewed as a pro feature,
+
+00:27:58.260 --> 00:28:03.340
+applications that didn't view
+themselves as pro imaging applications
+
+00:28:03.340 --> 00:28:05.720
+often didn't spend that effort.
+
+00:28:05.900 --> 00:28:08.320
+And this meant that
+the results are patchy.
+
+00:28:08.590 --> 00:28:12.470
+And even non-pro users are beginning
+to notice this and start to get
+
+00:28:12.470 --> 00:28:16.410
+a little bit tetchy about the
+fact that this picture they've got
+
+00:28:16.410 --> 00:28:18.690
+doesn't look the same everywhere.
+
+00:28:20.560 --> 00:28:25.440
+Here's what you had to do in order
+to draw an image using a graphics
+
+00:28:25.440 --> 00:28:27.310
+importer with color matching.
+
+00:28:27.620 --> 00:28:31.340
+You'd get a graphics
+importer for the file.
+
+00:28:31.600 --> 00:28:34.720
+Draw it into an off-screen
+GWorld or buffer.
+
+00:28:34.930 --> 00:28:37.740
+You'd get the ColorSync profile by
+making the call on the graphics importer.
+
+00:28:37.740 --> 00:28:41.320
+And then you'd choose
+some destination profile,
+
+00:28:41.320 --> 00:28:43.160
+often a generic RGB profile.
+
+00:28:43.160 --> 00:28:46.200
+Then you'd create a ColorWorld,
+which is a ColorSync API.
+
+00:28:46.200 --> 00:28:48.600
+And then you would match,
+which means actually
+
+00:28:48.600 --> 00:28:50.280
+performing the translation.
+
+00:28:50.280 --> 00:28:53.620
+You'd match from the GWorld to another
+GWorld and then copy that to a window.
+
+00:28:54.560 --> 00:28:57.410
+This is a little bit more work,
+and if you really cared,
+
+00:28:57.410 --> 00:29:00.900
+you probably did it,
+but it was still some work.
+
+00:29:02.110 --> 00:29:04.920
+If you wanted to preserve a profile,
+that wasn't quite such a big deal.
+
+00:29:05.020 --> 00:29:08.060
+You had to get it from the importer
+and set it on the exporter.
+
+00:29:08.110 --> 00:29:11.570
+And, you know, in QuickTime 4.0,
+this didn't seem like such a big
+
+00:29:11.570 --> 00:29:12.970
+deal for people to have to do.
+
+00:29:13.260 --> 00:29:15.720
+But if you didn't do it,
+then you lost some kind
+
+00:29:15.720 --> 00:29:17.340
+of important information.
+
+00:29:17.340 --> 00:29:19.790
+And people who are relying on
+that as part of their process,
+
+00:29:19.790 --> 00:29:23.290
+or people who just were messing
+around with some images,
+
+00:29:23.290 --> 00:29:26.290
+could become a little bit
+unhappy if they lost that.
+
+00:29:28.900 --> 00:29:33.660
+So here's what we're doing in Panther.
+
+00:29:33.740 --> 00:29:37.800
+Graphics importers will now draw
+using color matching by default.
+
+00:29:37.970 --> 00:29:42.890
+And we'll use the CMYK to RGB conversion
+that Colorsync provides by default,
+
+00:29:43.200 --> 00:29:44.900
+because it looks better
+than what we were doing,
+
+00:29:44.900 --> 00:29:47.130
+which was somewhat naive.
+
+00:29:47.460 --> 00:29:50.000
+Furthermore,
+when you convert image formats
+
+00:29:50.000 --> 00:29:53.200
+using graphics exporters,
+we will preserve the profile.
+
+00:29:53.200 --> 00:29:56.490
+We can only do this if you're plugging
+in a graphics importer directly into a
+
+00:29:56.490 --> 00:30:01.260
+graphics exporter or using some other
+mechanism that lets us automatically
+
+00:30:01.290 --> 00:30:04.210
+detect the profile and push it through.
+
+00:30:04.220 --> 00:30:07.480
+If you draw into some off-screen
+GWorld and then export out
+
+00:30:07.480 --> 00:30:10.580
+of that off-screen GWorld,
+the GWorld is not tagged.
+
+00:30:10.580 --> 00:30:14.950
+Other kinds of things like CG images and
+bitmap context and core graphics are,
+
+00:30:15.010 --> 00:30:17.450
+but the QuickDraw equivalents are not.
+
+00:30:19.810 --> 00:30:20.990
+We can help when we can help.
+
+00:30:21.140 --> 00:30:23.740
+Otherwise, you may have to do some
+work still yourself.
+
+00:30:23.740 --> 00:30:27.740
+But this is what you do now in order
+to draw an image using color matching.
+
+00:30:27.740 --> 00:30:31.010
+You just draw,
+and we will draw to generic RGB if you
+
+00:30:31.010 --> 00:30:32.680
+haven't told us to do anything else.
+
+00:30:32.740 --> 00:30:38.740
+We'll go and call ColorSync,
+and I might as well show you.
+
+00:30:38.740 --> 00:30:43.730
+So let's go to demo one.
+
+00:30:44.010 --> 00:30:44.840
+Wow.
+
+00:30:45.770 --> 00:30:47.730
+The export's finished.
+
+00:30:55.470 --> 00:31:01.650
+So all of the sample code that Tim showed
+you earlier and the sample code that
+
+00:31:01.650 --> 00:31:04.780
+I'm showing you now is available.
+
+00:31:04.780 --> 00:31:09.510
+But because it requires the Panther APIs,
+you have to go to the
+
+00:31:09.620 --> 00:31:12.390
+Apple Developer Connection
+site and log in.
+
+00:31:12.480 --> 00:31:14.890
+So you go to connect.apple.com, log in.
+
+00:31:14.900 --> 00:31:17.250
+And then if you look under
+Download Software and then the
+
+00:31:17.250 --> 00:31:20.370
+name of the developers conference,
+then you'll find a bunch of stuff.
+
+00:31:20.410 --> 00:31:21.320
+There's more stuff each day.
+
+00:31:21.320 --> 00:31:23.510
+And here I'm going to show you
+an application that you could be
+
+00:31:23.510 --> 00:31:24.910
+playing with if you'd known that.
+
+00:31:26.150 --> 00:31:30.540
+I, because it's an image application you
+drop images on and they get drawn,
+
+00:31:30.540 --> 00:31:32.580
+I called it DropDraw.
+
+00:31:32.630 --> 00:31:35.500
+That's the kind of
+unimaginative person I am.
+
+00:31:36.660 --> 00:31:43.160
+I mentioned the CMYK rendering because
+this we have had substantial complaints
+
+00:31:43.160 --> 00:31:45.560
+about in previous feedback forums.
+
+00:31:45.560 --> 00:31:48.320
+I've turned off this flag,
+used color sync matching to
+
+00:31:48.320 --> 00:31:50.260
+pretend that we're back in Jaguar.
+
+00:31:50.260 --> 00:31:52.980
+And this is what you get.
+
+00:31:53.260 --> 00:31:55.300
+This is a CMYK TIFF file.
+
+00:31:55.300 --> 00:31:56.540
+It's a picture of a palm tree.
+
+00:31:56.540 --> 00:32:00.470
+And this is recognizably a palm tree.
+
+00:32:00.500 --> 00:32:03.480
+But if you were a photographer,
+you probably wouldn't be very
+
+00:32:03.530 --> 00:32:06.440
+happy with that if that was
+the photograph you'd taken.
+
+00:32:06.600 --> 00:32:10.430
+This is what it looks like
+if you're using the color
+
+00:32:10.430 --> 00:32:12.710
+sync CMYK to RGB conversion.
+
+00:32:12.720 --> 00:32:15.220
+And it looks a whole lot better.
+
+00:32:15.220 --> 00:32:19.000
+You can see more depth
+of detail in the shadows,
+
+00:32:19.000 --> 00:32:21.850
+and the water looks less radioactive.
+
+00:32:25.540 --> 00:32:28.620
+So this is now what you'll
+get by default out of,
+
+00:32:28.620 --> 00:32:30.460
+if you're just drawing using QuickTime,
+and that's kind of nice.
+
+00:32:30.460 --> 00:32:34.140
+But because you're drawing
+using graphics importers,
+
+00:32:34.140 --> 00:32:36.160
+there's all these other
+features that we give you,
+
+00:32:36.160 --> 00:32:39.680
+like we give you the ability to crop,
+and that still works.
+
+00:32:39.680 --> 00:32:42.540
+This is a cropping using source
+extraction in source space.
+
+00:32:42.540 --> 00:32:46.280
+You can apply a rotation matrix.
+
+00:32:46.280 --> 00:32:47.890
+Let's do that.
+
+00:32:47.930 --> 00:32:49.040
+Let's rotate the image.
+
+00:32:49.040 --> 00:32:49.990
+We can clip.
+
+00:32:49.990 --> 00:32:53.220
+We can give it a clip region,
+and there's a fairly
+
+00:32:53.230 --> 00:32:55.200
+complicated clip region.
+
+00:32:55.440 --> 00:32:58.090
+We can do them all,
+which is the obvious thing to do.
+
+00:32:58.100 --> 00:32:59.460
+There we go.
+
+00:32:59.520 --> 00:33:02.610
+Here we go.
+
+00:33:05.070 --> 00:33:08.790
+So CMYK images look a lot better,
+and you can still do all of the
+
+00:33:08.790 --> 00:33:10.830
+things that you used to be able
+to do with graphics importers.
+
+00:33:10.840 --> 00:33:16.320
+We've introduced this feature in
+as orthogonal a way as we can.
+
+00:33:17.270 --> 00:33:21.370
+The difference between unmatched
+and matched images is a bit more
+
+00:33:21.370 --> 00:33:25.200
+subtle when you come to RGB images.
+
+00:33:25.270 --> 00:33:28.130
+And there,
+we can be forgiven for thinking
+
+00:33:28.130 --> 00:33:30.390
+that there wasn't much of a deal.
+
+00:33:30.690 --> 00:33:33.240
+If you look at this image,
+this is a picture that
+
+00:33:33.410 --> 00:33:35.700
+Ken Breskin took on holiday.
+
+00:33:35.700 --> 00:33:36.900
+He says that he was on safari.
+
+00:33:36.900 --> 00:33:38.700
+It's a bit hard to tell
+whether he was in a zoo,
+
+00:33:38.700 --> 00:33:42.470
+but we'll believe him.
+
+00:33:43.190 --> 00:33:44.920
+Here's a picture of some wild beast.
+
+00:33:44.990 --> 00:33:47.030
+It looks great, you know?
+
+00:33:47.310 --> 00:33:50.100
+If I got a bug report saying,
+"Look how bad you made my image
+
+00:33:50.100 --> 00:33:54.650
+draw," I wouldn't believe that,
+until maybe I saw what it looked like
+
+00:33:54.780 --> 00:33:57.710
+side by side with the matched image.
+
+00:33:57.840 --> 00:34:02.100
+And, you know, if you saw this image,
+if you were there in person
+
+00:34:02.100 --> 00:34:04.160
+and saw the animal and you
+know that it looked browner,
+
+00:34:04.160 --> 00:34:06.000
+then you'd be unhappy
+if it wasn't that brown.
+
+00:34:06.000 --> 00:34:10.810
+In fact, I think this -- I think
+it even looks hairier.
+
+00:34:15.300 --> 00:34:16.140
+Here's another example.
+
+00:34:16.140 --> 00:34:17.950
+This one's pretty good.
+
+00:34:18.150 --> 00:34:21.250
+Here's a picture of a lion.
+
+00:34:22.250 --> 00:34:25.270
+and here's the same line
+with color sync matching,
+
+00:34:25.270 --> 00:34:27.880
+and that looks a whole lot sexier.
+
+00:34:27.880 --> 00:34:31.920
+A much more romantic picture of a line.
+
+00:34:32.340 --> 00:34:36.070
+The photographer's side of this is,
+look how bad these things look.
+
+00:34:36.150 --> 00:34:37.540
+This is terrible.
+
+00:34:37.540 --> 00:34:41.650
+The programmer who isn't a
+photographer doesn't know what
+
+00:34:41.660 --> 00:34:42.810
+they're complaining about.
+
+00:34:42.990 --> 00:34:45.200
+But in fact,
+it's not necessarily a professional
+
+00:34:45.200 --> 00:34:47.240
+who's really going to care about this.
+
+00:34:47.240 --> 00:34:51.100
+I think anyone who's really getting
+into photography wants their
+
+00:34:51.100 --> 00:34:53.100
+images to look like they were.
+
+00:34:53.100 --> 00:34:59.010
+Otherwise, you feel your memory of the
+event was a little bit defaced.
+
+00:34:59.080 --> 00:35:00.940
+But the problem is,
+if you only see one of these,
+
+00:35:00.940 --> 00:35:02.930
+how do you know whether
+you did the right thing?
+
+00:35:02.940 --> 00:35:08.580
+So, going back to slides,
+we've got this problem.
+
+00:35:12.800 --> 00:35:16.100
+How do you know whether
+it's right or wrong?
+
+00:35:16.100 --> 00:35:16.560
+Could you pick?
+
+00:35:16.560 --> 00:35:18.640
+If you only saw one of these,
+could you pick the right one?
+
+00:35:18.660 --> 00:35:19.680
+I'm not sure that I could.
+
+00:35:19.680 --> 00:35:26.360
+So there's a bit of a
+problem for developers,
+
+00:35:26.360 --> 00:35:26.360
+and
+
+00:35:31.010 --> 00:35:34.280
+The ColorSync team has come
+up with a good solution.
+
+00:35:34.280 --> 00:35:36.960
+They've created some files
+with special profiles.
+
+00:35:37.030 --> 00:35:40.280
+It turns out that people have discovered
+that you can use ColorSync matching,
+
+00:35:40.280 --> 00:35:43.430
+because it does all of this
+color space conversion,
+
+00:35:43.430 --> 00:35:46.110
+you can use that for doing
+explicit image adjustment.
+
+00:35:46.120 --> 00:35:48.460
+You can say,
+make this a bit bluer or greener,
+
+00:35:48.460 --> 00:35:50.740
+make the sky blue,
+that kind of adjustment,
+
+00:35:50.740 --> 00:35:53.980
+and people use it for doing kinds
+of color correction on purpose,
+
+00:35:54.220 --> 00:35:56.210
+not just to make things look the same.
+
+00:35:57.080 --> 00:36:00.630
+And they've created some image
+files that have embedded profiles
+
+00:36:00.950 --> 00:36:02.690
+that do a whole lot of changing.
+
+00:36:02.690 --> 00:36:05.990
+In fact, they switch the colors red,
+green, and blue around.
+
+00:36:06.000 --> 00:36:08.210
+They all switch them around,
+and then they make one of them vanish.
+
+00:36:08.220 --> 00:36:15.820
+So, the image at the top is what it looks
+like if you don't do any color matching.
+
+00:36:17.560 --> 00:36:19.380
+and I don't know if you can read it.
+
+00:36:19.540 --> 00:36:24.080
+It says the embedded test profile is
+not used and is not double matched.
+
+00:36:24.240 --> 00:36:27.610
+But the second one where the
+text has gone green is if you do
+
+00:36:27.670 --> 00:36:32.210
+the correct compensation using
+color sync or something else.
+
+00:36:32.430 --> 00:36:34.850
+and it has switched the colors
+around and the first word,
+
+00:36:34.850 --> 00:36:37.440
+not, has vanished because of
+this special profile.
+
+00:36:37.440 --> 00:36:41.700
+And so it says the embedded test
+profile is used and not double matched.
+
+00:36:41.720 --> 00:36:45.220
+And should the compensation
+of the transformation between
+
+00:36:45.220 --> 00:36:48.640
+these profiles be applied again,
+then you'll find the image at the bottom,
+
+00:36:48.700 --> 00:36:51.540
+which has turned red,
+and the word not has vanished,
+
+00:36:51.540 --> 00:36:53.290
+and now it says it is double matched.
+
+00:36:53.300 --> 00:36:55.830
+But this is all coming
+from the same image file.
+
+00:36:55.840 --> 00:36:58.710
+So to work out whether you're doing
+the right thing or the wrong file,
+
+00:36:58.720 --> 00:37:01.460
+you can just drag this
+into your application.
+
+00:37:01.460 --> 00:37:02.800
+So let's have a look at this.
+
+00:37:03.120 --> 00:37:07.550
+These image files are also available
+if you go to connect.apple.com.
+
+00:37:07.560 --> 00:37:10.460
+There's these images with trick profiles.
+
+00:37:10.460 --> 00:37:13.260
+We've got a bunch of
+different image formats here,
+
+00:37:13.260 --> 00:37:16.880
+and I can go into my little application.
+
+00:37:16.880 --> 00:37:22.680
+So there's one which always
+looks blue because it doesn't
+
+00:37:22.680 --> 00:37:23.640
+actually have a profile.
+
+00:37:23.640 --> 00:37:25.100
+It's there as a baseline.
+
+00:37:25.100 --> 00:37:29.460
+It's there if you want to create
+other image formats by taking the
+
+00:37:29.460 --> 00:37:31.440
+profile out of one of the other.
+
+00:37:31.460 --> 00:37:37.720
+So here's a GIF,
+and here's the test text.
+
+00:37:37.770 --> 00:37:43.010
+The embedded test profile is not used,
+and let's make it be used.
+
+00:37:45.540 --> 00:37:46.230
+Look, it's used.
+
+00:37:46.230 --> 00:37:47.000
+Woo-hoo!
+
+00:37:47.000 --> 00:37:51.860
+So we've got a bunch of images here.
+
+00:37:51.860 --> 00:37:54.100
+I'll turn off that one,
+just show you that they all work.
+
+00:37:54.120 --> 00:37:58.020
+So this is in my application,
+which since you haven't
+
+00:37:58.020 --> 00:38:01.000
+downloaded the sources to,
+you don't know whether I'm
+
+00:38:01.000 --> 00:38:02.920
+actually doing anything very fancy.
+
+00:38:02.920 --> 00:38:06.060
+But I can show you in a few
+other applications that this
+
+00:38:06.060 --> 00:38:10.090
+is really a widespread effect,
+and we can make sure that things
+
+00:38:10.090 --> 00:38:11.500
+are doing the right thing.
+
+00:38:11.520 --> 00:38:15.250
+The finder's preview here,
+you can see that the finder is
+
+00:38:15.250 --> 00:38:17.420
+displaying these with matching.
+
+00:38:17.420 --> 00:38:19.550
+The finder does not call a
+color sync to do this stuff.
+
+00:38:19.640 --> 00:38:22.160
+Here's another application that...
+
+00:38:23.900 --> 00:38:27.700
+doesn't call ColorSync,
+as far as I can tell.
+
+00:38:27.760 --> 00:38:30.540
+Rich told me it didn't yesterday morning,
+and I believe him.
+
+00:38:30.540 --> 00:38:35.290
+BBEdit actually lets you
+open images and movies,
+
+00:38:35.290 --> 00:38:37.110
+I think.
+
+00:38:37.180 --> 00:38:39.380
+Well.
+
+00:38:39.960 --> 00:38:43.230
+There's an option in the
+preferences to do this.
+
+00:38:43.230 --> 00:38:45.730
+Let me try this other copy,
+see if this one works.
+
+00:38:45.830 --> 00:38:47.740
+Oh, here we are.
+
+00:38:47.840 --> 00:38:48.090
+Okay.
+
+00:38:48.090 --> 00:38:49.440
+So here's an image in BBEdit.
+
+00:38:49.440 --> 00:38:51.940
+In the preferences here,
+there's a choice whether you
+
+00:38:51.940 --> 00:38:56.300
+want to display images using
+QuickTime and even open movies.
+
+00:38:56.590 --> 00:39:01.400
+Kind of interesting for a text editor,
+but I've heard it doesn't suck.
+
+00:39:01.700 --> 00:39:04.630
+If your application's like BBEdit and
+it's just calling a graphics importer,
+
+00:39:04.720 --> 00:39:06.600
+so this is already working for you.
+
+00:39:06.600 --> 00:39:12.670
+Another Apple application,
+but not one that...
+
+00:39:12.920 --> 00:39:14.920
+You think of as an imaging
+application is iTunes.
+
+00:39:15.040 --> 00:39:17.440
+iTunes actually does
+call graphics importers.
+
+00:39:17.440 --> 00:39:18.520
+I have it on good authority.
+
+00:39:18.630 --> 00:39:24.310
+They use graphics importers
+to draw the album artwork.
+
+00:39:26.100 --> 00:39:31.660
+So, I can just drag my image file in.
+
+00:39:36.120 --> 00:39:37.260
+playing in the background.
+
+00:39:37.260 --> 00:39:44.480
+It's a really very 80s song.
+
+00:40:05.890 --> 00:40:08.040
+get your G5 upgrade today.
+
+00:40:08.040 --> 00:40:15.200
+Okay, what if your application already
+does color sync matching?
+
+00:40:16.280 --> 00:40:19.700
+Well, some of you are saying, oh my god,
+my application already does this.
+
+00:40:19.700 --> 00:40:20.660
+Has he broken it?
+
+00:40:20.710 --> 00:40:24.040
+And some of you are probably saying,
+what's the problem?
+
+00:40:24.150 --> 00:40:31.040
+Well, you don't apply that color
+sync image adjustment twice.
+
+00:40:31.450 --> 00:40:34.190
+That would be a bad idea,
+because then you'd overcompensate,
+
+00:40:34.190 --> 00:40:36.160
+and the photographers
+would be unhappy again.
+
+00:40:36.270 --> 00:40:39.970
+So it's difficult to...
+
+00:40:44.040 --> 00:40:46.070
+You might be concerned if you
+already have an application.
+
+00:40:46.090 --> 00:40:49.260
+The good news is that
+we did think of this.
+
+00:40:49.440 --> 00:40:54.240
+And we do maintain binary compatibility
+with applications that are already
+
+00:40:54.710 --> 00:40:57.190
+calling graphics supporters and
+doing the matching themselves,
+
+00:40:57.190 --> 00:40:58.060
+as we showed before.
+
+00:40:58.230 --> 00:41:02.810
+The way we do this is
+a little bit tricky.
+
+00:41:03.070 --> 00:41:04.600
+The graphics importer now lies.
+
+00:41:04.600 --> 00:41:07.340
+Well,
+it tells you the profile that it's going
+
+00:41:07.340 --> 00:41:11.380
+to match to when you ask it what the
+profile embedded in the image file is.
+
+00:41:11.380 --> 00:41:15.770
+So now, if it's going to draw the
+image matched to generic RGB,
+
+00:41:15.770 --> 00:41:18.800
+it'll tell you when you ask, say,
+what's the color sync
+
+00:41:18.800 --> 00:41:20.280
+profile of this image?
+
+00:41:20.320 --> 00:41:21.860
+It'll tell you, oh, it's generic RGB.
+
+00:41:22.540 --> 00:41:26.160
+And that means that if you then
+match again to generic RGB,
+
+00:41:26.210 --> 00:41:28.630
+color sync will say, that's a no-op.
+
+00:41:28.630 --> 00:41:30.410
+These are the same profile.
+
+00:41:30.470 --> 00:41:34.200
+And so the image will still
+only have been matched once.
+
+00:41:35.780 --> 00:41:38.650
+It's worth, if you have an application
+that does this,
+
+00:41:38.730 --> 00:41:42.060
+it's worth checking
+that this is the case.
+
+00:41:42.060 --> 00:41:47.720
+Because if you grab that profile ahead
+of time and store it somewhere else,
+
+00:41:47.720 --> 00:41:50.520
+or if you go through some other
+path that isn't quite this simple,
+
+00:41:50.520 --> 00:41:56.440
+then it's possible that there might be a
+situation in which you did match twice,
+
+00:41:56.440 --> 00:41:57.720
+you did get an erroneous double match.
+
+00:41:57.720 --> 00:42:01.000
+But you can easily detect that
+case and work out how to fix
+
+00:42:01.000 --> 00:42:03.840
+it by using those image files,
+which as I said,
+
+00:42:03.850 --> 00:42:07.180
+are up on the ADC Connect side.
+
+00:42:10.590 --> 00:42:13.250
+On the other hand,
+if you just want to tell us,
+
+00:42:13.350 --> 00:42:15.400
+don't do color matching,
+I'll do it instead.
+
+00:42:15.400 --> 00:42:17.010
+We have an API to do that.
+
+00:42:17.020 --> 00:42:19.540
+That's what we were using to turn off
+things and pretend we were on Jaguar.
+
+00:42:19.540 --> 00:42:22.320
+It's just setting a flag
+on the graphics importer,
+
+00:42:22.380 --> 00:42:25.080
+and since it's just a flag,
+it's safe to do that all the
+
+00:42:25.240 --> 00:42:27.820
+way back to QuickTime 4.0,
+in fact.
+
+00:42:32.920 --> 00:42:38.440
+In the panthecide that you have received,
+automatic color management only
+
+00:42:38.440 --> 00:42:40.490
+happens when you draw images.
+
+00:42:40.550 --> 00:42:46.470
+It doesn't happen in the utility APIs for
+getting images as pic handles or picture
+
+00:42:46.470 --> 00:42:49.150
+files or saving them as QuickTime images.
+
+00:42:49.260 --> 00:42:56.160
+We also have not yet done anything
+to modify importing still images or
+
+00:42:56.160 --> 00:42:59.130
+sequences of still images as movies.
+
+00:43:00.750 --> 00:43:06.200
+If you're a graphics-imported developer,
+you need to opt in to get this feature,
+
+00:43:06.260 --> 00:43:09.210
+because you need to enable the code that
+
+00:43:09.660 --> 00:43:18.300
+and the other two are going to be
+talking about the new version of the QCF.
+
+00:43:18.700 --> 00:43:22.690
+If you want to talk to me about it,
+I'll be downstairs in Sacramento,
+
+00:43:22.690 --> 00:43:24.760
+which is not up 80.
+
+00:43:24.760 --> 00:43:29.550
+I'll be in Sacramento tomorrow morning,
+and so will other people on the ICM team.
+
+00:43:31.320 --> 00:43:34.940
+So, we are making color management
+the default because we think that
+
+00:43:34.940 --> 00:43:37.640
+it's a better user experience,
+not just for pro customers,
+
+00:43:37.640 --> 00:43:38.360
+but for all of them.
+
+00:43:38.360 --> 00:43:43.200
+We're also making a strong effort
+to preserve binary compatibility
+
+00:43:43.200 --> 00:43:45.920
+because we think that's also a
+pretty important user experience.
+
+00:43:45.920 --> 00:43:48.740
+So, one more thing from me.
+
+00:43:50.060 --> 00:43:53.340
+I want to tell you about a couple
+of new APIs in QuickTime to
+
+00:43:53.340 --> 00:43:55.880
+help integrate with Quartz 2D.
+
+00:43:56.240 --> 00:44:00.980
+So we have a new API that's in
+the Panther seed to create a
+
+00:44:00.980 --> 00:44:03.040
+CG image from an image file.
+
+00:44:03.060 --> 00:44:06.360
+And this is great if you then want
+to draw that into a CG context.
+
+00:44:06.430 --> 00:44:08.500
+This was requested by a bunch of people.
+
+00:44:08.570 --> 00:44:12.180
+If you don't know what a CG context is,
+I encourage you to learn.
+
+00:44:12.280 --> 00:44:13.960
+Go to some Quartz sessions.
+
+00:44:13.980 --> 00:44:15.320
+Pick up a book.
+
+00:44:15.440 --> 00:44:18.800
+One tip, though, Quartz uses a floating
+point coordinate space.
+
+00:44:18.840 --> 00:44:21.760
+So if you want to center
+that image somewhere,
+
+00:44:21.760 --> 00:44:25.460
+you should be careful to round
+down the coordinates when you're
+
+00:44:25.960 --> 00:44:27.730
+dividing some number by two.
+
+00:44:27.740 --> 00:44:32.460
+Or else, you might draw that image
+at a half pixel offset,
+
+00:44:32.480 --> 00:44:34.360
+and then you get a blurry image.
+
+00:44:34.380 --> 00:44:36.960
+So round is your friend.
+
+00:44:37.070 --> 00:44:37.890
+Floor is your friend.
+
+00:44:37.950 --> 00:44:39.840
+Floor is the function.
+
+00:44:39.850 --> 00:44:44.580
+We've also introduced an
+API to create a new image.
+
+00:44:45.060 --> 00:44:51.360
+allow you to provide a CG image as the
+input to a graphics export operation.
+
+00:44:51.360 --> 00:44:53.500
+And so using this,
+you can take the smooth images that
+
+00:44:53.500 --> 00:44:57.470
+you've rendered by Quartz and write
+them out as Mac Paint files if you like.
+
+00:44:59.850 --> 00:45:01.780
+So that's it for me.
+
+00:45:01.780 --> 00:45:06.350
+I will have these little reminder cards.
+
+00:45:06.380 --> 00:45:09.070
+If you're interested in writing
+applications that take advantage
+
+00:45:09.070 --> 00:45:12.400
+of the multi-threaded abilities,
+please come and see me,
+
+00:45:12.400 --> 00:45:14.040
+and I'll give you one of these cards.
+
+00:45:14.040 --> 00:45:16.340
+And then you'll remember that you
+have to send some email to us.
+
+00:45:50.020 --> 00:45:53.820
+So let's switch to a totally
+different topic right now.
+
+00:45:53.900 --> 00:45:57.920
+From all this Threads Safety, ColorSync,
+and cross-2D support in
+
+00:45:57.920 --> 00:46:01.340
+QuickTime for Panther,
+and let me talk about
+
+00:46:01.340 --> 00:46:03.400
+Audio/Video Startup Sync.
+
+00:46:04.150 --> 00:46:08.210
+Before I do that,
+let's take a look at the current
+
+00:46:08.320 --> 00:46:11.290
+QuickTime AVSync model today.
+
+00:46:11.500 --> 00:46:15.560
+Today we have moving times,
+which is driven by time bases.
+
+00:46:15.600 --> 00:46:19.720
+And those time bases
+are driven by clocks.
+
+00:46:19.780 --> 00:46:23.290
+Basically,
+time bases have a definition of rate.
+
+00:46:23.490 --> 00:46:26.310
+They can stop the time,
+they can move the time
+
+00:46:26.430 --> 00:46:30.410
+forward or backward,
+whether the clock provide
+
+00:46:30.420 --> 00:46:33.100
+real-time clock information,
+which means that their
+
+00:46:33.190 --> 00:46:35.270
+time is always moving.
+
+00:46:37.680 --> 00:46:41.650
+So these clocks can be provided
+by external hardware device today,
+
+00:46:41.690 --> 00:46:43.420
+such as audio or video.
+
+00:46:43.460 --> 00:46:46.510
+If your movie is not attached
+to any of these devices,
+
+00:46:46.740 --> 00:46:50.070
+QuickTime internally
+will use the CPU clock.
+
+00:46:51.170 --> 00:46:54.810
+But the fact that QuickTime is
+capable of using this external
+
+00:46:54.810 --> 00:46:59.100
+clock to drive the time base of the
+movie let us play audio and video
+
+00:46:59.100 --> 00:47:02.680
+in sync over a long period of time.
+
+00:47:03.940 --> 00:47:08.990
+The issue we have today is that this
+model makes the assumption that the rate
+
+00:47:09.050 --> 00:47:12.240
+of a time base can change right away.
+
+00:47:12.960 --> 00:47:17.780
+and by making this assumption,
+what kind of trouble can we run into?
+
+00:47:17.900 --> 00:47:22.000
+Well,
+if you take the example of video clock,
+
+00:47:22.150 --> 00:47:26.210
+which is draw there,
+assuming this video clock is currently
+
+00:47:26.820 --> 00:47:30.770
+driving the time base of your movie,
+when your application asks
+
+00:47:31.000 --> 00:47:34.940
+QuickTime to start this movie,
+basically internally,
+
+00:47:35.000 --> 00:47:39.190
+we're gonna turn around and change
+the rate of this time base and assume
+
+00:47:39.190 --> 00:47:41.440
+it's going to change right now.
+
+00:47:41.850 --> 00:47:47.630
+But actually, this external device clock,
+we would like to see the
+
+00:47:47.630 --> 00:47:53.190
+rate changing not right now,
+but on the edge of the video scene,
+
+00:47:53.190 --> 00:47:56.010
+because it will be totally
+incapable of outputting the
+
+00:47:56.190 --> 00:47:57.900
+first sample before this edge.
+
+00:47:57.900 --> 00:48:02.310
+Well, if you look at this drawing,
+the second arrow is pointing at when the
+
+00:48:02.310 --> 00:48:04.940
+movie time has already started changing.
+
+00:48:05.080 --> 00:48:09.880
+So the audio track has already seen
+a time moving since the second arrow,
+
+00:48:09.880 --> 00:48:14.450
+when the video one will be totally
+not possible for it to display
+
+00:48:14.450 --> 00:48:17.260
+any sample before the third arrow.
+
+00:48:17.280 --> 00:48:20.930
+So by making this assumption
+that the rates can change,
+
+00:48:20.930 --> 00:48:25.920
+we introduce a gap, a tiny gap,
+between audio and video devices today.
+
+00:48:25.920 --> 00:48:31.580
+And we're not talking about
+seconds or minutes in this gap.
+
+00:48:31.580 --> 00:48:34.020
+This is about a couple
+of milliseconds today.
+
+00:48:34.020 --> 00:48:34.060
+Okay.
+
+00:48:34.640 --> 00:48:34.840
+But.
+
+00:48:35.250 --> 00:48:37.710
+When you are in the high-end
+audio and video space,
+
+00:48:37.710 --> 00:48:40.880
+they really don't care about
+what the scale of your gap is.
+
+00:48:41.050 --> 00:48:42.620
+They don't want to see any gap at all.
+
+00:48:44.710 --> 00:48:51.200
+So what do we need to do to fix
+this issue and get rid of this gap?
+
+00:48:51.250 --> 00:48:55.880
+Well, QuickTime needs to be able to
+understand this clock constraint,
+
+00:48:56.030 --> 00:48:58.440
+and as soon as we
+understand this constraint,
+
+00:48:58.440 --> 00:49:02.830
+we'll be able to provide some headroom
+before the rate of the movie changes.
+
+00:49:03.820 --> 00:49:05.770
+So how do we make that happen in Panther?
+
+00:49:05.900 --> 00:49:10.150
+Well, we've introduced two new APIs on
+the clock component side.
+
+00:49:10.390 --> 00:49:13.460
+The first one is clock
+getTimeForRateChange.
+
+00:49:13.510 --> 00:49:16.200
+And basically,
+this API-- we used to ask the clock,
+
+00:49:16.220 --> 00:49:18.940
+what time is it, and say, well,
+we'll change the time now.
+
+00:49:19.180 --> 00:49:21.210
+What we're going to do,
+we're going to say, well,
+
+00:49:21.380 --> 00:49:24.490
+we are about to change the rate
+from this value to this new one.
+
+00:49:24.890 --> 00:49:29.550
+Tell us what's the best
+time to change this value.
+
+00:49:29.790 --> 00:49:32.680
+The other API on the clock
+component side as well is clock
+
+00:49:32.880 --> 00:49:36.950
+get rate change constraint,
+which basically let QuickTime knows that
+
+00:49:36.950 --> 00:49:39.290
+the clock does have such a constraint.
+
+00:49:40.340 --> 00:49:43.240
+There is also in Panzer this
+new time-based API called
+
+00:49:43.240 --> 00:49:45.270
+GetTimeRateChangeStatus.
+
+00:49:45.440 --> 00:49:48.490
+So this one,
+you'll be able to call it after
+
+00:49:48.490 --> 00:49:52.740
+you change the rate of the movie,
+and you will be able to tell when
+
+00:49:52.740 --> 00:49:55.140
+the time will really start moving.
+
+00:49:55.580 --> 00:49:58.900
+There is also one new bit which
+has been added to an existing
+
+00:49:58.900 --> 00:50:01.080
+API called GetTimeBasedStatus.
+
+00:50:01.130 --> 00:50:04.500
+It's called time-based rate changing,
+basically telling you that you are
+
+00:50:04.500 --> 00:50:07.530
+within this gap I was just talking about.
+
+00:50:08.670 --> 00:50:10.530
+So what does that mean
+for your application?
+
+00:50:10.540 --> 00:50:13.300
+Well,
+if you use high-level movie toolbox API,
+
+00:50:13.300 --> 00:50:17.040
+you probably don't care about it,
+all that you really need to be aware
+
+00:50:17.040 --> 00:50:21.390
+of that the time-based rate can be
+not zero but the time is not moving.
+
+00:50:21.560 --> 00:50:25.500
+and actually the slide is talking
+about clock and I'm definitely
+
+00:50:25.500 --> 00:50:27.100
+out of sync with my slide.
+
+00:50:27.100 --> 00:50:29.600
+This should be really time-based.
+
+00:50:29.600 --> 00:50:34.790
+If you use low-level time-based
+API directly outside of a movie context,
+
+00:50:34.800 --> 00:50:36.860
+you might have more work to do.
+
+00:50:36.970 --> 00:50:41.040
+You probably need to check for this
+new flag returned by the get time-based
+
+00:50:41.040 --> 00:50:46.900
+status because it could generate some
+new behavior you've never seen before.
+
+00:50:47.260 --> 00:50:51.840
+So the last API added in Panther is
+a movie toolbox API called
+
+00:50:51.880 --> 00:50:54.100
+GetMovieRateChangeConstraints.
+
+00:50:54.140 --> 00:50:58.340
+So before you start a movie,
+you can query the minimum and maximum
+
+00:50:58.340 --> 00:51:02.490
+delay that you will see when you're
+about to change the rate of your movie.
+
+00:51:04.670 --> 00:51:09.790
+So let's switch to the demo machine to
+show you what this stuff is all about.
+
+00:51:09.940 --> 00:51:15.790
+So of course,
+I'm trying to demo something which is
+
+00:51:16.060 --> 00:51:18.110
+showing a millisecond delay
+when you start a movie.
+
+00:51:18.230 --> 00:51:19.670
+So that's not really something easy.
+
+00:51:19.790 --> 00:51:23.600
+So in order to have you
+re-understand what's going on,
+
+00:51:23.630 --> 00:51:26.520
+I modified the built-in
+audio clock on this machine,
+
+00:51:26.600 --> 00:51:29.860
+just because I can,
+and I advertised a constraint
+
+00:51:30.050 --> 00:51:32.580
+of two seconds rather than
+a realistic constraint,
+
+00:51:32.580 --> 00:51:35.850
+which is about a couple of
+milliseconds in real hardware devices.
+
+00:51:36.020 --> 00:51:38.590
+So you will be able to see
+what I'm talking about when
+
+00:51:38.600 --> 00:51:41.400
+the movie rate is changing.
+
+00:51:42.150 --> 00:51:45.350
+The other thing I have
+added to this standard
+
+00:51:45.350 --> 00:51:51.060
+QuickTime player is a custom panel,
+which is showing you a couple of things.
+
+00:51:51.060 --> 00:51:54.160
+The first one is the
+current rate of the movie,
+
+00:51:54.160 --> 00:51:57.940
+and the two other parameters
+basically are using the new
+
+00:51:57.940 --> 00:51:59.880
+APIs I was talking about.
+
+00:51:59.880 --> 00:52:02.520
+The first one is asking the
+movie to box with the constraint
+
+00:52:02.540 --> 00:52:05.370
+when you're about to start,
+and this is the two seconds
+
+00:52:05.370 --> 00:52:10.740
+I was talking about,
+building to this fake audio device clock,
+
+00:52:10.740 --> 00:52:14.120
+and the other one will basically
+monitor the time changing after
+
+00:52:14.240 --> 00:52:16.680
+I've changed the rate of the movie.
+
+00:52:17.140 --> 00:52:20.490
+So the player has not
+been modified at all.
+
+00:52:20.640 --> 00:52:24.540
+All that has been modified in this demo
+is the clock component which is used.
+
+00:52:24.540 --> 00:52:28.030
+And because this movie contains
+both an audio and a video track,
+
+00:52:28.230 --> 00:52:30.840
+by default,
+QuickTime will pick up the audio
+
+00:52:31.110 --> 00:52:34.780
+clock to take the time of this movie.
+
+00:52:34.860 --> 00:52:37.780
+So when I'm about to play this movie,
+you will see that the movie controller
+
+00:52:37.780 --> 00:52:39.660
+believes that the rate has changed.
+
+00:52:39.690 --> 00:52:44.810
+Well, we're gonna see that the rate
+actually will change in the future.
+
+00:52:44.890 --> 00:52:49.400
+So if I do that, nothing is happening,
+and you see the slider going down,
+
+00:52:49.400 --> 00:52:50.240
+and the movie restarting.
+
+00:52:50.240 --> 00:52:51.740
+- Thanks for coming to Apple today,
+Mary and Vivian.
+
+00:52:51.740 --> 00:52:54.370
+Do either of you work
+with computers at all?
+
+00:52:57.040 --> 00:52:59.830
+Let me do that again so you
+can understand what's going on.
+
+00:52:59.850 --> 00:53:03.340
+Everybody believe the movie has started,
+and the clock is running
+
+00:53:03.340 --> 00:53:04.700
+the time base of the movie.
+
+00:53:04.710 --> 00:53:07.540
+So even if the constraint is
+applied on the audio track,
+
+00:53:07.540 --> 00:53:12.290
+actually the video is going to wait
+patiently for this time to start playing.
+
+00:53:15.000 --> 00:53:18.000
+Do you know that Apple makes
+QuickTime for Windows now?
+
+00:53:18.000 --> 00:53:20.000
+Yeah, IBM.
+
+00:53:20.000 --> 00:53:23.160
+So to show you that it's really
+coming from the audio clock,
+
+00:53:23.160 --> 00:53:26.970
+what I can do,
+I can extract the video track
+
+00:53:27.050 --> 00:53:29.010
+from this original movie.
+
+00:53:29.620 --> 00:53:34.440
+And if I just show you the panel,
+the everything panel again,
+
+00:53:34.460 --> 00:53:37.470
+we'll see that there is no more
+constraint because QuickTime is not
+
+00:53:37.550 --> 00:53:39.200
+using the built-in audio clock anymore.
+
+00:53:39.200 --> 00:53:43.240
+And if I just play this movie,
+it does behave like any movie today,
+
+00:53:43.240 --> 00:53:46.420
+which means that the video
+can start right away.
+
+00:53:48.060 --> 00:53:51.530
+and there is nothing happening there,
+the rate changed instantaneously.
+
+00:53:51.800 --> 00:53:54.590
+If I extract just the,
+
+00:53:55.360 --> 00:53:58.840
+Audio Track of the original movie.
+
+00:53:58.900 --> 00:54:03.800
+Then, one more time,
+because QuickTime is using
+
+00:54:03.800 --> 00:54:05.950
+the built-in audio plug,
+
+00:54:07.880 --> 00:54:10.840
+is going to wait before
+the start happens.
+
+00:54:10.860 --> 00:54:15.990
+Are you now or have you
+ever used video for Windows?
+
+00:54:16.110 --> 00:54:17.310
+I've just experimented.
+
+00:54:17.360 --> 00:54:20.460
+I have-- Well, that's about all the time
+we have left for now.
+
+00:54:20.510 --> 00:54:22.770
+And that's all the time I have
+as well to talk about the
+
+00:54:22.860 --> 00:54:24.740
+service of the second pencil.
+
+00:54:24.790 --> 00:54:26.290
+Thank you.
+
+00:54:31.300 --> 00:54:34.640
+So Guillermo, Guillermo is not here.
+
+00:54:34.710 --> 00:54:38.460
+Guillermo is here and is coming
+up to wrap up the session.
+
+00:54:42.740 --> 00:54:48.100
+So now for the ending of the session,
+we're going to talk about what is
+
+00:54:48.100 --> 00:54:50.240
+still available for you as sessions.
+
+00:54:50.240 --> 00:54:54.450
+And we have, for tomorrow,
+we have QuickTime Streaming
+
+00:54:54.450 --> 00:54:56.330
+Server Programming.
+
+00:54:56.340 --> 00:55:01.520
+And we have QuickTime Alternative
+Programming Environments on Friday.
+
+00:55:01.520 --> 00:55:06.620
+But the thing that I want to highlight
+is the feedback forum tomorrow.
+
+00:55:06.620 --> 00:55:10.020
+It's at 3.30, if I remember correctly.
+
+00:55:10.380 --> 00:55:16.600
+And the important thing here is that
+it is scheduled to be in High Ashbury.
+
+00:55:16.600 --> 00:55:22.100
+And we have moved it to Marina because
+we think that we need more room
+
+00:55:22.100 --> 00:55:24.900
+for all the QuickTime people
+who are at the conference.
+
+00:55:24.900 --> 00:55:28.450
+So High Ashbury was going
+to be just too small for,
+
+00:55:28.460 --> 00:55:30.780
+we expect you all to be there.
+
+00:55:30.780 --> 00:55:34.500
+And this is enough to
+fill High Ashbury already.
+
+00:55:34.500 --> 00:55:36.840
+So please take note of that.
+
+00:55:36.840 --> 00:55:39.600
+We will be modifying
+all the displays around.
+
+00:55:40.410 --> 00:55:42.370
+the conference.
+
+00:55:44.800 --> 00:55:57.200
+[Transcript missing]
+
+00:55:59.950 --> 00:56:01.910
+That's my contact information.
+
+00:56:02.040 --> 00:56:07.300
+If Sam happens to run out of his cards,
+you can write to me and I'll make sure
+
+00:56:07.310 --> 00:56:09.380
+that he gets the information also.
+
+00:56:09.400 --> 00:56:16.430
+More information.
+
+00:56:16.430 --> 00:56:16.430
+This is all the...
+
+00:56:16.550 --> 00:56:18.600
+Sam Poco,
+that we have been talking about here,
+
+00:56:18.600 --> 00:56:23.050
+is already available for you
+to download from the ADC site.
+
+00:56:23.120 --> 00:56:28.020
+There is also new QuickTime documentation
+available that you can go and download.
+
+00:56:28.020 --> 00:56:32.720
+We have, every time we are trying to
+catch up with the new APIs and
+
+00:56:32.800 --> 00:56:34.680
+make that available to you.
+
+00:56:34.680 --> 00:56:41.200
+So, you, as attendees of the conference,
+can go today and download it.
+
+00:56:41.350 --> 00:56:44.130
+We will be making it available
+to all the developers as
+
+00:56:44.130 --> 00:56:46.160
+Panther goes out to more people.
+
+00:56:46.160 --> 00:56:48.170
+At this moment, only you have it.
+
+00:56:49.760 --> 00:56:56.510
+For documentation, you can go and get the
+new stuff right now.
+
+00:56:56.780 --> 00:57:01.890
+More information on ThreadTester,
+DropDraw, those are available from
+
+00:57:01.890 --> 00:57:03.500
+the download site already.
+
+00:57:03.500 --> 00:57:07.910
+And the QuickTime Lab,
+we have mentioned this many
+
+00:57:07.910 --> 00:57:09.900
+times for API developers.
+
+00:57:09.900 --> 00:57:13.530
+This is an important opportunity
+for you to talk directly with the
+
+00:57:13.530 --> 00:57:17.920
+QuickTime engineering team and
+have any questions or consultation
+
+00:57:17.920 --> 00:57:19.900
+that you want to make answered.
+
+00:57:19.900 --> 00:57:25.660
+We still have the rest of this afternoon
+and tomorrow and Friday for you.

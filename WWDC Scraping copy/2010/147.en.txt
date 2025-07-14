@@ -1,0 +1,262 @@
+---
+Title:  Advanced Performance Optimization on iPhone OS, Part 2
+Year:   2010
+Web:    https://nonstrict.eu/wwdcindex/wwdc2010/147/
+
+[!] This transcript has potential transcription errors.
+---
+
+[Ben Nham]
+Hi I'm Ben Nham. I'm an engineer on the iPhone Performance team. This is Advanced Performance Optimization on iPhone OS Part 2. Yesterday, we had Part 1 where we talked about making your animations fluid, making your app responsive and also optimizing the power usage of your app.
+
+So if you didn't get a chance to go to that yesterday, I highly recommend you take a look at that on video. Today, we're going to be talking about working with data efficiently. And we're going to focus on working with that data both in memory data structures and also taking that data and putting it on and off disk using serialization and deserialization routines.
+
+We're going to focus on a few main themes. The first is measurement tools. We want you to be able to use our tools to find hot spots in your code and then use those same tools to verify that any fix you've made has actually had the desired impact.
+
+The next is mental models. We want you to build up some intuition about how the system is put together and how it works. So you can preemptively write perform at code. And finally, there are a lot of frameworks on our system. So we're going to over a few of the best practices for using these frameworks.
+
+We're going to start by talking about how to use memory efficiently and then move on to talking about how to use the foundation framework to manipulate data efficiently. We'll talk about how to profile the file system to make sure you get the maximum amount of I/O speed from your device. Then move on to working with large datasets and databases.
+
+And finally, making sure your application works well with those large datasets and scales to ever larger sizes of data. So let's start with memory. iOS isn't a desktop OS. iOS devices aren't desktop devices. As you can see in the chart, there's less memory in an iOS device than on a desktop device. In addition, there are some architectural differences between iOS and the desktop OS.
+
+For example, we have virtual memory but we have no swap file. This actually has some interesting implications that we'll get into later. There are also some features in iOS that are not present on the desktop such as low memory notifications which you have to handle gracefully. So let's take a look at a 128-megabyte device such as the iPhone 3G. You can see that there are a lot of processes and applications that are running in the background which you don't really have any control over that are using memory even if your app isn't running.
+
+So in this example, a certain amount of memory is wired in by the kernel depending on how much file activity or network activity you have. It could be a little more or a little less. There's always 12 megabytes allocated by the graphics card. Some amount of memory used by Daemons. Some may go away such as the sinking Daemons. Some of them stay around forever such as the ones that listen to your phone calls or listen on-- [laughter] the ones that listen on waiting for your phone calls so you can listen to your phone calls.
+
+Of course, there's other programs even on iPhone 3G which can run all the time such as phone, mail, iPad, and especially Safari which if you load a complex web page can really take up quite a bit of memory. So your app might be asked to launch and run in a pretty limited memory window. So it really pays to use memory efficiently. So let's go over a few of the vocabulary terms that you'll have to understand to be able to really use our memory tools well. Let's start with Paging.
+
+Your process is split into 4 kilobyte chunks called pages and those pages can be either nonresident, resident and clean, or resident and dirty. Page is resident if it's in physical memory. If it's nonresident, it's not using physical memory. And when you touch that nonresident page, the kernel will take a page fault and bring that nonresident page into physical memory.
+
+Once that page is resident, it can either be clean or dirty. If it's dirty, it's probably anonymous memory. In other words, it just came out of thin air. For example, malloc memory. There's no file backing it at least on iOS so that means that once a resident page is dirty, it just stays around forever until you deallocate it or your application quits. So it's really important to keep your dirty memory usage down. There's also file-backed memory such as the memory that backs your code or if you explicitly memory map to file. And generally, this stays clean unless you modify it.
+
+And what that means is that the kernel can drop references to those pages at will. So it's relatively free to use clean memory. Now if you use too much dirty memory, it'll actually crowd out the clean memory that you have and that includes code pages. So if you use too much dirty memory, it turns out that just bringing in the code needed to execute your program could take longer.
+
+So let's go through an example and just as a caveat, some of these examples are a little dependent on your memory allocator but as a simplification, most of these concepts are true. So in this case I've allocated two pages from my malloc allocator. I've use valloc here which actually gives a page align address but otherwise it's the same as malloc.
+
+So at first, those two pages are nonresident. They're not taking up any physical memory. As soon as I write to-- for example the first byte in the first page, that page turns from nonresident into a resident dirty page. So it's going to stick around until either my app exits or I free this memory. And similarly if I modify the second page, it will take a page fault. It will be brought into physical memory and that page will turn from nonresident into resident and dirty.
+
+With file-backed memory, if we map it read-only which is the general case. If we explicitly map this file in this example which is two-pages long into memory using dataWithContentsOfMappedFile. Again, those pages start out as nonresident if we don't actually access the data from those pages. The moment we take any data from the first page, we're going to bring the data from the file into memory and that page turns from nonresident to resident and clean.
+
+And similarly, the moment we reference any data on the second page, we'll take another page fault and that page turns from nonresident to resident and clean in physical memory. So where these concepts are really useful are in our VM Tracker tool. This is part of the allocations template in Instruments and these VM snapshots basically take a snapshot of you virtual memory usage out of particular point in time in your application.
+
+You can either ask Instruments to snapshot automatically at a time interval or by default, you actually have to trigger the snapshot manually by clicking the snapshot Now button. As a word of caution, this actually works best in the simulator right now in our particular build of iOS 4. So once you've taken these samples, you'll get different samples over time. And what you're really looking for are you'll see the different regions of memory in your application which we'll go over in a second.
+
+But what you're really looking for is growing dirty memory usage over time. So in this case, I've started with 16 megabytes. I took another snapshot a little while later and now I have 20 megabytes and now a little while later, I have 24 megabytes used. So this is indicative of perhaps a memory leak.
+
+Next we want to see which region was growing in size, in this case, the malloc large region. So as you can see it's growing in size over time. So this is sort of indicating to you that this is probably a region of memory that you want to focus on. So if you see malloc growing, we have a lot of great tools to help you deal with that.
+
+There's the allocations template, the leaks template, those are all great for looking for leaks in your heap. If you have Growing dirty_DATA, that's pretty unusual. Those are generally global variables that you've modified. So if you do have global variables, try to make sure if they're constant, that they're really constant and then we'll put them into a read-only region.
+
+If you see Core Animation growing up over time, you might have a view leak because each view is backed by Core Animation layer. And just as a final note, if you see TC malloc taking up about 200 kilobytes in your application, you shouldn't be worried because that's fixed.
+
+JavaScript core uses that to execute JavaScript and it always takes at least around 200 kilobytes even if you're not using a web view. I'm not going to have time to talk about all these other memory measurement tools we had. We had an advanced memory analysis with Instruments talk yesterday, that you should take a look at on video to learn more about these tools, there's the leaks template, the allocations template and the zombies template which runs on the simulator. These help you find leaks.
+
+They help you find back traces for every single memory allocation you've made in you applications lifetime and they also help you find any references to over released memory. So please take a look at that talk if you want to learn more about these tools. What I'm going to focus on is something that's unique to iOS 4 if you're coming through the desktop and that's low memory warnings. If your application or perhaps the cumulative effect of all the applications on the system, use too much dirty memory, a low memory warning will be fired and you have to respond to this low memory warning in a graceful way. So let's go over how this works.
+
+As a total dirty memory in the system gets to a certain threshold, your application will receive a warning. If it gets to another threshold, then you'll get another warning and background apps will exit as we try to free up memory for your app. As you continue using dirty memory, for example if you a leak that eventually will get to a critical threshold that can kill your app. So when you get a low memory warning, make sure to release any objects that you can release, anything that can be reconstructed, anything that's cached. Don't ask the user to restart the app or restart the device.
+
+So there are a few places where you can respond to low memory warnings. If you have-- or if you're using UIView controllers, override viewDidUnload. Your app delegate will get an applicationDidReceiveMemoryWarning callback and any object can register for a UIApplication DidReceiveMemoryWarningNotification. Now I'm going to go over overriding viewDidUnload in a bit more detail, because this can be a bit tricky if you're new to the platform.
+
+When view controllers get a memory warning, if they're not at the top of the navigation stack or if they're obscured in some way, they'll automatically release their views. But if you've retained subviews in some instance variables or some outlets, you have to release those subviews for us. Let's go over an example. Suppose I have this navigation controller based app. At the bottom of the view controller hierarchy, we have a ComposeViewController. And suppose I click on that photo and slide a PhotoViewController on top.
+
+And now we get a memory warning. Well the ComposeViewController when it gets a memory warning because it's not visible on screen, it'll automatically release the view associated with it for you. But if you've retained the subviews here, in this case, these are IBOutlets, these button labels and textViews, those won't go away.
+
+You have to manually release those in viewdidUnload. So assuming I have these four outlets here, titleLabel, locationLabel, textView, imageButton as properties, in my viewDidUnload, to properly respond to the memory warning, I'm going to set each of these properties to nil and as a side effect, that release my references to each of these subviews.
+
+So now, when my ComposeViewController gets a memory warning, it'll automatically release the view associated with it and then our viewDidUnload will release the remaining references to the subviews and that's what we want. So it's really important that you test out low memory warnings in the simulator. We've seen a lot of interesting behavior in responding to low memory warnings even in the labs here. So make sure you test this out in many different ways. I just want to make a quick note about interacting with multitasking.
+
+Of course, we've had several sessions on multitasking here but when your application goes into the background, we don't preemptively, for example, send a low memory warning. We let you make the tradeoff. And the tradeoff is multitasking is supposed to be a fast app switching. So we want users to be able to get back into your app quickly. But on the other hand, when your app is in the background, it's using up memory. So you should try to release any easily reconstructed resources in you applicationDidEnterBackrground call.
+
+On the other hand, if you release some resource that's really expensive to recreate, that kind of defeats the purpose of fast app switching because then you have to expensively recreate it when you become foreground. So this is a tradeoff you'll have to make. Make sure you play with this a bit and release as many resources as you can possibly do reasonably without making fast app switching slow.
+
+Now, I just want to talk a bit about image memory as well. In the past, we've had a slide here that has a chart that doesn't really go over all the subtleties of image memory and really can cause a lot of confusion. So I've alleviated by removing the chart.
+
+And I'm just going to give you this general advice. If you use UIImage imageNamed, use that for read-only resources that come out of your app bundle and are used as say background images for buttons or you're going to use them to draw on the table view cells, things that are used in UI elements.
+
+For everything else, UIImage, imageWithContentsOfFile is generally good enough. We've removed a lot of the performance differences between these methods so that this general advice is generally good enough. One thing I'd like to point out is that in iOS 4, we've made public the ImageIO framework which has been on OS X since Tiger.
+
+And one of the nice features of ImageIO is if you're creating thumbnails of large images, it can do so quickly in both-- or efficiently in both space and time. So to use this, you create a CGUmageSourceRef which encapsulates the deserialization of the image. And then you pass in this options dictionary which asks the image source to create a thumbnail and also the size of that thumbnail and out pops a CGImageRef that's the thumbnail.
+
+And this is as I said efficiently uses memory so that if you create a thumbnail out of a say 2 megapixel image, you'll use much less memory than if you just deserialize that 2 megapixel image and then use ports to draw that into a 44 by 44 context. So if you want to know more about this, refer to the Creating a Thumbnail Image section of the Image I/O Programming Guide.
+
+This is a code snippet but that it'll go over all the caveats of using CGImageSource in this way. So in summary, drive down the dirty memory usage of your app. It causes memory warnings. It crowds out clean memory that could be used to for example execute code in your app.
+
+Respond to memory warnings correctly. And release resources as necessary when entering a background. We have a few additional user guides but really what I'd really urge you to do is to take a look at Advanced Memory Analysis with Instruments talk on video afterwards. So next let's talk about Foundation. Foundation has a lot of the objects we care about including NSObject. But let's go over some of the collection performance characteristics of the collections inside Foundation starting with NSMutableArray.
+
+Arrays have pretty textbook performance characteristics in our system but there is one unique performance characteristics that I want to point out which is that inserting or deleting at the beginning of an array is amortized constant time which means you can use an array as a queue or as double ended queue pretty efficiently.
+
+This is of course not true for most arrays you've probably dealt with in the past if you're new to our framework. So before rolling your own queue, you can try NSMutableArray first and it probably will be good enough. There is also another interesting thing which is that if you insert 250,000 elements into your array, it becomes a tree but if you did that, let us know.
+
+Strings work a lot like arrays. Indexed access is constant time. It's going to be a load plus a load at an offset probably. Inserting or deleting the middle is linear time. Inserting or deleting at the end is constant time. This is all pretty similar to any other mutable string class you've probably dealt with in the past.
+
+Dictionaries also work like most other well-behaved dictionaries. If you have a good hash function, all the major mutation functions or lookup functions such as lookup, insertion, replacement, removal, those are all constant time. But with a bad hash function, you turn your dictionary into an array. And in particular, that means that a lookup turns into a linear search. So what do I mean by bad hash function? If your return a constant value, that's a bad hash function. If you return a random value, that's a broken hash function.
+
+It's actually really hard to give good general advice about hash functions because there are whole courses about how to write optimal hash functions but most of you apply the making custom objects that are compositions of objects that we give you such as UIViews or arrays or dictionaries. In this case, I have this example where we have this array dict that has instance variables and array and a dictionary. And of course we implement hash for you on these objects efficiently and correctly. So if you don't know any better, you can try just XORing the hash of each of these instance variables that you have and that's usually good enough.
+
+In addition, you should make sure the hash function runs quickly, because as the dictionary grows we may have to increase the size of the dictionary. At which point, we have to rehash all the existing values in the dictionary. So stick to pretty fast operations adding, shifting, masking or XORing. And remember the API contract, when you call -setObject:forKey, your key will be copied. So respond to NSCopying in some same way. In addition, objects that are equal must return the same hash. If you don't follow this, your dictionary won't work.
+
+Now that we've talked about some of the performance characteristics of these collections, let's take a look at some of these perhaps tips and tricks about how to use this collections in the most performant way. And the first is if you're storing a lot of integers into your collection, one way to do it is by boxing each integer into an NS number and passing it on to your NSSet or NSMutableArray or so forth.
+
+But you can actually bypass this integer boxing step by using the correct data structure. So NSIndexSet is built to work with integers natively. In addition, core foundation collections can work with pointer size integers if you cast those integers into pointers by passing NULL into the callbacks parameter of the constructor.
+
+So in this example, to create an array that stores integers natively without boxing to NSNumbers, I can call CFArrayCreateMutable using default allocator with no capacity restriction and NULL as the callbacks. And I just cast my integer into a pointer and I can just add and remove and modify my array without boxing. So if you do this enough, it can actually add up. These timings are taken from the iPhone 3G. If you box and store 1000 NSNumbers into a set, it takes 30 milliseconds.
+
+If you don't box the integers and just store them natively into a mutable index set or a mutable set, it's 10 times faster. So these are one of those things that might add up over time if you box a lot of integers in your application. Next, let's talk about bulk operations. I've told you that some of these methods such as objectAtIndex or characterAtIndex are efficient. They're constant time.
+
+But there is a message sending overhead to calling these methods over and over again. So for example, if you want to call NSString characterAtIndex over and over again, perhaps you should instead call getCharacters range and just inspect the range you care about. Get that range into a C buffer and inspect the buffer using standard C indexing. That can be up to 3 times faster.
+
+Even better, hopefully there's a method inside these classes that does exactly what you want such as if you want prefix search, you might just want to call hasPrefix rather than writing your own. So make sure you inspect the API and select the highest level API possible because it's probably already implemented in the most performant way for you. One thing I want to point out in particular is that strings now have regular expression support finally in iOS 4.
+
+We've made them really easy for you to use regular expressions. You can use the existing NSString methods and pass this NSRegularExpression search option and all of a sudden, your substring search turns into a regular expression search. And this is great for one-off searches. But if you're going to look for the same pattern in many different strings, use-- create an NSRegularExpression object and use the enumerateMatchesInString options range using block method instead.
+
+And the reason for that is parsing a regular expression takes some time and sets up some state that you don't want to continually pay. If you use the regular expression object, you additionally had these options NSMatchingReportProgress. We'll call this block back even if you don't get a match periodically and you can write to the stop out parameter the-- you can write yes to the stop out parameter to stop the search prematurely.
+
+Regular expressions are an example of objects which are a bit expensive to reinitialize over and over again with the same parameters. They are examples of objects that you should keep around if you're going to use again and again. Date formatters and number formatters are the other usual example of this. So here's an example where we have a table view cell that shows a month and one way to do this is to just create a table-- create a date formatter for every table view cell that comes on screen.
+
+Set its date format to the month day format and use that formatter to format the month string and this works but it's not performant. Instead, you should lazily create that date formatter if you're going to use it over and over again. In this sample code, the first time you call monthFormatter, it will create the monthFormatter. Every subsequent time, it'll return the monthFormatter that's already created and then we can use this function to format our date performantly.
+
+There are some gotchas with doing this. In particular in iOS 4, the user can change their locale without exiting your app. So you have to listen to the NSCurrentLocaleDidChangeNotification if you're caching date formatters. In this case, I've just released and nilled out the formatter I created so that it'll be recreated after the user changes their locale.
+
+In addition, date and number formatters aren't thread-safe so you need to either use locking or create a separate one for each thread that you're using these cache formatters on. But do note that regular expressions and data detectors are thread-safe so you don't have to worry about locking or creating different ones for different threads there.
+
+So again, just to drive this point home, if you would take 100 date formatters and use each of them to format the same date one time, it's about five to six times slower that taking a single day formatter and formatting-- and using that to format 100 dates. Next, let's talk about property lists.
+
+These are really convenient way of serializing and deserializing object graphs in Foundation. They're so convenient that you might be tempted to use the right to file atomically methods on each of these collections, arrays, dictionaries, and strings. These are really convenient but you shouldn't use them because they produce XML plists.
+
+And XML plists are two to three times slower to decode that binary plists. So if you create plist at run time, make sure you use NSPropertyListSerialization and explicitly pass in the NSPropertyListBinaryFormat_v1_0-- that'll create a binary plist from your object graph. And then from that, the data you get back, you can write that out to disk as you please.
+
+[ Pause ]
+
+So plists are not an incremental format. What that means is if you want to access a single value out of a plist, we have to take that entire object graph into the plist, bring in some memory before you can access that one element.
+
+Similarly, when you're writing out the plist, if you modify a single element in the plist, we have to write out the entire object graph just to signify that one change. So plists are great for small sets of objects, dozens of objects, maybe hundreds of objects, no more than that.
+
+If you need to really encode a really large object graph, you should probably be looking at a database or Core Data because those will be incremental. They'll only bring the data you care about into memory and only write the changes that you made out to disk. Related to plist is NSCoding.
+
+NSCoding has the advantage that it's not restricted to plistable types. It's-- You can define your own archiver essentially, or your own encoder to encode your own custom types. And again this is generally not an incremental format. To access one object out of an archive, you generally have to bring-- deserialize all the objects out of that archive.
+
+Keep this to small object graphs. Don't encode thousands of objects using NSCoding and this is a time profile I actually pulled from a top 10 app. I know this was quitting pretty slowly and you can actually see it's taking about 400 milliseconds to archive some large object graph at quit time. So really runtime profiler, make sure you're not blocked on CPU and encoding or decoding these large object graphs with NSCoding because they can take quite a while to encode or decode.
+
+Even if you don't explicitly use NSCoding, you're probably implicitly using them by using NIBs. And the way you can keep the NSCoding usage down in NIBs just to make sure your NIBs are lean, don't put objects in your NIB that aren't associated with the files owner of that NIB.
+
+In iOS 4, we've added this new class called UINib that actually lets you deserialize objects from the same NIB repeatedly over and over again much faster. This is mostly used for table view cell NIBs. So in this example, I took this table view cell from the advanced table view cells example and that's on the left. On the right, you can see the NIB that that table view cell came from.
+
+So in our tableView cellForRowAtIndexPath, we have to load the cell from the NIB if it's not in the reuse queue. So the previous way of doing this would be the-- called the Foundation method, loadNibNamed, owner, options on NSBundle and this works if you're only viewing it once, if you're only creating an object out of this NIB once. This is perfectly fine.
+
+But if you're creating for example a table view cell, you're probably going to create that table view cell out of the NIB many times. So you want to use the UINib class to cache some state associated with repeatedly instantiating NIBs and ask the UINib instance for the objects in that NIB instead of asking the bundle for the objects in that NIB.
+
+And again, this takes-- this makes NIB loading about 33 percent faster if you're going to load the same resource out of a NIB over and over again. So in summary, most of the Foundation types have pretty good performance if you use them correctly. So understand the API. Make sure you call the highest level API possible. Avoid reinitializing expensive classes such as date formatters over and over again if you're going to use them over and over again. And finally, make sure you restrict your use plist and NSCoding to relatively small object graphs.
+
+We ship a lot of user guides with our SDK that let you know how to use collections, property lists, NSCoding and NIBs, so take a look at those if you have more questions. We also had an Understanding Foundation session yesterday that you should look at on video if you're new to Foundation. Next, let's talk about the filesystem. The first thing you should probably do if you think you have a filesystem performance issue is run the System Usage tool.
+
+And what this does is it prints out a list of all the filesystem related system calls your application has made along with the backtrace that caused that system call. So this is a great place to look for unexpected I/O and figure out what backtrace caused that unexpected I/O.
+
+There's one caveat with this which is that if you're using memory mapped files, it doesn't yet show bytes that were read in-- caused by paging in bytes from the memory mapped file. So some best practices for working with the Filesystem, you should definitely test your application on different types of devices. We've advertised that the 3GS is two times faster than the 3G in CPU and there are-- also very significant performance differences in read and write performance.
+
+So you really need to make sure you test application on an iPhone 3G if you're targeting an iPhone 3G. In addition, if you're doing really long blocking I/Os just as with any other long blocking operation, move them off the main thread using any of our threading APIs, Grand Central Dispatch, NSOperations queues and so forth.
+
+But if you are really doing a really long I/O, say with NSData dataWithContentsOfFile, you might not want to call that method with a really large file. For example, if I call dataWithContentsOfFile on a 10 megabyte file, we're going to allocate a 10 megabyte buffer inside your application. We're going to block your application until we can read all those 10 megabytes into that buffer in your application.
+
+Instead, you should probably use dataWithContentsofMappedFile and that will return almost immediately. And we'll use the virtual memory subsystem to demand page in data from that file as you touch the data as we talked about earlier in the talk. In addition, if we you want to use standard seat based I/O, you can use NSFileHandle.
+
+One last point here is that if you're repeatedly opening or statting a path inside the system usage instrument, you probably shouldn't do that because opening or statting paths incurs an additional permissions check above the usual UNIX permissions check in our system where we base-- we recheck whether your app has access to that path.
+
+So don't recursively enumerate a directory with say a thousand files and ask for the modification date on all those files. That's probably going to be a bit slow. To actually get paths into Filesystem, we have a few APIs, NSBundle gives you paths inside your read-only app bundle. If you want to store user defaults, you probably should use NSUserDefaults rather than any home-grown default system because those will be backed up for you. If you want writable paths, usually you'll use NSSearchPathForDirectoriesInDomain and you should pick the right directory for the type of data you're storing. If you're storing persistent user-related data, use NSDocumentDirectory because it gets backed up.
+
+It stays between launches and it's always there. NSUserDefaults is the same. If you just need some data that can be reconstructed, you should probably put in NSCachesDirectory because it won't be backed up and won't affect the user backup performance. And finally, if you just need to scribble somewhere for this particular invocation of the app, use NSTemporaryDirectory.
+
+One thing I want to point is that you should not be constructing arbitrary paths outside of your application sandbox and writing to them. That's a system protected interface and it's not guaranteed to work. Even if you can write to a particular path outside of your sandbox now and in the next release, you might not be able to and your app will break, the customers will get angry, all sorts of sadness will ensue. So don't do that.
+
+So in summary, start with the System Usage tool, look for any unexpected I/Os and figure out from the backtrace what caused those unexpected I/Os. If you have really large files, try to pick an incremental format or you can try using the memory mapped file option to demand page in that large file as necessary. And as with any other long lasting operation, perform your long I/Os off the main thread.
+
+Next, let's talk about manipulating large datasets and databases. We really like databases because they let you bring just the information you care about into memory rather than entire data set into memory. There're also additional features that databases give you, transactional storage, isolation, durability, those are all great properties for a persistent data store.
+
+And we really recommend you use Core Data if possible if you're creating a new application because we've taken a lot of the grudge work of using databases in Core Data. There is automatic schema management. There is also iPhone specific enhancements for example table view section loading is faster in Core Data because we especially optimized it.
+
+The Native SQLite library is available if you want to work with databases directly but just note that it's much more low level and requires more care. No matter what framework you choose though, you must have the same data model. So understand some of the basic concepts in data modeling.
+
+I've referenced this object modeling guide inside the Cocoa Fundamentals Guide which talks about some of the key concepts such as one-to-one relationships, one-to-many relationships, many-to-many relationships. You should understand these if you want to be able to create a performant data model. What I'm going to talk about a bit more is actually SQLite because we haven't had as much coverage of SQLite and we know that some of you are still using it rather than Core Data.
+
+If you are using Core Data, please watch the Understanding Performance in Core Data session from yesterday. So the first thing you should do if you have a performance issue in SQLite is to run the sqlite3_profile function and this will install a profiling method which calls back the profile function every time a statement executes along with an estimate of how long that statement took to execute. So in this case, the profile function just prints out the SQL statement along with how long it took to execute. This is really helpful for finding out if you have a lot of slow queries or maybe just one really slow query that you should be concentrating on.
+
+In addition, you should keep in mind that prepared statements in SQLite are really little programs. Every time you call SQLite3 prepare, you're really compiling a little program for a SQLite to interpret. So you can actually even see the instructions of this program by prepending the statement with EXPLAIN in the SQLite shell tool. So what this means is you probably don't want to recompile programs over and over again. So likewise, you don't want to prepare statements over and over again. So if you're going to use a prepared statement repeatedly, keep it in memory.
+
+Conversely, if you're not going to use the prepared statement over and over again, you should release it. We've actually seen some applications that keep every single prepared statement they've ever created in memory and then 1,000, 2,000, 3,000 statements later, the app gets terminated because that memory was never released.
+
+So if you used sqlite3_profile to find an offending query and you've prepared your query efficiently, the next thing you want to do is use EXPLAIN QUERY PLAN or EXPLAIN to actually understand what SQLite is doing execute that query and you could do this by opening your database on your Mac and prepending the statement with EXPLAIN QUERY PLAN or EXPLAIN.
+
+And one of the things you'll notice when you do this is that if you switch the order of tables in a JOIN, you might not be able to affect the order in which SQLite traverses the table, so this might be something you want to play with if you have a JOIN that's slow. In addition, watch out for transient tables. If you explain a statement and you see an OpenEphemeral instruction, you've created a temporary table for the lifetime of that particular statement.
+
+So these can cause pretty big performance issues if you've created a temporarily table of many thousands of rows in it. Usually these come from sorting a table without an index or subselects and that can cause the first sqlite3_step to take a pretty long time. So let's go over an example. Here we have a sample schema from a music player. There's a track. Each track has an album. Albums could have many tracks. Each track also has an artist and artists could have authored many tracks.
+
+So without any indices, a Naive query plan might look like this. I open my database up in the SQLite tool on my Mac and I EXPLAIN QUERY PLAN, SELECT * FROM Track WHERE AlbumID is a particular album ordered by AlbumOrder and what that means is select all the tracks in an album and sort that album by track order. That's a pretty simple and reasonable query.
+
+Without any indices, it's telling me that it's going to do a table scan of track and what that's going to look like is actually we're going to go over every row in that table and then we're going to find the rows that match the album we care about, in this case AlbumID of 2.
+
+We're going to move that result set into a transient table and then we're going to sort it to satisfy the order by criterion. And that's pretty inefficient. So perhaps you've worked with databases before and, you know, well, I have a where clause on this albumID, I need an index on albumID.
+
+And that's great because now when we look for all albums with AlbumID=2, we're got a logarithmic-- in logarithmic time, we're going to jump to AlbumID=2 in the index and we're going to use that to select all the albums, all the tracks in that album from the track table.
+
+But again, we've iterated over those tracks in unsorted order so we have to create a temporary table that holds that entire result set and then sort all those results before giving you back the pointer to that first result in this result set. So there's a lot going on there before that first sqlite3_step returned. So in this particular case, what you really want is an index that sorts all the tracks first by the album and then by the track order within that album. So here we've created an index, TrackAlbumIDOrderIndex ON Track(AlbumID, AlbumOrder).
+
+And now when we try to select all the tracks in the album, ordered by the track order in that album, we'll first look at the index and in logarithmic time, we'll jump to the first track in that album and now we can just iterate over the track table in sorted order.
+
+And you can see that EXPLAIN QUERY PLAN has showed this to us by saying, table track with index the index we created ORDER BY which means that we're iterating over to the track table using this index and also using that index to satisfy the order by criterion.
+
+[ Pause ]
+
+The last thing I want to point out here is that the query planner also works with Joins.
+
+So, if you have a query that joins two tables, it'll actually tell you the order in which it's visiting those two tables. I won't go over this in detail but as you can se in this particular query plan, we visit the track table using an index and then we join on to the artist table using the built-in primary key index of artist. One last concept that I'm going to talk about in SQLite is the page cache. When you have a SQLite database file, it's split into a set of contiguous pages, each generally 4 kilobytes in length. And it's just like any other file, just a contiguous array of bytes.
+
+But logically, what those contiguous array of bytes mean is a set of B-Trees for each table and index in your database. So, each of the nodes in that B-Tree is a separate page. When we want to actually access any page in that B-Tree, we actually have to bring it into memory into a data structure that SQLite maintains for you called the page cache. So in this case, if we are doing an in order traversal of this B-Tree, we're actually going to overwrite the existing contents of what was in the page cache with the pages that are in this table.
+
+So, what this means is that if you want to access say a byte from a table in SQLite, what you're actually doing is you're bringing the entire page around that byte into memory. So, you should keep this in mind when performing operations with SQLite, I/O is done in page-sized increments.
+
+In particular, if you're updating or modifying the database in any way, you should surround your updates with transactions, because otherwise, each UPDATE or INSERT will modify a page in the page cache. It'll journal out or copy the page that's being modified from the database file out to a journal file, and finally, you'll be able to modify the page you cared about. So, there's a lot of IO going on, a lot of page-sized IO going on for just your little small update.
+
+In addition, because this page cache is a fixed size, 1 megabyte by default, you shouldn't use your database as a filesystem. You shouldn't store large BLOBs inside your database. For example, assume you stored a 1 megabyte BLOB inside your database, if your page cache is 1 megabyte, you've actually just blown out the entire page cache and replaced it with that 1 megabyte BLOB, and that will make your joins slower and your subsequent selects slower. In addition, because SQLite is journaled, you'll pay a double cost in journaling the data before actually writing it to disk. So, instead of using the database as a filesystem, you should probably store pointers to the filesystem instead, and store those large BLOBs in the filesystem.
+
+And just to drive this point home, if you don't surround your batch updates with transactions, you can really shoot yourself in the foot. In this case, I took a pretty simple database and made a thousand updates and left it in the standard autocommit mode, which means one transaction for every modification, and I did 24 megabytes of I/O.
+
+Whereas if I surrounded those same 1000 updates with a single transaction, I did 40 kilobytes of I/O. So, really look out for this. You'll actually see this in the System Usage instrument. If you see a lot of journal or a SQLite database activity, make sure you've surrounded your modifications with transactions.
+
+So in summary, if you're using databases, use Core Data if possible. It takes out a lot of the grudge work for you. If you are using SQLite directly and you have a performance problem, first start by using a sqlite3_profile to figure out what statement is causing the performance issue.
+
+Once you know the statement that's causing the performance issue, use EXPLAIN QUERY PLAN to figure out what SQLite is doing to execute that query. If you're doing a lot of modifications, make sure your transactions-- make sure you're using transactions to surround the modifications so you amortize the cost of all those page-sized I/Os.
+
+If you want more resources on using SQLite or Core Data directly, we had a few sessions on Core Data yesterday. In addition, if you're using SQLite directly, I highly recommend you take a look at the YouTube video by D. Richard Hipp that-- where he gives an introduction to SQLite. He wrote the framework, so he knows how to use it. And there's also a lot of documentation on the website for all the key features, journaling, file format and so forth. So, take a look at that if you need more help.
+
+Finally, let's talk about making your app scale well with large data sets. Your app could be faced with an extremely large data set, thousands of items. And so, to make this-- your app perform well in the face of that data set, make sure you're thinking about the minimum amount of work needed to make the critical methods fast.
+
+And as an example, we'll take a look at the Contacts application. So, I took a few timings of launching Contacts with 30 contacts, 300 contacts and 3000 contacts on an iPhone 3G. And as you can see, the launch time is pretty much the same no matter how much data you throw at it.
+
+Now, if your app deals with a lot of data, you should probably do this with your app, increase the data size by an order of magnitude over and over again, and see how your launch time or other critical operations respond. Ideally, you want something that looks like this, something that stays relatively constant even as you're increasing the size of your data set.
+
+So, in launching applications, there are a few critical methods. Most of the performance is driven by this tableView that you see when you launch Contacts. The first thing you have to do is tell the tableView how many sections are in your tableView and the title for those sections.
+
+You also have to tell the tableView the number of rows in each section. If you have an index bar as in Contacts, you have to give the tableView the index bar. And finally, for each of these visible cells on screen, you're going to have to load and create the tableView cells.
+
+So, let's go over how to make each of these operations fast or at least how we've made them fast in Contacts. So, to load sections quickly, the naive approach would be to take your entire data set, suck it into memory, and then post-process them into sections. And that works for small data sets, but of course it grows linearly with the size of your data set. If you have 10 times more data, it's going to take at least 10 times longer to load your sections.
+
+So, a better idea if you're faced with large data sets is to cache those sections counts to make this critical section count method fast. In Contacts, we actually have a separate table that we maintain by triggers that maintains those section counts. It's actually a little hard to do right if you're targeting multiple localizations.
+
+So, take a look at the DerivedProperty example on our Developer Sample Code website to get an idea of how to deal with differing localizations. Good news for Core Data users is they get them-- they get this for free. If you pass in the-- if you use the cache name parameter from NSFetchedResultsController initWithFetchRequest to managedObjectContext setionNameKeyPath cacheNname, it'll save those section counts off to a side file outside of the database, actually, and use that cache file if it matches your fetch request. Otherwise, it'll cache the results of the fetch request so that the next time you make that fetch request, maybe the next time you'd launch the application, it'll be really fast.
+
+Next, we need to load the index bar quickly. You can do what we do in Contacts and cheat. You could always just load the same index bar. Even if you have no Contacts, you'll notice that we always put A to Z and number as your index bar, and that's perfectly fine. Otherwise, if your index bar is going to change based on the number of sections you have, anything you've done to make section loading faster will also make your index bar loading faster.
+
+And finally, let's look at loading the cells that are visible on the screen quickly. And this is where, if you're using a database, some of the profiling tools that I showed you earlier might help you. What you really don't want to do is to bring in the entire table all at once just to retrieve one cell's worth of information. So, what we do in Contacts is we actually do something where we select the Contacts and batches as you're scrolling along.
+
+It turns out LIMIT and OFFSET is not particularly fast in SQLite. There's a pretty long section on this on the website. But if you're iterating over a small index, it generally works OK. There's also a document on the website called the-- that describes the scrolling cursor method that you might want to use.
+
+So, if you're having trouble loading cells quickly, for example, you use time profile or you find that you're spending a lot of time in tableView cellForRowAtIndexPath, take a look at these documents. And again, this is really where proper indices will help you. If you have a proper index, hopefully, you only have to touch very little data to get one cell's worth of information. If you don't have a proper index, you do a transient sort over your entire result set just to get the first table cell on the tableView, then it's probably going to be a bit slower.
+
+So, in summary, test and profile you apps with different data set sizes, and only bring in the data necessary to satisfy the critical methods in your application. I've only looked at one example here. This is really something that you've got to do that's custom to your app to figure out what methods are critical, and make sure you're only doing what's necessary. So, in summary, reduce the dirty memory usage in your app. Dirty memory causes low memory warnings. It crowds out clean memory that might be-- that you might be using for executing code.
+
+Adhere to the Foundation API best practices. Foundation is generally pretty performant, but you do have to use it correctly to get the maximum performance out of it. If you have filesystem or database performance issues, use our profiling tools to figure out where the bottlenecks are. If you have a critical query or a critical file that's taking a really long time to load, and hopefully, that'll give you an idea of where to start to make that critical query or file faster to load.
+
+And finally, make sure to test your apps on different types of devices because each device has different performance characteristics. If you have more questions, please contact our evangelist, Michael Jurewitz. And you can always talk to us on the Developer Forums. I want to point you to some of these related sessions. These of course are all in the past, but you can watch them on video afterwards. We had a Performance Optimization on iPhone OS session, that's more of a first timer session, if you're new to the tools. Please take a look at that.
+
+We have a lot of demos there. There's the first part of this talk, it was yesterday where we talked about animations and optimizing power and responsiveness. If you want to learn to use the memory tools or other instruments, attend these Instruments talks. And finally, we have a Core Data talk if you have Core Data performance issues and that's all.
+
+[ Applause ]

@@ -1,0 +1,2946 @@
+WEBVTT
+
+00:00:15.780 --> 00:00:19.680
+Good afternoon,
+and welcome to the I/O Kit session.
+
+00:00:19.750 --> 00:00:20.760
+I'm Craig Keithley.
+
+00:00:20.800 --> 00:00:23.970
+I'm the I/O Technology Evangelist
+in Apple's Worldwide
+
+00:00:23.970 --> 00:00:26.100
+Developer Relations Group.
+
+00:00:26.240 --> 00:00:29.260
+When we started about five
+minutes ago or ten minutes ago,
+
+00:00:29.260 --> 00:00:32.110
+I could have probably identified
+everybody in this room.
+
+00:00:32.170 --> 00:00:34.850
+It's hard to go up against Xcode.
+
+00:00:34.960 --> 00:00:38.920
+One of the things that's toughest
+is properly architecting and
+
+00:00:38.920 --> 00:00:44.370
+writing I/O Kit kernel extensions
+to get optimum performance.
+
+00:00:45.090 --> 00:00:47.620
+You can improve on this,
+you can improve on your techniques
+
+00:00:47.710 --> 00:00:49.150
+by doing multi-threading.
+
+00:00:49.150 --> 00:00:52.260
+It's a common, I almost want to say
+misconception that you can't do
+
+00:00:52.270 --> 00:00:53.840
+threading in kernel extensions.
+
+00:00:53.840 --> 00:00:57.860
+You can, and to go into that,
+we'll bring up Godfre.
+
+00:01:07.360 --> 00:01:08.580
+My name's Godfrey van der Linden.
+
+00:01:08.650 --> 00:01:14.360
+I'm an I/O Kit architect,
+and like the vast majority of
+
+00:01:14.450 --> 00:01:18.370
+people who I expected to be here,
+I would probably prefer to
+
+00:01:18.380 --> 00:01:20.480
+be an XCode right now myself.
+
+00:01:20.850 --> 00:01:28.840
+Another thing is the handouts suggest
+that I shall be talking about memory.
+
+00:01:28.840 --> 00:01:31.860
+Even though memory is interesting,
+most of this presentation
+
+00:01:31.860 --> 00:01:33.790
+will be about threading.
+
+00:01:33.800 --> 00:01:37.800
+The new piece of hardware has got
+some interesting memory issues,
+
+00:01:37.800 --> 00:01:40.940
+and I will be available in the porting
+lab after this and on Wednesday if
+
+00:01:40.940 --> 00:01:46.800
+anybody wants to talk to me about how to
+set up memory maps on the new hardware.
+
+00:01:46.810 --> 00:01:52.020
+But there is no formal session
+on memory in this presentation.
+
+00:01:55.380 --> 00:01:59.530
+Okay, so as an introduction,
+Mac OS X has something like 100 threads
+
+00:01:59.550 --> 00:02:01.740
+running on the system at any one time,
+even when it's idle.
+
+00:02:01.740 --> 00:02:04.990
+I mean,
+I was running top on my system today,
+
+00:02:05.070 --> 00:02:06.860
+and it had 140 threads going.
+
+00:02:06.900 --> 00:02:09.600
+That's what makes kernel
+programming so much fun.
+
+00:02:09.600 --> 00:02:12.520
+When you've got 140 threads
+operating inside that
+
+00:02:12.650 --> 00:02:16.410
+environment at one point in time,
+it can lead to some interesting
+
+00:02:16.410 --> 00:02:20.190
+mind-bending problems.
+
+00:02:20.190 --> 00:02:23.440
+That just is why I enjoy
+kernel programming a lot.
+
+00:02:24.310 --> 00:02:26.360
+So in this session,
+I'm going to be discussing
+
+00:02:26.460 --> 00:02:29.500
+threading generally,
+how sort of high-priority
+
+00:02:29.700 --> 00:02:34.140
+threads work inside the system,
+and also I'll be talking
+
+00:02:34.140 --> 00:02:35.940
+about I/O Kit threading.
+
+00:02:36.000 --> 00:02:43.170
+And then finally, I shall discuss the...
+
+00:02:43.750 --> 00:02:48.080
+Teardown, synchronous teardown of device
+drivers when you get a hot unplug.
+
+00:02:48.080 --> 00:02:52.270
+It's sort of, it's not really threading,
+but if you don't know
+
+00:02:52.270 --> 00:02:57.520
+how to do it properly,
+it's very easy to get nasty explosions.
+
+00:02:59.260 --> 00:03:03.500
+So what I'm hoping you'll learn
+is a better understanding of how
+
+00:03:03.500 --> 00:03:08.860
+threads schedule on Mac OS X,
+how I/O Kit does its synchronization.
+
+00:03:08.860 --> 00:03:11.440
+IOKit's synchronization
+model is very unusual.
+
+00:03:11.440 --> 00:03:15.010
+I've never seen it in any
+other operating system,
+
+00:03:15.010 --> 00:03:20.700
+and probably because it's my invention,
+I think it's very, very cool.
+
+00:03:20.920 --> 00:03:22.770
+And also Mac OS X's hot unplug.
+
+00:03:23.010 --> 00:03:27.560
+We took two attempts at
+it before we got it right,
+
+00:03:27.560 --> 00:03:29.500
+and I don't think it's
+really been presented before.
+
+00:03:29.500 --> 00:03:31.910
+So I think it's really,
+it works very well.
+
+00:03:32.060 --> 00:03:37.470
+So this is its presentation.
+
+00:03:40.100 --> 00:03:44.460
+Okay, so the first part of the
+presentation will be on threading,
+
+00:03:44.520 --> 00:03:49.000
+specifically how threads work
+inside the operating system.
+
+00:03:49.050 --> 00:03:54.590
+I won't really be talking about
+threads inside the kernel so much as
+
+00:03:55.400 --> 00:03:59.560
+How threads interact,
+how the scheduler interacts with it,
+
+00:03:59.580 --> 00:04:01.580
+how the dispatcher works.
+
+00:04:01.580 --> 00:04:05.730
+Mac OS X doesn't differentiate between
+kernel threads and user threads.
+
+00:04:05.880 --> 00:04:10.380
+Yes, we have different priority bands,
+but we don't really differentiate
+
+00:04:10.410 --> 00:04:12.160
+the way they operate.
+
+00:04:12.340 --> 00:04:17.090
+Over the next few slides I'll be
+discussing the thread priority bands,
+
+00:04:17.120 --> 00:04:20.630
+how the dispatcher works,
+what the scheduler does,
+
+00:04:20.700 --> 00:04:24.350
+what it means to take high priority,
+because it's different to
+
+00:04:24.350 --> 00:04:27.910
+what most programmers think,
+and also priority inversions,
+
+00:04:27.910 --> 00:04:31.170
+which is a very standard
+problem that we're having now.
+
+00:04:32.280 --> 00:04:34.740
+So these are the priority bands.
+
+00:04:34.860 --> 00:04:38.070
+As you can see,
+there's quite a few of them,
+
+00:04:38.070 --> 00:04:40.560
+and there's a few there that
+aren't really threads at all.
+
+00:04:40.690 --> 00:04:45.200
+The primary interrupt and idle
+threads aren't really threads.
+
+00:04:45.200 --> 00:04:47.540
+But you can consider
+them thread contexts,
+
+00:04:47.540 --> 00:04:50.790
+at least to the extent of when
+a primary interrupt is running,
+
+00:04:50.790 --> 00:04:51.920
+no thread is running.
+
+00:04:52.120 --> 00:04:54.690
+And also,
+when the idle thread is running,
+
+00:04:54.830 --> 00:04:57.200
+by definition, no thread is running.
+
+00:04:57.510 --> 00:05:03.400
+The bands that we would like you
+to be in is the regular user area,
+
+00:05:03.400 --> 00:05:07.390
+but most high-end
+
+00:05:08.040 --> 00:05:11.550
+hardware, and let's face it,
+that's what I/O Kit is all about,
+
+00:05:11.550 --> 00:05:15.460
+tends to have tighter requirements and
+they like to go for higher priorities.
+
+00:05:15.470 --> 00:05:21.370
+Now we're experiencing a lot of
+
+00:05:21.830 --> 00:05:24.440
+I call it priority arms races.
+
+00:05:24.510 --> 00:05:27.480
+People are going for higher and higher
+priorities and it's really degrading
+
+00:05:27.480 --> 00:05:29.000
+the overall system performance.
+
+00:05:29.000 --> 00:05:32.250
+So I'm hoping in this
+presentation to convince you to
+
+00:05:32.250 --> 00:05:35.180
+get out of the real-time band,
+if at all possible,
+
+00:05:35.250 --> 00:05:40.590
+and down into the top of the user band,
+because I think that's probably the
+
+00:05:40.590 --> 00:05:43.040
+best place for most of us to be.
+
+00:05:44.860 --> 00:05:48.300
+Okay,
+so Mac OS X is a dispatcher-based system.
+
+00:05:48.300 --> 00:05:53.100
+There is a subtle difference between what
+a dispatcher is and what a scheduler is.
+
+00:05:53.100 --> 00:05:56.500
+We do have some sort of scheduling,
+but we're basically a
+
+00:05:56.500 --> 00:05:58.360
+dispatcher-based system.
+
+00:06:00.300 --> 00:06:05.520
+What that means is that a
+dispatcher takes the current
+
+00:06:05.520 --> 00:06:08.670
+thread that's executing,
+blocks it,
+
+00:06:08.880 --> 00:06:10.820
+then selects the next thread and runs it.
+
+00:06:10.860 --> 00:06:13.260
+So what does blocking mean?
+
+00:06:13.260 --> 00:06:15.710
+Well, generally a thread in
+our operating system,
+
+00:06:15.710 --> 00:06:18.660
+as I said earlier,
+I had 140 threads running.
+
+00:06:18.660 --> 00:06:21.070
+But in fact,
+they were all blocked waiting
+
+00:06:21.070 --> 00:06:24.740
+for some user advance,
+waiting for some I/O to complete,
+
+00:06:24.740 --> 00:06:28.880
+waiting for the lid to close or open,
+or for the battery to run dead,
+
+00:06:29.020 --> 00:06:29.650
+for all I know.
+
+00:06:29.740 --> 00:06:33.180
+And that's what we mean by
+blocked in our operating system.
+
+00:06:33.180 --> 00:06:38.590
+Those threads are put onto wait
+queues and we really just ignore them.
+
+00:06:38.740 --> 00:06:42.690
+So yes, we have 140 threads running,
+but they're really all asleep,
+
+00:06:42.690 --> 00:06:45.360
+which is the best way to
+have a thread in my opinion.
+
+00:06:45.500 --> 00:06:50.230
+The next thread thing that
+happens is a preemption.
+
+00:06:50.400 --> 00:06:53.100
+So what is a preemption?
+
+00:06:53.100 --> 00:06:59.180
+It's essentially you've used
+your quantum and the system says,
+
+00:06:59.180 --> 00:07:04.830
+"Okay, I'm going to put you on the end of
+your priority band's run queue."
+
+00:07:04.870 --> 00:07:06.760
+We'll discuss that in a second.
+
+00:07:06.860 --> 00:07:11.400
+And then I'll select the next guy to run.
+
+00:07:12.650 --> 00:07:17.350
+Every time the dispatcher is invoked,
+it selects the highest priority
+
+00:07:17.350 --> 00:07:19.620
+thread available and runs it.
+
+00:07:19.760 --> 00:07:23.460
+So that really has some very
+potentially nasty side effects.
+
+00:07:23.520 --> 00:07:27.250
+If you have an infinite
+loop at high priority,
+
+00:07:27.250 --> 00:07:31.010
+and that high priority
+thread runs to completion,
+
+00:07:31.090 --> 00:07:33.020
+then nothing in lower priority will run.
+
+00:07:33.040 --> 00:07:35.980
+So let's say you overload
+the real-time band.
+
+00:07:36.060 --> 00:07:39.870
+Remember earlier the real-time band is
+the highest priority band in the system.
+
+00:07:39.890 --> 00:07:43.540
+If that overloads,
+then you're not going to get any
+
+00:07:43.540 --> 00:07:45.700
+time at all for the I/O band.
+
+00:07:45.770 --> 00:07:49.060
+And the I/O band is probably where
+you're trying to store your data
+
+00:07:49.110 --> 00:07:50.950
+onto a disk or take it off a disk.
+
+00:07:51.030 --> 00:07:54.430
+So you've just stopped the system
+from doing what you need to have done.
+
+00:07:54.610 --> 00:07:57.390
+And that's probably
+not what you're after.
+
+00:07:58.380 --> 00:07:59.500
+So what does the scheduler do?
+
+00:07:59.610 --> 00:08:03.640
+Well, its job is sort of an
+oversight committee.
+
+00:08:03.640 --> 00:08:05.290
+We do have a scheduler.
+
+00:08:05.370 --> 00:08:07.300
+It will get better in the future.
+
+00:08:07.470 --> 00:08:12.220
+The scheduler we have right now
+is essentially for timeshare.
+
+00:08:12.300 --> 00:08:16.410
+When your thread has run for long enough,
+we will change your
+
+00:08:16.410 --> 00:08:18.300
+priority down a little.
+
+00:08:18.300 --> 00:08:21.670
+That doesn't necessarily mean you're
+going to start running slower,
+
+00:08:21.670 --> 00:08:23.300
+or at least not straight away.
+
+00:08:23.300 --> 00:08:26.640
+If there's no other thread that's
+competing with you that's runnable,
+
+00:08:26.820 --> 00:08:29.180
+then you're going to continue
+going and it won't make any
+
+00:08:29.270 --> 00:08:31.300
+difference if your priority is down.
+
+00:08:31.300 --> 00:08:34.120
+However,
+if you are competing with another thread,
+
+00:08:34.200 --> 00:08:37.090
+the scheduler's job is to try
+to make sure that the system
+
+00:08:37.090 --> 00:08:39.280
+balances its loads appropriately.
+
+00:08:39.340 --> 00:08:45.250
+The other thing is that aforementioned
+spinning real-time thread.
+
+00:08:45.330 --> 00:08:47.300
+We had this problem
+early on with the system.
+
+00:08:47.300 --> 00:08:50.730
+Spinning real-time threads will
+not give any time to the system,
+
+00:08:50.730 --> 00:08:53.300
+including to the keyboard,
+so that you can stop it.
+
+00:08:53.300 --> 00:08:56.240
+So one of the jobs of
+the scheduler is to say,
+
+00:08:56.300 --> 00:09:00.470
+"Hey, this real-time thread is taking
+far too much time." In which case,
+
+00:09:00.470 --> 00:09:04.300
+it will change it over to
+a timeshare and then say,
+
+00:09:04.300 --> 00:09:06.300
+"Oh, by the way,
+I've been running for eight seconds."
+
+00:09:06.300 --> 00:09:09.350
+So it gets depressed very quickly,
+which is a good thing because
+
+00:09:09.350 --> 00:09:12.180
+it means that you can use
+kill-9 and get rid of the thing.
+
+00:09:12.300 --> 00:09:14.300
+It came quite late, really.
+
+00:09:14.300 --> 00:09:17.300
+The original development of Mac OS X when
+we got the real-time threads,
+
+00:09:17.300 --> 00:09:21.300
+that was quite a common problem because
+everybody's written infinite loops.
+
+00:09:21.300 --> 00:09:21.300
+And a real-time thread is a very,
+very long time.
+
+00:09:21.300 --> 00:09:21.300
+It takes a lot of time.
+
+00:09:21.300 --> 00:09:21.300
+It takes a lot of time
+to get rid of the thing.
+
+00:09:21.300 --> 00:09:24.310
+So we had infinite loops,
+and a real-time thread infinite
+
+00:09:24.310 --> 00:09:27.300
+loop meant taking the big
+hammer out and hitting reboot.
+
+00:09:27.300 --> 00:09:30.240
+And that's really,
+really painful when we didn't
+
+00:09:30.240 --> 00:09:32.290
+have journaling file systems.
+
+00:09:33.710 --> 00:09:34.600
+Okay.
+
+00:09:34.600 --> 00:09:35.080
+So what does the scheduler do?
+
+00:09:35.080 --> 00:09:38.230
+Essentially the communication
+mechanism between the scheduler and
+
+00:09:38.280 --> 00:09:40.680
+the dispatcher is the run queues.
+
+00:09:40.680 --> 00:09:43.730
+Now,
+earlier I mentioned that the dispatcher
+
+00:09:43.880 --> 00:09:48.790
+finds the highest priority thread that's
+runnable in the system and then runs it.
+
+00:09:48.790 --> 00:09:50.810
+Well, that's the run queues.
+
+00:09:50.840 --> 00:09:55.640
+Logically, you can think of it as run,
+run queue per priority in the system.
+
+00:09:55.640 --> 00:10:00.900
+And then if one thread is runnable,
+it's at one location in the run queues
+
+00:10:00.910 --> 00:10:05.980
+and the scheduler just manipulates
+the locations in the run queue.
+
+00:10:06.620 --> 00:10:11.220
+Also, the schedule collects statistics so
+that you can do things like top and
+
+00:10:11.220 --> 00:10:15.710
+latency and a number of other tools so
+that you can find out what the system
+
+00:10:15.710 --> 00:10:18.970
+is really doing for and on your behalf.
+
+00:10:21.130 --> 00:10:24.500
+So in a timeshare thread,
+once the thread is run for-- so
+
+00:10:24.500 --> 00:10:28.640
+an example of what the scheduler
+does is a timeshare thread,
+
+00:10:28.640 --> 00:10:33.440
+as I mentioned, if your thread has run
+for sufficient quantums,
+
+00:10:33.550 --> 00:10:35.500
+we will drop your priority.
+
+00:10:35.560 --> 00:10:39.150
+Dropping your priority isn't, as I said,
+really a bad thing.
+
+00:10:39.160 --> 00:10:45.570
+It's only sometimes bad if you're
+using so much CPU power and
+
+00:10:45.570 --> 00:10:50.000
+you need that much CPU power,
+and another thread comes
+
+00:10:50.000 --> 00:10:53.120
+up-- say another task,
+the user launches another task,
+
+00:10:53.120 --> 00:10:55.530
+and then your thread will fall out.
+
+00:10:55.720 --> 00:10:58.030
+Well, you know,
+the user did launch that other task.
+
+00:10:58.150 --> 00:11:00.850
+Perhaps he really does
+want that task to run.
+
+00:11:00.950 --> 00:11:04.900
+So let the timeshare do its job,
+except for when you are
+
+00:11:04.900 --> 00:11:09.910
+certain that the user really,
+really cannot afford to let
+
+00:11:09.910 --> 00:11:13.500
+any CPU go to the other guys,
+in which case you would
+
+00:11:13.500 --> 00:11:14.540
+use different things.
+
+00:11:14.620 --> 00:11:18.890
+And as I said,
+the infinite loop misbehaving
+
+00:11:18.900 --> 00:11:21.710
+real-time threads is another
+example of what the scheduler does.
+
+00:11:24.810 --> 00:11:28.740
+So what does high priority really mean?
+
+00:11:28.780 --> 00:11:31.400
+There's nothing really that
+can make slow code go fast.
+
+00:11:31.400 --> 00:11:33.790
+If your code is slow,
+high priority will not
+
+00:11:33.840 --> 00:11:35.120
+make your code go faster.
+
+00:11:35.260 --> 00:11:41.570
+You will get slightly more CPU time,
+but it really is measured in percent,
+
+00:11:41.630 --> 00:11:44.110
+maybe 1 or 2 percent more CPU time.
+
+00:11:44.580 --> 00:11:48.970
+Higher priority won't
+give you faster code.
+
+00:11:49.030 --> 00:11:54.290
+The only way to get faster code,
+I'm afraid, is to run your code through a
+
+00:11:54.290 --> 00:11:57.010
+performance analysis and clean it up.
+
+00:11:57.200 --> 00:12:01.370
+It's very easy to write bad algorithms,
+unfortunately.
+
+00:12:02.540 --> 00:12:06.130
+What high priority does give you
+is it gives you a reasonable chance
+
+00:12:06.360 --> 00:12:08.740
+of running with a very low latency.
+
+00:12:08.740 --> 00:12:13.380
+So your thread is blocked,
+a MIDI event comes in, for example,
+
+00:12:13.450 --> 00:12:17.910
+and Mac OS X will probably get
+your thread running in around less
+
+00:12:17.910 --> 00:12:19.900
+than a millisecond on average.
+
+00:12:19.960 --> 00:12:22.120
+Our max jitter,
+I haven't run this for a while,
+
+00:12:22.120 --> 00:12:25.350
+but the last time I saw it,
+the max jitter for a real-time band
+
+00:12:25.350 --> 00:12:30.850
+in no competition was running at
+about 600 microseconds or something.
+
+00:12:30.910 --> 00:12:33.690
+Unfortunately, in the real world,
+there is always a little bit of
+
+00:12:33.770 --> 00:12:35.900
+other competition at that high band.
+
+00:12:35.960 --> 00:12:39.700
+So I think we're running our
+jitters at around 3 milliseconds.
+
+00:12:39.700 --> 00:12:43.070
+Again, I'm not sure exactly
+what those numbers are.
+
+00:12:43.890 --> 00:12:49.970
+Of course, when you have high priority,
+then you can end up very,
+
+00:12:49.970 --> 00:12:55.560
+very easily using so much CPU time
+that you're not allowing the
+
+00:12:55.560 --> 00:13:01.150
+low-level parts of the system,
+like disk I/O, any time at all.
+
+00:13:01.250 --> 00:13:03.300
+It's a bit of a shame.
+
+00:13:03.300 --> 00:13:09.260
+We had recently a
+developer raised a problem,
+
+00:13:09.310 --> 00:13:12.360
+which was they were using
+so much high-priority time
+
+00:13:12.360 --> 00:13:17.140
+that the FireWire thread,
+the FireWire work loop,
+
+00:13:17.170 --> 00:13:20.440
+which is an I/O thread,
+wasn't getting sufficient time to
+
+00:13:20.440 --> 00:13:22.910
+even acknowledge packets on the bus.
+
+00:13:23.040 --> 00:13:25.400
+And when that happens,
+you start getting weird
+
+00:13:25.400 --> 00:13:28.010
+little disk errors,
+and the system itself hasn't
+
+00:13:28.090 --> 00:13:30.630
+really got time to clean up,
+because you're using all of
+
+00:13:30.730 --> 00:13:32.990
+the... time at high priority.
+
+00:13:33.100 --> 00:13:36.560
+We call that a priority inversion,
+and priority inversions are
+
+00:13:36.560 --> 00:13:38.900
+really hard to get rid of.
+
+00:13:39.300 --> 00:13:42.090
+And this is really the biggest
+problem with arms races.
+
+00:13:42.140 --> 00:13:47.250
+If you're in a priority inversion,
+that's going to cause some problems,
+
+00:13:47.250 --> 00:13:50.500
+and it may take a very
+fundamental redesign to the way
+
+00:13:50.500 --> 00:13:52.980
+you've set up your workloads.
+
+00:13:54.510 --> 00:13:59.160
+So how do you decide
+your thread priority?
+
+00:13:59.180 --> 00:14:03.160
+Really, it comes down to exactly what
+your latency requirements are.
+
+00:14:03.160 --> 00:14:07.000
+It's not what performance you're after,
+it's what your latency is.
+
+00:14:07.300 --> 00:14:09.920
+User interface events,
+for instance a keyboard for a
+
+00:14:09.920 --> 00:14:13.080
+MIDI sequencer or something like that,
+really does need very low
+
+00:14:13.080 --> 00:14:17.440
+latency because a human has said,
+"I will move my finger,"
+
+00:14:17.440 --> 00:14:22.060
+and if the human system,
+the detection system as it were,
+
+00:14:22.100 --> 00:14:25.660
+can't hear it, the sensors don't hear it
+within a certain amount of time,
+
+00:14:25.660 --> 00:14:28.200
+then the keyboard feels wrong.
+
+00:14:28.240 --> 00:14:29.850
+And that time is very short.
+
+00:14:29.950 --> 00:14:32.170
+I mean, for computer time,
+it seems enormous.
+
+00:14:32.200 --> 00:14:34.170
+It's about five milliseconds.
+
+00:14:34.270 --> 00:14:38.680
+But five milliseconds isn't really very,
+very long on a modern operating system,
+
+00:14:38.680 --> 00:14:45.470
+especially because our standard
+quantum is 10 milliseconds.
+
+00:14:45.700 --> 00:14:50.020
+The higher priority that you want,
+if you really do need that
+
+00:14:50.020 --> 00:14:53.690
+extremely low latency,
+that's when you go for high priority.
+
+00:14:53.760 --> 00:14:58.940
+But you really want to be certain
+that you need a very low latency.
+
+00:14:58.940 --> 00:15:00.630
+If you're reacting to
+data off the internet,
+
+00:15:00.630 --> 00:15:02.940
+well, frankly,
+it's who cares what the performance is.
+
+00:15:02.940 --> 00:15:05.940
+You're dealing with
+30-second timeouts anyhow.
+
+00:15:05.940 --> 00:15:08.180
+Now,
+I'm not suggesting that you go timeshare.
+
+00:15:08.180 --> 00:15:13.940
+I don't think timeshare is appropriate
+if you're doing some sort of
+
+00:15:13.940 --> 00:15:16.980
+stream-based information processing.
+
+00:15:17.010 --> 00:15:22.170
+However, you probably don't need to be
+real time because the whole
+
+00:15:22.170 --> 00:15:24.880
+internet itself is arbitrary.
+
+00:15:24.880 --> 00:15:26.690
+And finally, there's sort of low latency.
+
+00:15:26.750 --> 00:15:30.300
+It's stuff when you're waiting for
+local results or something off the disk,
+
+00:15:30.400 --> 00:15:32.710
+a local firewire or something like that.
+
+00:15:32.750 --> 00:15:35.940
+It's sort of low latency
+without being ultra-low latency.
+
+00:15:35.940 --> 00:15:38.940
+So that's how you would use your bands.
+
+00:15:38.940 --> 00:15:42.540
+I would suggest for extremely low,
+you would use the time constraint stuff,
+
+00:15:42.660 --> 00:15:43.940
+the real time band.
+
+00:15:44.070 --> 00:15:48.940
+For who cares,
+I would probably use high user band,
+
+00:15:48.940 --> 00:15:52.940
+possibly below the Carbon async threads,
+but you can play with it a bit.
+
+00:15:53.130 --> 00:15:56.890
+And then for low disk stuff,
+I would suggest that you go to
+
+00:15:56.890 --> 00:16:01.470
+the top of the user band and you
+disable timeshare altogether.
+
+00:16:01.900 --> 00:16:06.330
+These are all things that you
+can look up on the ATC websites
+
+00:16:06.330 --> 00:16:08.170
+to find out how to do it.
+
+00:16:08.170 --> 00:16:09.720
+There are priority aversion.
+
+00:16:09.720 --> 00:16:15.040
+I want the highest priority
+except for when I don't.
+
+00:16:15.470 --> 00:16:19.320
+Priority inversions can really
+happen almost anywhere in the system,
+
+00:16:19.320 --> 00:16:22.940
+but the most common ones we're
+seeing is again the real-time band.
+
+00:16:23.230 --> 00:16:25.420
+Mac OS X's real-time band is very,
+very good.
+
+00:16:25.420 --> 00:16:27.730
+It's extraordinarily powerful.
+
+00:16:27.850 --> 00:16:32.330
+But unfortunately to get a really
+good low level maximum jitter
+
+00:16:32.880 --> 00:16:38.260
+we've had to give you enough power
+to hang the system effectively.
+
+00:16:38.270 --> 00:16:42.600
+And that means that your code now has
+to be far more complicated because
+
+00:16:42.650 --> 00:16:46.620
+you have to work out how to back out
+your high priority thread to give
+
+00:16:46.620 --> 00:16:48.900
+the rest of the system some time.
+
+00:16:48.900 --> 00:16:51.440
+Now traditionally on
+most operating systems,
+
+00:16:51.440 --> 00:16:56.480
+Mac OS 9 and Windows for instance,
+I/Os are really high priority.
+
+00:16:56.480 --> 00:16:59.330
+There is nothing you can do to get
+them out of the way and you would have
+
+00:16:59.330 --> 00:17:01.260
+to take whatever jitter is around.
+
+00:17:01.350 --> 00:17:05.230
+With Mac OS X we have deliberately
+chosen to make the real-time thread
+
+00:17:05.230 --> 00:17:08.680
+the highest priority threads in the
+system even higher priority than I/O,
+
+00:17:08.680 --> 00:17:11.730
+which gives you extraordinarily
+good jitter characteristics,
+
+00:17:11.730 --> 00:17:13.560
+but it comes at the cost of complexity.
+
+00:17:13.560 --> 00:17:15.620
+to complexity.
+
+00:17:18.070 --> 00:17:21.230
+So there's a couple of
+priority inversion strategies.
+
+00:17:21.340 --> 00:17:25.090
+The best strategy of all is get
+out of that high priority band.
+
+00:17:25.100 --> 00:17:27.800
+If you're experiencing
+priority inversions,
+
+00:17:27.850 --> 00:17:31.400
+drop your priority if you can,
+if the jitter is appropriate.
+
+00:17:31.450 --> 00:17:31.980
+Examine it.
+
+00:17:32.150 --> 00:17:34.100
+There are some wonderful
+tools in the system.
+
+00:17:34.100 --> 00:17:36.760
+My favorite is latency.
+
+00:17:36.760 --> 00:17:40.400
+Latency will show you a histogram
+of the performances in the system.
+
+00:17:40.400 --> 00:17:44.240
+If you can evaluate and have really hard
+numbers for what performance you need,
+
+00:17:44.700 --> 00:17:47.090
+latency will let you know
+what priority band will work
+
+00:17:47.170 --> 00:17:49.390
+well on your target system.
+
+00:17:49.400 --> 00:17:52.170
+So if you can, lower your priority.
+
+00:17:52.170 --> 00:17:54.400
+That's the best thing ever.
+
+00:17:54.400 --> 00:17:58.730
+If not, you're going to have to
+complicate your algorithm.
+
+00:17:58.900 --> 00:18:03.300
+You'll need to split into
+producer-consumer model where you have
+
+00:18:03.300 --> 00:18:08.000
+small amounts of work to be done at very,
+very high priority and larger
+
+00:18:08.000 --> 00:18:09.890
+amounts of work done at low priority.
+
+00:18:09.910 --> 00:18:12.250
+So for instance,
+if you're streaming off a disk,
+
+00:18:12.250 --> 00:18:14.900
+you would have a low priority
+thread in your system.
+
+00:18:14.900 --> 00:18:17.400
+And yeah, I don't usually recommend
+having multiple threads,
+
+00:18:17.400 --> 00:18:19.680
+but this is the time to use it.
+
+00:18:19.900 --> 00:18:22.660
+You'd have a lower priority
+thread in the system that's
+
+00:18:22.660 --> 00:18:25.160
+feeding a high priority thread,
+but at the cost of
+
+00:18:25.230 --> 00:18:26.700
+introducing some latencies.
+
+00:18:26.900 --> 00:18:30.140
+The high priority thread would
+just take whatever data it
+
+00:18:30.140 --> 00:18:31.830
+needs when it's available.
+
+00:18:31.830 --> 00:18:34.400
+And that way you get a producer-consumer.
+
+00:18:34.400 --> 00:18:34.900
+It's pretty good.
+
+00:18:34.900 --> 00:18:35.860
+It's complex.
+
+00:18:35.930 --> 00:18:39.260
+It works very well indeed.
+
+00:18:39.400 --> 00:18:42.510
+The worst choice,
+it's really bad because it
+
+00:18:42.510 --> 00:18:47.300
+doesn't give you 100% of the CPU,
+is to deliberately say I'm going
+
+00:18:47.300 --> 00:18:49.370
+to let the system have some time.
+
+00:18:49.430 --> 00:18:53.450
+So approximately every 10
+milliseconds or thereabouts,
+
+00:18:53.490 --> 00:18:58.450
+one buffer every two buffers or however
+it is that your workload is divided,
+
+00:18:58.450 --> 00:19:00.400
+go to sleep for a millisecond.
+
+00:19:00.400 --> 00:19:04.200
+Cause you sleep for a millisecond and
+then you will guarantee the system or
+
+00:19:04.200 --> 00:19:06.230
+at least some other threads some time.
+
+00:19:06.370 --> 00:19:07.400
+I don't like that.
+
+00:19:07.400 --> 00:19:08.900
+The problem with this solution is that
+it's not going to give you a good result.
+
+00:19:08.900 --> 00:19:12.120
+If you're not competing
+with anything else,
+
+00:19:12.120 --> 00:19:17.170
+then that extra 10% or 8% after
+the system has used it is gone.
+
+00:19:17.180 --> 00:19:18.900
+And you can't use it.
+
+00:19:18.980 --> 00:19:22.850
+And you're only doing that to save
+yourself the complexity of a good
+
+00:19:22.850 --> 00:19:27.150
+producer-consumer queue or lowering
+your priority in the first place.
+
+00:19:27.590 --> 00:19:31.400
+You see, if you lower your priority,
+you can use 100% of the CPU.
+
+00:19:31.400 --> 00:19:32.900
+There's a really nice anecdote.
+
+00:19:33.120 --> 00:19:38.400
+iTunes started early on with timeshare 3.
+
+00:19:38.400 --> 00:19:41.540
+I'm not sure if you've done it.
+
+00:19:41.540 --> 00:19:46.110
+I've recently done it
+with the AAC encoding.
+
+00:19:46.110 --> 00:19:53.010
+I was ripping my entire record
+collection over to 128-bit AAC.
+
+00:19:53.400 --> 00:19:57.480
+And the system was very,
+very performant while it was going.
+
+00:19:57.480 --> 00:20:00.700
+And I never had any idle
+time on the system at all.
+
+00:20:00.700 --> 00:20:02.290
+It was just 0% idle.
+
+00:20:02.400 --> 00:20:04.650
+And that's because the ripping
+was a very low priority.
+
+00:20:04.650 --> 00:20:05.540
+So look out for that.
+
+00:20:05.540 --> 00:20:07.900
+Lower than regular priority
+is actually a lot of work.
+
+00:20:07.900 --> 00:20:11.900
+So if you're using 100% of the CPU,
+you're going to have to do a lot of work.
+
+00:20:11.900 --> 00:20:15.900
+Anyhow, that's just the
+introduction to threading.
+
+00:20:15.910 --> 00:20:16.900
+There is a lot more to be said.
+
+00:20:16.900 --> 00:20:17.900
+I could talk for hours.
+
+00:20:17.900 --> 00:20:19.900
+But unfortunately, I don't have it.
+
+00:20:19.900 --> 00:20:21.900
+So we'll have to move on.
+
+00:20:22.040 --> 00:20:25.740
+The next set is work looping.
+
+00:20:25.960 --> 00:20:31.900
+This is essentially how
+I/O Kit does its synchronization.
+
+00:20:31.900 --> 00:20:37.400
+I shall be discussing the work loop
+and the event sources in this part.
+
+00:20:37.400 --> 00:20:41.900
+If you're a traditional I/O Kit driver,
+this is the mechanism we're recommending.
+
+00:20:41.900 --> 00:20:46.510
+And it's really quite hard to avoid now.
+
+00:20:47.190 --> 00:20:49.940
+Unfortunately,
+WorkLoop itself is an unfortunate name.
+
+00:20:50.060 --> 00:20:57.730
+The way it was originally designed,
+we did have a thread that all I/Os went,
+
+00:20:57.730 --> 00:21:00.590
+and we could guarantee single-threaded
+access to hardware because we only had
+
+00:21:00.590 --> 00:21:02.070
+one thread that talked to the hardware.
+
+00:21:02.100 --> 00:21:06.090
+But the difficulty is that the
+I/O systems were taking context switches,
+
+00:21:06.090 --> 00:21:08.100
+which were slowing down all I/Os.
+
+00:21:08.100 --> 00:21:11.090
+So we came up with this idea of the gate.
+
+00:21:11.170 --> 00:21:15.050
+And the gate allows us to schedule
+I/O on hardware directly without
+
+00:21:15.050 --> 00:21:17.050
+having taken a context switch.
+
+00:21:17.100 --> 00:21:18.070
+And, you know, what's a gate?
+
+00:21:18.110 --> 00:21:19.100
+Well, a gate's a lock.
+
+00:21:19.100 --> 00:21:21.100
+It's a recursive lock.
+
+00:21:21.210 --> 00:21:23.090
+It's not really very complicated at all.
+
+00:21:23.100 --> 00:21:25.850
+And it's sort of obvious,
+but it took us a while
+
+00:21:25.850 --> 00:21:28.590
+to come up with it,
+and it made a big difference
+
+00:21:28.590 --> 00:21:30.100
+in our performance.
+
+00:21:30.250 --> 00:21:34.900
+So what WorkLoop really is in our system
+now is it's a container for the gate,
+
+00:21:35.120 --> 00:21:36.060
+which is a recursive lock.
+
+00:21:36.100 --> 00:21:41.100
+It's a list of event sources that need
+to synchronize with respect to that lock.
+
+00:21:41.100 --> 00:21:43.100
+And, by the way, it has a thread.
+
+00:21:43.100 --> 00:21:45.100
+Yes, okay, it has a thread.
+
+00:21:45.100 --> 00:21:46.090
+In fact, the thread's optional.
+
+00:21:46.140 --> 00:21:47.790
+One day in the future,
+I'm going to get rid of the
+
+00:21:47.790 --> 00:21:51.100
+thread and only do it if you
+have interrupt event sources.
+
+00:21:51.100 --> 00:21:54.630
+So a WorkLoop's gate,
+the single threading is provided by
+
+00:21:54.750 --> 00:22:00.070
+the WorkLoop's gate being closed across
+all event source action routines.
+
+00:22:00.110 --> 00:22:08.440
+I shall define what that
+term means in a little while.
+
+00:22:12.450 --> 00:22:15.850
+Traditionally, Unix,
+traditional Unix solution for
+
+00:22:15.850 --> 00:22:19.520
+MP is to have one big lock,
+one Uber lock that protects
+
+00:22:19.520 --> 00:22:21.500
+the whole operating system.
+
+00:22:21.500 --> 00:22:25.370
+So whenever you need to do anything,
+you would take the Uber lock and then you
+
+00:22:25.370 --> 00:22:29.100
+would be safe until the Uber lock gets
+dropped and there would only be one lock.
+
+00:22:29.130 --> 00:22:32.520
+And naturally you get contention
+and only one thread could
+
+00:22:32.520 --> 00:22:34.220
+one on the system at a time.
+
+00:22:34.730 --> 00:22:35.660
+The other end is Muck.
+
+00:22:35.820 --> 00:22:39.340
+Muck has hundreds and hundreds of
+micro locks and extraordinarily
+
+00:22:39.340 --> 00:22:42.850
+complicated locking hierarchy
+so that you can make sure that
+
+00:22:42.850 --> 00:22:44.800
+you get locks in the right order.
+
+00:22:44.850 --> 00:22:47.040
+It's got lots and lots and
+lots of tiny little locks,
+
+00:22:47.110 --> 00:22:50.820
+which is great, but they're very heavy.
+
+00:22:50.840 --> 00:22:53.260
+It also is extraordinarily complicated.
+
+00:22:53.260 --> 00:22:56.820
+Locking hierarchies are nasty and
+they have to be done in one direction,
+
+00:22:56.820 --> 00:23:01.700
+which means for I/O systems,
+completion routines are painful.
+
+00:23:02.020 --> 00:23:05.340
+So we needed to come up
+with something different.
+
+00:23:05.340 --> 00:23:07.240
+What we came up with is the work loop.
+
+00:23:07.260 --> 00:23:13.890
+We have one work loop, one gate,
+as it were, per major interrupt
+
+00:23:13.890 --> 00:23:16.500
+delivery part of the system.
+
+00:23:16.500 --> 00:23:20.270
+So a PCI SCSI card, for instance,
+has a work loop.
+
+00:23:20.280 --> 00:23:22.680
+A USB controller has a work loop.
+
+00:23:22.680 --> 00:23:24.440
+A Firewire controller has a work loop.
+
+00:23:24.490 --> 00:23:28.360
+So on a typical running system,
+we have maybe 13 work loops.
+
+00:23:28.430 --> 00:23:33.660
+This is a compromise between the
+hundreds of micro locks that Mark uses
+
+00:23:33.660 --> 00:23:36.710
+and the two Uber locks that BST uses.
+
+00:23:36.720 --> 00:23:40.470
+It turns out it's very,
+very powerful because this allows
+
+00:23:40.470 --> 00:23:42.330
+us to deliver completion routines.
+
+00:23:42.340 --> 00:23:46.790
+So all of our drivers stack
+on top of this one lock...
+
+00:23:47.470 --> 00:23:49.310
+So by far the majority
+of I/O Kit drivers,
+
+00:23:49.310 --> 00:23:51.550
+as I say,
+don't create their own work loop.
+
+00:23:51.670 --> 00:23:53.180
+They use their provider's work loop.
+
+00:23:53.260 --> 00:23:56.060
+Now, if you've used I/O Kit for
+any length of time,
+
+00:23:56.060 --> 00:24:00.040
+you would have seen the client-provider
+model and the client-provider stacking.
+
+00:24:00.040 --> 00:24:02.690
+And you will see that this
+statement is recursive.
+
+00:24:02.700 --> 00:24:06.980
+If I call my provider and the provider
+also doesn't implement GetWorkLoop,
+
+00:24:07.160 --> 00:24:10.020
+it calls its providers,
+and eventually you get down to the
+
+00:24:10.020 --> 00:24:13.440
+bottom of the system and you say,
+hey, here's the work loop, use this.
+
+00:24:13.440 --> 00:24:19.590
+So high-level drivers always synchronize
+against the bottom of the system.
+
+00:24:20.810 --> 00:24:24.600
+As I mentioned earlier,
+only PCI devices and motherboard device
+
+00:24:24.600 --> 00:24:26.840
+drivers tend to create work loops.
+
+00:24:26.840 --> 00:24:29.700
+In most cases,
+your hardware will not need a work loop,
+
+00:24:29.700 --> 00:24:31.700
+and it's probably better
+if you don't create one.
+
+00:24:31.700 --> 00:24:34.060
+In fact,
+if you do create a work loop that
+
+00:24:34.120 --> 00:24:38.700
+builds on top of another work loop,
+you can be in for a whole world of hurt.
+
+00:24:38.700 --> 00:24:42.880
+I'm sure we'll have a RAID developer
+around here if you want to see somebody
+
+00:24:42.880 --> 00:24:48.090
+who really experiences pain discuss
+device teardown with a RAID developer.
+
+00:24:48.400 --> 00:24:52.640
+So you can use the systems.
+
+00:24:52.640 --> 00:24:54.800
+Because the statement is recursive,
+there has to be a way of
+
+00:24:54.890 --> 00:24:56.070
+terminating the recursion.
+
+00:24:56.220 --> 00:24:59.920
+There is a system work loop
+that you can grab hold of.
+
+00:24:59.950 --> 00:25:02.180
+Just by walking down the stack,
+eventually you hit the
+
+00:25:02.180 --> 00:25:06.570
+roots of the provider tree,
+and bingo, there's a work loop.
+
+00:25:06.610 --> 00:25:10.010
+It's not a bad work loop to use,
+and we really do encourage you to use it,
+
+00:25:10.010 --> 00:25:12.640
+because we like to limit the
+number of threads in the system.
+
+00:25:12.640 --> 00:25:15.850
+This is a good thing
+for system performance.
+
+00:25:16.440 --> 00:25:20.150
+However, if you're using...
+It's a shared resource,
+
+00:25:20.150 --> 00:25:22.040
+so don't be too greedy with it.
+
+00:25:22.040 --> 00:25:25.800
+If you expect a lot of interrupts
+to be used or you have very
+
+00:25:25.910 --> 00:25:28.980
+tight timing requirements,
+it's probably better not to
+
+00:25:28.980 --> 00:25:32.010
+use the system work loop,
+but to create your own.
+
+00:25:33.290 --> 00:25:34.780
+So an event source.
+
+00:25:34.830 --> 00:25:39.080
+An event source has an action routine,
+which I'm now going to define.
+
+00:25:39.080 --> 00:25:41.640
+But essentially it's an action
+routine that's synchronous
+
+00:25:41.640 --> 00:25:43.080
+with respect to the work loop.
+
+00:25:43.080 --> 00:25:46.240
+All event sources have an
+action routine and an owner,
+
+00:25:46.240 --> 00:25:49.120
+and usually are
+registered on a work loop.
+
+00:25:49.120 --> 00:25:50.960
+In fact,
+an event source is really only meaningful
+
+00:25:50.960 --> 00:25:54.570
+when it's registered on a work loop,
+but of course people can temporarily
+
+00:25:54.600 --> 00:25:57.910
+register it and then remove it
+and register it and remove it,
+
+00:25:57.910 --> 00:26:03.280
+because it's a fairly lightweight
+operation registering an event source.
+
+00:26:03.280 --> 00:26:06.080
+An action routine is
+just a call out function.
+
+00:26:06.080 --> 00:26:09.460
+When you create an event source,
+you're saying to the system,
+
+00:26:09.460 --> 00:26:12.280
+"I expect this event to occur
+at some time in the future,
+
+00:26:12.280 --> 00:26:15.150
+and when it does,
+call this function." And that's
+
+00:26:15.150 --> 00:26:16.980
+what an action routine is.
+
+00:26:16.980 --> 00:26:20.730
+All action routines in the system
+are synchronous with respect
+
+00:26:20.820 --> 00:26:25.340
+to all registered event sources
+on a particular work loop.
+
+00:26:25.340 --> 00:26:26.980
+If you're familiar with Java,
+you may have seen the Java function.
+
+00:26:27.000 --> 00:26:29.160
+You may have seen Java's
+synchronous routine concept,
+
+00:26:29.250 --> 00:26:32.170
+where you can have a number of
+routines in a class and you say,
+
+00:26:32.170 --> 00:26:34.920
+"This is a synchronous
+routine," or "These routines are
+
+00:26:34.920 --> 00:26:38.740
+synchronous with respect to each
+other." Only run one of them.
+
+00:26:38.740 --> 00:26:41.760
+That's how I think of
+event source actions.
+
+00:26:41.940 --> 00:26:44.880
+All of the event sources up
+and down the entire stack are
+
+00:26:44.880 --> 00:26:46.840
+synchronous with each other.
+
+00:26:46.860 --> 00:26:49.440
+Now that sounds as though
+it's a recipe for contention,
+
+00:26:49.550 --> 00:26:51.400
+but it hasn't proved to be so far.
+
+00:26:51.400 --> 00:26:55.500
+But there are some tricks there
+that you need to be aware of.
+
+00:26:55.940 --> 00:27:00.560
+In general, don't go to sleep while
+you're in an action routine.
+
+00:27:00.650 --> 00:27:01.710
+Very bad things happen.
+
+00:27:01.770 --> 00:27:05.660
+Again, we recently found a driver which
+was going to sleep in an action
+
+00:27:05.660 --> 00:27:08.460
+routine for 8 milliseconds,
+and that introduced 8
+
+00:27:08.460 --> 00:27:10.240
+milliseconds worth of latency.
+
+00:27:10.400 --> 00:27:15.450
+We do have ways of pointing fingers
+in the system so you won't get away
+
+00:27:15.690 --> 00:27:18.390
+with it for any length of time.
+
+00:27:20.400 --> 00:27:21.350
+Oh, okay.
+
+00:27:21.400 --> 00:27:24.900
+And when you register an
+event source with a work loop,
+
+00:27:24.900 --> 00:27:27.640
+you generally just do I/O service:
+get work loop,
+
+00:27:27.640 --> 00:27:30.070
+and that's the mechanism that
+gives you the entry into the
+
+00:27:30.070 --> 00:27:31.640
+recursive statement I was saying.
+
+00:27:31.640 --> 00:27:36.200
+That's how you find the work loop.
+
+00:27:36.200 --> 00:27:36.200
+One of the things
+
+00:27:37.290 --> 00:27:40.320
+Actually, we'll cover that later.
+
+00:27:40.500 --> 00:27:46.900
+Okay, so the first event source that
+most PCI hardware developers,
+
+00:27:46.900 --> 00:27:48.660
+I was about to say real
+hardware developers,
+
+00:27:48.660 --> 00:27:53.880
+which is a side of my background,
+unfortunately, think of is, okay,
+
+00:27:53.880 --> 00:27:55.340
+how do we get interrupts?
+
+00:27:55.430 --> 00:28:00.130
+Because it's one of the fundamental
+things that vary from OS to OS.
+
+00:28:00.230 --> 00:28:08.460
+Our filter interrupt event source is the
+mechanism we recommend for PCI hardware.
+
+00:28:08.520 --> 00:28:12.240
+The event source is used to deliver
+hardware interrupts to a driver.
+
+00:28:12.620 --> 00:28:16.100
+It takes the interrupt,
+causes the work loop to schedule.
+
+00:28:16.100 --> 00:28:19.490
+This is the only thing that
+causes the work loop to schedule,
+
+00:28:19.490 --> 00:28:20.100
+in fact.
+
+00:28:20.200 --> 00:28:22.580
+So at primary interrupt time,
+it's very quick.
+
+00:28:22.650 --> 00:28:24.440
+It just comes along and
+increments a number,
+
+00:28:24.440 --> 00:28:26.480
+and it says, "Hey, work loop,
+you've got some work to do.
+
+00:28:26.480 --> 00:28:29.180
+Kick." And then it goes
+back to sleep again,
+
+00:28:29.250 --> 00:28:32.500
+which automatically gets back into the
+dispatcher that I mentioned earlier.
+
+00:28:32.500 --> 00:28:35.560
+The dispatcher says, "Hey, look,
+I'm looking for the highest
+
+00:28:35.670 --> 00:28:39.130
+priority thread in the
+system," and it's a work loop.
+
+00:28:39.160 --> 00:28:41.140
+The work loop starts scheduling.
+
+00:28:41.340 --> 00:28:45.950
+So the latencies are very, very short,
+and the filters generally don't
+
+00:28:45.950 --> 00:28:48.310
+have to do any work at all.
+
+00:28:48.560 --> 00:28:53.370
+But we do recommend that you must
+always implement a filter because you
+
+00:28:53.370 --> 00:28:56.950
+don't know if your hardware is going
+to be in a shared chassis or not.
+
+00:28:57.010 --> 00:28:59.450
+And when you're sharing
+interrupt event sources,
+
+00:28:59.460 --> 00:29:02.860
+it's a very good idea for you,
+if your hardware supports it, to say,
+
+00:29:02.860 --> 00:29:07.630
+"Hey, this wasn't me." Just return
+false from the filter.
+
+00:29:07.900 --> 00:29:11.000
+Now, the action routine is synchronous
+with respect to the workload.
+
+00:29:11.000 --> 00:29:13.400
+You're going to see this statement a lot.
+
+00:29:13.550 --> 00:29:16.560
+But the filter is totally asynchronous.
+
+00:29:16.590 --> 00:29:17.860
+It's a primary interrupt.
+
+00:29:17.920 --> 00:29:20.840
+You have to do special things
+to stop it from coming out,
+
+00:29:20.970 --> 00:29:23.910
+which is why I would
+recommend single producer,
+
+00:29:23.910 --> 00:29:28.770
+single consumer queuing or something
+of that nature with the filter routine.
+
+00:29:29.010 --> 00:29:34.330
+If you need to synchronize
+with the filter routine,
+
+00:29:34.330 --> 00:29:34.350
+you've got to be very careful.
+
+00:29:35.320 --> 00:29:39.520
+Okay, so now the other major event
+source is the timer event source.
+
+00:29:39.570 --> 00:29:41.290
+There's lots of reasons to use a timer.
+
+00:29:41.510 --> 00:29:43.390
+Poll mode drivers,
+which we don't recommend,
+
+00:29:43.390 --> 00:29:45.290
+but people are doing it,
+so that's one of the
+
+00:29:45.290 --> 00:29:46.440
+reasons for using it.
+
+00:29:46.620 --> 00:29:49.000
+But the most common one
+is hardware timeouts.
+
+00:29:49.100 --> 00:29:51.300
+Oh dear,
+nothing has responded in 30 seconds.
+
+00:29:51.300 --> 00:29:53.200
+I have to do something.
+
+00:29:53.340 --> 00:29:58.020
+I/O Kit timers, the timer event source,
+is built on top of the
+
+00:29:58.020 --> 00:30:00.910
+kern/thread call APIs.
+
+00:30:01.220 --> 00:30:02.700
+They're very wonderful APIs.
+
+00:30:02.700 --> 00:30:04.600
+I highly, I just love them.
+
+00:30:04.600 --> 00:30:07.200
+They're very, very lightweight and
+they're a great solution.
+
+00:30:07.200 --> 00:30:08.850
+There is a problem though.
+
+00:30:08.850 --> 00:30:11.400
+If you remember back
+to my earlier diagram,
+
+00:30:11.400 --> 00:30:14.200
+thread call threads
+are very high priority.
+
+00:30:14.200 --> 00:30:16.200
+They're higher priority than workloads.
+
+00:30:16.200 --> 00:30:20.940
+Which means if your timeout and your
+interrupt occur at exactly the same time,
+
+00:30:20.940 --> 00:30:23.170
+the timeout will schedule first.
+
+00:30:24.240 --> 00:30:27.250
+So, best thing,
+check to see if your hardware
+
+00:30:27.250 --> 00:30:29.330
+is done in the timeout code.
+
+00:30:29.400 --> 00:30:30.860
+And if it is, fine.
+
+00:30:30.880 --> 00:30:32.860
+You've beaten the interrupt
+before it got delivered.
+
+00:30:32.930 --> 00:30:35.740
+If not, timeout has occurred.
+
+00:30:35.930 --> 00:30:39.280
+Okay, here I have to make an
+embarrassing admission.
+
+00:30:39.360 --> 00:30:40.860
+This is my bug.
+
+00:30:40.860 --> 00:30:45.910
+It's been my bug for a long
+time now and I will fix it soon.
+
+00:30:46.350 --> 00:30:50.590
+There is no synchronous way
+of cancelling a timeout.
+
+00:30:51.370 --> 00:30:53.860
+Really, it's just painful,
+it's embarrassing,
+
+00:30:53.860 --> 00:30:56.580
+I'm turning red up here.
+
+00:30:56.580 --> 00:30:59.510
+The safest way to delete a timer
+is to let the timer expire and
+
+00:30:59.510 --> 00:31:01.250
+then on another thread delete it.
+
+00:31:01.560 --> 00:31:03.170
+Don't rearm the timer.
+
+00:31:03.300 --> 00:31:05.380
+Sorry,
+I have to give you the warning because
+
+00:31:05.410 --> 00:31:10.300
+it is the big caveat with these things,
+but it's really a problem.
+
+00:31:10.300 --> 00:31:14.080
+And I'm hoping to fix it,
+but I can't go backwards in time
+
+00:31:14.080 --> 00:31:19.010
+and fix it in Jaguar and Cheetah,
+so I'm afraid if your drivers have to run
+
+00:31:19.310 --> 00:31:22.780
+back in time in Puma and Jaguar systems,
+then you are going to have
+
+00:31:22.780 --> 00:31:24.570
+to let the timer expire.
+
+00:31:24.920 --> 00:31:25.800
+And guess what?
+
+00:31:25.800 --> 00:31:28.880
+The timer's action routine is synchronous
+with respect to the I/O workload.
+
+00:31:29.030 --> 00:31:30.940
+Same as usual.
+
+00:31:31.830 --> 00:31:34.070
+Okay, the command gate.
+
+00:31:34.210 --> 00:31:35.500
+Command gate's rather interesting.
+
+00:31:35.500 --> 00:31:37.080
+A lot of people think it's a lock.
+
+00:31:37.080 --> 00:31:38.700
+It isn't really.
+
+00:31:38.890 --> 00:31:42.790
+It's just a sort of container,
+a pointer to the lock
+
+00:31:42.810 --> 00:31:44.950
+that is in the work loop.
+
+00:31:45.010 --> 00:31:48.740
+Remember I said the I/O work loop
+should be called a work gate?
+
+00:31:48.930 --> 00:31:52.490
+Well, the command gate gives you
+access to that work loop.
+
+00:31:53.620 --> 00:31:57.500
+So for all command gates
+on a particular work loop,
+
+00:31:57.500 --> 00:32:02.200
+there's still only one gate.
+
+00:32:02.660 --> 00:32:05.360
+Command gates allow you to
+run code synchronously with
+
+00:32:05.360 --> 00:32:08.100
+respect to the workload,
+but without a thread switch.
+
+00:32:08.100 --> 00:32:11.440
+It just takes the gate,
+allows you to run some code,
+
+00:32:11.440 --> 00:32:13.600
+and then you will drop
+the gate fairly quickly.
+
+00:32:13.620 --> 00:32:17.200
+Now, I admit that the run action,
+run command API is clunky,
+
+00:32:17.200 --> 00:32:19.350
+especially if you're used to
+writing locks and just saying,
+
+00:32:19.430 --> 00:32:26.020
+"Hey, take the lock, drop the lock,
+take the lock, drop the lock."
+
+00:32:26.270 --> 00:32:29.920
+It turns out run action has really
+come to our rescue several times.
+
+00:32:30.010 --> 00:32:33.300
+First of all,
+debugging recursive locks where
+
+00:32:33.300 --> 00:32:37.540
+you mismatch the lock/unlock
+pair is really painful.
+
+00:32:37.550 --> 00:32:39.460
+So with run action,
+you can't get it wrong
+
+00:32:39.500 --> 00:32:40.730
+because it's a subroutine.
+
+00:32:40.760 --> 00:32:42.930
+It just says take the lock,
+call the subroutine,
+
+00:32:43.080 --> 00:32:45.030
+return the lock on the exit path.
+
+00:32:45.030 --> 00:32:46.570
+There is no avoiding it.
+
+00:32:46.570 --> 00:32:48.110
+So you can't get it wrong.
+
+00:32:48.280 --> 00:32:52.660
+The other thing that it gives
+you is that it gives you --
+
+00:32:52.850 --> 00:32:56.940
+when you use show all stacks,
+it's a really wonderful command for
+
+00:32:57.060 --> 00:33:01.400
+tracking down deadlocks and other
+problems that are running in the system.
+
+00:33:01.400 --> 00:33:04.180
+Show all stacks will show up run actions.
+
+00:33:04.240 --> 00:33:06.230
+They will be there on the system.
+
+00:33:06.240 --> 00:33:11.190
+And we have caught so many deadlocks
+because of show all stacks.
+
+00:33:11.200 --> 00:33:13.000
+And run action is there on the system.
+
+00:33:13.000 --> 00:33:15.530
+Whereas if you just take a lock,
+you have to memorize
+
+00:33:15.530 --> 00:33:19.370
+everybody else's drivers,
+even ones you don't write, and say, "Oh,
+
+00:33:19.660 --> 00:33:20.360
+look.
+
+00:33:20.360 --> 00:33:22.440
+This routine,
+15 levels down in the stack,
+
+00:33:22.440 --> 00:33:22.890
+it takes a lock.
+
+00:33:22.890 --> 00:33:24.200
+And I know that because, well,
+I can run it.
+
+00:33:24.200 --> 00:33:29.200
+I can read minds." Run action,
+you don't have to read minds.
+
+00:33:29.200 --> 00:33:29.520
+There it is.
+
+00:33:29.520 --> 00:33:30.200
+It's in the backtrace.
+
+00:33:30.200 --> 00:33:30.700
+You know.
+
+00:33:33.440 --> 00:33:36.250
+Okay, this is the really cool
+part about Command Gates.
+
+00:33:36.250 --> 00:33:38.730
+It's Command Sleep, Command Wake Up.
+
+00:33:40.800 --> 00:33:42.990
+Another thing that sort
+of came a bit late,
+
+00:33:42.990 --> 00:33:48.160
+it's when a client thread
+is calling into your driver,
+
+00:33:48.160 --> 00:33:52.050
+it often says, "Hey,
+I want some data." And your hardware
+
+00:33:52.050 --> 00:33:55.770
+hasn't got any data available yet
+for streaming for whatever reason,
+
+00:33:55.800 --> 00:33:58.490
+like the device you're
+talking to is slow.
+
+00:33:58.620 --> 00:34:04.070
+So what you can do is you can block the
+client thread by calling command sleep,
+
+00:34:04.160 --> 00:34:06.400
+and it will block until
+some event occurs.
+
+00:34:06.440 --> 00:34:10.840
+Now, this is in fact the mechanism I was
+talking about that the dispatcher uses.
+
+00:34:10.880 --> 00:34:13.970
+This is how you block a thread
+until some event occurs.
+
+00:34:14.160 --> 00:34:16.470
+Now,
+there's lots of other ways of doing it,
+
+00:34:16.470 --> 00:34:20.670
+but this is the one that's built into
+the way that CommandGate does its job.
+
+00:34:21.710 --> 00:34:25.200
+Data acquisition drivers
+are a typical case for this.
+
+00:34:25.200 --> 00:34:29.900
+We don't really have
+hardware direct call outs.
+
+00:34:29.900 --> 00:34:31.940
+One of the most common
+requests we got is,
+
+00:34:32.020 --> 00:34:35.430
+"Oh, we can't write our application
+because your interrupt routines
+
+00:34:35.430 --> 00:34:38.320
+don't call out into user land." Well,
+no, we're not going to call
+
+00:34:38.320 --> 00:34:39.200
+out into user land.
+
+00:34:39.200 --> 00:34:43.130
+We can't allow that thread to disappear
+into some code that we don't trust.
+
+00:34:43.330 --> 00:34:45.780
+But Command Sleep,
+Command Wake Up gives you
+
+00:34:45.780 --> 00:34:48.350
+something that is very,
+very close to that.
+
+00:34:48.400 --> 00:34:53.210
+If you have a sufficiently high priority
+thread blocked in Command Sleep,
+
+00:34:53.210 --> 00:34:56.400
+then when you take your
+interrupter routine and your
+
+00:34:56.400 --> 00:34:59.220
+hardware turns up and says,
+"I have some data available," the
+
+00:34:59.220 --> 00:35:03.240
+schedule using Command Wake Up to
+wake up the thread is just so fast,
+
+00:35:03.240 --> 00:35:04.790
+it's amazing.
+
+00:35:04.910 --> 00:35:09.190
+So you can use Command Sleep to emulate
+interrupt call outs out to user land.
+
+00:35:09.280 --> 00:35:10.600
+Have the user provide a thread.
+
+00:35:10.600 --> 00:35:11.840
+It's your application.
+
+00:35:11.860 --> 00:35:13.300
+You provide the thread.
+
+00:35:13.330 --> 00:35:16.200
+Block it in your kernel
+extension using Command Sleep.
+
+00:35:16.200 --> 00:35:17.360
+Very lightweight.
+
+00:35:17.400 --> 00:35:20.190
+Wake it up using Command Wake Up.
+
+00:35:21.350 --> 00:35:25.800
+So that's it for I/O Work Loops.
+
+00:35:25.800 --> 00:35:30.550
+What we're about to do is how we use
+this stacking model of Work Loop to
+
+00:35:30.550 --> 00:35:33.200
+synchronously tear down device drivers.
+
+00:35:33.760 --> 00:35:37.190
+Oops, sorry, off by one.
+
+00:35:37.240 --> 00:35:41.720
+Sorry, I was going to... Okay,
+so I remember I was
+
+00:35:41.720 --> 00:35:44.200
+mentioning BSD locking.
+
+00:35:44.200 --> 00:35:51.790
+BSD does its locking with... currently
+does its locking with funnels.
+
+00:35:52.170 --> 00:35:55.990
+Mostly it doesn't affect
+I/O Kit developers.
+
+00:35:56.080 --> 00:35:59.110
+However,
+kernel extension developers generally
+
+00:35:59.110 --> 00:36:01.040
+must be aware of the funnels.
+
+00:36:01.040 --> 00:36:02.740
+There are two funnels in the system.
+
+00:36:02.740 --> 00:36:08.370
+We do share, if we go dual CPU,
+you can issue an IO on the network
+
+00:36:08.370 --> 00:36:14.040
+funnel on one processor and on the
+system funnel on the other processor,
+
+00:36:14.040 --> 00:36:18.790
+and it's our compromise on
+the traditional BSD Uber lock.
+
+00:36:21.110 --> 00:36:24.680
+Funnels are good,
+but they're really not locks,
+
+00:36:24.860 --> 00:36:28.120
+and this is not the right
+forum to discuss funnels.
+
+00:36:28.210 --> 00:36:32.320
+Writing funnel code that can switch
+between the system funnel and the
+
+00:36:32.320 --> 00:36:35.420
+networking funnel is difficult.
+
+00:36:36.070 --> 00:36:41.740
+I can't say impossible because NFS works,
+but it's bloody close to impossible.
+
+00:36:41.740 --> 00:36:44.010
+Funnels can cause long
+delays on work loops though,
+
+00:36:44.010 --> 00:36:45.540
+so you do have to be aware of that.
+
+00:36:45.540 --> 00:36:51.300
+If you've got a piece of hardware
+that's delivering into BSD,
+
+00:36:51.300 --> 00:36:54.830
+be it the serial ports,
+the disk drive system,
+
+00:36:54.830 --> 00:36:57.340
+or the networking system,
+you must be aware that those
+
+00:36:57.340 --> 00:37:00.720
+completion routines will
+probably try to take a funnel.
+
+00:37:00.720 --> 00:37:03.820
+Those funnels are going to
+cause some sort of latencies
+
+00:37:03.820 --> 00:37:05.500
+because there's only two of them.
+
+00:37:07.440 --> 00:37:09.760
+Okay, now we can do a synchronous
+device teardown.
+
+00:37:09.800 --> 00:37:12.700
+So, oh no, my device is gone.
+
+00:37:12.880 --> 00:37:15.680
+This can cause nightmare.
+
+00:37:15.680 --> 00:37:19.750
+Tearing down a stack is just so hard,
+and this animation I'm hoping
+
+00:37:19.750 --> 00:37:21.780
+will demonstrate what's going on.
+
+00:37:21.780 --> 00:37:25.140
+As you can see here,
+I'm just trying to emulate the
+
+00:37:25.140 --> 00:37:28.410
+stacking that we have in our system.
+
+00:37:28.410 --> 00:37:31.220
+So far on the left is where your bus is.
+
+00:37:31.220 --> 00:37:34.000
+Let's call it a USB bus,
+and on the right you have
+
+00:37:34.160 --> 00:37:35.870
+the client thread running.
+
+00:37:36.130 --> 00:37:38.500
+So the first step is we got a teardown.
+
+00:37:38.500 --> 00:37:41.110
+The bus is detected, the device is gone,
+and this is how we
+
+00:37:41.110 --> 00:37:43.140
+implemented them first,
+and it didn't work real well.
+
+00:37:43.140 --> 00:37:44.850
+We disappeared the device.
+
+00:37:44.850 --> 00:37:47.380
+But at the same time,
+we're on an MP system.
+
+00:37:47.420 --> 00:37:52.000
+A client thread has just come down,
+and it's issued an I/O request.
+
+00:37:52.000 --> 00:37:55.030
+It's a bit of a problem because
+they're going to meet eventually,
+
+00:37:55.100 --> 00:37:57.420
+and when they do, you get a panic,
+and very bad things
+
+00:37:57.480 --> 00:37:58.940
+happen when that happens.
+
+00:37:59.000 --> 00:38:00.860
+Blue screen of death, whatever.
+
+00:38:00.860 --> 00:38:04.310
+Panics are really hard to debug,
+and this particular one is nasty because
+
+00:38:04.310 --> 00:38:08.000
+everything looks perfectly all right,
+but your HUD has crashed,
+
+00:38:08.000 --> 00:38:10.430
+and it's not really obvious.
+
+00:38:11.400 --> 00:38:15.330
+So, how do we deal with this?
+
+00:38:15.420 --> 00:38:18.170
+Well, we do it synchronously.
+
+00:38:18.780 --> 00:38:20.670
+I guess that's obvious.
+
+00:38:20.970 --> 00:38:23.200
+Our solution is to use
+the work loop stacking.
+
+00:38:23.200 --> 00:38:26.700
+This is why drivers really can't
+opt out of the work loop system,
+
+00:38:26.700 --> 00:38:29.700
+not if they want to do dynamic unloading.
+
+00:38:29.700 --> 00:38:33.630
+And most of our developers like the
+idea that they can unload their drivers.
+
+00:38:33.690 --> 00:38:37.440
+So it means you have to be
+at least partially aware of
+
+00:38:37.440 --> 00:38:39.700
+work loops to do unloading.
+
+00:38:39.950 --> 00:38:43.470
+What we do is when we get an unload,
+we will tell the knob that
+
+00:38:43.470 --> 00:38:45.700
+has disappeared to terminate.
+
+00:38:45.700 --> 00:38:49.730
+And the terminate does a few things,
+like it goes recursively up the
+
+00:38:49.730 --> 00:38:51.700
+stack marking everybody as inactive.
+
+00:38:51.700 --> 00:38:53.700
+It does that through request terminate.
+
+00:38:53.700 --> 00:38:57.700
+But basically it calls a
+function called do terminate.
+
+00:38:57.700 --> 00:39:00.490
+And do terminate is a recursive function,
+as you can see,
+
+00:39:00.490 --> 00:39:02.670
+as I've implemented here in pseudocode.
+
+00:39:02.700 --> 00:39:07.660
+It essentially just does a head first
+recursion with will terminate calls
+
+00:39:07.700 --> 00:39:09.700
+and tail recursion on do terminate.
+
+00:39:09.700 --> 00:39:16.300
+You can rely on will terminate messages
+turning up in your driver before any
+
+00:39:16.390 --> 00:39:19.630
+of the clients get will terminate.
+
+00:39:19.720 --> 00:39:22.190
+And you can rely on did terminate
+after all of your clients
+
+00:39:22.190 --> 00:39:26.980
+have got their notifications.
+
+00:39:27.890 --> 00:39:32.780
+So your responsibility
+in will terminate is to,
+
+00:39:33.170 --> 00:39:35.960
+it sort of depends on where you are.
+
+00:39:35.960 --> 00:39:40.220
+If you're an intermediate driver
+and you have a series of commands
+
+00:39:40.220 --> 00:39:43.530
+that you know are outstanding
+and they're in your own queues,
+
+00:39:43.550 --> 00:39:45.830
+you haven't handed it off
+to the next driver down,
+
+00:39:46.000 --> 00:39:50.510
+then it's your responsibility
+to return those I/O requests
+
+00:39:50.510 --> 00:39:52.840
+with errors immediately.
+
+00:39:52.840 --> 00:39:56.910
+If you have client threads blocked
+in your driver on command sleep,
+
+00:39:56.960 --> 00:40:00.040
+command wake, command sleeps,
+you should return those
+
+00:40:00.040 --> 00:40:01.840
+immediately with an error as well.
+
+00:40:01.840 --> 00:40:06.160
+Wake them up and notify them that they're
+going to wake up with an offline error.
+
+00:40:06.160 --> 00:40:09.490
+The error we use is KIO return offline,
+and by the way,
+
+00:40:09.490 --> 00:40:14.100
+if you're higher in the stacks and you
+start seeing offline errors coming by,
+
+00:40:14.100 --> 00:40:16.040
+you know what's happening now.
+
+00:40:16.040 --> 00:40:20.150
+Somebody's got a will terminate and you
+can expect a will terminate fairly soon.
+
+00:40:20.880 --> 00:40:23.110
+By the time you get to the
+top of the driver stack,
+
+00:40:23.180 --> 00:40:28.000
+it should be expected that all
+outstanding I/Os and block threads,
+
+00:40:28.000 --> 00:40:29.890
+ideally, have been returned.
+
+00:40:29.900 --> 00:40:33.580
+So that makes the top of stack
+driver's job much easier.
+
+00:40:33.690 --> 00:40:35.670
+Notice we haven't torn anything down yet.
+
+00:40:35.730 --> 00:40:37.900
+All of our pointers are valid.
+
+00:40:38.030 --> 00:40:42.160
+One other thing with will terminate
+is you should be returning errors,
+
+00:40:42.290 --> 00:40:45.800
+if possible, given the API immediately.
+
+00:40:45.800 --> 00:40:48.940
+If any other I/O commands come
+down while you're doing this,
+
+00:40:49.000 --> 00:40:52.600
+you should be returning errors
+after you see will terminate.
+
+00:40:54.160 --> 00:40:57.610
+Okay,
+if the driver is on the top of the stack,
+
+00:40:57.700 --> 00:41:01.510
+you're expected to
+implement didterminate.
+
+00:41:01.540 --> 00:41:04.240
+Now, top of the stack varies.
+
+00:41:04.240 --> 00:41:09.380
+You are top of the stack because
+there is nobody on top of you,
+
+00:41:09.380 --> 00:41:11.960
+which means when you're tearing down,
+eventually you're going to
+
+00:41:11.960 --> 00:41:13.760
+be top of the stack again.
+
+00:41:13.940 --> 00:41:17.990
+Now, in didterminate,
+you must stop all future
+
+00:41:18.000 --> 00:41:20.100
+calls down to your provider.
+
+00:41:20.350 --> 00:41:24.700
+You must wait asynchronously,
+and that's a bit subtle,
+
+00:41:24.700 --> 00:41:26.660
+for all provider calls to return.
+
+00:41:26.660 --> 00:41:30.450
+So, if you have threads that
+have gone through you,
+
+00:41:30.930 --> 00:41:35.400
+then you should be aware of those
+threads and you should not call
+
+00:41:35.400 --> 00:41:39.050
+close on your provider until all
+client calls have gone through.
+
+00:41:39.050 --> 00:41:41.700
+Now, unfortunately,
+you have to do that asynchronously.
+
+00:41:41.700 --> 00:41:43.740
+You have to return from the didterminate.
+
+00:41:43.740 --> 00:41:47.880
+So, your primary responsibility, though,
+is to close your provider as
+
+00:41:47.900 --> 00:41:50.670
+soon as you reasonably can,
+as soon as you know that you
+
+00:41:50.670 --> 00:41:54.920
+can synchronously guarantee
+that no client threads will get
+
+00:41:55.270 --> 00:41:59.660
+through you and no client threads
+have already gone through you,
+
+00:41:59.880 --> 00:42:03.180
+then you can call close on your provider,
+but not before.
+
+00:42:03.180 --> 00:42:06.070
+If you cannot make that determination
+that you would have to wait
+
+00:42:06.190 --> 00:42:09.450
+for some threads to return,
+then you must return from
+
+00:42:09.450 --> 00:42:12.830
+didterminate immediately anyhow.
+
+00:42:12.840 --> 00:42:14.900
+It's a bit subtle,
+and what then happens is when
+
+00:42:14.900 --> 00:42:16.080
+the client thread does return,
+you can call close on your provider.
+
+00:42:16.080 --> 00:42:20.690
+So, you can return, take the command gate
+and then call close.
+
+00:42:21.200 --> 00:42:22.800
+It's really tricky to implement well.
+
+00:42:23.000 --> 00:42:25.780
+In general,
+you don't have to worry about it.
+
+00:42:25.780 --> 00:42:29.080
+You can make certain assumptions
+if you're an intermediate driver.
+
+00:42:29.190 --> 00:42:32.780
+The only drivers that really have to be
+aware of this is top of stack drivers.
+
+00:42:33.260 --> 00:42:36.620
+And we write those usually.
+
+00:42:36.620 --> 00:42:37.610
+Apple writes those.
+
+00:42:37.690 --> 00:42:42.840
+We've got the user clients
+for USB and FireWire.
+
+00:42:43.300 --> 00:42:46.830
+We have the media BSD client.
+
+00:42:46.930 --> 00:42:49.020
+And I would like to say
+the serial BSD client,
+
+00:42:49.020 --> 00:42:50.670
+which we own, but it's broken.
+
+00:42:50.740 --> 00:42:53.220
+I own that one as well.
+
+00:42:54.120 --> 00:42:57.200
+And that's about it really.
+
+00:42:57.200 --> 00:43:00.240
+In conclusion,
+I guess threading comes down
+
+00:43:00.240 --> 00:43:01.970
+to please lower your priority.
+
+00:43:02.050 --> 00:43:05.060
+We don't want an arms race and
+the system will work a whole lot
+
+00:43:05.060 --> 00:43:07.180
+better if you use a lower priority.
+
+00:43:07.200 --> 00:43:10.470
+The other thing that was
+interesting is work loops.
+
+00:43:10.470 --> 00:43:12.000
+Work loops are way cool.
+
+00:43:12.000 --> 00:43:14.000
+They integrate well with the system.
+
+00:43:14.000 --> 00:43:17.600
+You can't get deadlocks if you're on a
+work loop unless you're a RAID driver.
+
+00:43:17.600 --> 00:43:21.000
+And if you are a RAID driver,
+heaven help you.
+
+00:43:21.000 --> 00:43:22.510
+That's what Darwin is for, I guess.
+
+00:43:22.600 --> 00:43:29.600
+And finally, synchronous teardown,
+please implement it properly.
+
+00:43:29.600 --> 00:43:30.920
+Will terminate, did terminate.
+
+00:43:31.040 --> 00:43:34.570
+And by the way, synchronous teardown
+applies even to PCI devices.
+
+00:43:34.600 --> 00:43:36.590
+I mean, you could be PC card.
+
+00:43:36.590 --> 00:43:40.050
+But also, whenever you do a KEXT unload,
+you're essentially going
+
+00:43:40.050 --> 00:43:41.550
+through device teardown.
+
+00:43:44.140 --> 00:43:49.700
+So,
+further things that might be interesting.
+
+00:43:49.930 --> 00:43:54.020
+We have an open source presentation that
+we'll be discussing how X and U works,
+
+00:43:54.090 --> 00:43:55.090
+among other things.
+
+00:43:55.090 --> 00:43:56.930
+That's coming up tomorrow.
+
+00:43:57.140 --> 00:44:00.050
+We have kernel programming
+interfaces on Wednesday.
+
+00:44:00.050 --> 00:44:04.100
+And we have writing threaded
+applications on Mac OS X.
+
+00:44:04.100 --> 00:44:09.100
+Writing threaded applications isn't a
+direct hit on what we're trying to do.
+
+00:44:09.100 --> 00:44:11.100
+It's very, very high level.
+
+00:44:11.200 --> 00:44:13.530
+But it should be interesting.
+
+00:44:13.940 --> 00:44:17.900
+And also there's a series of
+hardware talks coming up tomorrow.
+
+00:44:17.900 --> 00:44:22.880
+Bluetooth, USB, Firewire,
+and some feedback forums.
+
+00:44:23.790 --> 00:44:29.200
+Who to contact is Craig Keithley,
+and I think I'll hand over to him.

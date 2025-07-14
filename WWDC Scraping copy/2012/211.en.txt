@@ -1,0 +1,217 @@
+---
+Title:  Building Concurrent User Interfaces on iOS
+Year:   2012
+Web:    https://nonstrict.eu/wwdcindex/wwdc2012/211/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Ladies and gentlemen, good morning. Today we're going to talk about building concurrent user interfaces on iOS. And you've read the title, but let me tell you what I mean by concurrent user interfaces. In particular, what I'm going to teach you today is how to keep your applications responsive and reactive to user input even while they're doing a lot of work.
+
+Now, if you've never done any concurrent programming before, this is a deep and complicated field. It's full of trap doors. But I'm hoping that I can give you enough of the fundamentals today to get you on your way and enough understanding to avoid some of the pitfalls that are here.
+
+If you've done concurrent programming before, on the other hand, you may feel like, "Well, I must still be in bed. I must still be dreaming because I thought that you can't do any concurrent anything with UIKit. It doesn't support it. Somebody on the Internet told me so." But somebody on the Internet was wrong. And today I'm going to teach you a number of techniques where you can leverage that existing concurrent programming knowledge that you have and some best practices for how to do that in particular with UIKit. So all that out of the way, let's dive in.
+
+Say that you've got an app that downloads a bunch of JSON from the internet, like about half of them do. But maybe it's a particularly large blob of JSON, so you need to parse it. And then maybe you're going to massage that data in order to get exactly what you need for your application.
+
+That can take a while, and depending on how your application is designed, you don't necessarily need to block your user from interacting with your application during that time. So I'm going to teach you how to process that data concurrently with respect to handling touch events, handling accelerometer events, all of that, so your application will feel really fluid.
+
+Next up, once you've got that data processed, you may need to make some very fancy rendering of it. You're gonna draw a pretty plot or something like that, and maybe your draw rect takes 100 milliseconds. Well, again, depending on the design of your application, that doesn't necessarily need to block your user from doing things with it. You don't want it to feel laggy just because you're making some complex drawing. You don't want to punish your user for that. So I'm going to show you how to move drawing to the background as well.
+
+And then, once you've got all of these concurrent operations happening, you're juggling all these things at once. You don't want more balls in the air than you have to have. And so if the user has done something like navigated away from a part of your application, which means that one of the things you've started up is no longer relevant, I'm going to show you how to cancel it early so that you don't perform unneeded work, wasting your user's battery life and slowing him down from getting to what he actually wants to do.
+
+This is the app we're going to be looking at today. It's part of my Get Rich Quick scheme. It does some fancy analysis of the stock charts and tells me where to put my dollars. It's basically a big gambling helper, and I'd like to show you what we're going to start with. We're going to be working on this app all morning.
+
+So I've got Xcode here. Let's build and run. Let's see where we are. So as I click in here-- Nothing is responding at all. And this is even worse. But by the end of the day, we're going to have the situation much better. You'll notice even like if I'd changed my mind, I clicked on the wrong category. I can't even back out until all that data loads. That's pretty nasty.
+
+So we're going to spend the day fixing this application up. And whenever you have performance issues, the first thing you should do is get data, because you don't want to fix potential performance problems without actually knowing what's wrong. And to get data about your performance, we like to use instruments.
+
+So I'm just going to go back to Xcode, choose product profile, so run this application in instruments. And when instruments ask me, well, what kind of instrumentation am I doing, I'm going to choose the time profiler, because what I care about is where is my time going? Why is it taking so long?
+
+So now the application runs again. And as I click into this category here, we see this big purple plot indicating that the computer is thinking really hard. And we go back here, and we see another big purple plot. So we're wondering about these big purple plots. What's hidden there? If I hold down the Option key and drag over one of them, I can filter to just that.
+
+And down here in this call tree area, I can see what's taking so much time quickly by holding down the Option key and clicking on this disclosure triangle. And as I scroll down, I see, okay, it's all of that fancy stock smoothing that's supposed to be predicting the future for me. That's what's slowing me down here.
+
+And it's all happening in response to some network data being received. CR request connection did finish loading. And so this is the section that we're really going to want to try to speed up. If we go back to slides for a second, I will give you an overview of how we're going to do that.
+
+Let's start with some nice schematics before we get to code. The model that we like to use is one of queues. They're a little bit like lines at the grocery store. You got a bunch of people in that line. We're going to deal with the one in front. When he's done, we're going to deal with the one behind him. Somebody comes in at the end of the line, it's not his turn for a while. So processing computational work on our system, we use much the same metaphor.
+
+By default, there's this thing called the main queue, and all of the system events come in on that queue. So that's touches, that's accelerometer events. And because all of the work that you're doing in general is happening in response to these system events, you are doing things when the user touches, that means that your work, i.e., this expensive work that we just saw, is also happening on the main queue.
+
+So the user touches, and then we queue off some network requests. We say, hey, give us some data about these stocks. That network data comes in, also on the main queue, but now we have some work to do because we got a bunch of data and we need to process it. So all of that processing work appears on the main queue as well.
+
+Now this queue's pretty backed up. This line's getting long. So if a touch event comes in now at the end of the queue, And these processing events take a few seconds for us to get through them. And that touch event will end up getting processed like 15 seconds after the user actually touched or something very terrible. Intuitively, we would like that touch event to be able to jump to the head of the line. Touches are important.
+
+So, the way that we're going to do that is effectively by opening another line. We can have a data processing queue in addition to our main queue. And what that'll mean is that when that network data comes in, rather than enqueuing a bunch of work to be performed, smoothing that data on the main queue, we're going to put that data on the data processing queue.
+
+And so now when a touch comes in on the main queue, If we have a dual core device, we can even work on the touch event and the data processing simultaneously. But even if we have a single core device, the system will slice things up so that it gives time to both. And it'll actually give more to the main queue because, like I said a moment ago, touches are important.
+
+So this way, you can handle touches, you can handle accelerometer events, you can handle even incoming network data and timers while you're doing this extra work, this smoothing work. Now, there's this one last little square here at the bottom. This one's new. It's a box within a box. It wasn't in the last schematic. And it signifies a new idiom that you need to be aware of when you're doing concurrent programming. It has to do with the age-old adage that also applies here, namely, "Don't cross the streams."
+
+Consider what might happen if, like I said, a touch event comes in on the main queue and UIKit is trying to figure out which table view cell did that user just touch while you are modifying the data source which backs that table view cell, potentially even on another processor. Calamity will result.
+
+And this is really one of the biggest problems in concurrency, and it's a very deep and complicated problem. But I'm going to show you a guideline today which, if you follow it, should take care of basically all of the cases that you care about when working with UIKit. And it goes like this.
+
+The main queue is UIKit's queue. It's where UIKit does its stuff. It handles touches, does rendering for the most part, all of these things that I've been telling you about. And so if you want to ensure that you don't touch anything that UIKit might touch at the same time, then all you have to do is, when you've finished processing that data, you send it back over to the main queue and actually update your user interface on the main queue.
+
+So if you have a lot of expensive work to do, you can do all of your expensive work on whatever queue you like. And then you can just send it back to the main queue and update your UIKit. And then you can just send it back to the main queue and update your UIKit.
+
+And then when you finish all that expensive work, you perform that one little extra step of sending the results of that work back over to the main queue and updating your user interface there so that you don't end up fighting with UIKit. That's a very small amount of extra time compared to all of the time you save by doing that extra processing on a separate queue compared to your actual work.
+
+Now that we've talked through schematics, let's talk about code. On our platform, this queue idea that I've been talking about is modeled by a class called NSOperationQueue. You can make one of them like this. So now you've got that little queue figure that I've been showing you. You can even give it a name, which is useful if you have a lot of them flying around, because it'll show up in the debugger. And you can query it.
+
+And you give that cue work by a number of approaches. This is one of them. We'll start using this one first. AddOperationWithBlock. You give a block to the queue, and you give it some work. So now the queue has something to do. And let me show you what it looks like to do that box within a box situation. Just like we had a box within a box, we now have a block within a block.
+
+And you'll notice the way that I shipped work off to the main queue was by actually getting a reference to the main queue, NSOperationQueue, main queue, and then we gave it work the same way that we gave our own queue work, addOperationWithBlock. So when we get around to actually playing through that last operation, we end up seeing the nice same schematic effect that we had in the last slide. We're giving the main queue work. We're sending that data, the resulting data from our processing, over to the main queue. Now that we've talked through the principles, Let's put it to practice.
+
+Try to fix up our application a little bit. So looking at this instruments profile, We see where the heavy work is. We see that it's in smoothing these stock points, and we see that it's happening in result-- in response to finishing receiving some network data. We've got some network data, and so now we're gonna process it. In fact, even initializing a stock is expensive.
+
+So, we're going to initialize those stocks concurrently, which means that we need to go to CRStocksTableViewController, requestDidFinishWithObject, to do our work. This is the CRStocksTableViewController, and if we scroll down a little bit, we can find the relevant method, requestDidFinishWithObject. All it does is pull all of the objects out of the received data and create a stock for each one of them, save it in an instance variable, and then ask the table view to reload.
+
+We're going to move this work to the background. In order to do that, I first need to create one of those operation queues I was talking about. So I'll add the instance variable to my list of instance variables and initialize it in this Table View Controller's designated initializer.
+
+Once I've done that, I can start moving this work to the background. So here, I'm gonna add a block onto my queue. And now all of this work will happen not on the main queue, but on the queue I just created. We're not done yet, though, because you have to remember that box within a box situation that I was telling you about. You do the work in the background, and once you've got the result, you send the result over to the main queue and update your user interface with the result on the main queue.
+
+And just like in the schematic, we can do that by saying NSOperationQueue main queue add operation with block. So now this is an operation which initializes all of my stocks and which, once all of the stocks are initialized, ships them back over to the main queue to update my user interface. You may be wondering, okay, I understand why table view reload data needs to be on the main queue. I mean, that's touching the UI. But what about this stocks instance variable? Why does this need to be updated on the main queue as well?
+
+Well, if we scroll down a little bit, we see our implementation of UITableView's data source method, number of rows and section. We see that it returns the number of elements in the stocks array. And so if UIKit is asking, "How many rows are in this table view?" while we are changing around the number of rows that are in that table view, very bad things will happen.
+
+Consequently, we update not only the user interface on the main queue using that shipping over technique, but also anything which the user interface might be touching. So now that we've done this, let's take a look at what our project looks like. If I click in the mid-cap, you'll see that it's letting me scroll at least a little bit until it tries to start rendering. And the other nice thing we've bought for ourselves is that I can change my mind, even though it's doing all this expensive data processing. But we still see that that scrolling performance was no good. So let's use instruments again to figure out why.
+
+Let me call your attention to a couple things. Here you see a line for main thread. Main thread is basically like main queue. And as I click here into this category, we see the thing that is accruing all of this running time, the thing that's doing all of this work, is not the main thread, i.e. main queue, but rather this dispatch worker thread, i.e. worker queue.
+
+So that's great. That means we move that work off the main queue. But now as I start scrolling around, it's the main queue that starts accruing time again. So let's figure out what's going on. Again, I'll filter to just this region. And I'll see that CRStockCellDrawRect is the culprit.
+
+So we've got our data processing out of the way, and now it's our drawing that we have to worry about. So next I'm going to show you how to move your drawing to the background just like we moved that data processing to the background. Before we do that, though, I'd like to review what we just covered.
+
+Everything on the system that comes in, touch events, accelerometer events, network data by default, all of these system events, they're all delivered on the main queue. And because you're doing all of your work in response to those events, you're basically just implementing a whole series of callbacks to system events. All of your work happens on the main queue as well.
+
+which means that when you're doing a lot of work, you are blocking all of those things that arrive on the main queue. You can fix this situation by doing that expensive work on a non-main queue, one of your own creation. NSOperationQueue is the one way that you can do that.
+
+And then we covered this one additional tricky subject, which is that if you are touching anything which UIKit might touch, we don't want a kind of siblings fighting over the toy situation here. So when you're done doing that expensive work, ship the results back over to the main queue and update it there.
+
+Excellent. Let's talk about drawing. Schematically, this is our situation. A touch comes in, which causes a scroll to happen. And now we've got a new table view cell on screen. So we've got this draw rect. And you can see I've drawn it large to indicate just how expensive this draw rect is.
+
+So as we're sitting around waiting for this draw rect, touch events are enqueuing behind it, just as they started enqueuing behind the data processing work that we were doing before. And it's not until we finish the draw rect operation that we handle those touch events. So just like with the data processing, what we're going to do is try to put the rendering on a queue of its own rather than putting it on the main queue, blocking all of that incoming work. So now when a touch event comes down, we'll put the rendering on a background queue.
+
+And just as before, we've got that situation where we can process touches that are occurring on the main queue even while the rendering is happening. And just as before, we have the box within a box, which sends the result of that rendering operation over to the main queue to actually do the work of updating our user interface.
+
+In order to show you the code teaching you how to make this happen for yourselves, I first need to make sure that we're all on the same page as far as how UIKit actually gets pixels onto the screen. That has to not be magic first. 'Cause right now, it may be magic for some of you. So you have UIViews. You're familiar with this class.
+
+There is this method, UIViewSetNeedsDisplay. That is the method that you call to say, "UIKit, I would like to draw something. "I've implemented DrawRect, and I want you to call it." Behind the scenes, what UIKit is doing is turning around and calling caLayer setNeedsDisplay because every view is backed by a caLayer.
+
+And then sometime later, when it's convenient for the rendering system, that layer will be asked to display. And when it's asked to display, it will create a region of memory called a backing store. It's basically just a bitmap that stores the result of all of those rendering operations. It's an image that's going to be painted on screen repeatedly until you call set needs display again, thus invalidating it. So it's that backing store we're concerned with.
+
+And in your drawRect implementation, you're going to use core graphics to draw into that backing store. And so we tell core graphics that this is the place we want to put the result of those drawing operations by creating a CG context and pointing that CG context at the backing store. Then all of your lines and shapes and things will go into that bitmap.
+
+Now, you've never accessed this directly, probably. UIKit surfaces that context to you via UIGraphics.getCurrentContext, which you've probably used if you've ever done any CG drawing calls of your own in DrawRect. But even if you haven't, the methods that you're maybe more familiar with, like UIImageDrawAtPoint and the BezierPath methods, the UIGraphics methods, they all use this function, too. So we're all pointing at this backing store. This is where we're gonna put the results of our drawing operations.
+
+So now, our strategy is going to be, instead of doing our drawing into this region of memory that Core Animation is managing for us, We're going to replace our UI view with a UI image view, make our own image, and draw that image on our background cue. We're going to take this into our own hands. We're not going to let Core Animation make a backing store for us. We're going to make the equivalent ourselves.
+
+The nice thing is you can actually use basically all of the same code. This is a typical, albeit useless, draw-rect implementation. And we're going to keep it essentially the same as we create a draw-rect implementation, which doesn't just draw into the existing context that Core Animation has set up for us, but which rather creates one of its own and draws into that and then pulls an image out. So instead of draw-rect, will make some function which returns a UI image. It's gonna need to take a size to know how big that image is going to be.
+
+We make the UI image using UIGraphicsBeginImageContextWithOptions. The first argument is the size. How big of a region of memory do we need? This is specified in pixels. Except there's a couple other options that can affect how that works. The second one is whether or not what we're going to draw is opaque. If what we're drawing is opaque, then we don't need to bother making an alpha channel. We can save a bunch of memory that way.
+
+The third option affects a pixels-to-points conversion. It's the scale factor. So I said the first argument was in pixels. That's only sort of correct. The third option, you might pass two if you have a retina display. And that would mean that it creates an image that's twice as large as that first size argument. But here I've passed zero because that indicates just use whatever scale factor the main screen has. That's usually a sane thing to do.
+
+So once we've done our drawing operations, we can get the image back out of this context using UIGraphics.GetImageFromCurrentContext, end the image context, thus cleaning up after ourselves, and give that image back to the caller. That's exactly what we're going to do now. I'm going to take this application and make the drawing of those very fancy plots happen in the background. Here is CRStockCellDrawRect. As you can see, it does many things. It's creating that very beautiful drawing of a graph for you. But what I've created is CRStockRenderer.
+
+Which, as you'll be able to see in a moment, has the exact same implementation. Let me line them up here for you. Except instead of, as I said, drawing into a context which core animation creates and manages, it's going to draw into a context which we control, which we manage, and it's going to return that UI image, just like I showed you on a slide a few moments ago. So all this code is the same.
+
+I migrated it wholesale. What's different is these first few lines. Here we're saying, if we've already drawn this graph, let's not bother doing it again. Let's return that value over again, thus caching the result. Easy enough. The second line is exactly that begin image context with options call that I showed you in the slides. We're saying we're going to make one that's desired size big.
+
+We're going to make it at whatever the main screen scale is. I'm not thinking too hard about opacity. No is always safe. And then all of this is the same. We scroll down to the bottom. And as you can see, it's matching up nicely. So all of this is lined up. And we have just three extra lines at the bottom.
+
+First, we pull the image out of the context and save it in an instance variable so that we can use it later as a cache. Then we end the image context, cleaning up after ourselves. And finally, we return that result. So now we need to make the code which creates our cells use this renderer instead of using the stock_cells_draw_rect implementation. Now you'll notice that cr_stock_cell, it doesn't do anything else. So we're just going to get rid of these two files wholesale because they're useless to us now.
+
+And so if we go back to the TableViewController, first off, I'm gonna remove the pound import for CRStockCell. It's no longer relevant. and scroll down to TableViewCellForRowAtIndexPath. Here, where we were going to make a CR stock cell, I'm instead just gonna make a UITableView cell. And I'm going to set that image from our renderer as the image of the image view of our table view cell. We don't need to give our cell the stock anymore. We're going to give the renderer the stock instead.
+
+In order to take advantage of the caching behavior I was talking about, which will allow us to reuse the same renderer's result over and over again, we're going to have to keep track of which renderer is which stocks. So scrolling up again to the top of the file where I have my instance variables, I'm going to add an NSMutable dictionary that maps names of stocks to renderers.
+
+And I'm going to go ahead and initialize it here in a knit with group. And now, returning to my self-errored index path method, I'm going to start using it. First, I'll try to pull a renderer out of that map. Say, "Do we already have a renderer for this stock name?"
+
+If we do and it's already finished rendering, then we're done. We just give our cells image view that rendered graph. And it's just like before. But if the renderer hasn't already rendered, we have a little more work to do. First, there's the question of, have we already made a renderer? There's two possible states. We could have made a renderer which hasn't finished yet, or we could have not already made a renderer for the stock.
+
+First, we're going to consider the case where we haven't already made a renderer for this stock. This stock is new. So we're just gonna allocate one of these CRStockRenderers and give it our stock. We'll store that renderer in this map. And then we're going to ask it to give us that rendered graph, but we'll ask it to do that on our own NSOperation queue, not the main queue.
+
+So as we're executing code here, we're just going to breeze right by these lines. Keep on going. Because this work, the expensive work, is going to happen on our own queue. And just like before, once we've got that rendered image, we don't update the cell's image view on that background queue. We update the cell's image view on the main queue so as not to fight with UIKit. We say cell, image view, set image, rendered image, and we do that on the main queue.
+
+Now, regardless of whether we already have a renderer starting for this particular stock or not, we can set a placeholder image on our cell's image view while that stock renderer is happening. What exactly makes sense for your application will differ by purpose. Here I've just done a much simpler, faster implementation of the same rendering path that can complete very quickly so that it'll give a smooth scrolling while that rendering is happening in the background. So here, I'm getting the placeholder image of a particular size and putting that on our cells image view while on our background queue, we're performing the more complex rendering. So now if I run, we see that I can scroll smoothly while stuff is rendering.
+
+And we're at 60 frames a second, which is fantastic. There's just one other thing that I want to show you. which is that now if we go to profile this application, and I click into mid cap and immediately click out, this purple plot continues. It's still doing all that work because we started up this work on our background operation queue, but we didn't tell it to stop.
+
+We didn't tell it, "Hey, the user's not looking at this anymore. Don't waste your time. Don't waste power." So we're going to look at how to do that next. But before we do, I'd like to review the concepts about rendering that we just covered. Like everything else, by default, the rendering happens on the main queue.
+
+Your draw-rect implementation is called on the main queue. So if your draw-rect implementation is slow, you're slowing down the main queue and all of the events that are processed on it-- touch events, accelerometer events, et cetera. So just like with the data processing, rendering can be moved out to your own queue as well. You just draw an image there.
+
+And when you're done, you ship it back over. You can use any of the UI graphics functions. You can use UI image methods. You can use UI Bezier path methods. But you do have to make sure that if you say, "UI graphics begin image context," like I was showing you, you call UI graphics end image context in the same operation. Otherwise, the results are undefined. That's one thing to keep in mind.
+
+Finally, as before, UI ImageView setImage is no more safe to call from a background queue than any of the other things we've been talking about where you could potentially fight with UIKit. So even though what you've created here on your background queue is an image, not some data, not a string, when you're done with it, you ship it back over to the main queue, and you say, "Hey, main queue, I want you to be the one to update my image view for me." Now let's talk about cancellation. Not keeping more balls in the air than we have to.
+
+If we have a situation like this and the user navigates away from the set of stocks that we're looking at, we would like to not do any of this work. There's a method that we can call that will do something like just that, called NSOperationQueueCancelAllOperations. And that will blow away not all of the operations on the queue, but all of the ones that haven't started yet.
+
+So that first one is still there. And the reason for that is that we can't possibly know if at any given point during your operation, it's safe to just cut it off. Because most of the time it isn't. So that operation keeps running until it completes, which might be fine for a small operation.
+
+But if it was more convenient for you to set up your operations like this, where you've got one really big one, Then now you're in trouble because you say cancel all operations. And what you ended up canceling was the useless, tiny, incredibly fast operation, not the one you actually care about.
+
+So we have a solution for that, too. We can say in our operation when it's safe to cancel me. There's a piece of API that you're going to use called NSOperationIsCancelled. But first I need to introduce what NSOperation is, because right now we've just been talking about NSOperationQueues. So far we've been doing work that looks like this. We've been saying, "Queue add operation with block." But that's actually just a convenience method. It's a shorthand for this longhand.
+
+You can actually explicitly create an NSBlock operation, which is a kind of operation, and give it some work to do. And then put that block operation on your queue. So now, if we have something like this, where we're going to loop over and over and over again a bunch of pieces of data, and process each of them, because maybe it was convenient to set things up this way, then in the middle of our loop, whenever we know it's safe to break out, we can see, hey, have we been canceled?
+
+If we have, we can break out, potentially doing some cleanup if we need to. We can close any transactions that might need to be closed. We can make everything happy and avoid unneeded work. There's just one catch here. Which is that we've just created a reference cycle. And I want to review what this means for those of you who aren't familiar, because this issue will come up a lot when using the NSOperation APIs. So our queue, because our operation is on the queue, has a strong reference to that operation.
+
+And the operation, of course, has a strong reference to the block which contains the work for that operation. But in that block, we've referenced the operation. And in Objective-C, when you create a block which references an object, The block gains a strong reference to the referenced object, which means the operation references the block, and the block references the operation.
+
+This creates an object cycle that will never be cleaned up without external intervention. And the easiest way to deal with it is just to create a weak reference to the operation instead and to use that inside of your operations block rather than the strong reference, which would create that cycle. Now you see we've got a dotted line from the block to the operation, so we don't have that reference cycle anymore.
+
+We've talked through the theory. Let's put it into practice. Here we've got an implementation of viewWillAppear. Intuitively, what we want to have happen is cancel everything, stop doing all of that wasted work when the view disappears, when the user navigates back to the list of stock groups. So we can just do that by implementing viewDidDisappear. And it's a one-line implementation. After calling "super," we just say, "Hey, Operation Queue, stop doing all that."
+
+Unfortunately, we're not quite done, because for the sake of expediency and for the sake of having something to demo to you, this operation is extremely long-running. : The one which we created in the very first demo. So in every step of this operation, we would like to be able to bail If this operation has been canceled, if the user has navigated away from that stock listing, we'd like to be able to say, "Hey, stop smoothing the data for the stock listing. It doesn't matter anymore." So we know it's safe to cancel operations here. In order to do that, I'm going to make an explicit NSOperation rather than this implicit one that I've made here. So I'll just alloc init an NSBlockOperation.
+
+And I will put this same execution block, unchanged, into this block operation. Then I will put the block operation onto my operation queue. It's just the longhand version. It'll give us a little more power. Now from within the operation, I can say, "If the operation's canceled, I know it's safe to return here."
+
+You might have to do some fancy cleanup. You might have to do some special work in your own code. Here, we're just moving stocks, and we're going to throw them all out. So it's OK. We can return here. Clang is warning us of the same thing that I warned you.
+
+Capturing operations strongly in this block is likely to lead to a retain cycle. Right you are, Clang. To get around that, We create a weak operation reference and refer to that instead inside of our operation block. Now, Clang is no longer upset with us. That's always good. If we now run our application-- ah, I should run it in the profiler so I can show you. Excellent. So here I'm going to click into mid-cap, and then I'm going to back right out immediately.
+
+And you see that it cuts off much more quickly than it did last time. It's just a little spike. It doesn't go on and on and on, wasting our user's battery, wasting our user's time. And that's great. But there's one more issue. which is that if I scroll this list really fast, you see these jump. They appear and then they change. That's a fun bug. It also has to do with cancellation.
+
+If we scroll down here to our implementation of TableView cell for road index path, We see that the work that's happening in the background looks like this. We're going to ask our renderer to give us an image representing the plot for that stock. And then once we've got it, we're going to ship that image over to the main queue and set it on the cell which we were configuring when this method was first called.
+
+The issue here is that this method may have been called a while ago, and this cell thing that I have selected may not be the cell that I think it is. In particular, if TableView cells scroll off screen, "Then they are reused for new on-screen cells. So we may actually be setting the plot for a stock which we don't mean to be setting it for. That is unfortunate."
+
+We're going to fix this in two ways to be thorough, and I'm going to explain why specifically I'm fixing it in two ways. Way number one is a useful one to know about, and it refers to a new piece of API in iOS 6 that I want to show you. And that is that when a table view cell goes off screen, we want to cancel these operations. We don't need for our system to be wasting time computing plots for a stock that's offscreen.
+
+So we're going to cancel those operations. But we can't say NSOperationQ cancel all operations, because we don't want to cancel them all. We want to cancel the one for the cell which just went off screen. We want the ones for the cells that are on screen to continue, please. In order to do that, I need to keep track of each stock's operation separately.
+
+So I'm going to scroll back up here to my list of instance variables and make another mutable dictionary. At this point, you got two mutable dictionaries mapping stock names to something. If this were a real project, you would probably create a real structure for this. But this is a demo, and so we have two mutable dictionaries. Each of them map stock names to a thing. This one maps stock names to rendering operations. And I'm going to instantiate it in my designated initializer.
+
+Now, if I scroll back down here, instead of saying, "Hey, Q, add operation with block," I'm going to say, NSBlockOperation block operation with block, thus making an NSBlockOperation I can refer to. I'm going to put it on my queue. This is a little bit of a longhand form. And then I'm going to store it in my dictionary so that I can get to it when my table view cell goes off screen and cancel it.
+
+Before I do that, there's one other tricky situation here. Which is that even if I cancel my operation, this code may end up executing anyway. Like I said, canceling an operation doesn't guarantee that that operation won't run. Because if it's already running, we can't stop it. And furthermore, simply saying, if not operation is canceled here, is not safe enough either. Because it could be canceled right after we check that.
+
+So we're going to do something slightly safer within our operation as well. Rather than saying cell image view, where this cell could be referring to a table view cell that has now been repurposed for some other use, I'm going to say table view cell for row at index path with the index path that was originally passed in.
+
+So if that cell is still the same one that I think it is, it's going to return the cell I was initially pointing to. And if my cell is now off-screen, it's going to return nil, which is lovely for this purpose, because when I try to get its image view, that will return nil, and when I try to set image on a nil variable, nothing will happen.
+
+Now that we've done all this, we can cancel our TableView cells operation. using a new piece of NSTableViewDelegate API called TableViewDidEndDisplayingCell for row at index path. Whenever a TableView cell scrolls offscreen, this method will be called, and this is your opportunity to do any kind of cleanup that you may-- for operations which you may have started related to that cell. If you've allocated a bunch of side table resources for that cell, this would be a good place to tear them down. And in this example, if you have started up some long-running concurrent operation associated with the cell, this would be a good place to cancel it.
+
+So here's the code to do that. First, we fetch the name of the stock in question, and then we pull the operation for that stock out of that dictionary I created. So we have a reference to an NS operation. This is the task that is running, or hopefully hasn't run yet, because if it hasn't run yet, we can still stop it. If there is such an operation, we're going to ask it to cancel, and then we're going to remove that stock from this map.
+
+And that's it. So if we run our application, and now scroll really fast once everything is here, We'll see that it doesn't pop around anymore. Everything is happy. in the land of our application, and that means that I'm going to get rich very quick as soon as I get off the stage.
+
+So, we just learned some things about cancellation. Namely, that there is a method called NSOperationQueueCancelAllOperations. You can call that to throw out any operations that are running-- or that have not yet run on a particular operation queue. You can also cancel a specific NS operation by sending that operation a cancel method.
+
+But remember, if it's already started, that's not good enough. That's not going to cut it off. So you can check within your operations to see, has this operation been canceled already? There's that isCanceled method that I showed you. You want to check that periodically when you know it's safe. Before I go on and wrap up, give you some more parting words of wisdom. For those of you leaving, I do actually have some more new things to say.
+
+I want to point you to some excellent resources. There's a gentleman named Jake Behrens who wears plaid and who can answer your questions. He's great. There's this concurrency programming guide that you might want to check out. It's got even more details about some of the pitfalls that you can really run into once you start leveraging this stuff heavily.
+
+And finally, there's the Apple Developer Forums, which is the place where you can help each other. There was one particular piece of parting wisdom that I wanted to give you, which is that I've taught you how to make these own queues, these queues of your own, to get out of the way of the main queue. And that's great. But once your application gets sufficiently complicated, you might want to get out of the way not of your main queue, but of your own queues.
+
+So you can make more of these. You can make queues and queues and queues, and they can point to each other. They can have dependencies on each other. This whole thing can get very gnarly very fast. And in UIKit land, we've dealt with some nasty consequences of that. So a parting word of wisdom that I wanted you all to take with you had to do with that scheme that we had for shipping data back over to the main queue.
+
+That is a useful philosophy, and it can be applied to your own sets of queues as well. It's typically called the share nothing philosophy. And so if you've got your own sets of queues which are competing over a piece of data, like they're both going to be modifying it, they're both going to be reading it and writing it, then you might want to use that same strategy that we used for UIKit's queue versus your queue and say, "Hey, this one queue I've made, this is the canonical owner of this piece of data.
+
+And so on this other queue I've made, and maybe this third queue I've made, when I want to modify that piece of data, when I've got some new value for it, I'm not going to just modify it on that second or third queue, but I'm going to have to update it on the first queue. And so I'm going to have to modify it on the second queue, and then I'm going to have to update it on the third queue.
+
+And so that's just as much crossing the streams as it was for you to update your image view on a secondary queue and then fighting with UIKit. So you could say on your second and third queue, "Hey, first queue, I want you to do the work of updating this data. Ship the data over to the first queue and have it do that." Have a great week at WWDC.

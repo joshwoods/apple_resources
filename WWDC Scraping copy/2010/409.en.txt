@@ -1,0 +1,279 @@
+---
+Title:  Using the Camera with AV Foundation
+Year:   2010
+Web:    https://nonstrict.eu/wwdcindex/wwdc2010/409/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+My name is Brad Ford. I'm a media engineer on the iPhone engineering team. Let's dive right in. Here's what you'll learn today. Why and when you should use AV Foundation capture APIs, as opposed to some of the other options we have on the platform. The AV Foundation capture programming model. And throughout this presentation, I'll be peppering the demos and the talk with performance hints, gotchas, things that you should be aware of when using the camera.
+
+We have four demos that we're going to show you today. All of these apps are available right now. If you were a crazy person, you could log into the website, you could download the apps, you could compile them, and put them on your phone, and you could follow along with me, but only if you're crazy.
+
+Again, for those who've been here with us this afternoon, you've seen this, this is the third time now. But here's where we sit in the technology hierarchy. Our framework that we're talking about today is AV Foundation. It sits below the thin blue line. That is, it does not link against or have dependencies on UIKit. It purposely sits lower in the framework so that it is lean and mean.
+
+Most of the heavy lifting done by AV Foundation is actually accomplished by lower-level core frameworks, core audio, core animation, and core media. Chief among these is core media. Core media is a new public C interface framework in iOS 4. It's core foundation-based, which means the objects have the same semantics you're used to, CF retain and CF release. Core media is where the power of AV Foundation derives from.
+
+Let's step back and talk about shipping software, iPhone OS 3. There we have a simple programmatic access, and let's see by show of hands who has an app in the app store that uses the camera. Wow, quite a few of you. All of you are using UI Image Picker Controller in some way. That's because there were no other options.
+
+UI Image Picker Controller is how we do simple things for recording, like choose high, medium, or low quality for recording. We give you that little hideable camera controls UI, the same that you see in the camera app. That lets you do things like toggle the photo movie button showing or hidden, and it lets you take photos. There's actually an API for that. But you do have to use the control overlay for doing things like starting or stopping recording. We can't do that programmatically. And if you want to do touch to focus, that's just up to the users using that UI view.
+
+The good news is, in iOS 4, UI Image Picker Controller has gotten a substantial upgrade. We offer more control there. There's now API for starting and stopping movie recording, so you don't have to use our stock UI. You also get the same high resolution still image capture as you would expect. But new in iPhone 4 are additional camera capabilities, like access to the flash. You also get switching between front and back cameras. All of this is available at the high level UI kit, UI Image Picker Controller API level.
+
+But for those of you power junkies out there, you might want to use AV Foundation for capture because it lets you go deeper. Full access to the camera. Steve promised it, and we think we've delivered it. What do we mean when we say full access to the camera? We mean independent focus, exposure, and white balance controls. Independent locking.
+
+Independent points of interest for focus and exposure. Let's say you're developing an HDR application. You can set focus to a given point on your video, and then keep that composed and locked while you set different exposure values and take multiple pictures and then stitch them together. We also give you probably the number one most requested feature in iPhone OS 3 with regards to the camera, which was access to video frame data in your process per frame data. But we don't just give you the data, we actually also give you accurate timestamps, so you know exactly when those frames came in and hit the sensor. We give you per frame metadata, so you know interesting things about those frames, like the f-stop and the exposure level.
+
+We give you configurable output formats, for instance, 4:2:0V, a bi-planar YUV format, or BGRA, if you're going to be doing some rendering using Core Graphics or OpenGL. We also let you configure the max frame rate. Maybe 30 frames per second is too much, or more than your application needs, and 15 frames per second is just fine, thank you. We let you throttle the frame rate if you need to.
+
+We also let you configure the resolution, so you can get a full 720p if you need that, but if your processing algorithm needs less, you can get more CPU back for your interesting processing that you're going to do by asking for it at a lower resolution, for instance, 480 by 360.
+
+We also give you flexible output. These are new features that you won't find at the higher level in our UI stack. For still image output, we give you not just JPEG, but in addition to that, you get YUV and RGB output. Think of that: access to the full 5 megapixel images from the camera, but uncompressed. So you can do a lot of processing with those and do great things with them. We're interested to see what you'll come up with. You also get EXIF metadata insertion, so you can insert your own custom tags.
+
+As you would expect, we do recording. We record QuickTime movies. We allow you to insert your own movie-level metadata. And we also let you control the presentation of the movie. For instance, doing an orientation lock. What if you had an app, for instance, that's only a landscape app? You don't want to allow them to turn it portrait because you don't want portrait movies. We allow you to lock the orientation of the recorded movie so they are all landscape, for instance.
+
+We also give you access to video preview, not in a UI view, but in a core animation layer. That means it's performant like core animation. It lets you insert this layer into a rendering tree like any other core animation layer. And we give you some interesting features there, one of which is video gravity, and we'll talk more about that later.
+
+But that lets you control how the video stretches or fits or fills that video preview layer. We also give you audio level metering and access to audio sample data as well. This is the only Objective-C API in our stack that gives you access to audio samples in your process.
+
+All right, let's start with capture basics. What might you want to do if you have an iPhone? I'm going to go out on a limb and venture that most of you have an iPhone here. So let's say you have an iPhone. It has a camera on the back.
+
+What kinds of things might you want to do with it? Well, you might want to preview what you're seeing from the camera to a core animation layer. You might want to take high quality still images. You might want to get individual video frames into your process and process them. you might want to record to a QuickTime movie.
+
+Now that camera is not the only input you have. There's of course one high quality back facing camera, and in a couple weeks I'm sure you'll all have newer phones that have two high quality cameras on them. There's also a built-in microphone, and the microphone is another input that we can use for doing capture. You can get those audio samples directly into your process for additional processing, or you can write those audio samples to a QuickTime movie.
+
+All of these capture scenarios are provided for in our API using a hierarchy of classes. Let's look at what this looks like to AV Capture. The center of the AV Capture universe is the AV Capture Session object. The session is your central hub. It's where you, it controls the flow of data. It's where you add inputs and outputs. Each of those sources that I talked about is represented in the API as an AV capture input.
+
+Each of those outputs I talked about are AV capture outputs. The preview layer is a little bit different because it is a subclass of core animation layer, CA layer. It behaves a little bit differently and plugs into the session a little bit differently, so it's a special case. We'll take care of it separately. But this is what, from the high level, AV capture looks like.
+
+The rest of the talk is going to be devoted to four common usage cases. The first one, processing YUV video frames from the camera, controlling the camera, taking photos, recording movies, previewing video from the camera to a core animation layer, and finally, processing PCM audio data from the microphone to draw waveform.
+
+Let's tackle that first one first, since that was the most requested feature in iPhone OS 3 with regards to camera. Let's do a demo. This one's called Find My Icone. I'd like to invite up Matthew Calhoun, who's going to help me with this demo. You see before me a cone, a traffic cone. You're probably asking yourself the same question I've been asking myself. You know, how many times have I found my cone missing and wished that I had an application to find my Icone?
+
+Well, now we've provided it in this talk. As you can see, he's running a preview, and he found the cone. He sampled the cone's colors, and he's looking for a range of pixels that are close to that color orange. And when he finds it, when he finds a threshold of 10, he draws a rectangle around it.
+
+So he's finding the cone. He's drawing that little rectangle around it. You see it move with the cone. And when I hide the cone-- oops, it went away. Bring the cone back. Oh, there it is again. This isn't just a cutesy little demo app. This has a real world application. I mean, think if you were in a bar, and your cone happened to fall out of your pocket. You would really want an app to find your icon.
+
+So find my icon. How do we do that? We started with the camera. And it's outputting video frames to the client process to the application. It's also using a video preview layer. And we saw that running at full resolution, 1280 by 720. And it was very smooth. Wasn't dropping any frames at all.
+
+But he's doing processing on the background. When he finds that pattern and matches to it, he superimposes the rectangle on top of his core animation layer. And we see where the icon is. What does this look like to AV Foundation's capture objects? Well, again, you have a session in the middle.
+
+You have a concrete subclass of AV capture input on the source side. And that is an AV capture device input. Each device on the system is represented as an AV capture device. On an iPhone 3GS, there are two devices, one for the camera, one for the built-in microphone. On an iPhone 4, there will be three devices, one for the back-facing camera, one for the front-facing camera, one for the built-in mic.
+
+He also used a concrete subclass of AV Capture output called AV Capture Video Data Output. This will be your friend if you want to do video processing. From this video data output, he gets delegate callbacks, each providing a sample buffer with a video frame. He also used an AV Capture video preview layer to draw the video to the screen and superimpose his rectangle on top of it.
+
+Let's look at the code for this. It's actually very simple. The setup for this is about 30 lines. Find My Icon is available as sample code, and also this snippet that I'm about to show you is available and attached to this session as code snippet SP16. You can follow along.
+
+So what do we do first? We make a capture session. We set the preset on the session to whatever desired quality of service we want. For this one, I set it to high. High because we wanted the full resolution, we wanted a nice-looking preview, and the processing was quick enough that we could tolerate a high level.
+
+Next, you need to find a suitable AV capture device. In this case, we just chose the default, which is the back-facing camera. So we used default device with media type and asked for the video AV media type. Once we've got that, we create and add an AV capture device input and add it to our session. You've just configured half of your graph.
+
+So now, how do we do the output side? Well, first we make an AV Capture Video Data Output instance, add it to the session. We configure our output, and then start the session. So how you do this is if you don't have a delegate callback, you're not going to get any video frames. You have to tell your video data output the callback to deliver the frames to. Now, this is not a traditional delegate callback like most Objective-C objects have.
+
+It's a fancy delegate. So when you associate a delegate with your video data output, you call set sample buffer delegate queue. Now, this queue, you may or may not be familiar with. This is a recent development and certainly a new development. On iOS 4, which is the use of Grand Central Dispatch, or GCD.
+
+You can associate a GCD queue with your delegate. That means that you have control over the priority, the thread of when these callbacks happen. We give this control to you because we want you to be able to manage the performance of video frames. Video is hard, and it really taxes the system.
+
+And this is about the hardest thing you can do on the phone. It lights up the just about every block we've got. So we want to give you all the tools we can to help you mitigate performance problems. And this is one of them. Being able to specify a queue, you have some control over the relative priority.
+
+Next, you implement your delegate callback, which is simple. It calls you with did output sample buffer, and then you can start and do your processing. Now, that might bring up a question. What is a CM sample buffer? I saw that object there, but I've never heard of one of those before. Well, it's defined in the new core media framework. It is a CF object, so it has retain and release semantics.
+
+First and foremost, it contains the sample data. And it does that by wrapping it in a CV image buffer, or in our case, it's a concrete type of CV image buffer called a CV pixel buffer ref. If you've ever worked with Core Video on the Mac, you know what I'm talking about.
+
+When you have a CV pixel buffer ref, you can get at the base address, the row bytes, you can start iterating through the pixels and do whatever it is you need to do. It also contains timing information, accurate timestamps from exactly when that frame showed up on the sensor. You can get the presentation time as a CM time. Eric told you all about that in the last session.
+
+You can get format information. Format information is housed in the CM sample buffer as another CF object called a CM format description. Once you have that, you can find out things about the format like its pixel type, its clean aperture, its dimensions, things that you might want to know about it.
+
+And lastly, metadata about the samples. You get these as attachments. They're carried along with the sample buffer as a dictionary of attachments. In this case right here, I'm asking for the metadata dictionary attachment. If it has it, we can look through that dictionary and find all kinds of interesting metadata. Focus scores and exposure levels and whether the flash was firing.
+
+Interesting stuff. All of this is in code snippet SP20, and please refer to the CoreMedia framework documentation for more information on how to work with CM sample buffers. Performance considerations. Can we just pause for a second to reflect on how cool this is? You're getting 1280, okay, go ahead.
+
+We're getting 1280 by 720, 30 frames per second video delivered to your process on a phone. You know, this is things that we were doing on the desktop not too many years ago. I liken to it to the following analogy. Let's say all of you are high school seniors, and it's prom night.
+
+This is your senior prom. And let's pretend that Apple is your dad. And so you're all dolled up and ready to go, and you think you're going to take the family car, and then your dad pulls out the keys to the Porsche and gives them to you and says, have fun with it. I trust you.
+
+But Please bring the car back on time, and please don't have a scratch on it, or else you're grounded and you never get to use it ever again. That's the kind of performance considerations we're talking about with AV Capture Video Data Output. You must be timely with your use of these buffers, or you might not get any more.
+
+So, as I said before, you set the sample buffer delegate and queue. The queue that you set on us must be a serial queue. That ensures properly ordered buffer callbacks. If you use one of the global concurrent queues, order is not guaranteed. So how hilarious would it be if you started getting video frames out of order?
+
+So don't pass dispatch get current queue either. You can't guarantee what thread it's on. By default, the buffers you get from the video data output are emitted in the camera's most efficient format. That is, the format that's easiest for it to produce, which may or may not be the best format for your application.
+
+If you find that by default it's not giving you the best format for your application, you can specify a custom output format using the video settings property. Set the video settings, for instance, if you want to output BGRA. And as I hinted before, both Core Graphics and OpenGL work well with BGRA. It's not the default emitted format, but if you plan to process pixels and then render them, this might be a good choice.
+
+Additional performance considerations. You can set the min frame duration property on the AV capture video data output to cap the max frame rate. That might sound a little backwards. Min frame duration is the reciprocal of the max frame rate. So if you set it to 1 over 15, that's going to give you a max frame rate of 15 frames per second. You can also configure the session to output the lowest practical resolution for your processing algorithm. You'll want to do that to save CPU cycles if you're doing some complicated processing.
+
+There's also this long property name called Always Discards Late Video Frames, and the default is yes. By default, we want to drop video frames early and efficiently if you fall behind. So if you accept the default, you're giving us leeway to drop frames early before messaging them over to your process and perhaps causing you to get even later.
+
+Now, you can set it to no. That doesn't guarantee that we're not going to drop video frames. It just means we're not going to drop them as early and efficiently as we might have if you said yes. Now, why might you want to set it to no? You might set it to no if you're recording, and it doesn't matter if the video frames are a little bit late. You want all of them that you can get.
+
+So, again, let me impress upon you that your sample buffer delegate callbacks must be fast. Do as little processing as you can get away with, and return that buffer. Because if you hold onto the buffers too long, the camera is going to stop producing buffers, your preview will stop, your processing algorithm will probably get really confused, hilarity will ensue.
+
+Also, this was the first time we saw AV Capture Session, which again is the central hub of the AV Foundation Capture API universe. It's the place for adding inputs and outputs, and the flow of data does not start until you call Start Running on it. Lastly, we talked about that session preset property. We have six supported session presets in iOS 4: high, medium, low, some named ones, and photo. Let's talk about these.
+
+High means the highest quality video and audio recording resolution and quality that we can give you. It changes from product to product. High on a 3GS is not the same as high on an iPhone 4. But it means that if you use high, you'll always scale to the very best that the given product can do.
+
+Medium we define as suitable for Wi-Fi sharing. Low we define as suitable for 3GS. And low we define as suitable for 4G sharing. But we don't make guarantees about what those resolutions are and bit rates are, just that they'll fall within those parameters. If you need to have something that is VGA and stays VGA for all time and eternity, you can use one of these named presets, like the 640x480 preset.
+
+We guarantee that that will not change from product to product. And lastly, there's that photo preset at the bottom, which is a special case for getting absolutely the highest resolution, the full 5 megapixel on an iPhone 4, or the full 5 megapixel on an iPhone 5. a three megapixel on an iPhone 3GS.
+
+Here's a list, a grid of all the supported resolutions and formats. I don't expect you to memorize this right now, but you can see in AV Capture Video Data Output, you can get the full 1280 by 720 if, for instance, you're on the iPhone 4's back-facing camera. I did want to call out at the bottom that photo resolution is not supported for video data output on any platform. The buffers are just too big.
+
+All right, we've covered the first capture scenario. Let's move on to the second, which is controlling the camera, taking photos, recording movies. And let's start that with a demo and bring up Sean Ojakian. All right, he's running an application called AVCam Demo, which is also available and associated with this session.
+
+Notice that it has the same or very similar features to our camera app, but a completely different UI. There are buttons on the bottom. There's a HUD button that we'll come back to. The second one says swap. And when Eric pushes swap, it switches to the front-facing camera, and now he can smile at you and you can see his beautiful face. Now, if he pushes the record button, he's recording to a movie.
+
+We'll do a quick recording and there you go. Once he stops the recording, it records the movie to his sandboxed process space, and he writes it over to the camera roll using the new AL asset library class. The third one says high quality still images. Let's go ahead and take a still image right there. He flashed the screen for us so that we could see it taking the picture.
+
+And now let's go back to the back-facing camera and display what's in the HUD controls. Here's where things get interesting and new. Okay, notice he's got in there flash off, torch, auto focus, auto exposure, auto white balance. So let's go ahead and turn the flash on and then take another picture and... Point it at the audience so they can be blinded. Great. And then let's turn on the torch.
+
+Torch is kind of like flash, except that it's at a lower intensity beam, and while you take a recording, you can see it humming along there, illuminating your recording and making it brighter in low-light conditions. Okay, and then next, we've got autofocus, which is currently locked. He has it wired up so that when he does a single tap, it does an autofocus and then locks at that current focus position. Okay, let's back up now and have something bright on one side and dark in the back. If he double taps, it will expose on the point at which he double taps. So let's double tap on the screen.
+
+Okay, it just got, you know, it adjusted for the brightness of the screen, and now let's double tap over on the dark side. And you see the auto exposure just kind of blew out. Now, while he was doing that, he didn't change the focus. The focus remained locked. So we're setting separate exposure windows and focus windows. This is a first on our platform.
+
+And also notice that while he's doing something like a focus, look at those cool little traffic lights there. They light up when things happen. So even if he's in a continuous auto focus mode, it will light up when the focus event happens. Thanks, Sean. Let's go back to slides.
+
+What did we just see there? We saw two inputs, a preview to a core animation layer, output to a still image, and movie recording. And again, to AV Capture, it looks like this. You have a session in the middle. You have two AV Capture device inputs, a new subclass of AV Capture output called AV Capture Still Image Output, and another new one called AV Capture Movie File Output. Video preview layer is our old friend.
+
+Moving on, let's talk about focus support. There are three supported focus modes. Locked. Locked means what you would expect. It parks the sensor at its current position, and it doesn't do any focus. So you can compose a scene, frame it how you like, do a focus operation, lock, so that it will stay there.
+
+Focus mode autofocus does a single scan focus and then reverts to locked. So this is something that might be suitable for a touch-to-focus interface where you want to do one focus and then keep it there. Lastly, there's continuous autofocus mode. That continuously autofocuses as needed in the background. It's constantly monitoring the scene for fuzziness. When it gets blurry enough that it thinks it needs to focus again, it'll do that.
+
+You can use the isFocusModeSupported property to determine if your given AV capture device supports it. Not all devices support focus. For instance, an iPhone 3G is a fixed focus camera. Also, you can observe the adjusting focus property using key value coding, key value observation, to know when it changes. That's what he was driving his red blinky lights using.
+
+[Transcript missing]
+
+Setting the focus mode or focus point of interest requires calling lock for configuration on the AV capture device. Think of AV capture device as a shareable object. These are things that you would set on the AV capture device that might mess up another application that's using the same shared resource at the same time. So before messing with their state, we want to make sure that you have mutually exclusive access to that device. So here's some code that you might use.
+
+You would see if that focus mode is supported if you wanted to lock it. If you see that it is supported, you would call lock for configuration, then go ahead and lock it, lock the focus mode, and then unlock the device for configuration. And please do avoid holding the lock for configuration for too long. Again, think of it as a shared resource. You might degrade other applications' user experience if you hold it indefinitely. Exposure modes follow the same basic rules that focus. modes do. There's locked and continuous.
+
+We have the same isSupported and adjustingExposure key value observable property. And again, you must call lock for configuration before you set the exposure mode or point of interest. Also with white balance, the same two supported modes, continuous and locked. You can ask if it's supported. You can observe when it changes. And you must call lock for configuration before setting it. Now let's talk about Flash support on the camera.
+
+Flash modes, we have three of them. We have flash mode off. When flash mode is off, the flash will not fire, even if it's the middle of the night and you're out in the middle of nowhere. AV capture flash mode on always fires the flash when you take a picture, even if it's the middle of the day and it's bright outside. AV capture flash mode auto will only fire the flash if ambient light conditions determine that it's low enough that we should fire the flash.
+
+Again, you have those has flash type properties to know whether you can use that facility, and you can call lock for configuration to set it. Torch support. Torch is actually the same LED used for illumination that the flash or strobe is, but it fires at a much lower intensity that's sustainable for a longer period of time.
+
+When you use the torch, that's what you would use for video recording. Off, on, and auto follow the same semantics that I just talked about for flash. Off means always off, on means always on, and auto will only turn on if ambient light requires it during a recording.
+
+You can ask if it has a torch, and you must lock for configuration. Please also note that the torch only turns on if the device is associated with a session, and that session is running. It's meant for video recording. Here is a grid of all of our AV capture device properties and the various products and what's supported. So if you want the Uber list, you've got to go get an iPhone 4 and use the back camera.
+
+Let's talk about camera switching. There are some performance considerations here. When you use AVCaptureSession, you can tell it, since it's the control object, you can tell it to start or stop running. But these are synchronous calls, meaning when you call "start running," it's not going to return until everything is actually running and going.
+
+This can take a little bit of time, same with "stop running." So it would be wasteful and it would be a bad user experience if, for instance, you wanted to switch from front to back camera and you had to stop the session running, wait for it to stop running, then set to a new camera, then start it running again. It would glitch and stutter. So instead, AVCaptureSession is meant to be reconfigured while running. You can use begin configuration and commit configuration, which are very similar to CoreAnimation's CA transaction, begin and commit.
+
+This is all in code snippet SP21, but the abbreviated version is you call begin configuration on the session, and then you do stuff to the session. Add inputs, remove outputs, swap front and back camera. In this case, we're removing the front-facing camera input, adding the back-facing camera input. But no work is done until we call commit configuration when it's committed all in one call, and it's very smooth and as fast as can be. So please do use begin and commit configuration when you're reconfiguring your session.
+
+Now let's move on to movie recording and the AV capture movie file output, and some performance considerations. When you initiate a QuickTime movie recording, you supply a file URL and a delegate. It's very simple. It looks like that. You have a URL. You supply a delegate. There are a couple optional delegate callbacks, but one is mandatory, and that is, did finish recording to output file at URL.
+
+We require that you be informed when your recording finishes so that you're not just recording into the ether. In your did finish recording to output file at URL callback, you might do things like write it to the camera roll, as AVCam demo does. And if you look at code snippet SP24, you'll see how to do that.
+
+Here is AV Capture Movie File Output's writing policy. You must pass a file-based NSURL. You can't pass an HTTP URL or anything other than a file-based one. You may not pass a URL to an existing file. The Movie File Output does not overwrite existing resources. Also, you must have permission to write to the URL specified. We won't write to privileged locations on your behalf.
+
+Setting limits. You might want to do things like set a max recorded duration or file size, or ensure that your recordings don't fill up the disk so that users can no longer boot their phone. You can use these properties to set these recording limits. And when you do that, be prepared that you might spontaneously get a did finish recording callback when you didn't ask for it.
+
+So for instance, if you set a max recorded duration property to say, I want it to record for just 10 seconds, then after 10 seconds, your callback will fire telling you that the recording did finish. And it will have an NSError associated with it. That error will tell you the reason that it finished. But that does not mean that your file is not usable. So please get in the habit of checking both the error and its user info dictionary to find out if the recording was successful. And you can also find out from that why it stopped.
+
+Here are some early recording termination conditions. I wanted to call these out. AV error disk full. Pretty understandable. If you filled up your disk, it had to stop. If a device gets disconnected, when might that happen? Well, if you're on an iPod touch, and it doesn't have a built-in microphone, but it has headphones, and someone pulls out the headphones so the headphone mic suddenly disappears, your recording will stop.
+
+Maximum duration reached, maximum file size reached, and session was interrupted. And what's a session interruption? That's when, for instance, a phone call comes in. Phone calls need to rip hardware away from you that's being used for your recording, so the phone call wins. It's more important than your recording. So your recording will stop right now, and you'll be told that you were interrupted.
+
+Again, look at SP24, code snippet 24 for the full list. Metadata, let's move on to metadata, which is also a very interesting feature of our movie file output. You can set movie-level metadata at any time while recording. That's different from other properties, and there's a good reason for it.
+
+It allows for slow metadata. Not all metadata is available at the time you start your recording. Let's take GPS location, for instance. If someone starts up your app and pushes record immediately, you may not have had time to get a GPS location fix. But you really wanted to put that in your movie.
+
+So at any time while it's recording, you can update the metadata array with metadata up until the point where you stop. And we will update the movie file with whatever metadata you come up with. So you can wait to know what the right metadata is until your recording has started. Here's a code snippet that shows how you might set the location. So this is the location metadata.
+
+These are expressed as AV mutable metadata items in an array. This one has a key space of common. The key is location. And it uses an ISO 6709 compliant string to express latitude and longitude. This is all in the code, and you can see it in the code snippet. Code snippet 25.
+
+Here are supported resolutions and bit rates on various products. You can get video in any format as long as it's H.264, and audio in any format you want as long as it's AAC, except on iPhone 3G, where there is no video supported for movie file output because of hardware constraints. As you can see, the iPhone 4 back camera at its highest Supports 1280 by 720 at 10.5 megabits. And I also wanted to call out that the photo preset is not supported for writing to movie files. That's just too big of buffers.
+
+And then let's talk about photos for a minute. The still image output is a block style completion handler that delivers image data to you as a CM sample buffer. Well, you guys know about CM sample buffers now. We just talked about them when we talked about video data output.
+
+That sample buffer contains useful metadata. In addition to the ones you would normally find in your video data output, you'll find EXIF, an EXIF dictionary. So for instance, when you want to take a high quality still image, you would call capture still image asynchronously from connection and provide a completion handler, which is a block.
+
+That block will be invoked when the picture is ready and the data has been messaged to your process. Here I show what I might do to get at the EXIF dictionary. So I call CM get attachment, and then I can inspect the EXIF dictionary associated with that sample buffer containing still image data.
+
+We support a number of output formats, as I said earlier. You can call available image data CV pixel format types and available image data codec types to find out which are supported on your device. And you can also set your preferred pixel format or data codec format using the output settings property. If your final destination still image format is JPEG, we highly recommend letting AV Capture Still Image Output do the compression for you.
+
+You say, "Well, why? Maybe I want to insert my own metadata, so I want to let Image I/O do the compression afterwards." Well, if you use AV Capture Still Image Output, we will use hardware to do the JPEG encode, and it will be as fast as it can be.
+
+If you do want to have that very fast, you can use the JPEG still image NSData representation, which will fetch that sample buffer in JPEG format, write it to an NSData, merging in whatever additional custom metadata you have without recompressing. So again, that's a performance hint if you want to get really fast JPEG encoded still images and insert your own metadata.
+
+Here are our supported resolutions and formats. As you can see, most--well, all platforms support BGRA and JPEG. That's kind of small. I don't know if you can see that. And all have their various resolutions. You can see that photo was a full 5-megapixel photo preset. Let's move on to our third capture use case, which is previewing video from a camera to a core animation layer. And I'm going to do a demo for that called Pinchy Preview.
+
+Okay, Pinchy Preview is a very simple application. It's about 200 lines long, and it's mostly UI gesture recognizers, and it's about 30 lines of AV capture code. This garish red rectangle you see is an AV capture video preview layer, but it's not showing any video, you say. That's because I haven't pushed the start button yet.
+
+When I push the start button, I start seeing video. It is a core animation layer. It inherits from CA layer, so it behaves as you might expect any other CA layer to behave. I have it hooked up to a number of UI gesture recognizer, UI gestures. So, for instance, when I touch, I can move the layer around.
+
+If I pinch, I can make myself really small. This is a fun app to play with late at night. And you can also twist with your fingers to rotate yourself around. And if you get tired of everything you've been doing with this, you can shake, and it goes back to its default location. Again, this is about 200 lines of code.
+
+Now, what's that equally garish orange pointer you see at the top? The pointer is showing you where the UI orientation is oriented towards. So this shows that we're a portrait app, and when called to auto-rotate, we're saying no, except for portrait mode. So if I turn my phone sideways, I'm turning the phone sideways, you're not seeing it turn, but I'm turning it upside down, you can see that my UI is still, you know, pointed down. So no matter what happens, I'm turned right side up with respect to my UI. Now, most applications will just set this once and forget about it, like Camera app.
+
+They'll set their orientation, and then they'll keep that one orientation for the life of the app. But if you have a very complicated application where you need to set up a camera app, you can set it up in the camera app. But if you have a very complicated application where you need to auto-rotate to different orientations, I'm going to push this button to stop locking UI view. If you forget to tell the preview layer the orientation of your UI, this is what will happen. So when I rotate, okay, my UI rotated, but my video didn't, so now I'm sideways. And if I go this way, oh no, my video's upside down.
+
+But you can correct for that by using the video preview layer's orientation property, and when I push this button to turn the lock off, it's now going to follow my UI orientation as it turns. So as I turn, my video preview turns with it. And up is always up, and down is always down. All it's got is one input and zero outputs. There are no outputs at all, just one preview layer. You have a session in the middle. You have a device input for the camera. You have a preview layer for what we saw on screen.
+
+Considerations when using these. Unlike the AV Capture output, it retains and owns its session. That might seem a little bit backwards. As I said, the session was the center of our universe. But still, it's idiomatic for core animation programming to sometimes make your core animation layer, do your configuration on it, and then throw it into your render tree and forget about it.
+
+So that when it comes time to dispose of that layer, it takes care of all the cleanup. And that's why we carry that idiom over here. So the video preview layer retains and owns its capture session. It behaves like any other CA layer, as you saw. We could perform transforms on it. We could rotate it, scale it.
+
+You can set the orientation property to ensure that it rotates the preview layer correctly with respect to your UI's orientation. And on iPhone 4, the preview layer supports mirroring. We were actually seeing that. I didn't call it out. But when you saw pictures of me, it was showing me as a mirror image of myself. This is the default for the front-facing camera, because it's easier for people to orient themselves when they see a mirror image of themselves in the preview. But you can turn that off if you want to see exactly what the image looks like without mirroring.
+
+We support three video gravity modes: Aspect, Aspect Fill, and Resize. Okay, so let's take a look at this picture of a person playing guitar. This is resize aspect. Now, as you notice, on the top and bottom there are black bars. That's because this movie was taken 16 by 9. It's a 720 movie shown on a 4 by 3 display. So, of course, there are black bars because it doesn't fit, and we're preserving the aspect ratio.
+
+If you use aspect fill, we're going to fill the given viewing size, but keep the aspect ratio. So now we've cut out something on the sides. Let's go back to the previous one so you can see what happened. Look at where the guitarist's hands are. And when we go back to the other one, you see they're kind of chopped off on the sides. And then finally, comparison between aspect and resize. Resize is like Funhaus effects. It just stretches it or squishes it to fit your previews.
+
+So you can see that the aspect ratio is the same as the size of the video. So you can see that the aspect ratio is the same as the size of the video. So you can see that the aspect ratio is the same as the size of the video.
+
+Now, there's an extra consideration you should be aware of, and that is when you're trying to drive a tap to focus or tap to expose UI using this video preview layer, there's some translation that you have to do. Why? Because the focus touch from a video preview may be, your video preview may be rotated differently than the buffer as it comes in on the sensor.
+
+It also might have a different video gravity, you know, so you may not be seeing the entire buffer on screen because it's blown up. Or mirroring may be enabled, in which case a touch on your video preview needs to be translated, you know, flip it over the vertical axis. The good news is, if you look at AVCam Demo, it's got all of that translation code. So it shouldn't be a mystery how to perform this translation between preview and driving your touch to focus. or touch to expose.
+
+Let's move on to the very last, and that's processing PCM audio data from the microphone to draw waveform. We'll have Matthew come back up and help me with this demo. Okay, this is probably the simplest app of the day. It has a neat-looking You can see the little gradient there, sort of Darth Vader-ish, and nothing happening until you push the Start button.
+
+But when you do, it starts drawing an audio waveform. So if, Matthew, you blow in or whistle into the microphone, You see it get really big. That's kind of a neat feature. But what's even neater is if you menu out, You see that it's drawing that double height pulsing red bar, indicating that Wavy is still running the audio device in the background. It's still getting processing time.
+
+It's still processing those audio samples. So if you're, I don't know, doing some strange reverb effect, you'd still be getting your callbacks. And now if you touch that and go back, You see that he was indeed still getting called back, and when he did his whistle while it was in the background, it was doing the drawing as well. Now, how did we do that? We had a single input, this time no camera involved, just the built-in microphone, and going to a single output.
+
+This looks like a capture session in the middle, a device input on top, and an audio data output on the bottom, which is another concrete subclass of AV capture output, which delivers CM sample buffers of audio samples. Performance considerations. Just like when you use the video data output, you provide a delegate callback along with a GCD queue, so you have some control over when and how these samples are delivered to you. And again, do use a serial dispatch queue to ensure proper ordering. I mean, if you think video frames coming in out of order are funny, audio samples coming in out of order are even funnier.
+
+The emitted sample buffers for an audio data output are always, always, always interleaved 16-bit signed integer PCM. They might be mono or stereo, depending on the kind of 30-pin adapter you have on there. For instance, some 30-pin accessories support stereo recording. If you have one of these, you will get stereo audio in your callbacks. By default, you get 44.1 kilohertz sample rate. But again, depending on the kind of accessory that you use, you might have a different source sample rate, and we will deliver you the sample rate of the source device.
+
+Very important. Unlike video capture, video data output, there is no affordance for dropping samples. You can't set it to a lower max frame rate. You can't do that with audio. It's just the samples or a glitch. So it's even more important here that you be fast in your delegate callback. Otherwise, you might drop audio samples, and your user experience will be degraded.
+
+The CM Sample Buffer usage is almost the same for audio as it was for video, with one exception. It contains no image buffer. There's no CV pixel buffer backing this CM Sample Buffer. Instead, it contains an object called a CM Block Buffer. You can think of a CM Block Buffer as a very fancy CFData. It supports things like non-contiguous ranges of data within the buffer.
+
+But for audio, it will be just like a fancy CFData. You can use CM Block Buffer APIs to address into the--to get a base pointer for the audio samples. And when you do that, you call CM Block Buffer, get data pointer. You now have your data pointer to the base address of the samples in the PCM buffer.
+
+Multitasking considerations. I saved this for last because the rules are important. I wanted it to be near the going away message. You may record or process audio in the background. If you set the appropriate UI background modes in your plist. If you've used Xcode, you'll know what this little plist looks like.
+
+You can add a key to your plist called required background modes. If you add the one that says app plays audio, then you will continue to get callbacks while you're backgrounded. Just like the app Wavy that Matthew showed you while he was in the background, because his app was a app plays audio in the background app, he continued to get callbacks. Users are alerted to the fact that there's still stuff going on in the background by that pulsing, double-height, red status bar. That's good. That tells them that the battery may be drained while you're doing stuff in the background.
+
+Background apps may not record or process video from the cameras. So we do not allow background usage of the camera. When you're backgrounded, here's what happens. If you're running the camera, your session gets told that it was interrupted, and then it stops, and you're told that it stopped. If you have any movie recordings in progress, they are stopped.
+
+When reentering the foreground, a user has come back to your app or, say, a phone call ends, Your session is told that the interruption ended, and then it starts back up. So it's as if it never left, and there's very little work that you have to do on your part to take care of this. You can key value observe the running and interrupted properties if you want to know when you got interrupted and take some additional action.
+
+The last thing we're going to talk about today is an advanced topic called AV Capture Connections. These have been there all along, but I kept them obscured from view because I didn't want to obstruct the main message, which is inputs, outputs, session in the middle. These are the glue that holds those sessions and inputs and outputs together.
+
+Here's how you use them. Let's take the AVCam demo use case that we saw earlier, where it was capturing from a mic and from the built-in camera, and going to still image output, movie file output, and video preview layer. Now, you see those little red and blue lines, red for video and blue for audio. Those are represented in the API.
+
+They're represented in the API as AV capture connections. So each one of those streams of data going to an output is an AV capture connection. Now, notice there's a big X going to the video preview layer. That's because it's not an output, so it doesn't get a connection.
+
+The purpose of the AV Capture Connection is to identify a specific stream of captured media. It allows you to enable or disable a stream of media going to an output. And more importantly, it allows you to control the data that's presented to the output, or monitor the data that's presented to an output. For an audio connection, this is where you can do your audio level metering.
+
+For a video connection, this is where you can do things like locking the video orientation. If you want to make sure that all of your still image pictures are always portrait, not landscape, you can lock it to portrait. Or same goes for movie recording. Now, one thing that's important to note is that the AV capture video data output is an exception. It does not support setting video orientation or mirrored on its connection for performance reasons.
+
+AV Capture Connection exposes the current state of the media stream while the session is running. If you refer to code snippet 27, this shows how you do audio level metering. If you have an output, you can ask the output for its connections. Once you've got the connection, so here I omitted the code where you found your audio connection, it has an array of audio channel objects. One for each source audio channel. Usually you'll have mono, so there'll just be one channel. But if you have a cool accessory plugged in, you might have two.
+
+And then for each of those channels, you can iterate over them and get the channel's average or peak hold level, update your levels, and do a bouncy lights audio level kind of UI. Now, this is not, these are not key value observable properties. You have to poll for audio levels. We don't want to assume that you want audio levels. And so we don't automatically update them on your behalf. As often as you want audio levels, poll for the new value and you'll get it.
+
+AV capture connections refer to the specific stream in an output delegate. We talked about that throughout the session as we looked at these connections. It's always the second to last or last parameter from connections. It identifies a single stream going to that connection. AV capture session is greedy.
+
+You can't make an AV capture connection directly. When you make a session and you add an input to it, it's going to greedily try to form connections to all outputs that are compatible with that input. And the same goes for when you add an output. So if you add a video input and you've already got an output that accepts video, it will greedily go and form connections on your behalf.
+
+But maybe you don't want that. Maybe you want a video input, but just to do preview. You don't really want to record video to your QuickTime movie. So knowing where the connection is, you can set the property on the connection to disable it. And then you'll get no video into your movie, just where you wanted it in your preview.
+
+So here we're showing how you can get at the connections property. And here's how you might disable the connection. Finding the connection with the media type that you're interested in-- look at the orange part. If it is equal to the media type you want-- it's going to be the same. you can disable the connection by setting its enabled property to "no."
+
+In summary, we processed YU video frames. And how did we do that? We used the Video Data Output class. To control the camera, we used AV Capture device. Take photos, we used still image output. Movie file output to record movies. We used the AV Capture video preview layer to preview video from the camera to a core animation layer.
+
+And we processed PCM audio data using the audio data output. Please contact Eric Verschen if you have any more questions about the technology. And come and see us throughout the week in our other sessions. Thank you all for sticking it out with us, and have a great rest of your show.

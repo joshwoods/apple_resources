@@ -1,0 +1,321 @@
+---
+Title:  Exploring the Quartz Compositor
+Year:   2002
+Web:    https://nonstrict.eu/wwdcindex/wwdc2002/503/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Ladies and gentlemen, please welcome graphics and imaging evangelist, Travis Brown. Good afternoon, everyone. Welcome to session 503, Exploring the Quartz Compositor. We're really excited about being able to tell you about new compositor technology such as Quartz Xtreme. But more importantly, we're really excited to be able to sort of begin to articulate why Mac OS X's visual pipeline is organized the way it is. Over the past year, a lot of developers have expressed concerns about getting their pixels to the screen. It wasn't readily apparent why we had architected the system the way it was.
+
+But hopefully, in yesterday's keynote, it sort of became clear that we're doing some very innovative things with regards to how we approach graphics acceleration on the platform. And the fact that Quartz Xtreme is able to accelerate 2D content, 3D content, and video and accelerate them seamlessly and with minimal CPU overhead because it fully leverages the GPU. So this is what we're going to be talking about in today's session. But one thing I want to make really clear. That's a point of confusion just on the early buzz that we've seen that Quartz Xtreme has generated.
+
+Is that even though Quartz Xtreme is a hardware accelerated architecture, we still have been working and optimizing the existing Quartz Compositor architecture that we've had in the system since we shipped Mac OS 10.0. So that's a good story for all our customers who are going to be running Jaguar. They're going to get improved performance.
+
+And we're going to talk about that today. But for customers with the right hardware in their systems, we're going to fully leverage that hardware to give them the best possible graphics experience. Now to take you further and tell you more about this, I want to welcome Peter Graffagnino, Director of Graphics and Imaging Engineering to stage. Thank you. Thanks, Travis. Hi, everybody.
+
+Welcome to our session on Network Server? No, I don't think so. Exploring the Quartz Compositor. My name is Peter Graffagnino. I manage the graphics and imaging group at Apple. And what we're going to do today is give you kind of a-- I'll do some introduction stuff, and then I'm going to have a couple of the engineers who worked on the overall architecture and the OpenGL implementation come up and talk you through how we do the windowing system on OS X and how we accelerate it with OpenGL.
+
+So some background comments. First of all, you've seen the architecture diagram before. We have three basic drawing APIs that people get to the screen with. We have Quartz, Quartz 2D for 2D drawing, OpenGL for 3D, and QuickTime for video multimedia. And the Quartz Compositor sits underneath those APIs and blends the content from those APIs onto the screen to present it to the user.
+
+So what we've really done is taking the windowing system, which we call the Quartz Compositor, and made it orthogonal to any of the drawing models you have. So a new drawing model could come along, for example, and we could composite that into the desktop just the way we do everything else. So I think it's a really good thing in OS X that we clearly separated drawing APIs from window presentation.
+
+And this is really not a new idea. The computer graphics industry for a while has been compositing together the results of different applications. In the old days, you had, you know, one program could do a sphere, another program could do fractal terrain, and you didn't want to run them all every frame. So you would, you know, if you had a bug in your fractal terrain renderer, you wouldn't have to run your sphere renderer every frame again.
+
+And so this idea of sort of caching results and being able to composite things together was developed in this 1984 SIGGRAPH paper by Porter and Duff, where they introduced the alpha channel and the whole compositing algebra concept. And what we're doing is just using that on the display in real time to create the desktop for Mac OS X.
+
+[Transcript missing]
+
+So this allows us to create a fully composited desktop experience as you see here. We've got accelerated 3D in the lower left corner. We've got a demo from NVIDIA. You know, the ubiquitous transparent terminal, which always goes over good at WWDC. And the volume control, you can see it composited into the scene.
+
+The transparent clock and QuickTime, 2D PDF, everything being blended together. Nice anti-aliased icons on the dock. So it really kind of ups the production values, if you will, of the desktop display compositing everything together. And with that, I'm going to turn it over to Ralph, who's going to go in more detail about the general compositing architecture on OS X. Ralph?
+
+[Transcript missing]
+
+So as Peter said, the Quartz Compositor is the piece that takes the content provided by all the applications and mixes them together to produce the final on-screen presentation. And the Quartz Compositor in our implementation has quite a number of features. It can do transparency, as you know, from menus and volume control. It can do drop shadows. It can scale content, like you see that in the dock, where the dock icons are actually windows that have a fixed size. And just in the Compositor themselves, they get scaled to the destination size.
+
+This is how it works. When an application creates a window, it sends a message to a process running on OS X. That process, if you use TOP or PS, you will see it has the name of Window Manager, which is kind of pedestrian. It contains the Quartz Compositing Engine.
+
+The message goes over to the Quartz Compositor, and the Quartz Compositor allocates a buffer to contain the content that the application will draw on. That piece of memory is then mapped back into the application's address space. So both the application as the Quartz Compositor have access to these bits. Then the application draws something into these bits. You're using various methods like Quartz 2D, Quick Draw, QuickTime, or whatever.
+
+At one point, the application decides, now it's time to present these final results on-screen. So it sends another message to Quartz Compositor, which says, flush this. And Quartz Compositor then the whole machinery kicks in that does the transparency and whatever. So if there is translucent content on top of your window, at that point, these two, the content of the translucent window and your window get combined.
+
+Okay, so, word about flushing. For the most part, as an application programmer, you don't really have to worry about that. Cocoa and Carbon both take care of you for that. What's essentially happening in the event loop, the event comes in, it gets distributed to whichever object needs to respond to events, and when the control returns to the event loop, these frameworks will essentially call flush for all the drawing that has happened. Every now and then, you will have to call flush yourself. For example, when... Your drawing is very complex, and you would like to give feedback to the user by showing intermediate results.
+
+So, you could call flush every now and then in between to, you know, every second or so to show that there's still something going on and the application is still working on it. Okay. So, usually, however, we are more interested in flushing rates that, you know, are somewhere close to the display refresh so that the user experience is very smooth and everything looks like it's, you know, a physical object and whatever.
+
+So, to achieve that, flushing is actually synced to the display refresh. So, if you have a CRT, this means the flush will happen in a way that the entire update area will appear on screen in one piece. So, there's not, the video beam will not cut through it while it is refreshing the cube. Similarly, LCDs have a refresh rate, too. So, they don't have a beam, but there's still a rate at which the frames go over the wire to the display. So, flushing is enforced to be synced.
+
+So, if you have a CRT, you can see that the screen is now flashing to the display. However, from the application's perspective, flushing is asynchronous, which means when the application calls flush, the control immediately returns to the application because it really just sent this message over to the other process, which then does its thing.
+
+So, in... Since Mac OS 10.0, flushing has been asynchronous, and that's a gain, for example, if you have a dual processor machine. Because then, the second processor will essentially run the window manager, which does the flush, while the first processor is still available for your program to do whatever it needs to do.
+
+In the case of Quartz Extreme, flushing is actually asynchronous in a different way. Because in Quartz Extreme, the bits are no longer pushed by the CPU over the bus to the video card. It's just, it tells the video card, okay, here are the bits, DMA them over. So, in the case of two CPUs, then you actually have two CPUs available during the flush. Okay.
+
+So that allows you to do an interesting optimization. So if you would produce a frame and then do the flush and then produce the next frame and the flush and do them in sequence, well, it will take a certain amount of time to do the flush. Because it is asynchronous, it allows you to-- Prepare the next frame that you want to present while the flush is in progress. So, in the best case, preparing the frame and flushing the frame would be exactly the same amount of time. Then you get a 2x speed improvement out of this. So, the important thing here is, in most cases, the application frameworks will take care of that for you.
+
+Because typical scenario is, event comes in and you update your model of whatever it is the user is modifying with that event. And at the end, you redraw, you update the screen to reflect the change in that model. So, if you repeat that, then event comes in and update the model can run in parallel with the flushing of the previous frame.
+
+So if your model is really trivial, like you have a little rubber band, so the model is really just updating a rectangle, then you will not get much out of it. But if you're doing some reasonable amount of computation, you can get a nice speed improvement by doing that.
+
+So the key message is here, most of the time, this is automatic for you. It's really the only case where you can actually spoil that is by, if the event comes in and you immediately decide, well, let's draw this little control over there first, and then go off and do all the computation. Because as soon as you hit the drawing surface, your application has to wait until the flush has actually happened. So I will have a little demo that shows that.
+
+Okay, so first of all in the bottom right corner, I have a little frame rate counter which measures how many frames come out of the Quartz compositing engine. So whatever I do, you see the needle goes up and tells you the frame rate of whatever it is I'm doing.
+
+So, let's turn this off. This little application does quite a bit of computation, and it produces one frame after another. So, if I just start that, you see, this computes a lot of floating point math. and we've seen it runs, you know, 45 frames per second. It peaks and then depending on how far you zoom in, it will drop over time.
+
+This was the case of the synchronous flush. And the way I implemented this is, there's a timer which fires 60 times a second, and I either compute the frame and then flush it, or I draw a single pixel in the top left corner, compute the frame, and then flush it. So drawing that single pixel will exactly do what I mentioned before. It spoils that parallelism you get for free. So when I actually remove that single pixel call, you see the frame rate peaks at almost 60 frames per second now. Okay. So that's it for the demo.
+
+So the important thing to notice there is these frame rates I just showed, this is about the order of magnitudes which we expect things to be. So I measured this machine we're using here, and the flush for this machine and this graphics card and this window size is about 9 milliseconds, which is, if flushing were the only thing you do, you get 110 frames per second.
+
+So that means if your application produces less than, say, 20 frames per second, then saving these 9 milliseconds is probably not going to be a big deal, so really don't bother. And you probably have other places where optimization time is better spent than doing that. But if you're trying to get a really smooth user experience and you know you're in the 30 plus frames per second already, then taking care of this might give you another 20 or something like that. Okay.
+
+Another feature of the Quartz Compositor is that window buffers can be compressed. So, because every window has its buffer, that can take up quite an amount of memory. And to take care of that, there's a mechanism in Jaguar which allows window buffers to get compressed when they are idle.
+
+So, idle means if a window hasn't been touched by the application for, you know, 5 to 10 seconds or so, in the background, the window server will go and take the window buffer away from the application and compress it. Because typical windows have, you know, a lot of white space and so on, compression ratios are fairly good. There's about 3 to 4x as typical.
+
+One neat feature about the Quartz Compositor is damage repair can be done directly from compressed windows without decompressing the entire thing. That means if, for example, your Finder window has been compressed because it didn't do anything in the recent few seconds, and you have a text edit window on top, if you move that text edit window away, you reveal certain parts of the Finder window, and if the Finder window is compressed, we can decompress only the parts that have been revealed without decompressing the entire thing. So the message to application developers here is, well, if you don't do anything with your window, well, don't draw in it, and you get an additional nice memory and speed savings. Okay.
+
+The cool thing about this is it's completely transparent to applications. There is absolutely nothing you have to do about it. Essentially, whenever a primitive is drawn, at the bottom end, the Windows Backing Store lock is acquired. And at that point, if the window is compressed, it will get decompressed for the application. And you will never know this, hopefully.
+
+Another feature about the Quartz Compositor is surfaces. So a window doesn't only have a back buffer, it can have a number of surfaces attached to it. Now, a surface is just an additional buffer that typically lives in video RAM, and it enables certain kinds of hardware acceleration. So, it is mainly used for OpenGL, DVD, and for QuickTime playback.
+
+In that case, in OpenGL, in the OpenGL case, the surface is essentially a piece of VRAM where OpenGL can draw into it hardware accelerated. And in the case of DVD and QuickTime, it's a YUV surface so that the conversion from YUV to RGB can be done in hardware. And this is essentially the key to enable the seamless mixing of 3D, 2D, and video.
+
+So here is the same architecture diagram again, slightly expanded. In the software compositor case, so that's the composite that is in 10.1 and this is in Jaguar, if you don't have a graphics card that can support Quartz Extreme. You have applications drawing either in the window backing store, which is in...
+
+[Transcript missing]
+
+Usually, essentially the message here is there is no tax associated with the Quartz Compositor if you don't do things like translucent terminals on top of your content.
+
+Okay, so this is a look at what's going on, well, without going to extremes, meaning if you don't have Quartz Extreme. So, blending is done with the CPU. So, the Quartz Compositor contains a fairly hairy piece of code that can take an arbitrary number of layers at the same time and produce an output blended pixel. So, it is, in a sense, it is optimal in terms of memory bandwidth.
+
+So, every pixel that ends up on-screen is read exactly once, and every pixel that needs to go on-screen is written exactly once. And in the meantime, there are no temporary buffers available at all. Okay. This code makes use of multiple CPUs. So if you have a dual CPU system, then the screen update is actually sliced into two bands, and each CPU works on one of them.
+
+There's also some degree of hardware acceleration. For example, when you move a window around and the center is opaque, then that part is actually moved with the graphics card without using the CPU. and that new bullet should actually be one further up as well. So in Jaguar, the entire Compositor is tuned for the Velocity Engine. So you can easily say if you don't have Quartz Extreme, every pixel on-screen that you have on Jaguar went through the Velocity Engine. It's kind of an interesting milestone to achieve that all the paths are vectorized.
+
+And that gives us about a factor of two in reasonably complex areas and about a factor of four in very hairy areas. So in the case of five translucent terminal windows on top of each other, you get about a 4X speed improvement over 10.1. We also added 2D hardware acceleration for scrolling.
+
+So how that is done, it's actually just a... The Quartz Compositor has a humongous amount of bookkeeping, essentially, to make sure that when the application scrolls, and some time later the application flushes, that at the time of the flush we still remember which pieces we scrolled and can use the all-screen move for moving these bits.
+
+That, again, at the bottom level, has given us about a three-time speed improvement for normal scrolling distances, like about two text lines or something like that. And at the top end, we've seen, you know, in text edit, about 30% or so, because a lot of other stuff is, of course, going on in the system. Okay. So with that, I'll give it back to Peter.
+
+Okay, so I'm going to talk for a few minutes about Quartz Extreme from a high level, about kind of some of the motivations for why we did that, and then Ken Dyke is going to come up and go through some of the gory details and do all the fun demos for you. So why did we do this? Well, we knew that we were going to be going down a path like this for quite a number of years now.
+
+It's been pretty obvious that GPUs were getting more and more capable of doing things like this. And the model--so we went for the model kind of before the GPUs were quite ready for it. And fortunately, we had things like Velocity Engine and smart people like Ralph who can make it work really well on existing architectures. But the model can be computationally expensive, especially when you start having to read pixels back over the bus in order to blend them.
+
+You know, if you're doing the translucent volume control over DVD, for example, is one of the worst cases. In fact, in Puma, we don't even have--we don't have--we don't have any of those. We don't--we can't spare the CPU to do that, so we do it over a gray rectangle.
+
+So--and also, there's issues about, you know, some concerns about us taking the frame buffer away. And we weren't really able to tell the whole story of why we're going down this architecture until this year. So it's good to be able to talk about Quartz Extreme and hopefully make you understand why we're kind of moving in this direction for our graphics architecture.
+
+So Quartz Extreme is really just an implementation of the Quartz Compositor on OpenGL. The desktop is really just a 3D scene. The nice thing about it is it removes the transparency tax for video and 3D. Since everything is over on the graphics card, if I have to mix the volume control over DVD, it's just an extra blending layer, and it's really not much extra work. It also frees up the CPU. The CPU's not involved in doing any of the blending calculations and can do other things in your application or for other users or whatever.
+
+And it allows us to kind of showcase the GPU and the user interface. So there's a lot of bandwidth in these cards, and I think over time we'll be adding more and more sort of flourishes in the user interface, and maybe on your high-end card, you get a little fancier window animation or some extra effects.
+
+For the customers who spent the money, why not entertain them a little bit more? So, and I think over time, we've got a lot of headroom with this architecture. I think we're really going to be able to do some dramatic things. And I think it's just sort of the tip of the iceberg right now.
+
+To kind of motivate things even further, I thought I'd talk about programmed I/O versus DMA. And in working with devices, there are kind of two basic ways. Back to computer architecture 101. You know, there's programmed I/O, where the CPU pushes data and commands to a relatively slow device, and it's not necessarily the most efficient use of the CPU.
+
+A more complicated model but more efficient model is to set up DMA for the device, where the device can actually pull the data out of memory or commands out of main memory that it might need and process that while the CPU is free to do other things. And when it's done, it can either interrupt the CPU or the CPU can wait, depending upon what is appropriate. And so CPU drawing in the frame buffer is really sort of just programmed I/O and not very efficient.
+
+I mean, you think about your gigahertz CPU, talking over 100 megahertz I/O bus, it's really not the best thing to be doing with the cycles on the machine. So that's why we're moving more and more towards a DMA architecture. In fact, Quartz Extreme is complete DMA architecture. All of the window textures are pulled from the GPU rather being pushed by the CPU.
+
+The other important thing to kind of keep in mind in all of this is the kind of evolution rates of CPUs versus the evolution rates of GPUs right now. For example, the traditional Moore's Law for CPUs is that performance doubles every 18 months, and that's proved to be roughly true over the years.
+
+For GPUs, performance has been recently doubling every six months, and one of the vendors talks about the Moore's Law cube effect, where you're actually getting three times the exponential growth, three times in the exponent, because it's six months instead of 18. And another way to compare it is in terms of transistor count, the G4 having about 10 million transistors, and the latest G4's 4Ti from Nvidia has about 63 million transistors in it.
+
+So really, you can see that there's just more and more logic being thrown into the problem. And one of the reasons is the GPU vendors have an extra degree of freedom in that they have a lot of parallelism in the problem they're trying to solve. You've got a lot of pixels on the screen. You need to do the same thing to megabytes and megabytes of data. You can just replicate gates and get lots of pipelines going at once.
+
+This is not really true for CPUs, which, you know, may have 4K page sizes and are just sort of nibbling at the memory instead of taking it in huge gulps like the GPU can. So it's clearly a curve we want to ride, and we think all of you want to ride, too, is that GPU-- for things that the GPU can do, let the GPU do it and do it fast.
+
+And we think this is the beginning of kind of a new graphics platform for us. You know, every day we have new ideas of the kinds of things we can do with this, and I'm sure you guys will impress us with stuff, too. It's really kind of a next-generation windowing system. There are various hacks out there that do, you know, transparent menus and transparent terminals, but a lot of them are really just hacks. We wanted to do it right, and we have a full compositing engine and a fully composited model, as Ralph talked about.
+
+And we think that this is kind of an inflection point, if you will, in platform graphics in terms of really factoring out the windowed presentation and the layer compositing for the desktop from the--whether you're doing 2D, 3D, or video, a really nice architecture that's gonna have a lot of headroom as we move forward.
+
+And it's a combination of a lot of things. There's obviously all the great work the vendors are doing with GPUs and just making them more and more advanced. And some of the great architectural work we've done in the OS to really treat the GPU as a--almost as a traditional DMA device, but with very high bandwidth transfers and getting the CPU disengaged from babysitting the device and just letting it take the memory.
+
+The other nice thing about Quartz Extreme, and if you've gone to-- well, if you've gone to OpenGL early bird session, you would have found this out, that all of the advances that we do to--that--in OpenGL to enable Quartz Extreme are available to the OpenGL programmer. So all of the extensions we've done for FastDMA texturing, for synchronization with NV Fence-- or sorry, with Apple Fence, all of those things are available to you as a OpenGL writer.
+
+So we kind of made the bet that the things we were gonna need to do to OpenGL to make it great to support the windowing system, are just gonna be great things to do to OpenGL in general, and I think that's worked out pretty well. So with that, I'm going to invite Ken Dyke up, who is going to take you through the Quartz Xtreme implementation. Ken? Great. Thanks, Peter.
+
+All right, so I'm going to talk to you guys a little bit about what's going on behind the scenes, what is accelerated, what's not, and sort of how we pulled off some of it. There's been a lot of speculation on the Web about what it does, what it doesn't do, does it take all my VRAM, et cetera. Right now, what it does is it accelerates all compositor operations. This is the type of stuff that Ralph talked about, window warps, all of the transparency, scaling effects, blending of drop shadows, all the type of stuff you see in the Aqua interface is now fully hardware accelerated.
+
+It doesn't accelerate Quartz 2D or Quick Draw. That's all still basically being done with the CPU right now. Now, the caveat to that is obviously we can get those bits to the screen a lot faster than we used to be able to. We've done some measurements of this, and right now we can usually get stuff from your window backing store after it's been drawn up into video memory at about 400 megabytes per second. Now, you know, a lot of people used to go, "I can write the fastest copy bits routine in the world." I don't think you could get 400 megabytes no matter how well you did. And, of course, it's all implemented in OpenGL.
+
+So, why OpenGL? Well, 2D is sort of done, you know? It's -- nobody is -- nobody is doing anything with it anymore in the GPUs. They sort of, like, all stalled out at sort of the Quick Draw, GDI sort of level, and that's where everything's, you know, done. You've got, you know, foreground color, background color, fills, index support, and all that junk, but it's not going anywhere anymore.
+
+So, 3D, on the other hand, we've still got, you know, gigapixel fill rates coming. I forget what the quoted numbers are in the GeForce 4, but they're insane. We're starting to get lots of video memory, so it's not a big deal. If you want to get lots of window backing stores cached in video memory, for example, you can have DVD going and video and lots of 3D stuff all at the same time, and it's not a big issue.
+
+The other thing is the GPUs are finally getting good support for 2D data. Traditionally, previous generation hardware could do 3D pretty well, but there are a lot of things that are not. So, I think it's important to keep that in mind. There are a lot of limitations, and I'll get into those in a little bit, but some of the current GPU stuff, like I said, it's really getting good for 2D content, believe it or not.
+
+And, of course, OpenGL is the industry standard for 3D, and most of the GPUs these days are built around OpenGL, regardless of what Microsoft might have you believe otherwise. OpenGL has a nice stable set of rasterization rules and the way things are supposed to work, and it doesn't change every nine months or so.
+
+So, and while we think OpenGL and Mac OS X rocks, and I want to like spend a little bit of time on this, because this is where a lot of the confusion I think has come in. We did a lot of work years ago looking in the overall architecture on OS X to figure out, you know, if we're going to accelerate the Windows server, what are we going to have to deal with? Well, the Windows server needs to put textures in video memory, and 3D apps need to put texture, and Quake wants its textures in there too, and QuickTime wants video memory.
+
+So, what do you do when you run out? Well, we can't have the windowing system stop work when you run out of video memory. That's just not going to work. So, we did a lot of work towards virtualizing memory management in the system, for example. So, if you've got Quake running, and you've got DVD playing, and you've got the accelerated Windows server running, they're all sharing the same video memory. Now, if you stop doing things, stop moving around Windows, and all you're doing is sitting there playing Quake in full-screen mode or something, it can get all the video memory. It'll page, it will page everything else out. Don't worry about it. It's not a big deal.
+
+You know, and we did this too, because, like I said, we can't have you create that 57th window, and now all of a sudden you don't get Quartz Extreme working anymore. We really had to make sure that everything is paged virtually, just like the virtual memory management system in MoC.
+
+We also, you know, had to do a lot of tight integration with the Windows Server. The graphics drivers have a lot of communication back and forth. They know that when there's a surface that they can just blip the stuff straight to the screen, the Windows Server can tell them, "Hey, this is completely opaque.
+
+You can just do the fast 2D blip." However, if there's something obscured, you've got the clock over it, or if you're playing DVD and you've got the volume control, the Windows System can tell the graphics driver, "Hey, you've got to get the Quartz Compositor involved because it's the only one that can make the display right for this." So that's exactly the way it works. So, like I said, there's a lot of tight integration between the windowing system and the graphics drivers.
+
+And along with that, Apple is really heavily involved in the graphics driver development. We have full source code to all the graphics drivers, and when we need to make experiments or, you know, just generally toy around with ideas, which is a lot of how we came up with this stuff, you know, we can just go and do that. We don't have to call up NVIDIA and go, "Hey, would you try this thing for us when you get a chance?" We just can get the stuff out there. We can go and do it, see how it turns out, and integrate the sources back to them.
+
+Now, in doing this, we came up with some new extensions that were really driven by the compositor needs. And we'll get into these in some of the OpenGL sessions later this week. But just to give you an example, two of these, GL Client Storage and GL Texture Ranger, used to let us get backing stores up into video memory at that 400 megabytes per second I was talking you about.
+
+So the CPU doesn't have to touch any of that stuff. And the great part about these extensions is they're available to all you guys. And they're available to all of you. You know, we're not cheating. You guys can use all the same stuff we're doing in the Windows server.
+
+So you guys should think of the Quartz Compositor as just another OpenGL app. It loads the same drivers that you guys have access to. You know, there's no cheating going on here again. And as Peter has said, you really should also think of the desktop as a 3D scene. Every single pixel, if need be, can go through the entire OpenGL pipe.
+
+Anything you can do with a GPU, we can now do to any pixel on the screen. I'm not going to give away everything, but, you know, use your imagination. You guys have seen a lot of cool effects this week from some of the other demos, so you can imagine what types of things we could do.
+
+In general, everything on the screen ends up being a textured polygon, usually just a textured quad of some kind, surfaces, windows, menus, everything basically just turned in--it's a window, it gets turned into a textured polygon. Same thing with surfaces. All the compositing is done with standard OpenGL blending and, in some cases, multi-texturing. You know, it's all really pretty standard.
+
+So in the Quartz Extreme world, the sort of green box has moved out of the way. He's really just sort of sitting in the driver's seat telling the GPU through OpenGL how to get everything to the screen. So an application, for example, does this stuff, draws it into its window backing store, tells the Windows server, hey, I need to get this stuff on the screen. Quartz Extreme wakes up and says, okay, fine, I can do that.
+
+Tells OpenGL, hey, get this stuff into video memory and get it on the screen right now. And that's basically the way it works. In the case of OpenGL or QuickTime, generally the data is already on a surface in video memory, so we just have to turn around and turn that surface into a texture.
+
+and So, does it work on my PowerBook? Question on everybody's mind. So, these are generally the requirements we had. We're recommending 32 megabytes of video memory. That's not a completely hard limit, so it works on the second generation tie books. AGB2X right now is definitely required for us to get the bandwidth we need into video memory.
+
+We need the hardware to support all of the core graphics native formats without having to have the CPU touch the data. It's kind of pointless if we have to make extra CPU copies, reformat the data around to do a bunch of junk, and then put it in video memory. Because in a lot of cases, we end up having to expand the data, so then use even more video memory, and it's not really worthwhile.
+
+The other really, really critical one is we have to be able to support non-par of two textures. Traditional OpenGL, each dimension had to be, you know, 1, 2, 4, 8, 16, 32, 64, et cetera, in each direction. With rectangle textures, it's pretty much arbitrary, and you can imagine the cases where we would need this. If you're playing back video, for example, DVD at 720 by 480, we don't want to have to, like, turn around and do funky scaling or anything, which would just tie up even more video memory to, like, convert that into a par of two texture.
+
+So that's really a showstopper on some hardware. I'll get into that in a minute. Multitexture is also required. There's cases where we have, like, alpha channels, even with 16-bit windows, and we need to be able to combine the sort of 8-bit alpha channel with the 16-bit texture, and we use multitexture to do that. And we're recommending 256 megs of system memory, and this just has to do with the fact that we end up tying up AGP space quite a bit, so you don't want to, like, wire down all the memory in the system.
+
+So here's the quick upshot. All of the NVIDIA stuff is supported. GeForce 2 MX, GeForce 3, GeForce 4 MX, GeForce 4. Radeon AGPs are all supported, including the ones in the second generation tie book. And Rage 128 is not going to be supported. And it's not because it doesn't have enough video memory. That's part of it.
+
+But it doesn't support all the texture formats we need. It doesn't support non-power of textures. The functionality just isn't there. It's not that I wouldn't like it to work on my machines with Rage 128's too. I can't have it. I don't know how to make it work. There doesn't seem to be any way to do that.
+
+So, give you guys a demo and see if we can bring the system to its knees a little bit. Everybody's been doing the fun demos that look cool, but let's see what we can really do here. So, let me get rid of Ralph's thing. So let's see, what else can I do to beat on this? Let's see. Oh, I guess I should have left that up there.
+
+So you guys have seen all these, obviously, before. Hopefully, anyway. Again, I can get as many of these things stacked up as I want. You know, this is similar to DVD, in which case we're compositing on top of OpenGL content. So if I get these over here-- Where'd you guys go?
+
+I can still bring all those terminal windows off on top of these guys and still see I can-- I can get it to fade out if I want, but it takes a while. and even now I can sit here and still drag this around pretty good. I don't think with the software compositor we'd be quite doing this good. It's fast, but it's not this fast. Alright, well I've got other demos but I'll have to save them for a little bit later. They're good though.
+
+All right, thanks. Oops. So as you can see, there's really no transparency tax. If you've got a fast graphics card, you can just keep piling this stuff up. You know, like I said, I probably lost count of the number of layers there. There's probably 20 or so terminal windows, so that's 40 layers of transparency on top of DVD. Whereas before, we couldn't even do the simple little volume control. And obviously the GD works. You can GD underneath transparency, all that fun Aqua UI stuff.
+
+So... It gives us a lot more CPU headroom, you know. I forgot I should have run this and I'll try it again later, but even with all that transparency up, the CPU monitors are just sitting there doing nothing. I mean, it's like they're decoding the DVD and they don't have any other work to do. They don't have to worry about the compositing. It's not CPU's problem. You know, as you can see, we've sort of got completely seamless integration now of DVD with the rest of the system.
+
+We don't have to worry about we need to treat DVD windows special because they take a lot of CPU horsepower. It's just like any other window in the system. And the cool part about this, and the demo sort of shows this a little bit, is this gives us a lot of exciting new possibilities on OS X.
+
+Where before, you know, on like SGI hardware or even some PC hardware, you know, a lot of people said, you know, I have to have overlays. You know, I've got GL. I need to draw something on top of it. You know, you guys don't have overlay support. What are you going to do?
+
+Well, why do you need overlays when you can layer 20 windows on top of something with transparency? Now you can do it with blending. There's no pixel, you know. You can't do it with per pixel issues anymore. Another cool thing we can do, which I'll get demo here in just a minute, is underlay surfaces. And there's a couple other cool things, too.
+
+So underlay OpenGL surfaces are sort of a new thing. In previous versions of Jack-- or previous versions of Jaguar-- previous versions of Mac OS X, Surfaces were always basically sitting on top of the window. You couldn't get rid of them. You know, they were just always there. You could reorder surfaces relative to each other, but they were still always on top of your 2D content. You know, people have always, you know, they'd say, I'm drawing 2D in my view or whatever, and I'm not seeing any of it.
+
+Well, it's drawing. It's just drawing into the window backing store, which is completely obscured. So with the Compositor, though, it becomes pretty, I don't want to say easy from an implementation standpoint, but from a compositing standpoint, there's no reason why we can't flip this around and put the surface underneath the window backing store.
+
+So now, if you want to do your 3D stuff, you can draw, you know, using Quartz or Quick Draw, you can draw on top of OpenGL, and as long as you've sort of punched a hole in it, you can see what's behind it and basically allow the GL stuff to poke through.
+
+Now, what this sort of alludes to is that there's still independent buffers. You can draw to your 2D, clear it, draw 2D, clear it, and you don't have to modify your GL content every frame. Likewise, you can sit there and animate the 3D content, and you don't have to redraw the 2D. It just sits there and gets composited by the Windows server. So, leave, and give you guys a demo of that real quick.
+
+Let's get into this real quick. Oh, where is he here? So here we go. So, you know, world's most complicated OpenGL demo, spinning lit cube. I think this is about 10 lines of code. But one thing you really couldn't do before in Puma, for example, oops, 10.1, is sit there and just draw and paint with it. So this is just splatting with Core Graphics, a little round little thing.
+
+You know, so the frame rate just keeps up. I can paint in here as much as I want and go and clear it all out. So all of you guys have said, I want to do 2D over OpenGL. Well, now you can do it. You can just sort of clear it all out. Make a little Etch-a-Sketch thing. And if I just had to use Metal, I was just like, okay, that's cool, it's in there. So another thing that would be common for an OpenGL implementation would be to do selection.
+
+So I can just, just to simulate what that might look like and just, you know, say this is a fairly big OpenGL surface, I can just now take my 2D and I go, okay, well, now I can just like do some selection similar to what Finder does. But I can do the selection stuff in 2D. I don't have to do it with OpenGL anymore. Unfortunately, I can't do both. I'll show you guys this again, but the app's pretty simplistic. It only lets me do one at a time. So anyway, so that's underlay surfaces. Thanks. Go back to slides.
+
+So how do you do this? Well, it's actually pretty easy. You can actually order a surface above or below a window. Obviously, above is the default. So there's basically a new method for NSOpenGL context or an existing call in Carbon for AGL that's been there forever, AGL set integer. But now you can basically say, hey, the surface that I'm attached to that my OpenGL context is using, I want to order that beneath the window. So it's pretty simple, as you can see.
+
+That's all the code it takes. You just call set values for parameter and pass in NSGL CP surface order, and you can set it to negative one. Probably should use a better constant for that. Basically, one is above, negative one's below. Same thing for Carbon. Works exactly the same way.
+
+So things to watch out for when you're doing underlay style drawing with OpenGL. You have to punch a hole using clear color in your backing store or nothing's going to show up. So for the Cocoa example, it's pretty simple. NSColor clear color set and just do a rect fill on your bounds. Or if you're using Carbon, I believe the correct call is CGContextClearRect, and that will paint the clear color in your backing store.
+
+So there's a couple of things to watch out for in this. It's really easy to just blindly write your sort of draw rect method for your NSView subclass if you're in Cocoa land to just always update your GL content every time it needs to be redrawn and to repaint the clear. That's pretty wasteful. Usually only one or the other changes. So you really want to watch out for that.
+
+A little trick I'll share with you that I found while actually doing one of these demos is to actually--when you know that the GL content is dirty, you can actually set a flag in your view that says, okay, just the GL content's dirty. Then you can call the standard Cocoa. Set clear. And that's pretty easy. You can call the standard Cocoa. Set needs display on your view.
+
+The next part of the trick is you modify your isOpaque call, or method rather, to always return the value of that flag. So what happens when the view system goes to render everything, if it goes--gets down to your view, realizes that, hey, everything's, you know, you've said that you're opaque, it's just going to stop right then and there and draw and it won't try drawing anything behind you. So it's actually a neat little trick to do.
+
+So the other thing to watch out for is extra flushes. It's also pretty easy if you're going to-- if you draw with 2D, that's going to cause the Quartz Compositor to do one flush to the screen. And then if you're drawing with GL, it can cause another redundant flush to the screen. So there are some cases where you kind of want to figure out which guy you want driving.
+
+If--in some cases, you may just want to draw some stuff in 2D.
+
+[Transcript missing]
+
+So the other cool thing that's my personal favorite, and one of the first things I did when I got this stuff running was transparent OpenGL surfaces. Now you guys have seen all my demo materials been stolen for stuff up till now.
+
+But you can get the Compositor to use the destination alpha channel if you've got a 32-bit OpenGL context. Now obviously, you know, you guys can tell what you can do with this. You can get OpenGL, you know, objects to basically appear sort of standalone. Now you don't have to do it quite like we've done in most of the demos so far, and I'll give you an example of it in a second. Now the things to watch out for is that the surface content has to be premultiplied.
+
+Normally what that means is, or the way to achieve that in OpenGL is first draw your content on a completely black, clear background. You know, so call geoclearcolor with all zeros and then geoclear, geocolorbuffer bit, whatever. That gets you starting on something clear fundamentally. Make sure then when you draw that you've, if you're doing any kind of blending effects, that you've actually got blending enabled so that the alpha value that ends up at, excuse me, in the destination buffer has the right value and that OpenGL has multiplied your color values times the source alphas so that the blending comes out correctly. So I'll give you guys a quick demo of transparent surfaces. So what I did is I took a little Application that I've been fooling around with in my non-existent spare time.
+
+It's basically just a Lego model viewer that I've been toying with. And it's also a gratuitous use of metal. and So what you've got here is this 3D object, in this case just a little train. But you can see that he's basically composited on the metal background. You can't tell that there's an OpenGL surface here at all. And the really cool part is that I'm actually using the GeForce 4's multi-sample support. So you get nice--let's see if this is going to work here. Oh, it's off. All right, here. Sidestep here for a second.
+
+You can actually see that the edges are all nice and anti-aliased on everything. So you get this really smooth effect, just sort of like it was drawn with Quartz 2D.
+
+[Transcript missing]
+
+But, you know, obviously you don't have to do anything like this, but you could certainly, as another example, where I think this would be useful, is you've got some kind of really cool custom control you want to draw, and it's obviously better to draw it with OpenGL. You can now sort of do it, and you don't have to have the little black or white or blue box around your OpenGL content anymore. You can really have completely stand-alone, completely stand-alone 3D objects in your windows now.
+
+Let's see, now I've got another fun demo of transparent surfaces here. So if you guys were alive in the 80s, you probably have seen this before. But I've done a few tricks. I've played a few--oops, sorry. Idiot Driver, try it again. So I've done a few mods, made it bigger.
+
+added lighting. Now, the Amiga was pretty cool when it did this. They cheated a lot in this demo. I don't know how many of you know, but all they did was color cycling and play field animation, so they didn't have to blit or anything. I'm actually drawing this in real 3D, lighting it.
+
+Now, believe it or not, this whole thing is being composited under the desktop. Well, you say, "Well, it's opaque." Well, that's fine, but what if it's out of the window? So, that one didn't get stolen. Now if that isn't enough, what if you want to play Space Invaders on your desktop?
+
+How come--hold on a second. It's supposed to be underneath the desktop. That's no fun. Well, I'm not gonna go recompile it, but... See, I can sit here and actually play it. Doo-doo-doo. Completely useless, yes, but you know, you're not going to do it on your XP box anytime soon either. Probably a few years.
+
+So, fortunately not all my material got stolen for the keynote. It's kind of hard. Can I go back to slides, please? All right, so how do I enable that? I want to do that. That's really cool. I want to make fun demos for my friends. It's a lot--it's very similar to what we just did with ordering surfaces. In this case, you just use NSOpenGL CP surface opacity and you can basically just say my surface is now, you know, use the alpha channel. That's now important and the Windows server will take--will do that for you.
+
+And I alluded to this a minute ago, but this is another one of those cases where I actually--this is the case where I ran into the sort of double rendering. When I first did the train demo, it was kind of slow and I was like, "Well, what's going on?" So it turned out what was happening was every time I had marked my view as basically--I had to mark my view as transparent. I had to return no for isOpake, otherwise the window back--metal background wouldn't draw. But now then what was happening is every single time I'd redrew my view, it would redraw the metal background and performance wasn't that great, you know.
+
+It's--it's--
+
+[Transcript missing]
+
+So all this new functionality is pretty cool, but you guys are like, "What do I do on a RAGE 128?" Well, as it turns out, all of the overlay and underlay surface stuff and transparent surfaces are supported in the software case. You don't have to have Quartz Xtreme enabled on your machine to do, like, the little LEGO demo like I did.
+
+If you're doing fairly small OpenGL surfaces, performance will probably be okay. I can actually run the Boeing demo small, for example, if, you know, with a small surface with the Compositor--hardware Compositor turned off and it does okay. If it gets really big, we have to pull a lot of data across the bus and it slows down. And again, the main bottleneck in this is the CPU read from video memory. That's pretty tough to do. It's a 66 megahertz wide, 32-bit bus with hellish read times. It's just--you read a byte and take a nap and another one comes back.
+
+So if you're doing something that you know is going to be really expensive and you want to maybe not do it if Quartz Extreme isn't there, you can call CG Display Uses OpenGL Acceleration on a per-display basis to figure out if Quartz Extreme is around. So if you've got, for example, GeForce 3 in your system and you've also got a PCI Radeon, it's very likely that the PCI card won't have Quartz Extreme enabled on it. And you can test for that so that if you move the window over to that screen, you can stop doing something that's so expensive that your windows would think your app is slow or a bummer or something like that.
+
+So anyway, so just the sort of real quick recap on all of this. The main thing we went for is, you know, reduced CPU usage. All of the effects in the world are cool, but if your CPU is dragged down into the dirt, it's not as much fun.
+
+The other point, hopefully, I got across with the million terminal windows thing is that the compositing is really, really, really fast. You know, with 10 gigabytes per second of memory bandwidth, which is probably an order of magnitude more than the CPU has access to, we can blow pixels all over the screen all day long, and it's pretty hard, as we saw, to drag the GPU down doing it. So if Quartz Extreme is around, take advantage of this stuff. It's almost free.
+
+We've now got completely seamless integration between 3D, 2D, DVD, everything else in the system. You know, you don't have to worry now if I've got my OpenGL CAD app or something and I want to pop up, you know, some kind of window on top of it for menus or whatever, like, for example, Maya's Hotbox, there isn't going to be a performance issue with bringing that up and down really quickly because the CPU doesn't have to go across the bus and composite a fairly big window anymore. So take advantage of this stuff again.
+
+and related to that You should really take home that with Quartz Extreme, transparent windows and surfaces are better than overlays. You don't have just one, you have N. How many do you want? Do you want one overlay for selection, another one for statistics, 10 more for whatever you want? You can really do that. There was a demo I forgot to do. I don't actually have code for it. I just thought of it. So I'll just explain it to you so you guys know you can do this.
+
+Sorry. This is what happens when all of your stuff gets taken. One of the other cool little hacks I did at one time was to-- with the underlay surface stuff-- well, actually, here. We'll do this on the fly. This is completely ad hoc. Can we go back to the demo machine real quick?
+
+So this was not planned, I promise. Where is the source?
+
+[Transcript missing]
+
+Interface Builder here and pull up my really ultra-complicated UI. One of the cool things I can do is just take some Cocoa controls and kind of drop them in on top of my GL content now.
+
+I don't know if I'll be able to make this one do exactly what I want. Anybody know how to make that not draw the background? Let's see, actually, if I just do this. Oops. Save. Cross my fingers. So now I've got Cocoa Controls on top of OpenGL. In fact, I can sit down here and type in a text edit control on top of OpenGL. And again, you know, you can see the text is all anti-aliased on top of the OpenGL content.
+
+and his little ad hoc demo. But I mean, this can be useful, like, where you've just got, you know, you want to pop up a control somewhere dynamically over your GL content. You don't want to have to open another window for it. It's anyway just something I thought I would-- I can paint over the control and...
+
+[Transcript missing]
+
+and so I'd like to welcome Travis back up to go over the roadmap. Thank you, Ken.
+
+Hopefully the mic's working. Yes, there it is. Yeah, actually I just want to let you know, as you saw, we have a variety of demos. And even on stage, Ken was able to think up things that he can do with this new technology, Quartz Xtreme. I think it's very important that this is really going to be a canvas for your imagination as developers. Because a lot of the things that you were unable to do with various types of media that were playing back on the computer are now completely possible.
+
+So it gives you the opportunity to think outside the box of your applications and do incredible new things. And hopefully incredible new things will really show off the power of your application and also Mac OS X. What I want to do here real quickly is point out a couple sessions. We have a lot more graphics and imaging content for you here at WWDC.
+
+And for people, just in case you have been in other tracks, I'll just quickly show you some of the things that we've done. I'll just quickly step through most of the sessions that we have planned today in case you want to view them later on the DVD or maybe ADC TV.
+
+Obviously we had the graphics and imaging overview earlier today. And this is where we went over all the updates that we have in graphics and imaging for you at this year's WWDC. A lot of announcements, not just Quartz Xtreme. We also talked in depth about Quartz 2D and our PDF support. We also had new announcements there.
+
+And then obviously this is today's session, 503: Exploring the Quartz Compositor. Key thing is we've had a lot of innovations in OpenGL, such as programmability. And there's a session dealing with OpenGL programmability, which helps you leverage the latest in what some of the hardware, such as the GeForce 4 Ti that we've been demonstrating on today is capable of.
+
+We also have an interesting pair of OpenGL sessions, which is Integrated Graphics 1 and Integrated Graphics 2. A lot of what we've been doing with Quartz Extreme is integrating the visual pipeline on Mac OS X so that these medias, 2D, 3D, and multimedia slash video, are no longer independent from one another. They can be seamlessly used and integrated. A lot of the techniques that we've used to create the Quartz Extreme are going to be available for you to learn and use in your own applications.
+
+And this is where you'll learn the tricks to create those new applications, those new classes of applications that you can develop that I just spoke about. So Integrated Graphics 1, Integrated Graphics 2, very important, particularly Integrated Graphics 2. I think a lot more content relating to how to do compositing, advanced compositing, will be communicated there. Obviously, part of what we do in graphics and imaging is printing. We have a lot of information on printing.
+
+We have a session on Darwin printing, which is going to talk about the CUPS announcement, the Common Unix Printing System, that we talked about in the Graphics and Imaging Overview. Also, we have a bit on ColorSync, and we're going to actually show ColorSync use a lot of the power of OpenGL to do interesting things with dynamic color correction, doing things like color correcting media that you wouldn't think would be able to be color corrected. Thank you.
+
+We also have a general printing session on Mac OS X. We also have an OpenGL dealing with advanced 3D. And then an important one for anyone who's doing anything with OpenGL is to go to the performance and optimization. There's lots of new optimizations in Mac OS X's OpenGL stack that came about because we wanted to develop something as cutting-edge as the Compositor.
+
+So that session is going to teach you a lot of the fast paths through the system to get the ultimate of performance in your applications. We also have some announcements for the Image Capture Framework, which is the technology that allows you to easily use your digital camera, plug it in, and have your digital camera just work.
+
+Interesting point is we've announced that Image Capture also supports scanners. There's going to be lots of information on scanner support in Mac OS X as well. Then a big one that's important if you're doing principally 2D stuff is graphics and imaging performance tuning. You know, big area. We get a lot of developer questions on how do I make my application go faster under Mac OS X when drawing graphics. We're going to answer a lot of those. So we're going to have a lot of those questions in that session.
+
+Now, in the remaining ten minutes, what I'd like to do -- well, before I do that, let me just let you guys know how to get in contact with me. Again, I'm Travis Brown, the graphics and imaging evangelist. My job is to work with you to help you adopt technologies like Quartz Extreme and also listen to what you need, what you want out of Apple, the types of technologies and enhancements to the technology portfolio that we do have that you'd like to see us potentially provide. So I'm the conduit for that. So if you have any questions, send me an email. Travis@apple.com. you

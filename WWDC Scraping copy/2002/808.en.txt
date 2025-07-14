@@ -1,0 +1,255 @@
+---
+Title:  Managing I/O: CFRunLoop and CFStream
+Year:   2002
+Web:    https://nonstrict.eu/wwdcindex/wwdc2002/808/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Here now for your afternoon session is Becky Willrich. Hello. So, we're here to talk about managing I/O, and in particular, how CFRunLoop fits into that, and then CFStream leveraging CFRunLoop. And I wanted to start out by sort of explaining the motivation, because CFRunLoop, most of you have probably heard of it before, but it's frequently frightening or confusing or difficult to look at and understand. So, we're going to hopefully dispel some of that, but also I want to explain why it came into being in the first place.
+
+So, when you manage I/O inside your application, you have this common problem. Compared to the other things you are doing, managing I/O is a very slow, lengthy process. You're just sitting there waiting for bytes to arrive from somewhere. On the other hand, once the bytes arrive, they don't require a lot of CPU time. So you don't want the computer sitting there waiting for the bytes. You'd really like to use the CPU for other things at the time.
+
+One traditional solution to this has been to go multi-threaded and let one thread sit blocking, waiting for I/O, while the other threads process. The problem with that approach is that multi-threading is complex, and you have to go through all of these hoops to protect and manage your data.
+
+So what would be really nice is if you could let someone else, some other part of the program, deal with watching the pipe. And you would simply be informed whenever processing needed to be done. So someone would essentially poke you and say, "Hey, there are bytes here. Please deal with them."
+
+That way you could handle the I/O in these small bursts as packets arrive amidst the other events, like the user moving the mouse or clicking on a button. The advantage here is that when you are dealing with I/O, you know that you're the only one running. You know that you own the CPU. So you don't have to go to all this extra work to protect your objects.
+
+So, how do you accomplish this? You need a multiplexer. You need some object that sits and watches a number of different inputs and shares out the CPU between them as events occur. Each input will only be triggered when work needs to be done. And then when that input has been triggered, it's promised that it's the only one doing any processing at that point. It knows it owns all the memory and all the CPU.
+
+So on our system, that fundamental multiplexer is the CFRunLoop. The inputs are represented by another cf.type, CFRunLoop source, and out of the box, there are several predefined inputs for a number of common sources. If that's not adequate to your needs, it is possible to define new sources that will then sit on the same underlying CFRunLoop mechanism. This way, all the user events, all the I.O., all the IPC gets multiplexed onto a single thread with a single mechanism.
+
+So that's sort of the motivation behind the run loop as a whole. What we're going to do now is talk some about CFRunLoop itself, look at the common sources that are provided, then we're going to move on to talk about CFStream for a little while. We'll talk about what it is, what it does.
+
+A stream has a fixed lifetime as it moves through a state diagram. We're going to look at those stages. And then finally we're going to look at how CFStream works with CFRunLoop to make it possible to manage sockets in particular on the run loop. And with that, I'd like to bring Doug Davidson up to introduce CFRunLoop to you.
+
+[Transcript missing]
+
+Now here's a sequence of events while the run loop is running. The run loop waits. Something interesting happens. The run loop decides which of its sources needs to be triggered as a result. The corresponding client receives a callback, and the callback returns and the run loop waits again.
+
+Now, there are many different interfaces to the run loop: Cocoa, Carbon, Core Foundation, CFNetwork, but they all deal with the same underlying run loop object. There is exactly one run loop per thread. You do not create it, you do not destroy it, it's just there automatically for you, and all these different interfaces act upon it. That's what allows us to integrate them all together. Carbon, Cocoa, Core Foundation, CFNetwork, they can all work together because they all deal with the same underlying run loop. Now, CFRunLoop is the core foundation level interface to the run loop.
+
+And you would use CFRunLoop if, for example, you wanted to use one of the run loop sources that's defined in core foundation, or if you're working with something that's defined at the core foundation level, like CFNetwork, or if you have a need to run the run loop yourself.
+
+Now, how does the run loop generally get run? If you are on the main thread in a Cocoa or Carbon application, then normally you will not need to run the run loop yourself, because it will be run for you as part of the application's main event loop. So, for example, in Carbon, running the run loop is at the heart of run application event loop. In Cocoa, NSApplication will typically run the run loop for you as part of its event loop, without you doing anything at all.
+
+If you're in some other situation, if you're on, say, a secondary thread in one of these applications, or if you're in something that doesn't use Cocoa or Carbon at all, then you may need to run the run loop yourself. And you can do that with the CFRunLoop APIs, either with the simple CFRunLoop run, or the more complicated CFRunLoop run in mode.
+
+Now, I guess this is the point at which I should say something about modes. A run loop may have many different sources attached to it, but you may not want to have all of them active at any given time. For example, you might have a timer that you don't want to fire while a control is tracking the mouse. To make this possible, we have a mechanism called modes.
+
+At any given time, the run loop is running. It's running with some specific mode, and any source that's registered with the run loop is registered with some list of modes. That source will be active and able to be triggered only when the run loop is running in one of those modes.
+
+Most of the time, the run loop will be running in the default mode, and most sources will be registered with at least that mode. But frameworks and subsystems can define their own modes. For example, in Cocoa, there is a special mode, the MotoPanel run loop mode, that is used while a MotoDialog is up. And there's another one that's used while controls are tracking the mouse.
+
+There is also one shortcut. You can register a source for the so-called common modes, and that is just those modes that happen to have been registered as being "common." For example, in Cocoa, that would be the default mode, plus those other two I mentioned, the event tracking mode and the modal panel mode. As I say, most of the time you'll be using the default mode.
+
+It is also possible to run the run loop in your own custom mode, and the point of that would be that if you do that, then you know for sure that only those sources that you yourself have registered with that mode can fire while you're doing that. Most of the time, though, you use the default mode.
+
+Now, the run loop by itself is not terribly interesting. What's interesting is the things that it can wait for, that is, its sources. So today I'm going to be talking about some of the run loop sources that are defined in core foundation: CFRunLoopTimer, CFMessagePort, CFMachPort, CFSocket. Becky will come back up and talk in much more detail about CFStream. Other frameworks and subsystems can define their own run loop sources, and you can even to find your own, although I'm not going to be going into that today.
+
+So before I get into specifics, I should say some general things about the core foundation run loop sources. One point to note is that in order to distinguish one source from another, core foundation usually allows you to attach to each source what's called a context, which is just a fancy name for an arbitrary pointer that you can use however you like, and some functions that it uses to deal with it. Becky will discuss that in more detail later on.
+
+Another point is that normally when you want to dispose of a core foundation object, you just release it. With the core foundation run loop sources, normally you will also have to invalidate the source. That tells it that it will never be needed again, that it can get rid of any underlying system resources that it may be using, and remove itself from run loops.
+
+Then you can release it and it will go away. Another thing that sometimes comes up is that the sources have an integer order for -- that comes into play only when there are many sources that are firing at once, and the run loop has to decide which one to call first. That's not terribly common.
+
+One more thing I should say is that although I'm going to speak about all these objects as run loop sources, because core foundation doesn't have a full object oriented system, in many cases there is a small auxiliary object which actually formally acts as the run loop source, and we'll see that in an example later on.
+
+So let me talk about the first kind of run loop source, the CFRunLoop timer. You remember I said that one of the things the run loop can wait for is the arrival of some predetermined time. CFRunLoop timer allows you to get a callback when some time arrives, or if you like, some repeating sequence of times. Now, the run loop is not a real time mechanism. What this means is that when the run loop has control, it checks to see if your timer's time has arrived, and if it has, then you get a callback, but only if the run loop is running.
+
+So to create a CFRunLoop timer, you specify a callback. And you specify the first time it will fire, and optionally some interval after which it will repeatedly fire. Then you add it to the run loop with some set of modes. And when the run loop is running and your time arrives, you'll get your callback. If you don't have the timer repeat, then it's automatically invalidated. It only fires once and is automatically invalidated afterwards. If it does repeat, then you have to invalidate it yourself when you're done with it and you no longer want it to fire ever again.
+
+Let's take a look at some code. First line here, we are creating a timer. We specify the callback, my callback. We specify the first time at which it should fire. Here that's CFAbsoluteTimeGetCurrent, which means now, i.e., as soon as possible. And an interval after which it will fire again. Here, 1.0 seconds. So it will fire one second from now and every second thereafter until it's invalidated.
+
+Now, you remember that I said there is exactly one run loop per thread. In almost every case, we'll be dealing with the so-called current run loop, that is, the run loop for the current thread. So we get the current run loop here, and we add this timer to the run loop. In this case, I've chosen to do it with the common modes. That's convenient.
+
+Now, if we were in a Cocoa or Carbon application, we'd be done. The framework would run the run loop for us, and all we'd have to do is sit back and wait for our callback. If we're in some other situation, we may need to run the run loop ourselves, and we can do that with CFRunLoop Run.
+
+Let me talk about another rather different kind of run loop source, the CFMessagePort. This is an IPC mechanism. There are many, many different IPC mechanisms in Mac OS X. CFMessagePort is the primary IPC mechanism that's defined at the core foundation level. This is lower level than Apple events in the sense that the messages that are transferred are not structured messages, they're just bags of bytes.
+
+This is a local IPC mechanism. You can use it between threads or processes on one machine. It has two modes, a one-way asynchronous mode and another mode that can be used where you've got to reply and call it synchronously. This is higher level than something like sockets or pipes in that it makes use of the core foundation abstractions and, in particular, the run loop.
+
+So to use CFMessagePort, one side, we'll call it the server, creates a local message port, CFMessagePort create local, and advertises it with a name, which is just a CFString. The other side, we'll call it the client, looks up that message port by that name and gets a reference to what to it is a remote message port, CFMessagePortCreatedRemote.
+
+The messages that are sent are, as I've said, just strings of bytes with, that is, CFDatas. You'll also get an integer message ID you can put on it if you like. The reply, if you have a reply, is also a CFData. And the client and the server simply have to agree on how these things are supposed to be interpreted.
+
+Learn to use this. The server will add its local message port to the run loop with some set of modes and run the run loop. The client will call CFMessagePortSendRequest. and if there's no reply, that just returns immediately. If you wait for a reply, then it blocks waiting for a reply. The message will arrive at the server, the server will get a call back in its run loop, and deal with it. If there's to be a reply, then the server returns the reply, comes back to the client, and the client's CFMessagePortSendRequest call returns.
+
+What if you want to go a little lower down in the system and actually deal with Mach messages, but you want to do it in the run loop? I'm not going to say anything detailed about Mach messages here, but those of you who have dealt with the Mach APIs will know that you can do many interesting and powerful things with them, like transfer portions of an address space from one process to another.
+
+It would be very convenient if you could wait for a Mach message in the run loop. For that, we have a run loop source called CFMockPort. And all it does is allow MockPort to serve as a run loop event source so that you get a callback when a message arrives.
+
+And you can create it with an existing mach port if you have one, or you can allow it to create the mach port for you. Again, you add it to the run loop with some set of modes, and when the run loop is running, when a message arrives on that port, you get a callback pointing you to the message. Very simple.
+
+So, now we come to the part of the talk that's most relevant for CFNetwork, and that is, what if you want to do the same sort of thing, not for a Mach message, but for a BSD socket? And for that we have another kind of run loop source called CFSocket. Now, this is not intended as some sort of complete wrapper over the BSD socket functionality. You still have the underlying socket to which you can do all sorts of socket-ish things like setSockOpt and so forth.
+
+But now in addition we have the CFSocket, which allows the socket to serve as a run loop source, which means that you can be notified in your run loop when interesting things happen to this socket. The interesting things, depending on what sort of socket you have, may be when data arrives to be read, when the socket is available for writing, when a connection arrives and is accepted, or when a connection attempt succeeds. Depending, again, on what sort of socket this is. And this can be essentially any kind of socket: TCP, UDP, IVv4, IVv6, even the local UNIX domain sockets. Doesn't matter.
+
+So, for example, what this means is that if you're writing a Cocoa or a Carbon application, you don't need to have a separate thread to handle your networking with sockets. You can create CFSockets for them, and you can be notified when things happen to them in your main event loop.
+
+Again, you can create a CF socket with an existing BSD socket if you have one, or you can choose to have CFSocket create the socket for you. And when you create the CF socket, you specify what callback will be called, and you specify what sort of events you want to be called for.
+
+Again, this will depend on what sort of socket you have. Now, I don't want to let you leave here without presenting a complete working code example. So I thought I'd present a little HTTP server. But to make it simple enough to present, I had to make it really simple. So we're not going to try to parse the incoming request at all. We're just going to return a single constant response.
+
+So this is going to use a TCP socket, and so it will follow a familiar pattern. That is, we have one socket that is bound to a port, listens, and accepts connections. When a connection arrives, there will be a new child socket for that connection that we use to read and write.
+
+And just now for each of these we'll have a CF socket. So first I'm going to create the socket that will be bound and listen for new connections. And I've decided to let CFSocket create it for me. And here in this creation call, I specify my callback, accept connection, and I specify what kind of events it's going to be called for. In this case, it's going to be called with KCF socket accept callback, that is, when new connections arrive and are accepted.
+
+And the other thing I have to specify is what kind of socket this is and what port it's going to be bound to. So for that I use a plain old struct SocketOrIn, in this case specifying port 1234, which I picked at random. And to pass that to CFSocket, I wrap it in a CFData. and include that in a structure called a socket signature, which all this does is it tells CFSocket what kind of socket this is. These are the standard BSD constants for a TCP socket.
+
+Now, remember that I said in some cases there is a small auxiliary object which acts as the run loop source. This is one of these cases. We call CFSocketCreateRunLoopSource to get the actual run loop source auxiliary object. Then, as in the timer example, we get the current run loop and we add the source to the run loop. In this case, I've chosen to do it with the default mode.
+
+Because I wanted this to be a standalone example, I'm going to run the run loop here myself. At this point, all we do is sit back and we wait, and we will get a callback when a new connection arrives and is accepted. So what does that callback look like?
+
+This callback is going to pass into us a new BSD socket for that accepted connection. And again, I want to create a CF socket for that. So here I use the form of creation that creates it with an existing socket. And I specify another callback, receiveData, that will be called when data arrives on this new connection. And I specify the KCF socket data callback type. That means I will be called, I will have CFSocket read the data for me and pass it to me.
+
+Same thing again. I get the run loop source for the CF socket. I add it to the current run loop with, again, the default mode, and I release it so I don't leak it. So the only thing left to do is to define the callback we will get when data actually arrives on this new connection. And that is a received data callback.
+
+As I said, I'm not going to try to do anything with this request that I'm getting. I'm just going to throw it away and return a fixed response. So I have a string here that is just "Hello World" in HTTP speak, and for use with CFSocket, and I'm wrapping that in a CFData. And then I use a CFSocket function that just sends data off on that socket.
+
+I release that data so I don't leak it. Now I'm done with this. We're not using persistent connections, so we're done with this connection. We're not going to use it anymore. The only thing left is to close it down. You remember that I spoke of invalidating run loop sources. So what we do at this point is that we invalidate the CF socket.
+
+That tells us--tells it that we never want to use it again. That closes the underlying socket and removes it from run loops--from the run loops. And then we release it, and we're done. That's a complete example. And now I'm going to turn things back over to Becky, who will talk to you in more detail about CFStream.
+
+Thanks, Doug. Okay, so now we want to spend a little more time about one particular kind of run loop source, a CFStream. Unlike the ones that, the sources that Doug spoke about, CFStream was new in 10.1. All the other sources have been around since 10.0. So, what is a CFStream? Well, at its heart, it's simply a one-directional stream of bytes.
+
+Part of the idea is that you don't need to know where you're writing to or reading from. The stream abstracts all of that away. There are two CF types to represent streams: CFReadStriem and CFWriteStriem. and as the stream exists inside your program, it will move through certain definite states in its lifetime. We're going to take a closer look at that lifetime now. So there it is drawn as a state diagram and we're going to walk through each of those step by step.
+
+When the stream is first created, it's in the not open state. At this point, the stream merely exists as memory in your program. It's not using any system resources. It's not doing any processing yet. This is the time when you want to configure the stream. You know nothing's going on, so you can set up the stream to behave precisely the way you want it to. Once the stream is fully configured, you move on to the next state by calling CFReadStriem or CFWriteStriem open.
+
+Once the stream has... pardon me... once open has been called, we're going to move on to the next states. This is the time when the stream is going to start reserving its system resources. And you should keep in mind that this process may take time. For instance, a socket may choose to wait until it's become fully connected, until the remote end has sent back an act saying that the pipe is fully formed. That's what the state opening is for. It means that the open has begun, but has not yet completed. Once opening has completed, the stream will move into the state open.
+
+Once the stream is open, and for most of the lifetime of the stream, you're going to be moving back and forth between the open state and the reading and writing state. Reading and writing occurs when you call readStreamRead or writeStreamWrite, matches the POSIX calls that you may have used before.
+
+It's going to return the number of bytes. You're going to give them a byte buffer. It's going to return to you the number of bytes filled if you're reading, or written out if you're writing. It'll return zero if you've reached the end of the stream, or negative one if some error has occurred.
+
+Now one thing to note is you don't actually have to wait for the state to transition to open before you start reading or writing. If you call readStreamRead or writeStreamWrite before the stream is fully open, CFStream will do the work of waiting for the open to occur before actually performing the read or write.
+
+But of course that means blocking. At some point you will reach the end of the bytes available, or the logical end of a write stream. This will happen when the read stream has been completely emptied, or the write stream has been completely filled, assuming you're not talking to an infinite source. At that point, the stream will move to state at end. Once you've reached this state, no more bytes will be accepted, no more bytes will be provided.
+
+Once that happens, some point in the future, you're going to close the stream. This is the stream's queue to release all of the system resources it's been holding. A closed stream can still be useful. You can still ask it for information for properties that it's collected or accumulated as the stream moved through its lifetime. But it's useless for the transfer of bytes.
+
+Finally, we are talking about I/O here. Something strange can happen at any point in the stream's lifetime. Once an error is detected, the stream will be moved into the error state. And errors for CFStreams are non-recoverable. All errors are fatal. You'll have to dispose the stream and start again.
+
+Oh, and there's a call: CFReadStreamGetError, CFWriteStreamGetError to retrieve the error and allow you to diagnose what the failure was. So, that's what a CFStream will do. How do you get one? Well, there are custom creation functions for each of the different kinds of streams you might want. Core Foundation provides in CFStream.h for files, sockets, and memory. CFNetwork adds HTTP streams to the top of that.
+
+So once you've got a stream, how do you use it? How do you drive it through its lifetime and actually get the bytes? There are three dominant models for using a CF stream. They're probably familiar models to you if you have done I.O. work in the past. You can use it in an event-driven fashion.
+
+You can use it in a blocking fashion, or you can pull. Of the three, we recommend you do event-driven. It's the most flexible. It's what's going to allow you to process your I.O. in small chunks, using the CPU for small amounts of time, and then freeing the CPU for other work the rest of the time.
+
+The way you use the event-driven model is create the stream, set a client on the stream. The client represents the entry point into your code. It's a callback function together with a refcon that's going to be passed back to you. Schedule the stream on a run loop. That's your way of telling the stream, "This is the thread I want you to use. This is the run loop I want you to use to watch for interesting events."
+
+Then open the stream and just sit back and wait for the callback to come in. The stream will do the work of scheduling any auxiliary objects that are needed on the run loop. The run loop will watch for events. As the events occur, it tells the stream. The stream looks at the event, interprets it, changes it into some notion of what has happened, like the stream has finished opening or bytes have arrived, and then it triggers your callback. So let's walk through it in code.
+
+So Doug said I would spend a moment to talk about contexts, so I think I'll go ahead and do that now. Core Foundation is a reference-counted system as a whole. You all know that. One of the implications is that any time you provide an info pointer, what you would think of as a refcon, to a Core Foundation object, Core Foundation needs to be prepared to reference-count that object, because you might very well want to send in a CF type, right? You might use, as I am in this case, a mutable array to just collect information. So it wants to play nicely in the reference-counting world.
+
+The only way it can do that is either by simply requiring that you always pass a CF type. Well, that's a little limiting. Or you can do what we have chosen to do instead, which is to accept a retain and a release callback at the same time as it accepts the pointer.
+
+When you provide a context to a core foundation object, it will call the retain callback as sort of its indication to your RefCon that, hey, I have now started remembering your object. When the core foundation object is done with your context, it'll call the release callback to say, okay, I'm not going to look at this info pointer anymore. As far as I'm concerned, you can dispose of the resources.
+
+At the same time, there's usually a third callback, the copy description callback. That one is purely for debugging use. It should, if you implement it, it should print out some kind of a string, it should actually return a CFString describing your info pointer, and it's automatically called by the debugging functions in core foundation.
+
+So if you call CF show on a stream, for instance, after it prints out the stream information, it'll then call the copy description pointer on your, excuse me, the copy description callback on your info pointer, and you can print out your specific state along with the stream. So in this case, I've chosen to use a mutable array as my context. That's my info pointer. Since it is a CF type, I can simply pass CFRetain, CFRelease, and CFCopyDescription as my callback functions.
+
+Now I describe which events in the stream's lifetime I'm interested in hearing about. Open completed happens when that opening process is done. Has bytes available means there's bytes available on the stream that need to be processed. End encountered happens when the stream reaches its end. And then if any error occurs, of course I want to hear about that too. Now I call setClient to pass all that information to the stream. First argument is a stream I wish to monitor. Second argument are the events I'm interested in. Then my callback function. Finally, the context.
+
+Okay, so now I've got the stream ready to go. I've set the client, that's the configuration work, and I'm ready to open the stream. Before opening it though, I would like the stream to know which thread, therefore which run loop, I want to receive my callback on. So I call schedule with run loop, pass the stream, pass the relevant run loop, here I'm using the current run loop, and pass the relevant mode, the common modes in this case.
+
+Then I call open. Here we go. Now I'm done, except for waiting for the callback to come in. So here's the callback function handling events. I'll just spend a moment on the signature of the callback. The first argument is the stream that's reporting the events. Second argument is what event has just occurred. Third argument is the info pointer out of that context structure that I passed in.
+
+This is just a simple code example. We're not going to go into much detail. I'm just going to create a string describing what event has taken place, and then append it to that mutable array I'm passing in. But in the case of hasBytesAvailable, I have to do a little more. When the hasBytesAvailable event occurs, the stream is telling you, "Hey, there are bytes waiting to be processed.
+
+Come and do something with them." And if you don't read them off, the stream's not going to give you any more events. It already told you that there are bytes waiting. You already know. So in order that the stream can advance in its lifetime, I'm going to call CFReadStr3m read and just pull off those bytes.
+
+So what events should I expect to see in that callback? Here's the basic event flow. Assuming you called readStreamOpen or writeStreamOpen, you will receive one open completed event when the open process completes, then zero or more hasBytes or canAcceptBytes events, then finally a single at end event. If something goes wrong, you'll receive a single error occurred event instead. And once you've received an error occurred event, that will be the last one you will ever receive for that stream.
+
+Now there's another, this next line focuses on that caveat. Once you've received a has bytes available event, you're not going to receive any more events until you take care of the bytes that are sitting in the stream. The same is true on the write side, of course. If you have a write stream, once you receive can accept bytes, you're not going to receive any more events until you actually perform a write.
+
+Finally, the client can be changed at any time. So if you're shuttling a stream back and forth between a number of different objects inside your own program, you're welcome to change the client and the callback function. However, keep an eye out for race conditions because, of course, events can happen on the stream at any time, and they're going to be dispatched to whichever client is there when it takes a look.
+
+so that's the event driven model now I'm going to spend a moment to talk about the other two models blocking model is probably the one you're most familiar with if you've worked with Berkeley Sockets or the POSIX APIs basic idea is very simple you open the stream you just read or write until the stream is empty each time you call read or write it's going to block until at least one byte can be read or written once at least one byte can be processed it will go ahead and process as many bytes as possible without blocking then the call returns and lets you know how far the stream has progressed and sends you back sorry then you loop and call read again and you wait until eventually you reach the stream's end when you're done you just dispose the stream so it looks like this If the stream fails to open, handle the error immediately.
+
+Now, why didn't I have this code in the event-driven case? I didn't test the return value of readStreamOpen in that case. Well, I didn't test it because I didn't need to. If the open had failed, that would have been an error. An error is an event that would have triggered my callback, so I could safely assume that my callback would be triggered to process the error then.
+
+Assuming the stream opens, now I'm ready to do the work of just reading the bytes off. So I'm doing that here: CFReadStreaM read, pass in the buffer, look at how many bytes have been read. For each buffer, I then go and process the bytes until I get a return that is non-positive.
+
+If I get a return value of zero, that means the stream's reached the end of its life. On the other hand, if I get a negative return value, an error has occurred, and I need to process that error. Finally, regardless of what has happened, I close the stream at the end.
+
+So that's the blocking model. Now for the polling model. Polling works about the way you would expect. You open the stream. At various periods, you want to look at the stream and see if it has bytes available. At those times, you call either CFReadStriemHasBytesAvailable or CFWriteStriemCanAcceptBytes. If those return true, well, then there are bytes available for you to read, or you can write in some new bytes.
+
+However, a stream that has errored out is not considered readable or writable. So you also have to check to see if an error has occurred on the stream. You can do that two ways. You can either ask the stream for its status, or you can call getError. If you call getError, it'll simply return zero if no error has occurred. So it looks like this. When I want to pull, I call CFReadStreaM has bytes available. If it returns true, I can now read without blocking. So I go ahead and do that.
+
+Look at the return value from readstream read. If it's positive, I have bytes and deal with them. If it's zero, I'm done, finish up. If it's negative and errors occurred, I go and handle that. But if there weren't bytes available, I need to make this extra call. I need to get the status of the stream and see if an error has occurred while I wasn't looking. If so, I go and handle it.
+
+So that's it for the basic handling of a stream, the basic process of shuttling bytes to and from a stream. Now I'm going to talk a little bit about stream properties. The properties on a stream represent any attribute that's not directly related to moving the bytes around. It could be something like the permissions on a file, it could be something like the HTTP headers coming off of an HTTP stream. Not actually considered part of the byte transaction. When I set properties, I'm configuring the stream. I'm telling the stream, "I want you to use SSL encryption. I want you to behave in the following fashion." When you fetch properties, you're getting out-of-band information from the stream.
+
+So the properties are all key value pairs, much as you might be familiar with in property lists in core foundation. The names are all CFStrings, and the values can be of any CF type. So to figure it out, you go to the relevant header file. It will have a list of the property names. With the property names, there will be a comment explaining what value you should expect, or what value you should provide.
+
+So where are those headers? CFStream.h provides most of the basic stream information, so that's files, simple sockets, memory. CFSocketStream.h in CFNetwork provides some more advanced socket options, including SSL encryption, SOX proxy settings. and CFHttpStream.h and CFNetwork provides the HTTP settings. Now, because the properties are so very generic, they're all named from strings, we need a mechanism to explain when we receive a property we don't recognize.
+
+If a stream receives a property it doesn't recognize, it's simply going to return null from copy property. Likewise, set property is going to return false if you give it a property it doesn't recognize. But there are, uh, there are sorry, but set property might also return false under another condition. Most of the time, you cannot configure a stream once the open has occurred. In fact, you should always assume you cannot set a configuration option on a stream if that stream has already opened.
+
+There are a couple exceptions. Most notably, you can negotiate up or down SSL encryption level on a socket stream on the fly, but those are all called out in the header files unless you can find documentation to the contrary. Don't do it. Configure the stream before you open it.
+
+Alright, so a word about using streams with multiple threads. So the stream APIs are all thread safe. However, the individual streams are not. In other words, you can create streams, or you can manipulate multiple streams for multiple threads without any problem, but if you want to use a particular stream on multiple threads, protecting that stream is your responsibility.
+
+Likewise with multiple run loops. Multiple run loops means multiple threads. Go ahead and schedule the stream on multiple run loops if you wish. This is a common technique when you're writing a server. You want to maintain a thread pool. You want whichever thread is free to handle the stream if something's available. So you schedule the stream on each of the various run loops.
+
+If you do that, the events are going to be dispatched in a first-come, first-served fashion between the run loops. The events will not be duplicated across all run loops. Just whoever gets to it first will process the event. And again, multiple run loops, multiple threads, protecting the stream is your responsibility.
+
+Okay, so that's it for the material. I wanted to take a moment and do a quick demo. I will warn you up front, this is probably the most boring demo you're going to see at all of WWDC. It's a simple... It is a simple echo server, and it's on the Jaguar CDs. If you go to developer examples networking, you'll find an echo server there.
+
+What I want to do is walk you through the code in that example. Now, if I wanted to write an echo server in absolutely the most compact fashion using CFSocket and CFStream, it would be somewhere between 50 to 100 lines. And I thought long and hard about doing that rather than showing you the sample code. In the end, I decided showing you the sample code was going to be more useful because then you can go back to that sample code and look at it yourself.
+
+And also, you know, brevity is not really the strong point here. I could probably write an echo server using native Berkeley sockets in about 100, 150 lines, so you're not seeing a huge win there. But the structure of this example will show you, I think, a fair deal about how to use streams with the run loop. So here's the echo server.
+
+There are three basic source files. There's main, which we'll look at first. And then there's a server file that deals with the server, sort of the server object. And it's quite reusable. You could take it out, use it in your own code. That's in server.c. And then there's an echo context. It's what's actually doing the work of monitoring the accepted sockets, reading the bytes off, and then echoing them back out. So let's start with main.c.
+
+In main, what I do is I create the server. That represents the listen socket that's waiting for connections from clients. Then I connect it, saying, "OK, start listening now. Start waiting for connections." Assuming it connects successfully, I just run the run loop, sit back, wait for the callbacks. The server object does the work of setting up the listen socket, waiting for the connections to come in, automatically getting the new socket connected to the client, and passing it back to this callback accept connection. Accept connection then. It's right up here.
+
+What it's going to do is look and see if it's got a new client socket or if an error has occurred. Assuming it's a new client socket, all it's going to do is go and create the echo context to manage that socket, and then tell the echo context to go ahead and do its work. Listening on the socket, when it gets data, all it does is copy that data right out and return it to the client. Let's look at the server.
+
+Okay, so there's a lot more code here, like I said, that is really necessary. It's there primarily to provide you with an example of how to manage custom callbacks, how to manage the whole structure. What I'm going to do here is highlight those two functions, the create function, which creates the server, and then the connect function, which starts the listening on the socket.
+
+First chunk of code is here, where I set up the context for the socket. I'm going to set, use the, the server object, the server pointer as the info pointer for my socket. Now that's not a CF type, so I'm going to need to create custom callbacks. And here they are listed out here. Retain, release, and copy description. They're custom functions in this file, take a look at them when you get a chance, that do the work of managing reference counting and describing the underlying object. Create the server.
+
+Assuming all goes well, I set the info pointer to be the newly created server object, and then I go and create the listen socket, the listen CF socket that I'm going to use. So here I'm saying I want a typical TCP socket. I guess actually this is the part that describes it as a typical TCP socket. It's a listen socket, so I'm interested in the accept callback.
+
+Tell me when new clients have connected and I have accepted the new connection. There's my callback function, and then I pass in the context. Okay, so far so good. Now that socket is still dormant until I give it the address that it's to listen on. I do that down here in Server Connect.
+
+What I do is I create a struct sock adder in to describe the address the socket should bind to. The port number actually came from... Right, so the port number actually came in from main.c. It was passed in by the creation function. Before I connect the socket, I'm going to grab its run loop source and schedule it. So there's the run loop. I get the run loop source. I add the source to a run loop. Here I'm adding it to the current run loop in the common modes. The run loop is now holding on to that source, so I don't need to.
+
+Now I set up the socket address. There I'm setting the port. And here I'm using in-add or any, meaning I don't care what IP address you listen on. As long as the IP address is one of the addresses for this host, I will listen on it. Once that's done, I need to create a CFData around that address.
+
+And then it's ready to pass off to CFSocket. CFSocket set address, I pass the CFSocket, and I pass the CFData I created. This is what actually starts the socket listening. Once I've made this call, an underlying Berkeley socket has been instantiated and is actively sitting there listening for connections. So once again, I'm now ready to just sit back and wait. I'm waiting for the callback to arrive, telling me that some client has connected. So that callback is here.
+
+Really simple. We only registered for one type of callback, so we're only going to get one type of callback and accept callback. Grab the data that we were handed. Here I'm checking to see if that data is -1. -1 would mean that an error has occurred, otherwise it's the socket for the new connection. And now I'm going to call my callback. This is the callback that was passed in from main.c that accepts client connection, I believe. To tell my client, there's a new connection here that needs to be dealt with. So back to main.c.
+
+We've got a new connection, create the echo context, and open it. So let's take a look at the echo context. Here's the structure. There's not a lot here, but I want to call out these three run loop sources. I've got a timer. This is how I'm going to time out the stream. If after a certain amount of time has elapsed, if there hasn't been any traffic, I'm going to kill the socket.
+
+A read stream and a write stream for managing the socket itself. Then the mutable data is just my buffer where I'm going to hold bytes while I'm transferring them from the incoming side of the socket before writing them out to the outgoing side. Echo context create. Here we're creating that new echo context.
+
+I'm not going to go over this. This is all much the same, just allocating the memory and getting it ready for use. Here's the interesting part. Given a native socket, create both a read stream and a write stream. Once I've gotten those streams, I'm going to set a property on it. Here I'm asking that the stream go ahead and dispose of the native socket. Go ahead and close the underlying Berkeley socket when the stream itself is destroyed. And then I'm done. I just return and wait for my client for main.c to call open.
+
+So there's Open. Open starts the work of listening on the read stream and copying the bytes across to the write stream. Looks pretty similar to the connect call in the server. Grab the run loop. Here I'm using the current run loop. Set up my context. Set client on the streams. So I'm asking for the read events. I'll show you those in a moment. When one of those events occurs, call read stream callback. Here's my context. Same thing for the write stream.
+
+Now both of the streams have their clients set, so I'm ready to schedule. Schedule it on the current run loop in the common modes. Clients been set, streams have been scheduled, time to open the stream, so I do that here. Okay, so far so good. Now it's time to set up a run loop timer. This is going to be, this is what's going to allow me to time out those streams.
+
+So I'm asking for a timer that's going to fire once in k timeouts in seconds. When that happens, I want the timer callback to be called past the context. Once I've created that timer, I need to add it to the run loop. All right, so now we wait for these callbacks to come in.
+
+I have all three of them here at the bottom of the file. There's a read stream callback, a write stream callback, and a timer callback. I'm not going to go over each of them in detail. I just want to show you that they each dispatch, depending on what event comes in, they dispatch to a different function. I'm going to go over the two most interesting ones: has bytes available on the read stream.
+
+[Transcript missing]
+
+All I'm going to do is read the bytes off. Traffic happened on the socket, so I want to reset my timer. I do that here. Assuming I got some bytes, I append them to that mutable data I'm using as a buffer. And if the write stream is available right now, I go ahead and copy them out. And I do that by triggering exactly the same function as the callback, the write stream's callback would trigger. So let's look at that one.
+
+All it's going to do, get the byte pointer from inside the CFData, Again, reset the timer because traffic has happened. Something interesting has happened on the socket. and then write it out. Now, I said this was exactly the same as the sample on the CD. That's not quite true.
+
+The sample on the CD is designed for use with CFNet services, so it goes through the extra work of choosing an arbitrary port on the system, registering itself so that clients can discover the Echo server, and then the client, of course, uses CFNet services to discover the server and connect with it. But I do not want to go through all of that here, so I added a single printf to this program to print out the port number that was chosen. I'm going to run this now.
+
+So it's listening on the local host on port 1059. Just to prove that, I'm going to go to terminal now. And I'm just going to telnet to that port. Alright, so now I've connected to the server, and hopefully, while I type, it will echo. Look, it worked. Like I said, most boring demo you're going to see at all of WWDC.
+
+Okay, so that's it for the demo. Now I'm just going to have some closing comments, and then we're going to move on into Q&A. For more information, I do encourage you to look at the examples on the Jaguar CD in Developer Examples Networking. There's also a DTS-hosted list, MacNetworkProg.
+
+I watch that list. Doug Davidson also watches that list. You're more than welcome to send any questions there, and we'll answer them if we can. I also encourage you to get the notes from session 805, which occurred yesterday evening. We were talking about CFNetwork and HTTP streams in particular at that time.

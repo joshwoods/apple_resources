@@ -1,0 +1,319 @@
+---
+Title:  Harnessing the Power of OpenCL
+Year:   2009
+Web:    https://nonstrict.eu/wwdcindex/wwdc2009/308/
+
+[!] This transcript has potential transcription errors.
+---
+
+ Good morning. This is the second session on OpenCL this morning. Last hour we talked about the OpenCL APIs and the OpenCL C kernel language. Which is a small extension on the C for new features that you might want to do, use in the kernel to expose more parallelism in your, in your code. This hour we're going to see how well we managed to predict your questions from last hour and answer them as best we can. So I'm going to talk about, I'm sorry, my name is Ian Ollmann in case you're wondering.
+
+So I'm going to talk about a couple of examples where I work through performance optimization problems in OpenCL. There is, the first example is the box filter, which we had a couple of questions about at the end of last hour. And then I'm also going to explore performance tuning with OpenCL API using the conversion performance test for OpenCL. And, and later on Andrew Brownsword will come and talk about his experience importing his application to OpenCL.
+
+So first of all I want to start off with the box filter. And I'm using the box filter to just sort of put OpenCL in context and show why, why OpenCL is actually necessary. OpenCL is a little different from most frameworks. Most frameworks you know provide a series of canned routines. They might play a movie or, do FFT for you or do a number of other things.
+
+But OpenCL is more of a tool chain, its peers are more like pthreads and GCC or maybe OpenGL in a shader compiler. So we want to make sure that when we're introducing a new, a new set of tools in this ecosystem that it is performance competitive with these things and that you can actually deliver the stuff that you need to deliver on OpenCL.
+
+So one example that I'm sure all of you are familiar with are pthreads and GCC. Standard technology for writing applications, CPU only, but it's great because you get predictable results out of the arithmetic and it's pretty flexible. You can do just about anything you want in C. Some of you may also use OpenGL with a shader compiler, which is OpenGL shaders are C like languages.
+
+There's also OpenGLR, which is kind of an assembly like thing. And that's a wonderful technology for image processing. You can do CPU and GPU on there. So GPU acceleration is obviously nothing new. And in fact, there's a whole community of general purpose GPU stuff that's grown up in the last few years using these shader compilers to do general purpose work.
+
+But you know when you go try to do that sort of thing, you find out that the arithmetic you get out of OpenGL and shader compilers is hardware dependant. And it's also less flexible because the shader languages force you to present your algorithm as a graphics operation. And there are certain things that you just can't do. So being a bit lazy, I did not write complete examples of a box filter using these technologies. If I had, it would've taken a while to tune them up. So I leveraged the work of some of my colleagues at Apple.
+
+So I have a couple of frameworks, which use these tools that you all have probably been using for some time. And they're pretty mature, well optimized and I will call them framework A and framework B to protect the innocent since we're really talking about tool chains here. If you missed the session last hour, you're wondering what is a box filter, maybe you don't do much image processing.
+
+It's really just an average over pixels over a nearby pixels in an image. So if you started with an image like this, you could calculate a pixel based on the average of that larger square grid on the left and the next pixel is the next square grid and so forth.
+
+So it's nothing fancy. And there are actually much better ways to do blurs, but this is an interesting, easy to understand example. And here is a sample kernel that does the box filter, which you saw last hour also. And the notable parts of it, you know we start off at the top figuring out which pixel we're going to operate on which is what that GetGlobalID stuff is about.
+
+And then we loop over adjacent kernels, reading in pixels and adding them up. And then we might divide by the number of pixels in the, in the grid. And then write out the result. And that is a very simple example and I have some code, which does that, right here.
+
+This is an application, which plays a 780p movie file through QuickTime. As you can see here, I've got a little time indicator that's how many milliseconds of image processing we're doing on this thing. Right now, we aren't actually doing any, this is just a little bit of color correction, which slides into the time. And this is CPU utilization.
+
+Right now, we're using 78% of one CPU. So we can turn on OpenCL and apply the box filter. And we discover that oh no, we're not running in real time. And this is a central point about OpenCL. OpenCL is a toolkit for moving your code and your data onto discreet devices. And getting really great performance out of it.
+
+But the magic in the end comes from you. Whereas a framework, a standard framework which has canned libraries may do FFTs or show a movie, you'll believe when you write your application you have something particular that you want to do that makes your application your application. And there's always been hard to do is find a high performance framework that's going to let you fill in the gaps between all of that carefully hand tuned Apple code and your own code in a way that's going to be able to run in a very high throughput way. And you often had to work pretty hard to do that. So here, we've done that, but the performance is not great, so what did we do wrong? Well, it's not really OpenCL's fault or so I dissert.
+
+The problem is we're just using the wrong algorithm. And every year I get up here and I start talking about optimizing code. And I always have to make a point that before you get started doing any kind of tuning, you got to make sure you're using the right algorithm. Now there are obvious faster ways to do a box filter.
+
+For example, if I was doing a 5 by 5 box filter, I would have to add up 25 pixels. But if we look at it carefully and we realize that really that matrix of 1s is the product of 2 smaller matrices, I can do this as a two pass filter. Each that do 4 adds.
+
+So a total of 8 adds. So for a simple 5 by 5 filter, I might have saved 3X on the arithmetic cost. And the savings goes up rather dramatically as, as the filters get larger. And so what we can do is split our OpenCL kernel to do this in a more sensible way. We have one that goes in the horizontal dimension and one that goes in the vertical dimension.
+
+And the only real difference that I've done, change I've made here is that rather than having a doubly nested loop, I have a singly nested one because I'm only operating in one dimension. And we can see that right now we're you know running at about 3 clips, frames per second.
+
+But I can switch over to something that uses separable filters and all of a sudden we're running at 18 frames per second which is you know starting to approach real time, but obviously not there. Also, the amount of time that we used in the filter dropped from what was 270 milliseconds down to 40 milliseconds. This is all on the CPU.
+
+So there's quite a lot of things. And this is just an algorithmic improvement that we've done. So you always want to make sure you have the best algorithm. And in fact, the way I wrote it, those of you that were paying attention, I used read_image which is an insert into an opaque image type. And read image is a great function for getting faster access to images on the GPU. There is a lot of hardware there to make that thing run fast.
+
+They're called texture units. And it's a wonderful thing to do. But on CPU, there is no such hardware. So all this stuff is being emulated in the software. So that feature is not doing it any favors. And so we could switch over our basic buffer, our basic image container to a flat buffer. And all this thing is is just a standard C array. And if we do that then the address arithmetic for finding all of our data becomes a lot simpler. And we just click that on and now we're running in 12 milliseconds and it's running in real time.
+
+And of course, we could vectorize it and get it down to 6 milliseconds. But we're still getting pretty good CPU utilization. We're getting about 7 CPUs running at a time. But, and we can see how we compare with framework D which is an OpenGLR based framework. And we can see that we're actually doing pretty well.
+
+So we're running a bit faster and, and performance is actually not too much slower than running it on the GPU on that, on that framework. Well, how do we compare to framework A which used GCC and pthreads? And as you see, hand tuned assembly. Oh dear, it's beating us.
+
+Well, what did we do wrong? The important thing is that you use the best algorithms. Sometimes good isn't good enough. And the guys who write framework A are using C. They can do whatever they want. And if you actually look at this problem a little bit more carefully as one of our questionnaires alluded to last hour, you can see that you know the average is a sum of 7 pixels, so for result 3, you know we add those up, result 4 we add those up. But the region in the middle is the same, so there's no reason to recompute that partial sum.
+
+And in fact, we can actually calculate result 4 from result 3 simply by adding on the pixel on the right, removing the pixel on the left, correcting for some of the normalization that goes on. And this is a great way to do it. It's actually constant cost because no matter how wide we make the filter, the region that's the same scales with it, so all we ever have to do is add one pixel and remove one pixel regardless of how big that filter is.
+
+So rather than being an N square algorithm, it's now constant cost. But you can't do this on an OpenGL shader language. So if you want to run this code on a GPU, that algorithm was not you know unless you use one of the special GPU languages available to you. But we can do this in OpenCL. And again switch over to use the best algorithm which is now running in 3 milliseconds, which is faster than what the GPU was doing under the OpenGLR. And we're running on the CPU in this case.
+
+So OpenCL among other things is brings you sort of a new world of algorithms that you can actually deploy on the GPU. For many of you the GPU is the new thing, for many of you you've already used the GPU for a while. But now you can do more stuff. And it does in a portable fashion.
+
+[ Period of silence ]
+
+So next, I want to talk about performance tuning with OpenCL API. I'm going to talk about the conversions conformance test. This is the conformance test for OpenCL that tests conversions. We support standard scalar casts but you know kind of in using them over the years, you kind of run into little edge cases where it's like well maybe C left a little bit too much undefined here.
+
+Also, we wanted to extend them out to cover all of the vector sizes that we added to OpenCL. We wanted to give you some control over the rounding of those because I know a lot of you like to round to the nearest integer rather than rounding down all the time.
+
+And then also different architectures handle overflow differently, so if you read the float to an integer and the float was really big, what you get out of it is very hardware dependant. And it's really much nicer to have some certainty, especially when you're trying to write portable code.
+
+What's going to happen there it's nice you can rely on it. So we also have a test philosophy that if it's possible, we're going to test every number through here. Which can get to be a lot, a lot of numbers. And in fact, on average it's about 2.6 billion values. So at the end of the day, we had about 12 trillion values to test. Which is a lot.
+
+And it's a good thing we have a high performance framework to work with. So earlier when I said I was going to talk about the conformance test for conversions for OpenCL, I knew there was a question burning in your, in your mind. And that was what could possibly be interesting about a conformance test? I hate these things. And the answer really is it has to finish.
+
+We can't ship OpenCL until we're conformant. So we have to pass that test. And it's really terrible to run it all the way through and discover you have one bug and then you're always, oh I have to run it again. So, this is actually something that's very interesting to us over the last month. And so I thought I would show you our work on it here. The starting algorithm is nothing fancy. We init a series of numbers to be tested for a particular conversion function. We call clEnqueueWriteBuffer to copy that up to the device.
+
+And then for each vector size, we call up WriteBuffer again to override the destination buffer with garbage to make sure the kernel actually did something. And then we incur it EnqueueAKernel to do the test. The kernel is extremely simple, this is far simpler than anything you'd want to write in your own code. All it does is read the data out of a global array and write it to the destination after doing a conversion. And we call clFlush to get OpenCL moving.
+
+And we calculate the reference answer that we're expecting to see in the main thread. And for each vector size, we then sort of read back the data and then read through it with MemCompare to make sure we got the right answer. And if we didn't, we report an error.
+
+And for a particular benchmark conversion function, that takes about 4 minutes to get through 4 billion numbers. And the time is about the same on a CPU and GPU. And we can run Shark on this. And the top thing on Shark is long_copy. Anybody who's used Shark before will know that sometimes the symbol names alias, well the long copy is actually a code for MemCopy. And so we're spending about 30% of our time just copying data around. Well what can we do about that? And where does that come from? Well if you call up clEnqueueWriteBuffer, your application is copying data over OpenCL.
+
+And if you call clEnqueueReadBuffer, OpenCL copies the data back to you. So every time we put data into OpenCL and get it back, we're doing a copy. And that's where all that time comes from. Well there's another way to do this. We have a clEnqueueMapBuffer which lets you go inspect memory in OpenCL as it is in place. So you can avoid all these copies. And when you're done, you can call UnmapMemObject and tell OpenCL you're done and then it can go on its merry way.
+
+So we can change my usage of the API. I remove the WriteBuffer that I was doing. And I can change the read to a map, so I can look at the data in place. And then before I'm done I'll just refill the results buffer with garbage again for the next time around and then tell OpenCL I'm done reading. And when I did that, I got about a 40% improvement on the GPU and an 80% improvement on the CPU. So then, I thought well why don't I run a Shark system trace on this?
+
+And the system trace is a little bit different. You pull down the little menu in the middle of the Shark control bar. And what it does is it records a time stamp and stack dot track every time a system call is made. And you get back a report which looks little bit like this. These are threads going across on the horizontal dimension. This is time.
+
+And each one of these little telephones are system calls. And they reported back trace. In this case, if you squint you can see clEnqueueNDRangeKernel, which is one of our interfaces. So you can figure out using this you can kind of back figure out what all these blocks of time are, so we start off with initializing the data, then we have this sort of parallel section where OpenCL is actually running our kernels to do the computation.
+
+And then we spend a lot of time in the main thread verifying our results. So you can kind of use Shark system trace to get a detailed view of exactly what OpenCL is doing when. In this case, I notice that there's a little chunk here where the main thread is idle. And the main thread is also sort of the long bar we've got to get through before we can turn this over and run the next set of data.
+
+So that's, if we want to make things go faster, that's the thing we've got to collapse, at least right now. Well, why is it idle there? I don't know. I went and looked at it and it turns out that the part we need on the main thread, the data for that is being created in the box on the left. So we didn't actually need to wait. So I must have made a mistake when I wrote my code.
+
+And it turns out that the buffer EnqueueMapBuffer that I issued was enqueued after I enqueued 5 kernels. But I really only needed to wait till the first one was done in order to start checking the data. So there's no reason for you to do that. So I can set this to nonblocking so that we don't have to wait till I'm done mapping in order to run the next kernel.
+
+And move this up there. So now in the loop I EnqueueKernel and then I enqueue a map operation right after it to get the results back, loop again and queue the next kernel and queue the next map operation. Because the map is nonblocking, I don't have to wait for the next kernel.
+
+I don't have to wait for that before I enqueue the next kernel. And instead, because it's nonblocking, I have to wait for the event it produces so that I know it's done in my check code later on. And when I did that, I found I got a little bit of improvement on the CPU; GPU it didn't move very much. And when I go run the Shark system trace, I can see that the little window of time where nothing was happening is now gone.
+
+You can see a region where I'm running kernels and a region where I verify the kernels in the main thread, they overlap which is what I wanted. So I got pretty much what I wanted there. Except what's that? There's like this region where it doesn't look like I'm making any system calls.
+
+So I'm not really calling OpenCL. What, what was I doing there? And when I go take a look at it, turns out I had put in a blocking call to write buffer right at the top of my thing. That's telling OpenCL to block my main thread until the write is done.
+
+But this is all called in a big loop. The only reason you'd want to block until the write is done is because you want to free the buffer after you're done with it. But in this case, I'm calling a big loop, I don't intend to free the buffer. So I'm just going to reuse it, so there's no reason to block and wait for that to happen.
+
+The OpenCL queue will manage all of the stuff I've enqueued, so we'll be sure that the kernels that I've enqueued will wait until that write is done, but there's no reason why I need to block the main thread too. So what I did was I switched it over to map to hopefully save a copy and I double buffered it to so that I could do that concurrently with other work. And I found that when I did that, my performance actually got worse on the CPU but it got a little better on the GPU.
+
+Well, that wasn't what I quite had in mind. And the thing is I really didn't do my homework. When you're looking at system traces, you should also be looking at time traces. Because you can't save any time if there's any time to be saved. And in this case, the MemCopy call I was trying to get rid of was only 5% to begin with. The other mistake I made is I double buffered it so actually touching more memory now.
+
+And that seems to be a compensating for any performance I might have gotten. So it was just a wash. So you have to pay attention. But I can look at where I'm standing now, indeed I've now got something happening in OpenCL at the same time I'm trying to verify results.
+
+That's the map call. But this isn't really satisfactory, I mean I'm not really getting much out of the CPU. And this is my fault, I'm doing all the verification code in single threaded mode in the main app. But this is also a conformance test. It has to be ported to other applications.
+
+This is anybody who wants to write OpenCL runs this test. So I have to come up with some way to parallelize this thing that ports you know Windows and Linux and all those other things. And I'm sitting there thinking oh man, how am I going to do that? But it turns out that I have portable high throughput, very parallel library right here.
+
+I can use OpenCL to accelerate OpenCL testing. So yeah, you got to get up really early in the morning sometimes to think of these things. So what I imagine is that if I parallelize these things, I'm going to take all this time here shown in red and kind of paralyze it that way, and collapse down the time.
+
+And you know maybe I'd every get like a 40% win or something out of this. So I can do that. Instead of calling MemCompare, I've written a kernel to do MemCompare. And you know this is a simple kernel. It just sort of runs through the list of bytes and if any of them are nips, then it then it sets an error somewhere and later one we check to see if the error was set.
+
+But when I ran it, I got an improvement. But it wasn't quite the huge win I wanted. You know 88% to 2.2X kind of looks big, but we have a change of units here so it's actually not that great. And really, the problem is that the verification stages took longer than I thought. I didn't really imagine it would take that long. But it didn't.
+
+Well, what'd I do wrong? Well, what I ended up doing was replacing MemCompare which is hand tuned vector assembly code in libsystem with my cheesy MemCopy kernel. Which lazily written does one byte at a time. So I traded you know this is a four way CPU that I did this test on.
+
+So I traded 16 at a time in a vector in one thread for one byte at a time across four threads. Well that's not a very good exchange. Also, there are other problems here. When I run my code on a multicore CPU, if you've got one of these things that actually has 2 CPUs on there with multiple cores in each, each of those packages has a separate cache on it. So you know 0 through 3 might be in one and have the cache that's in green.
+
+And 0, and 4 through 7 might be in another one and has a cache in blue. And when I run the second kernel, there's no real control over where the data goes because which workgroup runs on which core is not under your control. So this can actually be a fairly chaotic process.
+
+And the reason why it's chaotic is that we have to schedule our work around everything else that's happening in the system. So the particular CPU you might have thought that you might like to run on might be available, but there's one over here and you've kind of got this difficult decision Do I run over there?
+
+Or do I wait however long it takes until that CPU is ready? So we just run it. So you get the situation where you're ping ponging data between caches, which is a little slow. For GPU it can actually be worse. You're taking an extra trip to global memory and back.
+
+There's no persistent state except in global memory between kernel implementations. So because I split it up into two kernels, I actually have to save them, raise those up to global memory, then load them back in and memory throughput is often the slowest part of any kernel in the GPU.
+
+So what I could do is just combine the kernels into one. I mean, hey I've got the result, might as well check it while I've got it. And now I've got one kernel that, that does both things. I call the convert function and if the reference result that I passed into the function doesn't match, then I set an error condition. And this really does two things for me. I convert the kernel, so I don't have all this memory traffic. But it also means that I never had to write the results back to the global buffer for the CPU to later check on the main thread.
+
+So I might save some bus traffic there. And we can see how we're doing now. I mean I've got a nice performance window on that, I'm running twice as fast on the CPU and a good bit faster on the GPU. And when we look at Shark in the system trace, we can see that I've got very nice parallelism, there aren't too many little windows where I'm not doing work. And things are starting to get pretty nice.
+
+But of course, the work is still split up. I mean I've got a scalar kernel and an N2 kernel and an N4r kernel and an NA, these are all vector links. Why don't I just do them altogether? I mean after all, they all have to read the same input data stream, why am I reading it five times? I could just read it once and then split it up in the kernel.
+
+Another thing that might have tipped me off that my kernels were too small is that I'm spending an appreciable amount of time in seal the execworkfile on the CPU. This is the function that calls your kernel. It has a little tight loop that just calls 0 kernel. So if you're spending a lot of time in there, in that loop, then you're probably spending, your kernels are too small.
+
+We could even look at the kernel in disassembly in Shark, it's 12 instructions, too small. So I can throw everything in one kernel. We load in 16 wide vector and then each of these nested loops, we break it down into halves, all the way down to scalar and test every conversion for every vector type all the way down. Now, that looks like a bit of work. And indeed, it is. And when we run it, we find that we're running almost 10 times faster now on the CPU than when we started.
+
+And about 7 times faster on the GPU than when we started. And also we're getting really good utilization here. We spend some time in the main third calculating the next set of input data and results we're expecting, but we finish early so we can jump over and the CPU will start running one of, doing some of the work in OpenCL.
+
+So it's all very efficient. So while I was working on this, tried to sum up my findings. There were some things I tried which didn't work out so well. I tried moving around work to fill in holes. One time it worked, a couple times it didn't really. You always have to keep in mind what's in the Shark time profile. Also tried replacing vectorized single threaded out code with unvectorized OpenCL code. That was not a good idea. And but there were some things that worked.
+
+I got great speed ups, 2X, 3X, 4X, sometimes eliminating copies and other work. I got a great speed up moving my application code to the OpenCL kernel, but I had to do a good job just replacing MemCopy with something brain dead wasn't such a good idea. And I had merging multiple kernels into one kernel to reduce global memory accesses was a great performance win. And so that leads me to a short discussion about vectorization versus multithreading. You can do both obviously. With multi, with OpenCL multithreading just happens.
+
+You actually have to you know be very careful to prevent it. But you still have to write the vector code. We tried to make that as easy as possible for you. Now have a portable vector program language, standard types, we manage the details like between whether you're on SSE3 or SSE4.1 or SSE4.2 for you.
+
+We'll just use the hardware instruction if your machine supports it and if it doesn't, then we have a software fallback which usually you know a couple of instructions. And it's got shared consistent operators between scalar and vectors. So you're no longer writing MM_add_PS, you just use a +. And it's portable. So you put your investment in vector code and chances are it'll still work when the next machine comes down the road.
+
+Multithreading is not a replacement for vectorization. Using more cores just uses that much more power which means less battery life and less processing power available to other apps. Vectorizing code saves power because we merged a bunch of work into one vector. That's one instruction doing all that work. So there's many fewer instructions to decode.
+
+And it usually is a result of vectorizing your code, you'll find that sometimes you reorganize your memory a little bit for more linear data access just so you can get stuffed loaded conveniently in the vectors and that in turn actually can lead to a pretty good performance improvement.
+
+I've had many cases where I've changed my data layout so that I can vectorize my code and the scalar code starts to run twice as fast. And it's using the GPU, can save a lot of power. All the processing elements on the GPU are generally much smaller and cheaper.
+
+They may be running at a lower clock. Power is. So got to run a higher, higher voltage to get those gates to flip faster. And vectorizing can in certain cases make the GPU run faster. Bigger types help with coalesce memory accesses and more parallel work can help with scheduling some times. So I'd like to invite Andrew Brownsword to continue the talk to give you his story of integrating OpenCL into his application.
+
+ Thank you Ian.
+
+So I'm Andrew Brownsword from Electronic Arts BlackBox. So you might be wondering why I'm here. Last year when Apple introduced the idea of OpenCL and said they were building this thing and offered to Kronos to standardize, we were very interested because we've been dealing with this sort of hardware, highly concurrent hardware for about 5 years now. And looking forward, the hardware we expect to come, the problem is only going to get worse.
+
+And it sounded like OpenCL would be the kind of thing that would help us address this problem. So we went and looked at the list of companies that were involved in Kronos and who are participating in OpenCL. And we noticed that low and behold there were no software application developers. And we thought this was a bit of a shortcoming because when you're developing applications you tend to have a bit of a different perspective on things than perhaps when you're a hardware vendor or an operating system vendor.
+
+So we thought our input would actually be useful and the feedback we've gotten so far is indeed it has been. And one of the things that software guys do is write software. So when I finally got my hands on an actual early implementation of OpenCL, my natural tendency was to start bringing some of our code over to it.
+
+So why am I doing this? Well, OpenCL is important to us because it supports a very wide variety of computational resources. And right now we're struggling with several kinds and in the future, we see more and wider variety and increasingly different sorts of concurrent hardware. OpenCL provides a nice uniform programming API to all of this.
+
+Second, it's an open standard which means it'll be portable, it'll be on multiple platforms, and the, the open nature of the standard means that anybody can implement it, anybody can sign on board and if the platform that you're aiming for doesn't have it, perhaps there'll be an open source implementation, perhaps you can do one yourself. And third, it provides a concurrent programming model, something which is sadly lacking in C++ or C for example. They basically are used from a concurrency point of view are using the same programming model that has been in use since the late 60s.
+
+So it's time we get some concurrency into our programming languages and OpenCL does this. So when I got my hands on the first implementation, I decided I would take some actual code and bring it into OpenCL environment and the environment I had of course was an early release of Snow Leopard on the Macintosh, so I took some code out of one of our games.
+
+In this case from Skate 2 and I selected the character scheming code and the clock physics because it was a set of code I was familiar with, a set of code we highly optimized and it was a nice self contained piece that I could just sort of pry out of the game engine and steal some of the assets from the game and turn into an actual working demo. The goal was to see what happens to the actual game code when you try to introduce OpenCL. What do you have to do? How badly do you have to mutilate it? So what the demo actually does, let's see.
+
+[ Period of silence ]
+
+There we are. What the demo actually does is take an animation and a character model that we captured straight out of the game and play it back. It skins the model of the character to the recorded animation which is the skeleton pose. And then it applies cloth physics to the shirt.
+
+And the cloth physics represents a few algorithms that allow the cloth to move according to gravity and acceleration and what not. So I built the demo and what you see running here is the original C++ code, running single threaded. And then of course I did an OpenCL implementation and what you now see is OpenCL code also running single threaded on the CPU. And I did some variations that allow it to be data parallel.
+
+So now, it's running on all 8 CPUs. And now in fact it's running on the GPU. And you can see the profiling bar over on the right hand side of the screen. It's only using a tiny little bit of one CPU and it's running faster than it was before.
+
+[ Period of silence ]
+
+[ Applause ]
+
+So what's going on under the hood? So we have a very simple task graph in this application. It's extracted out of a game which has a much, much larger task graph. And the intention bringing it across was to try to leave the original code undisturbed.
+
+So conceptually, I didn't want to change the fact that it was a piece of a task graph. The task graph is actually just 5 kernels that run one after another and so they're dependant on the previous one. And the full game is a very broad graph, it's a full DAG. And this is just one slice out of it.
+
+But since I didn't want to actually change that model, I just left it intact and bring it across to OpenCL and the OpenCL task model happens to map very well to the task model that we've settled on for use internally to our games. It's a directed encyclical graph where tasks are dependant on preceding tasks. And you just toss stuff into the, into the queue and it executes wherever a computing resource comes along and has time to compute it. So in the task graph here, it's a simple in order queue and these things, each of them is independent individually data parallel.
+
+And then the outputs are sent to the renderer. So making the change to OpenCL, one of the really important things was in the original code, each of these boxes in that graph is a single algorithm, it's a single function call. You call it, by the time it returns, the data has been computed. It's a change in OpenCL. Isn't that what you're doing is you're enqueueing an operation to happen asynchronously.
+
+So the way I did that in minimizing the disruption to the original code was I introduced this notion of functers which is more or less a function pointer that embodies some additional state and that allows me to extract out all the OpenCL details so that the original code actually doesn't know anything about how the work is being done. That's encapsulated inside the functers. The major change actually is a semantic change that when the functer returns, the work hasn't been finished yet. So to manage that, you can pass in an event parameter that says hey, this functer is going to run when that one has finished.
+
+And it returns an event that says, that represents itself. Internally the functers enqueue at kernel for OpenCL. So a code that looks like this, the integrate call, now looks like if we have a functer call it passing the previous event we got, return the event that represents this one, and if we don't have a functer, now we modify things slightly to deal with the data management, we lock some buffers, we call the original function call. And then we unlock them again. This allows me to take in and out the OpenCL version and leave the original version intact, which for us for testing purposes is a really important thing. So the data buffers.
+
+So in OpenCL, your data is encapsulated inside of cl_mem_objects. Now it's not quite right to say it's encapsulated inside of cl_mem_objects. The cl_mem_objects represent to OpenCL your data. And in fact there is a feature, a flag you can use when creating a cl_mem_objects called CL_Mem_Use_Host_Ptr that avoids having additional allocations and avoids copying from the buffer that you have to the buffer that OpenCL created.
+
+Basically, it says use my buffer right then and there. To game developers, that's really important because we're really fussy about how our memory is laid out and how much data copying happens is going around. So we like to own our memory. So at least when using the CPU device, this is a very, very useful thing.
+
+I'm going to come back to that a little later. And the other thing that's useful is there is a extension that is OpenGL CL UserOp. And what this allows you to do is it allows you to take buffers created in OpenGL, vertex buffers in my case and turn them into CL, cl_mem_objects. So my demo has these data buffers and I'm not really going to go through them in detail, but there's quite a few of them.
+
+And they're used like that. So this is the game task graph decorated with the various buffers that the various kernels are using. So basically, what's going on is the host queues up everything and then execution starts. The skin model kernel runs and it takes in the pose, which is the current frame of animation.
+
+And it takes in the source vertices. And it computes the destination vertices. That's the output vertex buffer. And it also queue computes these things called drivers which are inputs to a later algorithm. The next algorithm that runs is the integrated and what it really is doing is applying gravity.
+
+So it causes all the cloth particles to fall, excuse me. And it's operating on another buffer that's the particle buffer which is retaining the current state of the particles, where they are, where they were. And then the distance constraint runs. And what it's doing is it's a spring map system between all the particles of cloth.
+
+[ Period of silence ]
+
+The springs are described by a constraint array which is in the constraints buffer. It also modifies the particle buffer and then after its run, it calls the driver con, or it doesn't call it.
+
+It's followed by the driver constraint kernel. Which then takes the driver input, makes some more changes to the particles and what that's doing is its keeping the cloth close to where the underlying skater's body is. So it doesn't get too far away from the skater's torso. And when all of that's finished, it goes through a write back kernel.
+
+And the job of the write back kernel is to extract all the computed cloth positions and stuff them back into the output vertex buffer. And then finally that vertex buffer is handed off to OpenGL and fired out to the display. The nice thing is for all of these kernels, OpenCL is managing the movement of data between the kernels if it needs to move.
+
+If it's all on one device, it typically doesn't need to move. So by the time I'm finished, I've actually add, injected a few other commands into the command queue. Before the skin model can run, it has to write the pose. It has to take the pose data from the animation buffer in memory and it has to move it into the OpenCL buffer where the skin kernel is going to find it. It needs to acquire the vertex buffer from OpenGL so that it can modify it. Then it needs to run the other kernels and then after the write back is done, it releases the GL kernel.
+
+And this is a slightly outdated diagram. I used to acquire and release and then acquire and release the GL buffer, but it turned out that it was better just to hang onto the GL buffer the whole time. So the GL interop extension manages the movement of data between CL and GL. And by injecting these commands into the command stream, you can say to the system exactly when these things pass back and forth. So what are the kernels? So skinning is taking the vertex buffer and computing the output vertex buffer.
+
+So it's the source model and it's just a guy standing at a buying pose like this. And it combines it with the pose and it generates from that the vertex buffer that's going to get rendered. And it also generates the drivers which are another input to the cloth system, integrator causes the cloth to fall, the springs cause individual cloth particles to move apart or move together in order to sort of maintain the shape of the cloth.
+
+The driver constraint keeps it outside the guy's body and the write back fires it back out so OpenGL can then draw it. So it turns out that I actually wrote two versions of most of the kernels. A wrote a scalar version initially and then I wrote a vector version. And the vector version actually I did for the game consoles that we actually shipped on. And for those consoles, vectorization is actually very, very important. Some hardware does extremely well with same D optimization.
+
+We're talking order of magnitude improvement. On the X86 hardware that you currently find on the Mac platform, the speed up is quite a bit less than that but looking forward future X86 hardware is likely to benefit a great deal more from vectorization. And depending on your kernel right now you can get very substantial speed ups from doing this.
+
+The vector kernel really boils down to doing math in structure of array style. What that means is instead of having a single float4 in OpenCL C notation, that contains and XYZW coordinate if you're talking 3D coordinates here. Instead of having sort of a heterogeneous semantically heterogeneous value in your single variable, structure of array says OK, well we're going to do four things at a time.
+
+And we're going to have a variable that contains all the Xs and a variable that contains all the Ys, one for the zeds and one for the Ws. And then you can write your code pretty much as if it were scalar code except you do four things at once. To actually achieve this, I used two key techniques.
+
+The transpose and the select. So the important thing about the transpose is that I didn't change the memory layout. So the data is still all stored in array of structures format. So the vertex buffer is an array of structures in memory and when I want to operate on it, I need to pull out the 3D coordinate that happens to be the position inside the vertex buffer. And it comes in as a float4 from memory which contains an XYZW, which is not how the vector version wants to operate on it.
+
+So what I do is I collect up four of these things from four vertices and then you can see it on the left there, we have four variables that are heterogeneous in nature. And by applying a 4 by 4 transpose, that turns it into 4 separate variables which are each semantically uniform, all the Xs in one, Ys in the other and so forth.
+
+Now in OpenCL that little code snippet there, which you can see, shows how expressive the swizzle notation that's in the OpenCL C language is. Now I happen to have formatted these things as float16s and it's very easy to build a float 16 from four float 4s and the compiler does a very good job under the hood of actually achieving that.
+
+And then you go ahead and write these four lines of code that do the even odd min, sorry even odd high low thing and presto it comes out the backend is another float 16 that is transposed. The other thing to do is eliminate the branches. Branches are very bad for performance, they cause scheduling problems for the compiler, they cause pipeline stalls when they happen. And they just don't work well with SIMD because the idea with SIMD is you're doing the same thing to every single element in your vector.
+
+And if you're busy changing your code path on every single element in your vector, you're not doing SIMD. So the way to eliminate branches is basically to do both sides of the if and when you have the results from both, then you make a comparison that says do I want per element, do I want the one from the left or do I want the one from the right.
+
+To do this comparison, it's just like in AltaVec or assetC, you can issue an isgreaterthan, feed it the two element wise vectors that you want to compare and it generates a mask that is then used to select between the two. So here's my scalar integrator Details aren't particularly important, OpenCLC code, it's all pretty standard C++ stuff or C stuff. The reason I put it up is because I want to compare it to the vector integrator which is much denser because it's doing four at the same time.
+
+And in here, you can see that when I load the data, I then transpose it and then I do my math and then I do the selectcompare operations and then I transpose it back and I write it out. So that was vectorization. So how did concurrency show up in OpenCL? Core wise, parallelism shows up as work items. You take your problem space and you chop it into an index space. What I've drawn here is an array of 20 work items grouped into 5 workgroups.
+
+The maximum workgroup size that you can select is actually limited by the combination of the device and the kernels. So on a given device, given a particular kernel, you find that you can find out by querying the API how big your workgroups can be. Now each workgroup shares local memory barriers and fences.
+
+So within the workgroup you can use these things but not between workgroups. So in the demo all my kernels happen to be one dimensional. In the case of the skinning, it's the vertex buffer and I just index the vertex buffer with the index space in the integrator's particle array, driver constraint the driver array constraints array for the distance vertex buffer Again, for the write back.
+
+[ Period of silence ]
+
+It's interesting to note here that there doesn't have to be a 1 to 1 correspondence between indices in your index space and indices in your vertex array. And this can actually be an important optimization depending on your device. You might want to have a single work item operate on multiple indices in your array.
+
+So don't limit yourself to thinking about I have a thousand elements in my data array so I must have a thousand work items. So the interesting case is the spring mass system. It's interesting because it has limited parallelism. Turns out that each spring mentions two particles and it has to update those two particles according to how far apart they are.
+
+[ Period of silence ]
+
+And bad things happen if you try to run two of them at the same time which happen to modify the same particle. You end up in a data race condition and you, you get unpredictable, in deterministic results. So the way I got around that in the original code was to organize the data so that sets of 8, which I called octets never mentioned the same particle more than once. And I could compute 8 of them completely in parallel.
+
+Unfortunately, when you bring it to OpenCL and you try running it on a GPU, 8 at once is virtually nothing. It's the same as scalar from the GPU's perspective. The GPU wants to operate on thousands at the same time. I'll come back to that in a moment. But first, I want to show you what happened when I implemented all these things in OpenCL.
+
+These numbers are from a latest generation Mac Pro. You can see the scalar and vector columns and the interesting thing to note is that the vector is not always a win on these machines. And with these particular algorithms, the integrator case in particular is very much bandwidth bound and executing a lot more code. There's more code involved and for various other reasons because you're doing a swizzling and what not, the vector version ends up being slower. I created it primarily to show it because it's the small that fits on the slide.
+
+And some of the other kernels are limited in different ways. The skinning is a pretty big win compared to a scalar task because it's completely data parallel. So when we run it on the GPU, and compare it to the best score from the CPU, it's faster than the original host code. It's about 4.1 times faster on this high end graphics card. But that's kind of underwhelming. The main CPU 8 cores, actually I believe that's an error. I think that number is from a 4 core latest generation MacPro but it outperformed the, the GPU by quite a margin.
+
+So what can we do about that? Well OpenCL is a low level API. It's not protecting you from having to do optimizations, it's providing you a better environment in which to do optimizations and like Ian said, the first important optimization is to use the right algorithm. The distance constraint in particular is crippled by the fact that only 8 of them can happen simultaneously and by reordering my data, I found that instead of having sets of 8 I could have sets of 56 or 54, whatever itT is.
+
+And that actually helped quite a bit. However, that's still relatively limited and the GPU wasn't doing particularly well on that algorithm. So what I should do if I was pursuing this demo is go back to basics and identify whether or not I can find a spring mass system that doesn't have the same fundamental limitation. The next optimization is to do as much as you can per task.
+
+And really, the skater is about 1000 particles, couple of thousand vertices. That's really not a whole lot of work from the GPUs perspective. So a larger dataset is really important. Now, in a real game that means taking a whole bunch of the characters and batching them all into one. In the demo, what it means is just replicating the data and creating your own little skater army here.
+
+[ Laughter ]
+
+And simulate them all.
+
+[ Period of silence ]
+
+And then optimizations bandwidth. These machines are heavily bandwidth bound. They are not computationally limited. Virtually all kernels you're going to write unless you have a really, really computationally aggressive kernel, almost all of them are going to be bandwidth limited.
+
+So there's a few ways we address that in the demo. The first was the OpenGL CL integration because what that allows us to do is leave the data right up on the GPU and that means it doesn't have to get copied back and forth and that saves some time. The other thing was switch from use host pointer to copy from the host pointer which is the different mode on the MemObjects.
+
+And that allows the data for the GPU to be resident in DREMM. And then the other problem was the access pattern. How the kernels were actually accessing the memory. So it turns out that current GPUs are optimized for graphics surprisingly enough. And the way to get performance is to do burst reads from memory. This is true of CPUs as well as GPUs but it's more extreme on the, on the GPUs.
+
+Bursts only happen on sequential accesses. They are created by coalescing smaller reads and current hardware typically can only coalesce relatively small reads. So if you're reading more than about 16 bytes or more than the actual particular sizes in fact, the coalescing is not going to happen and you won't get any bursts.
+
+And coalescing has to happen within a workgroup and it happens across the work items in a workgroup.
+
+[ Period of silence ]
+
+So you sort of need to explicitly code for this pattern. And array of structure acts sort of works against this pattern because it tends to cause things to get loaded out of global memory, not according to that pattern.
+
+So my vertex buffer for example is 80 bytes. So it's clearly larger than the size that is currently coalesced. So the solution is to actually read it into local memory and access it there because local memory doesn't suffer from the same kind of problem that accessing global memory does.
+
+The, these things don't have to coalesce nearly so much. So the newest GPUs can do better, but in the short term when we might see compiler improvement, it'll help. But in the short term, what we needed to do was figure out how to read the vertexes I need in an efficient way.
+
+So this animation is showing is rather than each work item simply accessing the individual 80 byte vertex, what they do at the beginning of the work item is they gang together, the entire workgroup works on transferring the set of vertices that those work items are going to operate on into local memory and then it can operate on them locally.
+
+So it turns out that the intrinsics built into the language provide the Async workgroup copy and these are exactly that kind of a gang to transfer. So you can use that at the beginning of your kernel to get your data into local memory and this is essentially what we did. And the performance speed up was dramatic. On my machine, it was from 50 milliseconds on a particular test case down to 6 by the time we were down.
+
+So we're talking order of magnitude speed up by doing this memory optimization. And on the machine that we had here for testing, this demo machine here is the speed up that results. So you can see it went from 4.39 times faster 9than the host to 83 times faster than the host for the skinning algorithm. And that was the only algorithm since that's the dominate algorithm in the demo. That was the only one we had time to optimize for. We could apply similar optimizations to the other kernels because they're all bandwidth bound.
+
+[ Period of silence ]
+
+So in summary, the performance and this graph is per kernel and they're all normalized to the fastest device. And you can see what I have here is a Core 2 Duo host. The OpenCLC implementation on the Core 2 Duo and 8800 was in the Core 2 Duo machine.
+
+And then the I7 processor, again the host, the OpenCLC CPU implementation and its GPU. And you can see that the latest GPU is indeed very, very, very, very fast. I want one.
+
+[ Laughter ]
+
+So there's a few take aways from this. The first is that performance tuning is essential.
+
+You can't get away without it. OpenCL is a low level API with a minimalist abstraction layer so that we can do the kind of performance tuning we need. It can also act as a foundation layer and I'm hoping to see other technologies built on top of it. But it provides a foundation layer for us to work in. Second, the abstraction layer is not trying to hide the performance characteristics of the machines. So you have to know about the kind of hardware you're operating on. And third, you should expect to write multiple variations of your kernels unless you have a very, very specific target.
+
+For us we address all sorts of hardware platforms on our target platforms which we don't know what the hardware is, then we need to provide cases that deal with the likely variations we're going to expect. I would expect to see a very small handful of kernels that address the dominant classes of hardware that you see. So you're not going to need to implement for the particular nVidia chip and that particular nVidia chip. Instead, they'll probably be lumped into classes. And you'll have some number of kernels. And that's it.

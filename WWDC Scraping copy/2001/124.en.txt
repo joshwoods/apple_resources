@@ -1,0 +1,283 @@
+---
+Title:  Printing
+Year:   2001
+Web:    https://nonstrict.eu/wwdcindex/wwdc2001/124/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+When it came time to put the slides together for this year, we looked back at what we'd done for the last couple of years. About two years ago, we talked about the architecture and a bunch of APIs. Last year, we went through APIs again, showed you how to write plugins for the print dialogues.
+
+So this year, we're going to do something a little different. And the agenda is basically the topics that have spawned the most amount of email between developers and us to the various developer mailing lists over the last year. The topics that have been the most interesting to discuss with the developers and in-house.
+
+Hopefully, we've got a little bit of something for everybody. We've got some do's and don'ts for Carbon, a little bit of information about how Cocoa glues onto the underlying printing system, a little bit on Unix printing in the system, some diagnostic tools. And we'll end up talking a little bit about printing and color.
+
+Before I go on, I want to say thanks to everybody here who has reported bugs against printing. It has been appreciated. It's kept us busy. And also, thanks for all the suggestions for improvements, which we'll work on. So before we get into this, I got one slide. Some of you may have seen before, so hands up all those who've seen this slide.
+
+Well, that's very interesting because all the printing engineers didn't put their hands up, so that's why we got these bugs. So I'm going to explain to the printing team and some of you very quickly how the architecture is put together, mainly so that you understand the terminology we're going to use in the subsequent slides.
+
+And I was thinking of doing this with my eyes shut because I've done it so many times before, but I'll probably fall off the stage. So we'll start over on your left towards the top where your application is linked against the printing framework. That's the box we call the print job creator.
+
+That serves up all the APIs that are in the two main printing headers, PM core, PM application. PM application for the UI related APIs, PM core for all the rest. Those APIs let you set up what we call the page format object and the print settings object, bring up the print dialogues, and execute the print loop. And a result of that, you get a print job.
+
+And the print job is that PDF school file shown here and a meta file we call the job ticket. The job ticket contains most of the settings you put in, the user does in the print dialogue and a bunch of other things that are needed for processing the job downstream.
+
+Underneath that print job creator is a plugin, Print Dialog Extensions. Those are CFPlugins. They can be written by application developers, by printer driver developers, and they're written by us in the printing team. Underneath that print job creator is a plugin, Print Dialog Extensions. Those are CFPlugins. They can be written by application developers, by printer driver developers, and they're written by us in the printing team.
+
+Moving across, we have the print server. The print server is, when you think about it, it's the nerve center of the printing system. It's responsible for sending print jobs downstream from the print job creator and relaying status and error information back up to the UI from the modules, which we'll talk about in a second. The print server is its own process and manages all the queues.
+
+When a job is ready to print, PrintServer runs a process called the Print Job Manager. As its name implies, it does everything that's needed to do to get a job printed. It runs These modules over on the right are in separate threads. The first one we call the converter.
+
+Actually, that's a bit of an oversimplification. The converter is a set of libraries that do various things to do with converting from one graphics format to another. For example, there's a converter library that turns PDF into raster data, one to turn PDF into PostScript. Converters are also used up in the front end of the printing system to generate the spool file itself. So it's involved in turning Quickdraw drawing into a PDF spool file or Quartz 2D drawing into a PDF spool file.
+
+Next one down, the printer module. The printer module is pretty much the only thing that's left of classic print drivers. Classic print drivers used to do everything themselves, UI, spooling, quick draw conversion, chooser packs, IO, everything. Now the system is a lot more modular. Printer modules, basically all they have to do these days is tell the converter what sort of data they want, and once they receive that data, package it appropriately and send it to the printer.
+
+So in the case of a Raster printer module, it would tell the converter the color space and the resolution of the Raster data it wanted. As it received bands from the converter, compress them, insert some engine control codes, and send them off downstream. Talking about talking to the printer, that's where the IO modules come in.
+
+Those are today mainly written by Apple. We have an IO module for Apple talk printing, for LPR printing, for USB. The list can go on. We'll probably add to it. Also third bodies can add to it. Down at the bottom, printer browsers. Those provide the UI for the IO modules.
+
+They basically provide the UI for discovering printers. So there's one for using the MVP protocol to discover Apple talk printers, one that scans the USB bus looking for printers. And those printer browser modules are actually loaded by the last box on this slide, which is print center, which is the application that presumably everybody's used. The application that you use for setting up print queues, monitoring, and managing print jobs.
+
+So that's the architecture in a nutshell. The one thing I have to say is it's a lot more modular than whatever we used to have in Mac OS 9 and 8 and earlier versions. It's a lot more extensible. And our goal is that-- hopefully we're partially achieving that-- is that if you're in the business of writing printer drivers or even if you're in the business of running applications to do a lot of printing, Apple's done a lot more work for you than was the case in the past.
+
+Okay, so back onto the agenda. We're going to talk a little bit about Carbon printing. And we're going to cover both printing from Carbon apps running on Mac OS 8 and 9 under CarbonLib as well as Carbon apps running on 10. And as you're probably aware, the printing system underneath those two environments is very different. That raises some issues and that's why we need to talk about some of them here.
+
+My first slide here is probably exactly the same as the one I had last year, although I didn't check. The message is use the APIs that take a session argument as opposed to their counterparts which don't. If you're familiar with the headers, you'll see there are about 40 APIs where there's a non-session and a session version.
+
+It sounds a bit crazy that there's a historical reason behind that. Originally the non-session APIs appeared in Mac OS X, but now they're in Mac OS X. So I'm going to show you how to use them. With a parallel set of APIs which take a session parameter. In that way we can manage printing within an application, printing multiple documents concurrently.
+
+Our favorite APIs are the session ones. Those are the ones we'll carry forward. If you're using the non-session ones, we'd likely ask you to switch over to the session ones. What you've probably noticed in the last year is that we've added new APIs. They're session only. That's one way of coercing you into doing the right things. Putting up here a note to say we will deprecate the non-session ones eventually. Not this year, but soon. All our sample code uses the session APIs.
+
+A couple of technical restrictions. One is that when you're running on 8 and 9, you're limited to a single session, and that's just because of the nature of the underlying printing system with the print dialogs being system modal, for example. So you have to check your environment at runtime. If you're running on 8 and 9 under CarbonLib, limit yourself to one session. On 10, you can have as many as you like. Every window can have its own print dialog, for example.
+
+If you are using multiple sessions, you should be aware of the fact that the page format and print settings objects can be shared amongst those sessions. Pretty much the only limitation, but an obvious one, is that each session can only have one print dialog up at any particular time.
+
+So somewhat related to that is using sheets for your print dialogues. You can't do this on 8 and 9, but you can definitely do it on 10, and we want you to do it on 10. We want it to be the standard user experience for printing. Actually, not all Apple applications do it right now, and they should, so hopefully that'll happen quite soon.
+
+Obvious benefits of the dialogues appearing as sheets is that the printing control is always in a predictable place relative to the document window, and the other nice thing is that the user can switch from one window to another, from one application to another. The dialogue is no longer modal to either the application or the system.
+
+The two APIs that are up there, if you're running at run time, you want to check your environment before you start using PM session use sheets because you can't do this thing online. Even though you can bring up a print dialog for each open document window, whether or not you want to spool multiple documents in parallel is up to you. It can be tricky if you're a quick draw based application.
+
+You've got to carefully coordinate your use of printing ports. There's actually a limitation on Cocoa Apps at the moment because the spooling dialog is modal, but we'll get rid of that in a future release, I'm sure. You can print multiple documents or spool multiple documents in parallel, but be a little careful on that.
+
+I mentioned that CarbonLib printing, you don't get sheets. Basically, you get the classic drivers, print dialogues. And I've got this bullied item on several slides. We have got sample code. It's in the posted online documentation. It's on the developer CD. It's a little out of date now. We are improving it. Until we can get another developer CD out, we are actually going to provide more sample code to DTS. And so DTS will be able to post this sample code, hopefully quite soon.
+
+Another UI related thing is how do you extend the print dialog. When I say print dialog, I mean the page setup and print dialogs. The message here is to write these print dialog extensions. Instead of using the old append-dittle mechanism, append-dittle was the way in which you used to extend the print dialogs back on older versions of the OS using PM dialog init and main calls. And it was a little kludgy. You really had no control over how you could lay out your controls for whatever print-specific features you had.
+
+What you can do with PDEs is that you can have, if you like, multiple panels added to the print dialog, or the page setup dialog for that matter. Lay them out exactly as you like, so it's a lot more powerful. The only restriction is that PDEs are only supported on 10.
+
+A couple of things to mention in connection with PDEs is that You're welcome to write PDEs and add any features you like, but we would definitely like you to talk to us before you start doing that. You don't have to register PDEs because they are plug-ins, they use the UUID mechanism, so they're all by definition unique. But we'd rather you didn't write a PDE for a feature that you know deep down is something that Apple should do. And if you're an application developer, we'd rather you didn't write a PDE for a feature that really should belong to the printer.
+
+And vice versa, if you're developing printer modules for X, we don't want you putting features in that really should be provided by Apple or maybe are application specific. So you're very welcome to run your ideas by us and we'll give you some advice. We'll certainly tell you if we're planning to write a PDE for a feature that you think you need. And we're acutely aware of the fact that there are some that we should write and add, and we're working on that, so patience is always appreciated. I appreciate it.
+
+I should mention in connection with PDEs that we strongly encourage you to think about the UI design and the layout to follow Apple's example. If you're a printer module, you may be very tempted to make your UI look exactly like your print dialogues on Mac OS 9 or 8 or, heaven forbid, on some other platform. And we strongly encourage you not to do that, to take a step back, look at how things look on Mac OS X and fit in with that.
+
+Certainly users don't want to see any inconsistencies as they switch between one panel and another or between one printer and another. So same applies to application developers. You might want to do something that looks just like your application printing extensions on 8 or 9, but try to do the ACWA thing if you can. And certainly we're here to give you advice if you have any questions about that.
+
+Let's see. So if you're an application developer and you've added a panel to the print dialog, you want to know what the user did in that panel. So the two routines down here are used for that purpose. Your plugin is going to call PM session set data in session, and you can use the get call to fish that out, and then your application mainline code is going to know what it needs to do in the print loop.
+
+Again, sample code from DTS. One small thing that's probably worth mentioning is that you do have a choice when you're building your PDEs as to whether to build them as pair form or code. Even if you're a CFM app, there's glue code from DTS. So it's your choice. It's perfectly doable.
+
+Okay, now a plug for a few APIs that we certainly use in our sample code. These are not exactly taken at random, but there are a lot of APIs in PM core, PM application. Some of them have rather specialized purposes. Others, hopefully, are obvious why you should use them. But there's a lot of APIs, so it may not be obvious which ones you should use. Here are a few that we encourage you to use all the time.
+
+The first one, PM set job name CFString, is a function you should call to name your print job. By default, if you don't call this routine, we'll get the window title and use that. But there are applications that don't necessarily have windows or have multiple windows and do strange things at print time. So this is a great way of providing a user-friendly, meaningful name.
+
+That name will be displayed by print center in the queue window. It'll be displayed in the print window. The second one, PM set job name CFString, is a function you should use all the time. This will be displayed as a default file name if you're printing the disk. We'll put it in the job title comment in PostScript files we generate. It's used in various other places, so please use that routine.
+
+PM Set Page Range is quite a useful API as well. You use it basically to tell our Copies and Pages panel how to limit the from-to fields when the user's typing in the pages they want to print. You can use this in connection with another routine, PM Set Last Page, to prime the print dialog so you can actually tell the user what the first page and what the last pages are in the document.
+
+It prevents people typing crazy numbers in there and then your application has to deal with that in the print loop. PM Session Error You really need to use this in your print loop and you have to make sure that you always call it before the begin page function.
+
+If you do detect an error with this routine, don't bail immediately. What you should do is make sure you call the end document routine. That allows us to clean up any memory we've allocated and then you can safely get out of the print loop, just post your error message if you need to, and exit cleanly.
+
+You should use PM Session Set Error within the print loop to set your own error codes or error conditions that will be picked up after that page has been processed by PM Session Error. PM Session Set Error is the way you register your application-specific error conditions that you encountered while trying to draw your pages.
+
+Obviously, you don't want to use it for...
+
+[Transcript missing]
+
+So how many people remember the original articles called The Perils of PostScript? Ten, eleven years old they were written. Okay. Written by a guy called Zizi Zimmerman who's I think the originator of the dog cow. Pretty famous guy in his time.
+
+I'm certainly not trying to emulate what he did, which is a lot better than what I'm doing today, but it's worth talking about some of the tricky aspects of mixing PostScript with Quick Draw when you're printing. Historically, every application that's had moderate to sophisticated drawing requirements or capabilities has had to resort to PostScript at print time, obviously if you're only printing to a PostScript printer, because Quick Draw really won't cut it.
+
+For things like smooth shading, etc. For a long time, application developers have been using PIC comments, inserting snippets of PostScript or huge chunks of PostScript in their PIC spool files, and getting to know the idiosyncrasies of different versions of print drivers, etc. We recognize that the folks who've written these sort of applications probably got a lot of code they need to bring over to 10. They can't do it immediately. We'd obviously like you to go towards the PDF.
+
+We have a PDF imaging model, but in the meantime, we do have what we call the Laser Iterate compatibility path in printing. So you can tell the printing system that you want to pick with PostScript spool file instead of a PDF spool file. These are the two routines you use to do that. You call PM session, get document format generation to get back a list of spool file formats that are supported. And obviously, you've got to call this after the print dialog's been dismissed. Because before that, nobody knows.
+
+They don't know what the target printer is and whether it's a PostScript printer. So call it after the print dialog's been dismissed. You get back a list. The list will always contain PDF as a supported spool file format. And maybe it's going to contain PIC with PostScript if the target printer's a PostScript printer. So having discovered that, you can then call PM session set document format generation, pass in PIC with PostScript as your preferred format.
+
+And basically, from that point on, when you draw your pages in the print loop, you can use PIC. comments, and insert your own postscript. The sample code is already on the developer CD. It's not bad, but I think we've got a better version coming out very soon, again through DTS.
+
+Those are the routines you should use. There's a routine that's in PM Core called PM is PostScript Driver. It might sound like it does the same thing. It doesn't. It just tells you whether the current printer, basically it tells you whether the current printer is LaserWrite or 8 or whether the current printer on 8 and 9, whether it's WDEV field is 3. So you could use it on 8 and 9 to see if you're printing to LaserWrite or 8 or Adobe PS, but don't try to use it on 10 for this purpose.
+
+Paul Danbold So having told the printing system you want to generate your own PostScript, these are the five pick comment routines you can use to put your PostScript in. I say be careful with PostScript. Anybody who's doing this stuff already knows why. You have to be careful. It's only designed for inserting PostScript in page drawing to supplement what you're already doing with Quick Draw. Be careful, especially be careful about assuming existence of resources like font resources, etc. The Space Hacks does still work, but if you've got code that is currently compatible with LaserWriter 8, it's going to be compatible with this method of printing on 10.
+
+There used to be a mechanism to send your own PostScript procedures down with the print job. It goes by the name of the P-REC 103 mechanism. It's a resource you have in your application. That's the way in which you get your own PostScript into the header or into the document page setup sections of the print job. You can still use P-REC 103, but there's a much better API and mechanism for doing it, and that is this PM Session Set PostScript Injection Data routine. It's documented.
+
+It's in PM Core today. Basically, you provide a dictionary of key value pairs. The keys are tags into the PostScript job. The values are snippets of PostScript you want us to insert at specific places. It gives you fine control over the PostScript job you generate. You still obviously have to be careful about what you're doing, but it's a lot better than P-REC 103, and you should use it if you are forced to use the LaserWriter 8 compatibility path on 10.
+
+A couple of disadvantages, or obvious disadvantages, of using all this stuff. The first thing is that Preview, which the Preview app we use for previewing spool files, can handle PDF, but we don't have a PostScript rip in the system. So if you're doing the PostScript printing path on 10, you can't preview your documents.
+
+What's more, if you're doing this, one day we'll support drag and drop in Print Center and you'll be able to drag spool files from one print queue to another, or documents onto queues, for example, and you can't drag a PostScript spool file onto a queue for a Raster printer because we can't render PostScript.
+
+So use this stuff if you need to, if it's a short-term solution for getting onto 10. But go to... The Graphics and Imaging Tips and Trips session tomorrow morning at 9 o'clock, where one of my colleagues, sitting in the front row there, is going to tell you a lot more about QuickDraw and Quartz 2D, and I think you'll find the information you get out of there really shows you a much better way of doing sophisticated printing on 10 than the old QuickDraw and PostScript route.
+
+Now for a topic that has generated a ton of email, a lot of bug reports. Actually, we've put a lot of bug fixes in CarbonLib. The issue is how we get routines like PM, set, get, scaling resolution, orientation, etc. to work accurately when you're printing through CarbonLib on Mac OS X. So it's difficult for us algorithmically to figure out how to deal with all these different print drivers, print records.
+
+So what we've done, and we've been doing this for the last year or so, we've been encouraging printer driver developers to help us create this database, which we call the PDAT database, that's inside of CarbonLib. It contains information that tells us for these various settings like copies and orientation, the offset into the print record, the size, bitmask to separate the parameter from its neighbors, and some information to handle.
+
+So it's pretty good. There's about 40 PDATs in CarbonLib today. It covers about 250-odd drivers, but there are other drivers out there, and you'll probably encounter them, or your customers will encounter them, and they'll complain, and you tell us, and we'll talk to the driver developer, and we'll add another PDAT.
+
+So it's pretty good. There's about 40 PDATs in CarbonLib today. It covers about 250-odd drivers, but there are other drivers out there, and you'll probably encounter them, or your customers will encounter them, and they'll complain, and you tell us, and we'll talk to the driver developer, and we'll add another PDAT.
+
+And that's the way it works. And in the meantime, code defensively. It's just as bad as the situation when you were printing directly to those drivers on 8 and 9 last year or the year before. So it's a compatibility problem. We're working on it. It's getting better, but we certainly appreciate your support. And bug reports are just a fine way of doing it.
+
+We use the PR general function, again, under CarbonLib against the classic drivers, and for those to work reliably, we need that driver to support the various opcodes associated with those functions. If the driver doesn't support that opcode, the only thing we can do is return KPM not implemented, and you have to deal with that. Again, it's no worse than the situation ever was, but the message is, if you're printing through CarbonLib, be careful, because there are some drivers out there that we don't know how to deal with. how to handle it.
+
+All right. Probably going to trip over myself on this one. I'm going to try to talk about some page and paper wreck issues. So first of all, terminology. The formatting printer is the printer you see in the page setup dialog. On 10, we are gently trying to educate users that when they format a document, it's not necessarily going to be printed to the same printer that they format it for, and it might well be printed to a variety of printers. So we've introduced this entry in the pop-up called Any Printer, which we call the generic printer. The idea is that the user who, well, actually the user who doesn't care.
+
+He isn't even going to bring this dialog up, and they'll never see anything. But when the page format object is created, we'll create it for this generic printer, which has associated with it a set of standard papers and a set of safe margins. If you go into the page setup dialog, you can pick another printer, one of the printers that you see that you set up in Print Center, and you can pick a specific paper size supported by your printer. And you will get, courtesy of the printer module, downstream. So you can get, courtesy of the printer module, downstream exact margins for that selected paper size.
+
+But the important thing is that whatever you format your document for is quite separate from what happens when you decide to print that document. So the formatting for printer is totally independent of the printer entry that you see in the print dialog. And it's a little bit of a leap of, well, it's a change of model for some users.
+
+But we feel... We feel that it's a sensible step in the right direction. So the current and the default printers, those are only relevant in the context of printing, as in the print dialog. When you bring the print dialog up for the first time, the printer pop-up will always contain the name of the default printer. The default printer is the printer you set in Print Center. Typically, that's the last printer you set up.
+
+And if you fiddle with the pop-up... You can change the printer entry. So you're changing, at that point, the current printer. So there are cases where you will format for one printer and print to another. And that's fine. I mean, we've got this nice PDF imaging model. We can handle mapping, you know, the document to different paper sizes. The default behavior right now is we clip.
+
+But we'll provide some more functionality to allow people to do things like scale and center their pages on the paper. But the main thing for people to come to terms with is the fact that formatting for a printer is very different from the current printer that you see in the print dialog. Let's see, what else to say about that?
+
+You can't change, there's no programmatic way of changing the default printer. That is the user's decision. The user can do that through Print Center. Today you can't change the current printer through any APIs, but we do recognize that there are some applications that want to do this sort of thing. If you're writing a printer utility, for example, you might want to do it. So here are a couple of APIs, PM Session Create Printer List and PM Session Set Current Printer, which respectively will give you a list of the printers that you see in Print Center.
+
+And they will let you change the current printer. They're not available today. They will be available in some future release. And I think if you write to DTS in a week or so from now, they'll be able to provide you with some details. Again, you can't use them today, but if you're trying to do functionality that requires access to the printer list, we do have a solution for you.
+
+The other thing I need to say, well it's a bit of a confession really, is that the page setup dialog doesn't exactly work the way it's supposed to in 10.0 or 10.0.1, 2, and 3, but we are fixing it. I'm sure you've noticed if you go to the page setup dialog, pick a printer, pick a paper size, okay the dialog, and then come back to it later, it doesn't appear that the settings have stuck. So we are very well aware of that problem and we have, I think it's safe to say we fixed it. So you'll be getting those fixes, hopefully quite soon.
+
+A few words about paper and pages and the first thing I have to say in connection with these routines that are generally used by applications that are trying to format a document that maybe have come from another platform or been formatted for another printer without using the page setup dialogue. These routines, you have to be very careful about using them on 8 and 9 because there's no programmatic way on 8 and 9 to tell the driver what to put in, well, to put in a document.
+
+You can't put different R paper, R page settings into the print record without going through the driver's page setup dialogue. So the APIs are there. Use them carefully on 8 and 9. They do work on 10 as advertised or as expected. So you really do have a lot more control over your paper and page recs on 10. If you're going to print without a UI, you can do that and you've got a reasonable amount of control over margins.
+
+A The last bullet item here is extremely important. and Before you call any of the GET functions to get the page rec, for example, always make sure you call the validate call after any set call to set orientation, set scale, set resolution, set paper or page rec because that's the only time we sync everything up. In fact, we're even fixing a few bugs in that routine, so we'll get it right very soon.
+
+So that's pretty much all I've got now for Carbon. Just to recap, do use the session APIs, display your print dialogs as sheets on 10, develop your own PDEs, go to tomorrow morning's session, look forward to using Quartz 2D instead of mixing up Quickdraw and PostScript, and program defensively when you're running on 8 and 9 on CarbonLib. We do our best. Compatibility is getting better, but be aware of some of the issues we face.
+
+Now we're going to switch horses for a moment to talk a little bit about Cocoa Printing. What I'm not going to do... I'd like to tell you what to do in your application because there's a session straight after this on advanced Cocoa topics in Hall 2. And there's a lot more information there, so I encourage you to go to that session if you're a Cocoa app developer and want to know a bit more about how to do printing right. What I'm going to talk about is the relationship between the AppKit printing classes, there's only four of them that are really relevant for printing, and the underlying printing system.
+
+So we're just going to go through these classes fairly quickly and I'll just try to explain how they map to each other. The first one, NSPrintInfo. If you look in NSPrintInfo, look at the online documentation or look at the code itself, you'll see it's a dictionary that contains all the settings that are usually associated with the page setup and print dialog. So in theory, it maps directly to our page format and print settings objects.
+
+As a Cocoa application, you automatically get a shared NSPrintInfo object. There's always a notion of a current one that's used for the current print operation. You can create multiple instances of it. There are accessor functions for the various things that are stored in NSPrintInfo, although most of them are changed by bringing up the dialogs, the page setup and print dialogs.
+
+The thing that we need to do is we need to sync NSPrintInfo. NSPrintInfo. A little bit more closely with page format and print settings because there's a couple of things in NSPrintInfo that aren't supported by the underlying printing system. We need to take care of that and vice versa.
+
+There's a couple of things that we have in the underlying print system that aren't in NSPrintInfo. Just a few things like NSPrintInfo's got some fax settings which we don't carry through downstream. The underlying printing system's got settings for things like print quality modes and things like that. So we'll be syncing those two up.
+
+NSPageLayout, basically that's the page setup dialog. You really don't have to do a lot of coding with NSPageLayout. It basically accesses and has print and post as things like the paper size and the scaling orientation for the document. The one thing I want to point out is that you can invoke it in two ways. You can invoke it as a modal dialog and you can invoke it as a sheet. So you'll know which one you should do.
+
+One thing I could have mentioned is that you can extend the page setup dialog in a Cocoa app, but very few applications have need to do that. And it's Print Panel, which is a print dialog, obviously. You can do the same thing. You can add an accessory view, and it's sort of equivalent to print dialog extensions for Carbon applications. You can add a view, put your application in specific print settings in it.
+
+The only restriction today with Cocoa apps is that you can only have one accessory view. I'm sure we'll work on that and enable you to have more if you need them. And actually, if you need to do that sort of thing, I think you should tell Apple, so we understand the priority for that. And obviously, NS Print Panel sets the things in NS Print Info that you see in the dialogs like copies and page range, etc.
+
+Last but not least is NS Print Operation where all the good stuff happens. When you pull down the file menu, hit print, you create an NS Print Operation that takes a copy of NS Print Info, brings the print dialog up, merges the results back into NS Print Info, and then it's up to NS View to do all the real work.
+
+NS View draws all the pages, goes into the spool file, the PDF spool file, and that spool file goes through the rest of the printing system just like any other print job, maybe from other Cocoa apps or from other Carbon apps. Basically, that's it. There's very little for you to worry about for Cocoa printing. There's a little bit of work for us to do to more tightly sync the AppKit classes up to our underlying data structures, but it works pretty well today.
+
+Now for the power of printing, sorry, the power of Unix and printing. So we don't expect a lot of consumers to do printing from the command line, but maybe some of you guys in this room will want to do that occasionally. So you can. The LPR family is in the BST layer. LPR works.
+
+Just a couple of things to mention. Today, LPR and its associated tools like LPC, LPQ, LPRM, etc., they work, but they're not really well integrated with the rest of the printing system. In other words, or for example, when you say LPR-P, you want to type in your printer name, you can't type in necessarily any of the print queue names that you see in Print Center. The only exception to that is that you can use... printer entries that are stored in NetInfo.
+
+So you can put NetInfo printer entries in when you're LPR printing. The other thing, of course, with LPR is that you don't get user-friendly status and error messages if anything goes wrong. And you're limited in the file types you can print. Generally, text and PostScript files work well and others not so well. So LPR works, but there's actually a better tool. And... if you haven't found it already, it's just called the Print Tool. It's in the user S bin.
+
+The difference is that the Print Tool is actually integrated with the rest of the printing system. So when you specify your printer, you can specify any printer queue name that you see in Print Center. You can, for example, print PDF files to raster printers using the Print Tool.
+
+There's an NUP flag you can use, dash N, so you can print your files 2UP, 4UP, etc. So... and... and once you've printed, you can see that your job's in the queues along with everything else via Print Center. So... if you want to do command line printing, print is a little better than LPR at the moment.
+
+LPD is in the system. Obviously, it's used when you print through LPR. It's not... It's not set up by default to enable remote printing, but you can do that. So if you know what you're doing, you can edit the config files and you can run LPD maybe from a startup script. And other clients on the LAN can print to your LPD spool or running on your system to whatever printers you're set up for. So LPD works. It's not our long-term solution for print sharing, but it's there.
+
+I mentioned a moment ago NetInfo. Something you may not know is whenever you set up an LP operator in PrintCenter, we actually create a local NetInfo entry. I'm not going to get into NetInfo because I'm definitely not the right person to talk about it, but NetInfo is... A very convenient way of making LPR printers available to everybody on the network without them having to know their domain names or IP addresses or anything like that. But you can't use Print Center to create global NetInfo entries or NetInfo entries that are exported to higher network domains. You have to use NetInfo Manager to do that, and you have to be appropriately privileged to be able to create network-wide NetInfo things.
+
+So you can do it. If you're going to create a printer entry, the PrintCap man page tells you about the keys that you have to put in. You have to be careful there. I mean, we have to know, you have to be exactly right when you specify the name of the printer and the name of the machine that's running LPD, for example.
+
+There's one instance there which I'm flagging. There's a TY key, which we use, the value associated with that, we use to find the PPD file for the PostScript printer. So you can use Print Center associated with that NetInfo entry. And NetInfo is limited in the bytecodes it can accept.
+
+It doesn't like forward slashes and spaces, for example. Some PPD files may have those in the file name. So if you're going to put the PPD name in the entry, you can replace those slashes and spaces with an underscore. So there's some subtleties there. I'm sure DTS can handle that. They can handle questions on it. But it's a nice way of making your printers available to everybody on the network. So it's demo time. So is Phil Schiller here? Oh, okay. So I'll do the demo.
+
+We're already running terminal. It's going to be a very exciting demo. So exciting that... I think a lot of people may want to leave now. Alright, so we're running top over here just so that you can see what's going on. Not much happening right now, though we've got PrintCentre running down here.
+
+Let me say a few words about CPL Util first of all. It's a tool that was written a while back when we were developing the printing system. It was written for Intel News originally, but it's become quite useful for people who are doing print testing, people who are trying to troubleshoot print jobs, especially for printer driver developers.
+
+If you're feeling brave and you're having a printing problem, CPL Util is a great way of finding out if, for example, print queues have got corrupted in some way, when a job fails, how far the print job got through the pipeline. I'm going to show you a little bit about CPL Util, but by no means give you a comprehensive walkthrough. If we go to Developer Tools, We'll see, oops, where are we? Oh, CD.
+
+Of course this requires that I can type. See a bunch of things in there that Apple provides that aren't in the standard BSD set, but there's CPL Util, so we can run CPL Util and first off get ready for the scrolling. We can see all the things that CPL Util does.
+
+We're not going to try many of these commands, but here's one that we can do. ShowWorksetPrinters is a command we can use in CPL Util to see what print queues we've set up. We can do this and we can see, oh, I don't have any print queues. So let's go to, well, Let's get print center, let's get CPL Util listening to all the things that the print server does. That'll be one way of seeing whether operations like creating a queue or printing a job work successfully. So, first thing I'm going to do is, I'm not going to trust my typing. We're going to start the server.
+
+Top has beautifully shown that the print server is now running. So now we can... You can listen to servers. So what we're doing now, I mentioned earlier on that Print Server is the nerve center of the system. So we're now listening on a port to Print Server. We're finding out everything that happens.
+
+If queues are created, if jobs are printed, if queues are deleted, etc. So we're listening to Print Server at this time. What we're going to do is we are going to run Print Center down here and we're going to add a printer. And I just happen to have down here a USB printer. It's on and hey presto, I can see it. I can create a queue for it.
+
+you'll see a few things happen. And what you'll see in the CPL util log is you'll see that a queue has been created. You'll see the name of the queue. And you'll see a bunch of other information. This rather un-user-friendly string is the name of the queue directory that we've created in VAS full printing.
+
+If you had appropriate privileges, you could navigate down there, go into that directory, and you'd find a bunch of files containing information about the print queue and the printer, the directories for the spool files, et cetera. We won't do that now. And you don't really need to do it, because CPL util is a much easier way of finding out information about the printer or the print queue. So we'll stop listening for a moment, and we will... We'll use the get queue info command.
+
+You have to type in everything exactly as it's supposed to be, otherwise it's not going to be recognized. Get Queue Info tells me a little bit about the queue that I just created. Let's see what we've got here. Here we've got the URL to the printer module associated with this queue. Down here we've got the URL to the IO module associated with this queue.
+
+Further on, if I can find it, we've got the URL to the print dialog extension associated with this queue. We've got the name of the queue and a bunch of other information. So you can, especially if you're a driver developer, you can use this sort of tool to make sure everything got set up correctly.
+
+So now let's do something a little bit more adventurous and we'll print a job and we'll see what can happen. I will I'll do listen to server again. And okay, so we're now waiting for something to happen. Let's go and find a job to print. Oops, I didn't do that. Let's do this one.
+
+I'll print out the other one later if you like. So, this is a much more politically correct document. So let's print it. and we're not going to do much which is going to print it because we're actually seeing what CPLUtil does. And if we're patient, first of all if we were down in print center, We would see that the document's printing.
+
+Sitting over here watching the log, we'll actually wait for the print job to go through and then we'll take a quick look. You'll see there's basically a sequence of messages that come through. It's a pretty predictable sequence and it's one way of finding out did your job actually get through to, was a school file created, was a connection to the printer successfully opened, was the job sent to the printer, was the connection closed, etc. So it's one way of monitoring the entire life cycle of a print job.
+
+Did I mention that we were going to work on printing performance? Well, maybe we are printing. Let's see. The thing to look for when you're looking at this, yes, if you look at the event text field, that's basically the thing to look for. That tells you what sort of event has happened. So if you don't mind, we'll work backwards.
+
+If you see down here associated with event text, we've got the message that the job's been deleted. If we go back, we've got a message that the job's been deleted. That's on the next line down. Print job completed. Looks pretty good. Closing printer connection. A few progress messages.
+
+So it might sound strange to go through this backwards, but I think you get the gist of it. Printing job. Opening printer connection, starting job, job created. So that's the reverse healthy life cycle of a successful print job. And I know you won't believe me, but the page did actually print.
+
+That's CPL Util. There's a lot of stuff in there that I could show you. Some of it's for some fairly brave people. You have to be appropriately privileged to do some things like delete queues, etc. But certainly if you're a printer driver developer, maybe if you're an application developer, certainly if you're a tester, CPL Util is a tool that's available and comes in handy sometimes. So that's all we've got for the demo. So if we could switch over to the slides.
+
+[Transcript missing]
+
+The last topic is probably the most controversial one. I'm talking about it this year because it's important that we emphasize the fact that the printing system, the graphics system, the color sync system, are far more tightly integrated on X than they ever were on Mac OS 8, 9 or its predecessors.
+
+This is all good stuff. I mean, it's much better to have a tightly integrated system, but it does have implications. It has implications for application developers and it has implications for printer driver developers. So I'll mention some of those. First thing to talk about are the main differences between printing on X versus printing on earlier versions of the OS. First bullet item, applications can print in or can draw their pages.
+
+Obviously a lot of Carbon applications are going to be drawing with QuickDraw and RGB, but Cocoa apps can use any of the PDF color spaces. Things can be drawn in device colors, device gray, RGB, etc., and in device independent, CIE, color spaces. So it's no longer a safe assumption if you're a printer driver developer that the source material is going to be drawn in RGB.
+
+Another thing that's different is that everything that goes into the PDF spool file is automatically tagged. Obviously it's nicer if the application does this, but if the application doesn't do it, we'll make sure that every shape in the spool file gets a profile and gets a rendering intent.
+
+If the application hasn't done it for us, everything gets a system profile, images automatically get perceptual, everything else, line art and text, gets relative colorimetric. So the PDF spool file, everything has a source profile. That is definitely different from the way things typically worked on Mac OS 8 and 9.
+
+I should emphasize the fact that this is all, we're talking about source profiles here. We've got quite a nice, clean dividing line between what happens in spooling, which is the domain of the graphics system and the application, Paul Danbold and what happens at rendering time, which is obviously the domain of the application.
+
+So we're talking about the domain of the graphics system and printer drivers. Printer drivers don't get to control the tagging of anything with source profiles, and they certainly don't get to control rendering intents. So in print drivers on 10, you won't see color panels offering rendering intent options. That's all handled upstream when the spool file is created.
+
+It also falls out from this that obviously we want good color sync profiles in the system, not just for printers, for displays, scanners, any sort of input device. So obviously everything's going to work just fine if there's accurate and versatile profiles for all the devices involved in the printing pipeline.
+
+And obviously printers need to have profiles and we obviously work with the printer vendors to encourage them to develop good quality profiles. The printer modules down at the back end actually provide their profiles. When the queue is created we ask the printer module to tell us about the destination profile.
+
+I'll talk a little bit more about that on the next slide. The final bullet item sounds a little controversial to some folks. Basically, no way to turn off color matching. It's a simplification. Basically, there's only one scenario in which color values are not changed, and that's when the source and the destination profiles are identical. In all other cases, if the application is drawing in a different color space from the one specified by the printer module, we have to match. The color sync CMM gets in there and does its thing.
+
+Typically, If everybody's doing the right thing, if everything's being tagged, there's a good chance that color data will be managed through the printing system and printer modules will get data that's been matched. Once it's matched, once PDF is rendered, shape-specific information is lost. So there are implications for printer drivers in connection with that. So let's talk about raster printing for a moment.
+
+So although everything gets color matched, it's not to say the printer drivers don't have a lot to do with final print quality output, color fidelity. There's a couple of things they can do here. First one, there's an image access callback. It's probably not as powerful as it needs to be, and we'll be working on it.
+
+But basically, this is a callback that enables printer modules to get at image data, sampled image data, before it's rendered. So they get an opportunity to do edge enhancement, resample images, color balance adjustment, whatever, if they need to do that and want to do that, before the PDF page is rendered.
+
+To make this system shine and to make it just a great color platform, we want every printer driver developer to provide accurate, versatile profiles. And it's most important, of course, that they cover all the permutations of all the media types that are supported by the printer, all the print quality modes. It's recommended that those profiles include profile connection space tags so we can optimize the number of transitions or transformations that happen when we're doing our color matching.
+
+So it's very important that we get good quality profiles for all the printers on 10. Now remember I said that there is a scenario where data can go through unmatched. In that case, a printer module could apply its own color science. There's really two options for printer modules.
+
+When they tell the converter what sort of data they want, they can omit a profile reference, in which case we have to make an assumption. That assumption is that the destination profile is a system profile, and if it matches the source profile, we'll do nothing, but otherwise we'll render to the system profile's color space.
+
+That's not great because system profile generally doesn't have different conversion mechanisms, or generally has the same conversion mechanism for different rendering intents, but that... The printer module could get data rendered to the system profile and then apply its own color science. Better than that, actually, is for the printer module to give us a profile that represents a wide gamut color space. We will render to that space and from that point on the printer module could provide or could execute its own proprietary table-based color matching to the printer device.
+
+Generally speaking, to enable vendor-specific color matching, we'd recommend that the printer module provides this wide gamut profile as a destination space. This is a fairly complicated topic. I'm certainly only sort of... touching the surface of it. We are working on a tech note and hopefully in will have an eTech note out that explains color matching on X with respect to printing.
+
+I need to mention PostScript quickly. The simple way of saying this is that Color PostScript printing is handled on 10 exactly the way it was with LaserWriter 8 on 8 and 9 if you pick PostScript matching and the printer's default. Because what we do is we turn all the source profiles in the PDF spool file into color space invocations, send them down in the print job to the printer, use the printer's own embedded color rendering dictionary as a destination color space, and let the PostScript machinery do the color matching.
+
+We will probably, in a future release, allow host-based printer profiles to be converted to color spaces and sent down to the printer so we don't have to use the printer's own CRD in the case where you've got a calibrated. profile. That's for the future. And that is all I have to say about printing in color. Just quickly, the three follow-on sessions that we'd like you to go to.
+
+After this, if you're a Cocoa person, go to the Advanced Cocoa Topics session. Tomorrow morning, David is wandering around there. He's going to tell you all about how QuickDraw and Quartz 2D is going to come together. That's that. If you've recovered from the beer bash tonight in time, get up and go to the 9 a.m. session. And last but not least, there's a feedback forum tomorrow afternoon for, I guess, all your questions about graphics, color, printing, and related technologies. And with that, I'm going to hand you back to Travis.
+
+Thank you, Paul. Okay, what I want to do is give you my contact information. We obviously hit you with a lot of information in today's session. If you have any further questions, feel free to email me at travisb at apple.com. This extends for both printing and any of the 2D graphic technologies that are in Mac OS X.

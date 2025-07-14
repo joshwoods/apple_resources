@@ -1,0 +1,2408 @@
+WEBVTT
+
+00:00:13.509 --> 00:00:17.980
+>> Nick: Nick Gervae and I'll be talking
+to you about managing kernel extensions
+
+00:00:17.980 --> 00:00:20.870
+on Snow Leopard with my colleague Andrew Myrick.
+
+00:00:20.870 --> 00:00:26.070
+We are on the IOKit team and we rewrote
+the whole kext set for Snow Leopard.
+
+00:00:26.070 --> 00:00:29.149
+Before we start we have to do the
+obligatory do you really need to do this
+
+00:00:29.149 --> 00:00:32.670
+because you really shouldn't if you can avoid it.
+
+00:00:32.670 --> 00:00:35.690
+So, if you can, don't write a kernel extension.
+
+00:00:35.689 --> 00:00:41.619
+This is why, you're running in old school mode if you
+load into the kernel it's just like the old Classic days.
+
+00:00:41.619 --> 00:00:43.309
+You don't have memory protection.
+
+00:00:43.310 --> 00:00:46.469
+If you crash the whole computer comes down.
+
+00:00:46.469 --> 00:00:50.070
+It's also true that debugging kernel
+code is a little more complicated
+
+00:00:50.070 --> 00:00:53.509
+than debugging user-space code and
+I'll be getting into that later.
+
+00:00:53.509 --> 00:00:57.500
+And it's worth pointing out that code's not
+going to run faster if it's in the kernel.
+
+00:00:57.500 --> 00:00:58.700
+Threads are scheduled the same way.
+
+00:00:58.700 --> 00:01:00.900
+It runs just as fast.
+
+00:01:00.899 --> 00:01:06.159
+There are a lot of things you can do from user-space without
+writing a kext, in particular if you're writing a lot
+
+00:01:06.159 --> 00:01:09.789
+of USB drivers including printer,
+scanner and camera drivers.
+
+00:01:09.790 --> 00:01:11.710
+You can do that from user-space.
+
+00:01:11.709 --> 00:01:19.009
+A lot of other kernel services including Device Access
+is available through the IOKit framework in user-space
+
+00:01:19.010 --> 00:01:25.219
+so whenever possible check in user-space before
+you decide that you need to write a kext.
+
+00:01:25.219 --> 00:01:29.280
+That said, if you do have to write a kext
+it's going to be for one of these reasons.
+
+00:01:29.280 --> 00:01:31.799
+Low-level device drivers are the majority of kexts.
+
+00:01:31.799 --> 00:01:37.179
+These are things that need to get at the hardware
+directly through register access typically
+
+00:01:37.180 --> 00:01:39.650
+or that need to handle device interrupts directly.
+
+00:01:39.650 --> 00:01:45.190
+Another reason you need a driver in the
+kernel is if your client is in their kernel.
+
+00:01:45.189 --> 00:01:51.569
+The same things apply to non-driver kext, these are
+typically network stack filters which have to work
+
+00:01:51.569 --> 00:01:56.759
+with the BSD networking layer above, kernel
+authorization plug-ins and file systems,
+
+00:01:56.760 --> 00:01:59.900
+of course, which work with the VFS layer above.
+
+00:01:59.900 --> 00:02:05.930
+What we're going to cover today is a little
+bit of basic information about the kext system
+
+00:02:05.930 --> 00:02:08.590
+as it has existed and then some new stuff as well.
+
+00:02:08.590 --> 00:02:12.159
+So we're going to go over the general
+structure of a kernel extension,
+
+00:02:12.159 --> 00:02:15.879
+talk about the tools you use when
+working with and developing kexts.
+
+00:02:15.879 --> 00:02:21.930
+Debugging and installing as well and then we're going to get
+a little bit under the covers with how the kext system works
+
+00:02:21.930 --> 00:02:25.189
+and some of the runtime support that
+is available for kernel extensions.
+
+00:02:25.189 --> 00:02:30.699
+The big new features we're covering
+are these, of course, 64-bit kext.
+
+00:02:30.699 --> 00:02:34.929
+We're not going to go into detail but we're highlighting
+it here because we've got the new 64-bit kernel.
+
+00:02:34.930 --> 00:02:40.599
+To support that we've got architecture
+specific properties that enable a kext
+
+00:02:40.599 --> 00:02:43.310
+to be portable as a single package on disk.
+
+00:02:43.310 --> 00:02:48.590
+And then probably the most significant change that you're
+going to see is that all of the developer functionality
+
+00:02:48.590 --> 00:02:53.469
+of kext that has been split out into a new
+tool for development work it's called kextutil
+
+00:02:53.469 --> 00:02:55.830
+and I'll be talking about that in a little bit.
+
+00:02:55.830 --> 00:03:02.980
+We've got some new ways to load a kext with a C Call instead
+of forking and execing kextload as you used to have to do
+
+00:03:02.979 --> 00:03:08.250
+and there are also APIs within the kernel for
+getting resources out of your kext bundle now.
+
+00:03:08.250 --> 00:03:13.740
+What we're not going to cover is how to write any particular
+kind of kexts, so we're not going to go into the details
+
+00:03:13.740 --> 00:03:17.290
+of programming in the kernel, we're not going
+to cover any of the specific interfaces.
+
+00:03:17.289 --> 00:03:20.439
+This is a generic session about kexts themselves.
+
+00:03:20.439 --> 00:03:28.609
+So let's get into the basics of what
+kext is and how you work with them.
+
+00:03:28.610 --> 00:03:33.350
+Pretty much like anything else a kext is a
+plug-in that is packages of bundle on disk.
+
+00:03:33.349 --> 00:03:38.789
+This is a very common way of packaging things in Mac
+OS X and you're probably already familiar with that.
+
+00:03:38.789 --> 00:03:42.009
+That bundle is just a folder that contains a few files.
+
+00:03:42.009 --> 00:03:45.789
+The most important one for a kext or any
+bundle is the Info.plist;
+
+00:03:45.789 --> 00:03:49.319
+this describes what is in that bundle.
+
+00:03:49.319 --> 00:03:54.789
+It gives the identifier for the kext as well
+as a version and a couple of other properties
+
+00:03:54.789 --> 00:03:57.120
+that we'll be talking about in just a bit.
+
+00:03:57.120 --> 00:04:00.819
+Your kext probably also has an
+executable shown here as MyDriver.
+
+00:04:00.819 --> 00:04:02.829
+That gets loaded into the kernel.
+
+00:04:02.830 --> 00:04:04.910
+And you may also have some resources.
+
+00:04:04.909 --> 00:04:11.139
+And I want to point out that unlike most
+bundles we only allow one level of plug-in kext;
+
+00:04:11.139 --> 00:04:18.399
+this is so that we can continue to boot the machine fast by
+not having to search deep recursive directory hierarchies.
+
+00:04:18.399 --> 00:04:23.149
+You'll see from the padlock there for security reasons
+because this code runs in the kernel all of the files
+
+00:04:23.149 --> 00:04:28.000
+and folders have to be owned by Root Wheel and
+Non-writable so that they can't be modified as an exploit.
+
+00:04:28.000 --> 00:04:33.850
+Finally, there are two kinds of kexts and they
+result in slightly different packages on disk.
+
+00:04:33.850 --> 00:04:36.390
+We've got Xcode templates to support those.
+
+00:04:36.389 --> 00:04:39.709
+One is an IOKit driver and the
+other is a generic kernel extension
+
+00:04:39.709 --> 00:04:43.549
+and I'll highlight the differences between those shortly.
+
+00:04:43.550 --> 00:04:49.930
+To cover the Info.plist briefly it's a dictionary of
+properties and the core properties that a kext is going
+
+00:04:49.930 --> 00:04:55.329
+to have are, of course, the CFBundleIdentifier that
+uniquely identifies it as well as the executable
+
+00:04:55.329 --> 00:04:57.969
+that tells where to find the file on disk.
+
+00:04:57.970 --> 00:04:59.820
+The version is used along with the identifier
+
+00:04:59.819 --> 00:05:02.740
+so that we don't accidentally load a
+different version of the same kext.
+
+00:05:02.740 --> 00:05:07.920
+And CFBundle allows a pretty free form use of the version.
+
+00:05:07.920 --> 00:05:13.920
+We actually define a specific format that has to be
+followed and you can see some examples of that right there.
+
+00:05:13.920 --> 00:05:20.129
+Also, for a kext because it's loaded at run time
+and has to get linked at that same time you have
+
+00:05:20.129 --> 00:05:24.350
+to list the libraries needed in the plist.
+
+00:05:24.350 --> 00:05:28.390
+There are several optional properties that
+a kext can have depending on its needs.
+
+00:05:28.389 --> 00:05:33.599
+The first one is OSBundlerequired which allows
+your kext to load during very early boot,
+
+00:05:33.600 --> 00:05:40.140
+which is not the case by default, compatible version
+which allows your kext to be a library and export symbols
+
+00:05:40.139 --> 00:05:44.370
+for other kexts to link against and then two
+new properties we've added for Snow Leopard.
+
+00:05:44.370 --> 00:05:53.100
+OSBundleAllowUserLoad which allows non-root users to load
+that kext and then another one for our new logging system
+
+00:05:53.100 --> 00:05:56.370
+that is described in the man page that I'll be mentioning.
+
+00:05:56.370 --> 00:06:01.939
+Also, IOKit drivers have IOKitPersonalities which
+is a nested dictionary of matching information
+
+00:06:01.939 --> 00:06:05.709
+that describes hardware the driver can operate.
+
+00:06:05.709 --> 00:06:10.239
+A new feature we've added in Snow Leopard
+is architecture specific properties.
+
+00:06:10.240 --> 00:06:16.350
+To do one of these you just add the Architecture
+onto the end of any top-level OS or IO key with an _,
+
+00:06:16.350 --> 00:06:23.160
+so OSBundleLibraries_X86_64 for the
+K64 kernel; this allows a single kext
+
+00:06:23.160 --> 00:06:28.130
+with a single Info.plist to load on multiple platforms.
+
+00:06:28.129 --> 00:06:33.350
+If you are loading on a release prior to
+Snow Leopard you want to key the Base key
+
+00:06:33.350 --> 00:06:35.730
+without the architecture for backward compatibility.
+
+00:06:35.730 --> 00:06:38.319
+And I will point out this is specific to the kext system.
+
+00:06:38.319 --> 00:06:41.490
+This isn't something you can use with CFBundle.
+
+00:06:41.490 --> 00:06:49.829
+The kext executable is just a Mach-O file typically
+multi-architectured these days and it embeds a little bit
+
+00:06:49.829 --> 00:06:55.740
+of bookkeeping info that lets us know it is a kext
+executable and we do use that at load and runtime.
+
+00:06:55.740 --> 00:07:01.170
+A kext is allowed to not have an executable
+and that's typically done for two reasons.
+
+00:07:01.170 --> 00:07:04.150
+The main one is to publish IOKitPersonalities
+naming another kext.
+
+00:07:04.149 --> 00:07:10.779
+That is you would have a driver shipped with an executable
+and some personalities matching a particular set of devices
+
+00:07:10.779 --> 00:07:14.349
+and then you might ship a new bit of hardware
+with a different product idea or something
+
+00:07:14.350 --> 00:07:16.960
+but there's no new code that needs to be added.
+
+00:07:16.959 --> 00:07:23.430
+You can just ship a kext with it that has personalities
+naming the other kext and it will get loaded.
+
+00:07:23.430 --> 00:07:28.310
+The other thing is that a kext can redirect
+linkage so it could say I'm a library of this name
+
+00:07:28.310 --> 00:07:36.660
+and I don't have an executable so when anybody links against
+me it's implicitly going to link against these other kext's.
+
+00:07:36.660 --> 00:07:42.380
+Resource files, as I mentioned, are typically used
+in user-space for any data relevant to a bundle.
+
+00:07:42.379 --> 00:07:46.800
+They're used for NIB files, icons,
+other localized files in user-space.
+
+00:07:46.800 --> 00:07:52.319
+And now in Snow Leopard we can use them in kernel
+for firmware look-up tables and other such things.
+
+00:07:52.319 --> 00:07:57.969
+On previous releases you typically had to embed these
+in your Info.plist as driver matching properties
+
+00:07:57.970 --> 00:08:01.440
+which means they remain resident in wired memory forever.
+
+00:08:01.439 --> 00:08:06.449
+We're hoping to make it possible that you can free up that
+wired memory by getting these resources when you need them,
+
+00:08:06.449 --> 00:08:10.579
+download them to your device and then
+get rid of them from wired kernel memory
+
+00:08:10.579 --> 00:08:13.339
+These are part of your kext bundle
+which means they can't change.
+
+00:08:13.339 --> 00:08:15.349
+They are read only, they are static.
+
+00:08:15.350 --> 00:08:19.140
+So, don't use these to store configuration or preferences.
+
+00:08:19.139 --> 00:08:22.729
+Those have to be stored somewhere else.
+
+00:08:22.730 --> 00:08:28.250
+I mentioned some Xcode templates for
+kext earlier these are the two kinds
+
+00:08:28.250 --> 00:08:30.709
+and these are the principle differences between them.
+
+00:08:30.709 --> 00:08:36.340
+If you're writing an IOKit driver you're going to be working
+with our IOKit framework which is a C++ framework and it,
+
+00:08:36.340 --> 00:08:42.850
+together with a number of libraries called families define
+generic subclasses for different kinds of device drivers
+
+00:08:42.850 --> 00:08:48.620
+such as a network controller or a disk and you're
+going to subclass that and implement the bits
+
+00:08:48.620 --> 00:08:50.980
+that are just needed for your particular piece of hardware.
+
+00:08:50.980 --> 00:08:58.170
+An IOKit driver initializes and tears down through C++
+statics and instance functions that automatically get called
+
+00:08:58.169 --> 00:09:01.639
+when it's loaded or when an instance
+needs to be created which means, also,
+
+00:09:01.639 --> 00:09:05.110
+that the kext can be loaded automatically
+by IOKit when it's needed.
+
+00:09:05.110 --> 00:09:12.340
+Similarly when no more instances of your driver classes
+are present IOKit can just unload your kext automatically
+
+00:09:12.340 --> 00:09:15.160
+and you don't need to worry about that either.
+
+00:09:15.159 --> 00:09:17.120
+Things aren't quite so automatic for a generic kext.
+
+00:09:17.120 --> 00:09:23.269
+These are typically written in C++ and they
+register C functions with substances such as VFS
+
+00:09:23.269 --> 00:09:28.860
+so that you'll get a call-back, for example, when a mount
+event needs to occur for your file system or an open-call.
+
+00:09:28.860 --> 00:09:33.250
+They're initialized and shut down through explicit
+start and stop functions that happen at load
+
+00:09:33.250 --> 00:09:36.370
+and unload time which must happen explicitly.
+
+00:09:36.370 --> 00:09:42.399
+Something external to the system has to ask
+for a generic kext to be loaded or unloaded.
+
+00:09:42.399 --> 00:09:50.009
+There are a number of tools that you're going to use
+when working with kexts for development and deployment.
+
+00:09:50.009 --> 00:09:53.689
+These four are the ones you're going
+to be using as you create your kext.
+
+00:09:53.690 --> 00:09:58.000
+Kextutil is the new replacement for kextload
+while doing development and that's used
+
+00:09:58.000 --> 00:10:01.639
+for simple generation and sanity checking.
+
+00:10:01.639 --> 00:10:07.039
+Kextlibs is a program we introduced in Leopard to
+figure out your OSBundleLibraries for you automatically
+
+00:10:07.039 --> 00:10:09.569
+so you don't have to figure it out by yourself.
+
+00:10:09.570 --> 00:10:15.800
+And then, of course, kextstat lists the loaded kext on the
+system and kextfind is kind of like a super find for kext.
+
+00:10:15.799 --> 00:10:19.889
+You can ask it all sorts of things about kext and find them.
+
+00:10:19.889 --> 00:10:23.720
+When deploying your kext you're going
+to be using kextloader and kextunload.
+
+00:10:23.720 --> 00:10:26.490
+That's pretty straight forward what those do.
+
+00:10:26.490 --> 00:10:29.430
+And then, of course, the system
+tools are kextd and kextcache.
+
+00:10:29.429 --> 00:10:34.979
+Kextd handles load requests from the kernel
+and a few other user-space RPC requests
+
+00:10:34.980 --> 00:10:38.620
+and kextcache rebuilds caches used
+at boot time and other times.
+
+00:10:38.620 --> 00:10:41.860
+You're typically not going to be using
+either of these tools on Snow Leopard.
+
+00:10:41.860 --> 00:10:47.759
+Now that I've gone through those
+let's talk about how you use them.
+
+00:10:47.759 --> 00:10:52.580
+The first one is kextload, of course, and this is a
+significant change from Snow Leopard because we've removed
+
+00:10:52.580 --> 00:10:59.100
+about 2/3 of the command line options so that we can
+insulate installation and deployment from development.
+
+00:10:59.100 --> 00:11:03.560
+This tools now just sends and RPC to kextd, which
+does all the work of loading a kext into the kernel
+
+00:11:03.559 --> 00:11:06.719
+and it's got a really small set of
+arguments and options these days.
+
+00:11:06.720 --> 00:11:13.149
+You can give it a kext bundle name to load or -bundle-id
+and it will go Have Kextd Look in System Library Extensions
+
+00:11:13.149 --> 00:11:17.149
+or you can tell it to look in another folder with -R or -D.
+
+00:11:17.149 --> 00:11:20.490
+And, of course, we've got the verbose options
+that have always been there so you can see
+
+00:11:20.490 --> 00:11:24.690
+if something went wrong and find out exactly what that was.
+
+00:11:24.690 --> 00:11:26.290
+The new tool is called kextutil.
+
+00:11:26.289 --> 00:11:28.349
+This is not for deployment loading.
+
+00:11:28.350 --> 00:11:31.570
+It's installed on the base system for
+various packaging reasons I'm going into
+
+00:11:31.570 --> 00:11:35.560
+but you really should avoid using it
+in your shipping products if you can.
+
+00:11:35.559 --> 00:11:43.109
+This program requires root access because it talks directly
+to the Kernel, and it moves all those developer options
+
+00:11:43.110 --> 00:11:46.970
+that I mentioned from kextload for Snow Leopard.
+
+00:11:46.970 --> 00:11:50.009
+All the options for sanity checking,
+all the options for stage loading,
+
+00:11:50.009 --> 00:11:53.850
+generating debug symbols and for cross-architecture work.
+
+00:11:53.850 --> 00:11:55.860
+If you want to unload a kext you use kextunload.
+
+00:11:55.860 --> 00:12:01.800
+This is a pretty simple tool and it's primarily for
+development sellers but it's considered a deployment tool.
+
+00:12:01.799 --> 00:12:07.149
+This tool, again, talks directly to the Kernel so
+it requires root access, it shuts down the kext,
+
+00:12:07.149 --> 00:12:12.699
+unloads it from kernel's address space and it
+also removes any IOKit driver matching information
+
+00:12:12.700 --> 00:12:18.160
+so that unless the caches get rebuilt and things
+get rescanned your driver's not going to load.
+
+00:12:18.159 --> 00:12:25.329
+It takes either bundle filename or an identifier and
+it will unload that kext if possible from the kernel.
+
+00:12:25.330 --> 00:12:27.530
+Now we've got something new in Snow Leopard.
+
+00:12:27.529 --> 00:12:33.720
+We've had a lot of comments over the years that it's kind
+of a pain to have to fork an exec kextload to load a kext
+
+00:12:33.720 --> 00:12:36.620
+from a program so we've got CAPIs to do it now.
+
+00:12:36.620 --> 00:12:41.340
+You can do these RPCs to kextd to
+load a kext based on a path on disk.
+
+00:12:41.340 --> 00:12:46.230
+That should be an absolute path, or with a bundle
+identifier, and the primary argument is that path
+
+00:12:46.230 --> 00:12:52.570
+or bundle identifier but there's a secondary argument that
+is basically equivalent to the -R and -D options to kextload
+
+00:12:52.570 --> 00:12:58.550
+so you can specify any other directories or
+kext URLS to use for dependency resolution.
+
+00:12:58.549 --> 00:13:08.099
+The other new feature we have for kext loading in Snow
+Leopard is kext that can be loaded by non-root users;
+
+00:13:08.100 --> 00:13:14.600
+this is something that kext itself has to allow because
+we don't want non-root users loading our arbitrary kext.
+
+00:13:14.600 --> 00:13:18.080
+So if you as the developer of the kext
+know it's OK for your kext to be loaded
+
+00:13:18.080 --> 00:13:25.540
+at any time you can set this OSBundleAllowUser Load property
+to True, all of your dependencies also have to allow that,
+
+00:13:25.539 --> 00:13:27.909
+of course, and they also have to be
+
+00:13:27.909 --> 00:13:31.230
+in either /System/Library/Extensions/
+or /System/Library/Files/Systems/.
+
+00:13:31.230 --> 00:13:35.629
+We want to keep things really tight here,
+but we did want to make User Loading possible
+
+00:13:35.629 --> 00:13:39.710
+so that you can have non-set UID Binaries.
+
+00:13:39.710 --> 00:13:44.259
+This API is available for kextload and KextManager APIs.
+
+00:13:44.259 --> 00:13:49.610
+It's not available for kextutil because it has to
+talk to the kernel it has to run his root anyway.
+
+00:13:49.610 --> 00:13:51.820
+This facility is intended for generic kext.
+
+00:13:51.820 --> 00:13:55.440
+IOKit kext doesn't need it so they shouldn't use it.
+
+00:13:55.440 --> 00:13:59.290
+And, again, unload requires root privilege because
+kextunload still has to talk to the kernel.
+
+00:13:59.289 --> 00:14:02.329
+And I do want to stress you should use this with care.
+
+00:14:02.330 --> 00:14:07.410
+It's best used with file systems because those
+typically shouldn't require set UID binaries.
+
+00:14:07.409 --> 00:14:16.480
+If you've got a reason for a network or a KOFF plug-in to
+use it then go ahead but think about that really seriously.
+
+00:14:16.480 --> 00:14:21.060
+Now we're going to get into debugging kext and this is an
+area people often have trouble with I have people coming
+
+00:14:21.059 --> 00:14:24.809
+by all the time saying I don't know how to
+generate symbols from my kext and I can't debug
+
+00:14:24.809 --> 00:14:30.250
+so we figured we'd spend some time this year
+at WWDC going through that in some detail.
+
+00:14:30.250 --> 00:14:35.720
+Here's a quick checklist of the
+techniques you might use to debug a kext.
+
+00:14:35.720 --> 00:14:40.389
+Starting from left to right, you know,
+based on how complicated the problem is,
+
+00:14:40.389 --> 00:14:45.789
+if your kext doesn't load you might get a
+message that tells you why right off the bat,
+
+00:14:45.789 --> 00:14:50.629
+but if it doesn't you can run kextutil with some
+sanity checking options to get more details.
+
+00:14:50.629 --> 00:14:55.700
+There are also the verbose flag options that will
+give you deeper details into the load process
+
+00:14:55.700 --> 00:15:01.620
+in case something's going wrong, and, of course, if it's
+something wrong with your kext start function you can log
+
+00:15:01.620 --> 00:15:04.669
+from your kext or you can use the debugger.
+
+00:15:04.669 --> 00:15:08.329
+Similarly if you have a driver that
+isn't matching you can set a property
+
+00:15:08.330 --> 00:15:13.080
+in your IOKitPersonalities called IOKitDebug it's
+kind of outside the scope of this talk but I wanted
+
+00:15:13.080 --> 00:15:17.600
+to mention it here, or you can log from
+your kext or, again, resort to the debugger.
+
+00:15:17.600 --> 00:15:22.389
+Finally, if your kext is actually misbehaving
+or causes a panic you're typically going
+
+00:15:22.389 --> 00:15:24.840
+to want use one of those last two techniques.
+
+00:15:24.840 --> 00:15:32.170
+So the first technique, sanity checking, is running
+kextutil-NT and I can't tell you how many times people come
+
+00:15:32.169 --> 00:15:37.439
+to me saying, my kext doesn't load, and I say, did you run
+kextutil-NT or kextload-NT on older systems, and they say,
+
+00:15:37.440 --> 00:15:41.640
+no I didn't, they do and it tells them right away
+what was wrong, so this is the first check to make
+
+00:15:41.639 --> 00:15:46.179
+when you're kext fails to load Always
+run that first if you have a problem.
+
+00:15:46.179 --> 00:15:49.899
+-N or -NoLoad, we've got long options on Snow Leopard now,
+
+00:15:49.899 --> 00:15:54.220
+does most of these checks and prints
+some diagnostics about it.
+
+00:15:54.220 --> 00:15:57.920
+It does a trial link to report
+undefined symbols on Snow Leopard.
+
+00:15:57.919 --> 00:16:02.569
+This is new we've got a completely new link for
+architecture so we can actually do this dry run.
+
+00:16:02.570 --> 00:16:07.210
+But it no longer authenticates ownership and permissions
+and we did that for convenience we got a lot of complaints
+
+00:16:07.210 --> 00:16:11.170
+from developers saying, I'm just trying to generate debug
+symbols why do I have to run this route or why do I have
+
+00:16:11.169 --> 00:16:16.149
+to add this extra option, so we don't do that now
+unless you add -T, which used to stand for Tests
+
+00:16:16.149 --> 00:16:21.529
+and the long option is now a print diagnostics
+because it prints some extra info as well.
+
+00:16:21.529 --> 00:16:26.659
+This program uses the running kernel's architecture
+so if you're running on K64 but your kext didn't load
+
+00:16:26.659 --> 00:16:31.089
+on some other machine that's running K32
+you want to be sure to add a -Arch flag
+
+00:16:31.090 --> 00:16:36.370
+to be sure you're using the right Architecture and that's
+particularly because of the cross-architecture properties
+
+00:16:36.370 --> 00:16:40.450
+and because you have a fat executable in your kext.
+
+00:16:41.679 --> 00:16:44.969
+Using the Diagnostics has significantly
+improved on Snow Leopard.
+
+00:16:44.970 --> 00:16:47.710
+We've really tightened things up a lot.
+
+00:16:47.710 --> 00:16:50.120
+The Verbose Flag gives you more control and particular
+
+00:16:50.120 --> 00:16:55.379
+for kextutil it now focuses log messages
+only on the kext you're working with.
+
+00:16:55.379 --> 00:16:59.269
+You don't get spew about every single
+extension in the extension's folder
+
+00:16:59.269 --> 00:17:01.470
+but you can still ask for that if you want it.
+
+00:17:01.470 --> 00:17:07.319
+These tools also now capture messages generated from
+within the kernel because we link kext in the kernel now
+
+00:17:07.319 --> 00:17:12.079
+so if something goes wrong there we'll capture those
+messages and print them right in your terminal session
+
+00:17:12.079 --> 00:17:17.549
+and you don't have to be running a tail -f in some
+other window on the System Logs to get that output.
+
+00:17:17.549 --> 00:17:21.369
+There's a lot of detail here that we just don't
+have time to go into so I recommend you check
+
+00:17:21.369 --> 00:17:27.439
+out the kext_logging man page and it will
+show you all the goodness that's there.
+
+00:17:27.440 --> 00:17:32.370
+Similarly if you do need to check out what's
+going on in the kernel or with kextd you need
+
+00:17:32.369 --> 00:17:34.569
+to look in two places now in Snow Leopard.
+
+00:17:34.569 --> 00:17:41.129
+Kernel logging now goes to var/log/kernel.log so that we
+can kind of keep that separate from general user activity,
+
+00:17:41.130 --> 00:17:44.450
+and then kextd logging still goes to system.log.
+
+00:17:44.450 --> 00:17:50.390
+You can use the same logging options for
+the tools in the Kernel Kext Logging System
+
+00:17:50.390 --> 00:17:54.360
+and kextd that's all documented in the man page as well.
+
+00:17:54.359 --> 00:18:00.699
+Now we're going to get into actually doing a debug
+session and this is where things get complicated.
+
+00:18:00.700 --> 00:18:02.400
+There are a number of ways you can do it.
+
+00:18:02.400 --> 00:18:06.950
+I'm just going to go through the typical most
+common set-up and in that scenario you're going
+
+00:18:06.950 --> 00:18:09.970
+to have a development machine that
+you're doing your kext work on.
+
+00:18:09.970 --> 00:18:15.450
+You've got your kext there with the developer tools
+and the Kernel Debug Kit for the test release.
+
+00:18:15.450 --> 00:18:19.309
+You'll have Xcode running with your kext source
+and you're going to build an unstripped kext
+
+00:18:19.309 --> 00:18:25.139
+and Xcode will also build a dSYM file that is used by gdb.
+
+00:18:25.140 --> 00:18:31.790
+Once you've done that you bring up your test machine and
+you'll want to start that with special debug boot-args,
+
+00:18:31.789 --> 00:18:37.069
+you're going to want to set the flags to be at least
+0x14e, I'm not going to explain what those bits are
+
+00:18:37.069 --> 00:18:43.369
+but they are documented online, and
+probably also -V for a verbose kernel boot.
+
+00:18:43.369 --> 00:18:49.049
+That machine should be connected to Ethernet when you start
+it up and at some point you're going to have the kext loaded
+
+00:18:49.049 --> 00:18:54.149
+in the kernel either before or after you start the
+debugger and then you're either going to have a panic
+
+00:18:54.150 --> 00:18:55.890
+that you're working with or you're going
+
+00:18:55.890 --> 00:19:02.970
+to run a non-maskable interrupt using the
+Power button, which that debugs0x14e enables.
+
+00:19:02.970 --> 00:19:09.279
+And once you've done that you'll run
+kextutil to generate relocated debug symbols
+
+00:19:09.279 --> 00:19:12.420
+for your kext and then you can load those into gdb.
+
+00:19:12.420 --> 00:19:16.210
+I'm going to walk through this process
+now in a number of different ways
+
+00:19:16.210 --> 00:19:18.380
+but first we'll talk about the Kernel Debug Kit.
+
+00:19:18.380 --> 00:19:20.800
+This is a download from the ADC Member Site.
+
+00:19:20.799 --> 00:19:26.559
+It contains a symboled version of the kernel and all the
+Apple Library kexts so you can do some debugging with those.
+
+00:19:26.559 --> 00:19:30.769
+There is a different version for each release
+of Mac OS X including the software updates.
+
+00:19:30.769 --> 00:19:37.879
+And as of Snow Leopard we now include a debug build of the
+kernel and the system kext that you put on the test machine
+
+00:19:37.880 --> 00:19:41.240
+so that you can use those for debugging
+as well and there's a Read Me File
+
+00:19:41.240 --> 00:19:44.809
+in the Kernel Debug Kit that shows you how to do that.
+
+00:19:44.809 --> 00:19:52.480
+Those debug files I mentioned are used in a multi-staged
+process to get you from a source address of your PC
+
+00:19:52.480 --> 00:19:56.960
+to a symbol and then a line in your Source Code File.
+
+00:19:56.960 --> 00:20:02.600
+The .sym, as I mentioned, is a relocated symbol info
+because kext get loaded into a different process
+
+00:20:02.599 --> 00:20:07.379
+and the debug process itself is so different
+we have to go through this in multiple stages,
+
+00:20:07.380 --> 00:20:12.280
+so the .sym gets us from an address to a symbol
+and then the de-sym generated by Xcode points
+
+00:20:12.279 --> 00:20:16.660
+that symbol and offset to the source code line.
+
+00:20:16.660 --> 00:20:20.769
+When you're ready to start gdb this is how you do it.
+
+00:20:20.769 --> 00:20:26.049
+You're going to do this on your development machine
+and run gdb with -arch and you really want to specify
+
+00:20:26.049 --> 00:20:33.789
+that explicitly to avoid any confusion and you give it the
+mach kernel binary from the Kernel Debug Kit to start with.
+
+00:20:33.789 --> 00:20:36.970
+You're going to be loading your kext
+in a separate stage following this.
+
+00:20:36.970 --> 00:20:41.610
+You'll then target gdb to the remote machine as remote -kdp.
+
+00:20:41.609 --> 00:20:48.089
+KDP stands for Kernel Debug Protocol and then
+you'll attach to that computer's IP address.
+
+00:20:48.089 --> 00:20:54.149
+Once you've done that kgmacros is a set of
+gdb macros available in the Kernel Debug Kit
+
+00:20:54.150 --> 00:20:58.210
+and those will give you a lot of useful utilities
+and some of them I'm going to mention here.
+
+00:20:58.210 --> 00:21:04.779
+And finally, for your .sym files you might want to tell gdb
+where to find those so you can set kext-symbol-file-path
+
+00:21:04.779 --> 00:21:08.089
+and that will ease some of the pain that's about to follow.
+
+00:21:08.089 --> 00:21:13.449
+This is the point where you are going to have to generate
+your symbol files and the easiest way to do that is
+
+00:21:13.450 --> 00:21:19.120
+if you can load your kext on the test machine
+or if you have to do that just tell kextutil
+
+00:21:19.119 --> 00:21:22.299
+at the time you load to save the symbols and it will do so.
+
+00:21:22.299 --> 00:21:27.289
+Kextutil, if you do this, will load the kext, will send
+the personalities down to the kernel for driver matching
+
+00:21:27.289 --> 00:21:31.379
+which may cause things to happen, it might
+cause your driver to actually get instantiated
+
+00:21:31.380 --> 00:21:35.510
+and then it will save the symbols
+to a directory that you specify.
+
+00:21:35.509 --> 00:21:40.369
+Once you've done that you want to copy those .sym
+files to your development machine for use in gdb
+
+00:21:40.369 --> 00:21:46.659
+and as it says there this is good for non-panic problems
+that occur after kext startup and I'll be covering dealing
+
+00:21:46.660 --> 00:21:50.460
+with panic problems in kext startup in just a little bit.
+
+00:21:50.460 --> 00:21:55.539
+Another way you can do this if the kext is already
+loaded and it's too late you can get your symbols
+
+00:21:55.539 --> 00:22:01.559
+by telling kextutil not to load the kext but to save symbols
+in which case it will ask you for the load addresses.
+
+00:22:01.559 --> 00:22:08.169
+And on Snow Leopard now you can skip symbol generation
+for a given extension that kextutil, kextload, rather,
+
+00:22:08.170 --> 00:22:13.250
+on previously releases it used to be very fussy and
+if you didn't give an address it couldn't do the link.
+
+00:22:13.250 --> 00:22:17.819
+Now if we don't get an address we can fake an address and
+not save the symbol file and we'll just skip that for you.
+
+00:22:17.819 --> 00:22:22.950
+So in this case we're going to skip USB family but
+then when it comes to MyDriver we enter a load address
+
+00:22:22.950 --> 00:22:26.650
+and then we're going to have symbols saved
+in /tmp and, again, you'll want to copy those
+
+00:22:26.650 --> 00:22:31.670
+on to your development machine or if you're working on
+your development machine you'll already have them there.
+
+00:22:31.670 --> 00:22:39.990
+You can add a -r and in this case to /tmp for
+dependency resolution wherever you need that.
+
+00:22:39.990 --> 00:22:43.970
+You may be wondering where we got that load
+address and this is one of the ways you can get it.
+
+00:22:43.970 --> 00:22:48.640
+If you're running in gdb already and you're
+connected to the kernel you can source those kgmacros
+
+00:22:48.640 --> 00:22:55.110
+and then use showallkmods and it will print a list of all
+the loaded kext with their bundle ID's under the Name column
+
+00:22:55.109 --> 00:23:01.079
+and their addresses and that's the HEX number you'll
+want to put into kextutil not kmod and not Size
+
+00:23:01.079 --> 00:23:06.250
+which are HEX addresses that look like load
+addresses but they're not the ones you want to use.
+
+00:23:06.250 --> 00:23:09.579
+Similarly if you're on the test machine
+and it hasn't panicked you can run kextstat
+
+00:23:09.579 --> 00:23:12.720
+at the command li e and it gives you similar information.
+
+00:23:12.720 --> 00:23:21.309
+Now, you can use the same setup to generate symbols
+for a different Architecture if you're working on K64
+
+00:23:21.309 --> 00:23:26.299
+on your development machine and your test machine
+is running K32 you can speci2fy the architecture
+
+00:23:26.299 --> 00:23:29.329
+with -arch on the command line.
+
+00:23:29.329 --> 00:23:34.409
+If you do that kextutil can't talk to the kernel to get
+the symbol information for the kernel itself so you have
+
+00:23:34.410 --> 00:23:40.640
+to tell it where to look on disk for the kernel to
+be used and that will give you the symbols you need.
+
+00:23:40.640 --> 00:23:47.250
+I want to point out that K64 is actually a different
+architecture from K32 as far as the tools are concerned.
+
+00:23:47.250 --> 00:23:54.650
+Similarly you can generate debug symbols for a different
+release of Mac OS X using the tools and if you want to do
+
+00:23:54.650 --> 00:24:00.190
+that you'll want to add a -e option which means
+don't look in the System Library Extension's folder
+
+00:24:00.190 --> 00:24:04.500
+to resolve dependencies because you're
+generating symbols for a different release.
+
+00:24:04.500 --> 00:24:09.170
+And then you use -r to add the directory
+that actually does contain the contents
+
+00:24:09.170 --> 00:24:12.140
+of System Library Extensions for that other release.
+
+00:24:12.140 --> 00:24:19.360
+Make sure you use the right Kernel Debug Kit
+for the release you're doing your testing for.
+
+00:24:19.359 --> 00:24:24.500
+Once you've done that and you finally have your .sym file
+with the relocated info you can use the add -kext command
+
+00:24:24.500 --> 00:24:32.410
+in gdb and you just give it your kext bundle and it
+will look for that kext and the related files that .dsym
+
+00:24:32.410 --> 00:24:39.190
+and the .sym in the same folder, so they all have to
+be together unless you set that kext symbol file path
+
+00:24:39.190 --> 00:24:44.850
+in which case gdb will also go and look there for the
+.sym files so that may make your life a little bit easier.
+
+00:24:44.849 --> 00:24:48.089
+This is the point where you can set your break
+points and proceed to debug your kext and gdb.
+
+00:24:48.089 --> 00:24:56.339
+Now, if you have to debug your kext start routine there's
+a bit of a problem because you can't get the load address
+
+00:24:56.339 --> 00:25:02.669
+until you load the kext but if you load the
+kext it's going to start running, or is it?
+
+00:25:02.670 --> 00:25:08.259
+You can use kextutil to pause before starting
+that kext so it will load the kext and then wait
+
+00:25:08.259 --> 00:25:12.200
+and similarly it will wait before starting
+Matching it will ask you for a Yes or No answer
+
+00:25:12.200 --> 00:25:18.690
+and it also delays Auto Unload by at least 2 minutes now on
+Snow Leopard it used to be just 1 minute on prior releases,
+
+00:25:18.690 --> 00:25:21.350
+so you have time to set up your debugger now.
+
+00:25:21.349 --> 00:25:26.099
+For drivers I want to point out that you should unload your
+kext first to make sure those IOKitPersonalities aren't
+
+00:25:26.099 --> 00:25:29.209
+in the kernel already because matching
+might start while you're in the middle
+
+00:25:29.210 --> 00:25:32.350
+of things and that will just confuse matters.
+
+00:25:32.349 --> 00:25:38.029
+This is what things look like when you
+run kextutil with -i for Interactive.
+
+00:25:38.029 --> 00:25:44.059
+When you do that it asks you if it's OK to load
+the driver now and you say Yes and then it says,
+
+00:25:44.059 --> 00:25:51.059
+I have loaded the driver, assuming it works, of course, and
+it says that this driver and its dependencies are now loaded
+
+00:25:51.059 --> 00:25:55.539
+but they're not started unless they were already
+running and that's for you to figure out;
+
+00:25:55.539 --> 00:25:59.430
+this is where you set up your break points in the
+debugger so you go back to your development machine
+
+00:25:59.430 --> 00:26:06.470
+and set everything up in gdb, you've add kext and you set
+your break points and then you say, Start my kext, Yes,
+
+00:26:06.470 --> 00:26:11.940
+and once you've done that it will say, is it OK to send
+personalities down to the kernel now, and you say Yes
+
+00:26:11.940 --> 00:26:14.860
+and then for each personality it asks and so on.
+
+00:26:14.859 --> 00:26:19.039
+Now that can get a little bit tedious
+if your driver has dozens and dozens
+
+00:26:19.039 --> 00:26:21.629
+of personalities and I know there are drivers that do.
+
+00:26:21.630 --> 00:26:27.140
+So there's a slightly quicker way to do this for
+drivers only and that's to run kextutil twice.
+
+00:26:27.140 --> 00:26:33.820
+You can run it once with -l which means load
+it but don't do anything else, that will load
+
+00:26:33.819 --> 00:26:38.059
+and start if you've got a start routine for
+generic kext but it doesn't do driver matching.
+
+00:26:38.059 --> 00:26:43.750
+Similarly this will delay Auto Unload for at least 2
+minutes, actually, kextutil, in general, delays Auto Unload
+
+00:26:43.750 --> 00:26:46.150
+and kextload is the thing that doesn't now.
+
+00:26:46.150 --> 00:26:50.230
+Once you've got your symbols you copy
+them on to the development machine
+
+00:26:50.230 --> 00:26:53.500
+and then you can add your kext and set your break points.
+
+00:26:53.500 --> 00:26:57.680
+After you've done that then you run
+kextutil with -m which means match
+
+00:26:57.680 --> 00:27:00.360
+and that sends the IOKitPersonalities down to the kernel.
+
+00:27:00.359 --> 00:27:03.279
+Your driver instances will be created and Probe and Start
+
+00:27:03.279 --> 00:27:08.039
+and what not will be called and
+you will hit your break points.
+
+00:27:08.039 --> 00:27:11.690
+There are a number of other ways to generate
+debug symbols and we're not going to bother going
+
+00:27:11.690 --> 00:27:14.490
+through them all you can find out
+about them on the man page.
+
+00:27:14.490 --> 00:27:19.690
+But just to summarize if you already have the kext
+loaded on the machine and you need to generate symbols
+
+00:27:19.690 --> 00:27:26.460
+on that machine you can run kextutil with a -A option
+which means use the load addresses in the running kernel.
+
+00:27:26.460 --> 00:27:33.920
+You can also specify load addresses on the command line
+with -a or -address and you just give it a BundleID@ address
+
+00:27:33.920 --> 00:27:36.940
+and then you can also do the interactive
+thing for libraries.
+
+00:27:36.940 --> 00:27:44.059
+If you're debugging a library kext you'll run
+-I and that will ask you for each library,
+
+00:27:44.059 --> 00:27:47.039
+whether it's OK to load, start and send personalities.
+
+00:27:47.039 --> 00:27:50.619
+All these options and more are
+documented in the kextutil man page.
+
+00:27:50.619 --> 00:27:55.250
+And if you want to find out more on
+kernel debugging there are some documents
+
+00:27:55.250 --> 00:27:57.579
+on the developer website you want to download.
+
+00:27:57.579 --> 00:28:02.429
+The first one is Kernel Extension Programming Topics; this
+is a general introduction to kernel extension programming
+
+00:28:02.430 --> 00:28:07.350
+and some tutorials which are admittedly a little bit
+out of date but we're working on that so as you go
+
+00:28:07.349 --> 00:28:11.759
+through those apply what you've learned
+here today and make those changes as needed.
+
+00:28:11.759 --> 00:28:18.759
+There's also a Kernel Programming Guide that covers the
+general issues of programming in the kernel address space
+
+00:28:18.759 --> 00:28:20.750
+and then two really excellent tech
+notes you should check out.
+
+00:28:20.750 --> 00:28:26.569
+2063, which is all about understanding debugging
+kernel panics goes into a lot more detail
+
+00:28:26.569 --> 00:28:28.740
+about the stuff I just mentioned in the last few slides.
+
+00:28:28.740 --> 00:28:33.599
+And another one for debugging kernel core dumps if that's
+all you've got if you don't have a live machine to attach
+
+00:28:33.599 --> 00:28:36.109
+to you can actually work with a core dump of a kernel.
+
+00:28:36.109 --> 00:28:41.939
+Now I'm going to hand things over to Andrew and he's going
+to talk about dependencies and a bunch of other cool stuff.
+
+00:28:41.940 --> 00:28:42.200
+There you go.
+
+00:28:42.200 --> 00:28:43.009
+>> Andrew: Thank you Nick.
+
+00:28:43.009 --> 00:28:49.150
+[ Applause ]
+
+00:28:49.150 --> 00:28:50.509
+>> Andrew: Alright, good morning everyone.
+
+00:28:50.509 --> 00:28:54.990
+The first thing I'm going to talk to
+you today is about kext dependencies.
+
+00:28:54.990 --> 00:29:01.630
+Kext dependencies are the libraries that you use to develop
+your kext for kernel programming, and when I say libraries,
+
+00:29:01.630 --> 00:29:08.900
+loading kext into the system really is little more
+than static linking so the libraries that you're using
+
+00:29:08.900 --> 00:29:17.720
+with your kext are really just the kext binaries being
+statically linked against your kext in the system.
+
+00:29:17.720 --> 00:29:24.200
+We have two types of kext dependencies the first type are
+the built-in kernel programming interfaces what we call KPIs
+
+00:29:24.200 --> 00:29:32.700
+and they export the kernel subsystem symbols for a few
+different subsystems in the kernel, this is built-in.
+
+00:29:32.700 --> 00:29:38.870
+There are also library kexts, the IOKit families and
+any library kext that you define which are loaded
+
+00:29:38.869 --> 00:29:45.329
+into the system along with your kext they
+define an export C++ sub classes, or -- sorry --
+
+00:29:45.329 --> 00:29:50.039
+C++ super classes that you can derive and use in your kext.
+
+00:29:50.039 --> 00:29:55.039
+All of the headers for Apple's KPI's
+and libraries and IOKit families are
+
+00:29:55.039 --> 00:29:58.349
+in the kernel framework in the Headers Directory.
+
+00:29:59.529 --> 00:30:03.250
+There are four types of public
+kernel programming interfaces,
+
+00:30:03.250 --> 00:30:06.589
+the major ones that we export free to use in your kexts.
+
+00:30:06.589 --> 00:30:12.559
+The first is the mach KPI and this has all the
+really basic primitives of the OS X kernel,
+
+00:30:12.559 --> 00:30:17.200
+things for time, threading, locks, stuff like that.
+
+00:30:17.200 --> 00:30:24.019
+Next is the libkern KPI and this is used for your
+general Lib C type stuff, things like memory and strings,
+
+00:30:24.019 --> 00:30:31.109
+atomic operations and the Utility C++ classes for
+your kext to use, which include the various containers
+
+00:30:31.109 --> 00:30:33.169
+that we provide like OS Array and OS Dictionary.
+
+00:30:33.170 --> 00:30:41.269
+Next is the BSD KPI which, as its name implies,
+handles all the things for the BSD kernel,
+
+00:30:41.269 --> 00:30:44.700
+things like networking, file systems and K Off.
+
+00:30:44.700 --> 00:30:53.110
+And, finally, we have the IOKit KPI which exports
+all of the Core IOKit classes like IO Service.
+
+00:30:53.109 --> 00:30:56.759
+You may have also noticed that there is an unsupported KPI
+
+00:30:56.759 --> 00:31:01.069
+and as its name implies all the
+symbols in here are unsupported.
+
+00:31:01.069 --> 00:31:07.019
+If you link against this KPI and use symbols
+from it your kext can break in any future release
+
+00:31:07.019 --> 00:31:14.889
+of OS X including a software update, so avoid this if you
+can at all possible and file a bug for supported interface
+
+00:31:14.890 --> 00:31:18.350
+so we can get you the tools you
+need to build your kext properly.
+
+00:31:18.349 --> 00:31:26.029
+The kernel also has some compatibility interfaces, these
+are of the form com.apple.kernel and they're provided only
+
+00:31:26.029 --> 00:31:30.399
+for compatibility with Panther and earlier systems;
+
+00:31:30.400 --> 00:31:33.090
+this also implies that they're only
+available for the 32 bit kernel.
+
+00:31:33.089 --> 00:31:40.480
+So if your kext is already using KPIs there's
+absolutely no need to use com.apple.kernel interfaces.
+
+00:31:42.509 --> 00:31:48.660
+Multi-architecture kexts are something that you may have
+encountered before and on Snow Leopard they still exist.
+
+00:31:48.660 --> 00:31:52.029
+Because we have a 64-bit kernedl
+and a 32-bit kernel this means
+
+00:31:52.029 --> 00:31:56.529
+that your kext need to run both in 64-bit and 32-bit mode.2
+
+00:31:56.529 --> 00:32:03.349
+The available kernel interfaces for K32 and K64
+do vary a little bit a lot of the changes focus
+
+00:32:03.349 --> 00:32:11.329
+around just getting rid of the 32-bit
+specific2 address methods and things like that.
+
+00:32:11.329 --> 00:32:20.529
+So the big take-away there is that the KPIs are
+really the way to move forward with your kext.
+
+00:32:20.529 --> 00:32:23.170
+If at all possible please stick to just the KPIs.
+
+00:32:23.170 --> 00:32:26.509
+The unsupported KPI is still available on 64-bit.
+
+00:32:26.509 --> 00:32:29.230
+We've removed a lot of symbols.
+
+00:32:29.230 --> 00:32:31.779
+Please avoid if you can and file a bug with us.
+
+00:32:31.779 --> 00:32:36.750
+The com.apple.kernel interfaces, the
+old compatibility interfaces are gone.
+
+00:32:36.750 --> 00:32:44.259
+Now, as Nick mentioned before we've introduced architecture
+specific properties and one excellent way to use these is
+
+00:32:44.259 --> 00:32:49.789
+for your OSBundleLibraries property If your 32-bit
+kext needs to load on Panther and you need to depend
+
+00:32:49.789 --> 00:32:58.579
+on those old com.apple.kernel interfaces you can use
+OSLibrariesProperty to specify that for the 32-bit kext
+
+00:32:58.579 --> 00:33:02.939
+and still have just KPI interfaces for your 64-bit version.
+
+00:33:02.940 --> 00:33:08.670
+I'll show you an example here of the
+architecture specific property in just a minute.
+
+00:33:08.670 --> 00:33:15.170
+First let's look at the structure of an OSBundleLibrary;
+this property lists the load time kext dependencies
+
+00:33:15.170 --> 00:33:22.740
+for your kext; this is not bill time these are the
+kext links against when loading into the kernel.
+
+00:33:22.740 --> 00:33:26.559
+Its keys are the bundle identifiers of
+the library kext against which you depend
+
+00:33:26.559 --> 00:33:31.129
+and the values are the minimum
+required versions of those libraries.
+
+00:33:31.130 --> 00:33:39.270
+Here's an example of the OSBundleLibrariesProperty for a
+HelloIOKit.kext, as you can see it depends against the IOKit
+
+00:33:39.269 --> 00:33:49.349
+and libkern KPIs and the versions are 10.0b1 which
+is the Snow Leopard seed that you have in your hands.
+
+00:33:49.349 --> 00:33:56.759
+An architecture specific version of this kext here I've
+added a dependency, an extra symbol in the 64-bit version
+
+00:33:56.759 --> 00:34:00.009
+of this kext which uses something from the mach KPI.
+
+00:34:00.009 --> 00:34:05.400
+You can see the I386 version depends
+against just IOKit and LibKern.
+
+00:34:05.400 --> 00:34:10.930
+The x86_64 version also depends on the mach KPI.
+
+00:34:11.949 --> 00:34:16.599
+As Nick mentioned earlier we introduced a tool in
+Leopard called Kextlibs and kextlibs can be used
+
+00:34:16.599 --> 00:34:20.480
+to determine the OSBundleLibraries needed by your kext.
+
+00:34:20.480 --> 00:34:26.840
+What it does is it looks at all the undefined
+symbols in your kext and goes through all of the kext
+
+00:34:26.840 --> 00:34:33.480
+in the system library extensions to see which kext define
+-- which libraries define those symbols for you to use.
+
+00:34:33.480 --> 00:34:37.920
+It's based on the current running system so you should
+run it on the oldest release that you're targeting
+
+00:34:37.920 --> 00:34:40.269
+with your kext, the earliest of which is Leopard.
+
+00:34:40.269 --> 00:34:46.320
+So this means that for now you're a bit out of luck
+if you want to use this targeting in an older system.
+
+00:34:46.320 --> 00:34:52.500
+It also has a convenience flag -XML to generate raw
+XML and here you can see an example of kextlibs running
+
+00:34:52.500 --> 00:35:00.210
+against that HelloIOKit.kext we were working with earlier
+to generate the same OSBundleLibraries property we have.
+
+00:35:00.210 --> 00:35:05.690
+Kextlibs is also capable of handing architecture
+specific properties which is new in Snow Leopard.
+
+00:35:05.690 --> 00:35:12.889
+And here we have the second kext that I showed you
+HelloIOKitwhich had that extra dependency on the mach KPI
+
+00:35:12.889 --> 00:35:17.019
+for x86_64 and kextlibs will handle this without a problem.
+
+00:35:17.019 --> 00:35:23.230
+There are a couple of known issues
+with kextlibs, we're sorry,
+
+00:35:23.230 --> 00:35:32.179
+the first is that as documented kextlibs will use the
+current versions of the libraries that your kext depends
+
+00:35:32.179 --> 00:35:36.639
+on when generating its output, the XML that it gives.
+
+00:35:36.639 --> 00:35:44.319
+And then you should be able to use -C to have it
+print the compatible versions of the libraries.
+
+00:35:44.320 --> 00:35:50.500
+In Snow Leopard we got this a little backwards and
+kextlibs will print the compatible versions by default
+
+00:35:50.500 --> 00:35:56.920
+and then you can use -C to get the current
+versions, so we'll fix that in a future release.
+
+00:35:56.920 --> 00:36:03.539
+Also, just a heads up, the -r flag for
+specifying another repository is currently ignored
+
+00:36:03.539 --> 00:36:06.849
+so kextlibs only looks in the system library extensions.
+
+00:36:06.849 --> 00:36:11.730
+The final tool I want to mention is kextfind.
+
+00:36:11.730 --> 00:36:18.829
+Kextfind is incredibly powerful it's got a ton of options
+and predicates that you can use to find different kext
+
+00:36:18.829 --> 00:36:23.139
+on your system and they're all
+documented in detail in the man page.
+
+00:36:23.139 --> 00:36:29.599
+One thing I want to call out is that you can use kextfind
+as an alternative to kextlibs when targeting older releases.
+
+00:36:29.599 --> 00:36:35.230
+It has a predicate -dSYM which means
+Define Symbol which will fine all kext
+
+00:36:35.230 --> 00:36:39.199
+that define the symbol that you
+pass to it on the command line.
+
+00:36:39.199 --> 00:36:44.659
+You can also use the -f flag to specify an older
+release's system library extensions so you can use this
+
+00:36:44.659 --> 00:36:52.349
+from Snow Leopard to find a symbol for your Tiger
+kext if you have a Tiger install lying around.
+
+00:36:52.349 --> 00:36:59.219
+So here we have an example of trying to load
+a kext, a HelloIOKit kext that I've broken
+
+00:36:59.219 --> 00:37:03.519
+by having it use a new symbol that
+I haven't added a dependency for.
+
+00:37:03.519 --> 00:37:09.199
+So we try and load it and, oh no, it has
+an undefined symbol clock getup time.
+
+00:37:09.199 --> 00:37:15.439
+What we can do is pass kextfind
+-dsym_clock_get_uptime and it will tell us
+
+00:37:15.440 --> 00:37:20.329
+that you can find this symbol in
+the mach kext which is the mach KPI.
+
+00:37:20.329 --> 00:37:25.610
+If you check in the Info.plist for this kext it will
+tell you the bundle ID and version that you should use
+
+00:37:25.610 --> 00:37:29.240
+and add to your Info.plist OSBundleLibraries property.
+
+00:37:29.239 --> 00:37:34.969
+Next I'm going to talk to you a
+little bit about kext linking.
+
+00:37:34.969 --> 00:37:39.949
+In Snow Leopard we've introduced a new
+kext linker that we've lovingly call KXLD.
+
+00:37:39.949 --> 00:37:46.389
+The kext linker is what takes the kext
+executables and bind them into the kernel.
+
+00:37:46.389 --> 00:37:54.089
+It does a couple of things; first it resolves undefined
+symbols that your kext has against the libraries
+
+00:37:54.090 --> 00:37:57.050
+that you specified with your OSBundlesLibraries property.
+
+00:37:57.050 --> 00:38:02.510
+And second it does a little bit of behind the scenes
+work to ensure binary compatibility for older kexts
+
+00:38:02.510 --> 00:38:05.960
+on newer systems, but the details
+of that aren't really important.
+
+00:38:05.960 --> 00:38:11.869
+We've built it from scratch for Snow Leopard with a
+lot of goals in mind we wanted to make it really fast,
+
+00:38:11.869 --> 00:38:17.009
+really portable, we got this new 64-bit kernel it
+has the support and we wanted it to be extensible
+
+00:38:17.010 --> 00:38:21.330
+so that we could take advantage of having
+this link here to add some new features.
+
+00:38:21.329 --> 00:38:28.529
+The primary goal for our architecture is
+that we wanted to link a kext only once.
+
+00:38:28.530 --> 00:38:33.670
+Since the previous linker was built around the model of
+static linking every time you loaded a kext it would have
+
+00:38:33.670 --> 00:38:37.250
+to link your kext and all of its
+dependencies all over again.
+
+00:38:37.250 --> 00:38:43.190
+We didn't want to have to go through all that work so
+we came up with this idea of intermediate state objects
+
+00:38:43.190 --> 00:38:51.970
+which we call Link States and these objects contain
+the information that a loaded kext will export.
+
+00:38:51.969 --> 00:39:00.039
+We use it for library kexts and it just tracks all the
+exported symbols and V Tables that we need for future links.
+
+00:39:00.039 --> 00:39:03.880
+We keep it in Page Memory so it
+doesn't have any wired memory impact
+
+00:39:03.880 --> 00:39:08.590
+and this really lets us speed up linking quite a bit.
+
+00:39:08.590 --> 00:39:14.590
+We also designed the kext linker to be completely cross
+architecture, 64-bit capable, biordinary dependant;
+
+00:39:14.590 --> 00:39:17.780
+it can handle any architecture you throw at it.
+
+00:39:17.780 --> 00:39:22.780
+And, finally, we designed it to run in both kernel space
+and user-space so not only does it run in the kernel
+
+00:39:22.780 --> 00:39:26.190
+but we also generate a library that
+the kext tools can use to do things
+
+00:39:26.190 --> 00:39:33.269
+like try a links when testing to see if your kext loads.
+
+00:39:33.269 --> 00:39:40.480
+Linking a kext with KXLD looks like this, we have our kext
+and the linker and the linker's pool of link state objects
+
+00:39:40.480 --> 00:39:44.360
+that it has from previous link operations.
+
+00:39:44.360 --> 00:39:49.289
+When it's time to link the kext it gathers the kext
+and all the link state dependencies that it has,
+
+00:39:49.289 --> 00:39:53.029
+loads them in the linker, processes
+them and if we have another library kext
+
+00:39:53.030 --> 00:39:58.620
+that we're linking it generates a link state, adds it
+back to the pool that it can use for reference later
+
+00:39:58.619 --> 00:40:06.659
+and then takes the link kext and places it in its
+spot in the kernel address space ready for running.
+
+00:40:08.610 --> 00:40:11.720
+Were we successful, how did performance do?
+
+00:40:11.719 --> 00:40:20.539
+Well, first looking at memory on a Mac Pro early
+2008 we looked at the memory allocated during boot
+
+00:40:20.539 --> 00:40:23.420
+which is the working set size of the kext Linker.
+
+00:40:23.420 --> 00:40:28.579
+The old linker used about 90MB
+from power on to log-in window
+
+00:40:28.579 --> 00:40:32.679
+over the course of boot and the new linker uses just 13.
+
+00:40:32.679 --> 00:40:42.069
+Looking at speed the actual time it took to link a kext
+when linking the ATI Radion X2000 kext on the same Mac Pro;
+
+00:40:42.070 --> 00:40:49.950
+this is the graphics driver for that Mac, the
+old linker took 210 milliseconds to process
+
+00:40:49.949 --> 00:40:55.969
+that kext and the new linker takes just 25.
+
+00:40:55.969 --> 00:40:59.230
+We've also been able enable a lot
+of new features because of KXLD.
+
+00:40:59.230 --> 00:41:05.079
+First there's cross architecture symbol generation
+not only will it generate symbols for your K32 kext
+
+00:41:05.079 --> 00:41:13.590
+and K64 kext regardless of what the Mac generating the
+symbols is running it can even generate power PC symbols
+
+00:41:13.590 --> 00:41:16.730
+for older release kext that you may have.
+
+00:41:16.730 --> 00:41:22.740
+It also enables weak linking for C symbols for K64 kext
+I'll get into the details of that in just a minute.
+
+00:41:22.739 --> 00:41:28.759
+And, finally, enables segment protection for K64
+kext so that dthe kext segment is right protected
+
+00:41:28.760 --> 00:41:31.730
+and the data segment is actually heat
+protected; this is something new as well.
+
+00:41:31.730 --> 00:41:40.789
+Alright, so, we talked to you about loading kext's
+and debugging kext's and dealing with dependencies
+
+00:41:40.789 --> 00:41:44.820
+in the new linker now let's talk
+about how your kext actually runs
+
+00:41:44.820 --> 00:41:47.320
+in the kernel, what the run-time environment is like.
+
+00:41:47.320 --> 00:41:53.380
+A little background first, as you know, the kernel is the
+longest running task on the system it's really important not
+
+00:41:53.380 --> 00:41:56.180
+to leak and use resources that you don't need.
+
+00:41:56.179 --> 00:42:01.589
+Allocated memory is wired so it can't be paged out and
+there's a lot of restrictions there's limited stack space,
+
+00:42:01.590 --> 00:42:05.579
+restricted floating point, restricted
+file IO, an incomplete C library
+
+00:42:05.579 --> 00:42:10.199
+and as Nick showed us debugging
+can be a little bit complicated.
+
+00:42:10.199 --> 00:42:14.669
+Kexts are not insulated from this environment in
+any way they run within the kernel's address space,
+
+00:42:14.670 --> 00:42:20.570
+there's no sandboxing, no address space
+protection, errors bring down the OS.
+
+00:42:20.570 --> 00:42:24.269
+All code running within the kernel is
+inherently trusted so as we said before
+
+00:42:24.269 --> 00:42:31.170
+if you can do what you're trying to
+do without a kext please pursue that.
+
+00:42:31.170 --> 00:42:37.070
+The kext runtime has a lot of new features in Snow
+Leopard and we've introduced the following things:
+
+00:42:37.070 --> 00:42:43.070
+some Kext Introspection so you can learn more
+about your kext, Libkern C++ generic kexts,
+
+00:42:43.070 --> 00:42:48.320
+Opt-in auto-unload for generic kexts,
+Weak linking for C symbols on K64,
+
+00:42:48.320 --> 00:42:54.070
+Resource Requests for kext and load requests.
+
+00:42:54.070 --> 00:42:59.269
+The introspection stuff is pretty straightforward we
+provide API's to get your current bundle identifier,
+
+00:42:59.269 --> 00:43:05.869
+get your kext version string and those are good for logging
+and just keeping track of information about your kext.
+
+00:43:05.869 --> 00:43:10.679
+And then something called OSKextGetCurrentLoadTag
+and the Load Tag is something we use in some
+
+00:43:10.679 --> 00:43:14.119
+of the other run-time APIs I'm about to introduce.
+
+00:43:15.199 --> 00:43:21.379
+We strongly encourage you to adopt these APIs instead
+of using the old kmod_info struct and kmod_ functions.
+
+00:43:21.380 --> 00:43:27.260
+That struct has been deprecated those functions have either
+been deprecated or removed where possible we're going
+
+00:43:27.260 --> 00:43:33.550
+to be getting rid of those quickly as possible so
+please move to this new stuff for your future kexts.
+
+00:43:33.550 --> 00:43:42.620
+In the past generic kexts while we've allowed C++
+in them we haven't allowed you to use LibKernC++.
+
+00:43:42.619 --> 00:43:51.139
+The collections and other support C++ classes we provide
+and that's changed in Snow Leopard we now support it,
+
+00:43:51.139 --> 00:43:57.279
+it's now safe to use but please keep in mind that it is
+not supported prior to Snow Leopard so you should take care
+
+00:43:57.280 --> 00:44:02.920
+to set your OSBundleLibraries property appropriately
+so that your kext doesn't load on older systems
+
+00:44:02.920 --> 00:44:06.210
+and run into some tough to debug problems.
+
+00:44:06.210 --> 00:44:12.429
+One feature we've gotten a lot of requests
+for is Auto Unload for generic kext
+
+00:44:12.429 --> 00:44:19.489
+so we've introduced an opt-in mechanism based on retained
+release model to auto unload your generic kext's.
+
+00:44:19.489 --> 00:44:22.579
+There's two APIs associated with this feature.
+
+00:44:22.579 --> 00:44:29.360
+First is OSKextRetainKextWithLoadTag and this takes the
+load tag parameter that I discussed a little bit ago
+
+00:44:29.360 --> 00:44:33.130
+that you get from calling OSKext GetCurrentLoadTag.
+
+00:44:33.130 --> 00:44:36.590
+Calling retained will increment the reference count
+
+00:44:36.590 --> 00:44:41.470
+and the first time you call it it
+will enable Auto Unload for this kext.
+
+00:44:41.469 --> 00:44:44.079
+Then you call OSKextReleaseKextWithLoadTime
+
+00:44:44.079 --> 00:44:47.860
+which will decrement the reference
+count and schedule an auto unload scan.
+
+00:44:47.860 --> 00:44:56.410
+Now, when your retain count hits 0 your kext will be
+auto unloaded on the next pass so it's very important
+
+00:44:56.409 --> 00:45:04.389
+to track the resources that your kext has outstanding so
+that your kext doesn't get unloaded out from under them.
+
+00:45:04.389 --> 00:45:05.339
+You can do this in two ways.
+
+00:45:05.340 --> 00:45:12.030
+You can either use the Retain Count API itself or
+you can have some sort of internal tracking mechanism
+
+00:45:12.030 --> 00:45:18.030
+to track your kext resource usage and
+fail when your Stop function is called
+
+00:45:18.030 --> 00:45:22.600
+so your kext doesn't get unloaded
+until those are cleaned up.
+
+00:45:24.269 --> 00:45:29.130
+For K64 we've introduced weak linking
+for C symbols in the kernel;
+
+00:45:29.130 --> 00:45:35.010
+this is a simple API OS kext symbol is resolved
+just pass in the symbol that you want to check
+
+00:45:35.010 --> 00:45:37.540
+and it will return true if the symbol is valid.
+
+00:45:37.539 --> 00:45:45.090
+Now the alerted attendee might notice that K64 is
+new so there are no symbols to link weakly, however,
+
+00:45:45.090 --> 00:45:49.860
+I can assure you that we've actually implemented this and we
+are checking every single symbol in the kernel to make sure
+
+00:45:49.860 --> 00:45:53.860
+that it exists and it is available for your use.
+
+00:45:53.860 --> 00:45:59.450
+This will become a bit more relevant in future
+releases as we add symbols that you want to use
+
+00:45:59.449 --> 00:46:03.879
+but will still want to be able to deploy to Snow Leopard.
+
+00:46:05.429 --> 00:46:09.539
+Kext Resource Requests are another oft requested feature.
+
+00:46:09.539 --> 00:46:16.599
+They allow you to request a resource from a kext
+bundle to be passed down to your kext in the kernel.
+
+00:46:16.599 --> 00:46:23.650
+It's useful for briefly needed or optional resources such
+as device firmware, look-up tables, state machine data,
+
+00:46:23.650 --> 00:46:28.610
+generally large things that you don't want to
+include in the kext Binary or the Info.plist itself.
+
+00:46:28.610 --> 00:46:31.829
+It's important to note that resources
+are not localizable for kernel to use
+
+00:46:31.829 --> 00:46:39.329
+and they're not available before kextd starts so you need
+to keep that in mind when designing how you use this.
+
+00:46:39.329 --> 00:46:45.759
+To request a resource simply call
+OSKextRequestResource; this function has 5 parameters;
+
+00:46:45.760 --> 00:46:49.260
+first is the Bundle Identifier of the
+kext you're requesting a resource from;
+
+00:46:49.260 --> 00:46:52.180
+this means that you can request
+the resource of another kext,
+
+00:46:52.179 --> 00:46:56.639
+potentially a kext that isn't loaded for your kext to use.
+
+00:46:56.639 --> 00:47:03.309
+Then you pass in the resource name which is the file name
+of the resource in the resources folder of the kext bundle.
+
+00:47:03.309 --> 00:47:07.489
+Next you pass in a call-back which will
+be invoked when the resource is available.
+
+00:47:07.489 --> 00:47:13.569
+There's a context pointer which you can pass
+in just general context that you may need.
+
+00:47:13.570 --> 00:47:19.670
+And then there's a return pointer the request tag out
+which will give you a tag to track this resource request;
+
+00:47:19.670 --> 00:47:26.170
+this call will cause an asynchronous
+request to go to kextd to get this resource
+
+00:47:26.170 --> 00:47:31.909
+and then your call-back will be
+invoked when the resource is available.
+
+00:47:31.909 --> 00:47:38.449
+OSKextrequestResourceCallback looks like it's -- similarly
+it has 5 parameters first there's the request tag
+
+00:47:38.449 --> 00:47:43.189
+which is the tag you received when
+you called RequestResource.
+
+00:47:43.190 --> 00:47:47.940
+It will give you a result and if that result
+is successful it will pass you a pointer
+
+00:47:47.940 --> 00:47:51.720
+to the data and the data's link of that resource.
+
+00:47:51.719 --> 00:47:57.179
+And then, finally, the context pointer that
+you passed in when you requested the resource.
+
+00:47:57.179 --> 00:48:02.579
+This callback is guaranteed to be invoked unless you
+cancel the request but it's important to note two things,
+
+00:48:02.579 --> 00:48:07.719
+first of all your kext does not own the
+thread that this callback is invoked on
+
+00:48:07.719 --> 00:48:12.689
+and the resource data will be destroyed when the callback
+returns so if you need to do anything non-trivial
+
+00:48:12.690 --> 00:48:19.610
+to this data copy it out into another bit of
+memory and process it on a thread that you own.
+
+00:48:19.610 --> 00:48:25.730
+If you need to cancel a kext resource
+request call OSKextCancelRequest
+
+00:48:25.730 --> 00:48:36.309
+and pass in that request tag it will return the context
+that you passed in for you to clean up if you need to do so.
+
+00:48:36.309 --> 00:48:42.369
+Finally, we've introduced a mechanism for you to
+request that a kext be loaded from the kernel;
+
+00:48:42.369 --> 00:48:48.389
+this function's called OSKextLoadKextwithIdentifier Pass
+in the Bundle Identifier of the kext that you want to load.
+
+00:48:48.389 --> 00:48:52.539
+It's an asynchronous and there is no callback for this one.
+
+00:48:52.539 --> 00:48:58.650
+What this means is you need to provide your own
+rendezvous mechanism to determine when the kext
+
+00:48:58.650 --> 00:49:03.519
+that you requested has been loaded
+and is ready for you to use.
+
+00:49:05.150 --> 00:49:10.990
+The last thing I want to talk to you about
+today is installing and uninstalling kexts.
+
+00:49:10.989 --> 00:49:15.099
+Kext installation really is nothing
+short of brain surgery on OS X.
+
+00:49:15.099 --> 00:49:25.269
+It affects everything it affects the kernel, kextd, IOKit
+matching, running applications that use services provided
+
+00:49:25.269 --> 00:49:28.570
+by drivers, anything you name it affects.
+
+00:49:28.570 --> 00:49:34.789
+The kext system guards against gross failures but poor
+installation can still yield a bad user experience,
+
+00:49:34.789 --> 00:49:41.889
+so these bad user experiences consist of
+things like silent failures of the new device,
+
+00:49:41.889 --> 00:49:49.190
+incorrect driver used for the new device and an alert about
+an improperly installed kext made with bad permissions.
+
+00:49:49.190 --> 00:49:54.619
+So when installing drivers first you should
+make sure that your device is not attached.
+
+00:49:54.619 --> 00:49:58.579
+If it is existing drivers may match
+immediately on that device
+
+00:49:58.579 --> 00:50:02.840
+and matching will get invoked again during installation
+
+00:50:02.840 --> 00:50:08.470
+so if you make sure the device is not attached
+you won't get any unpredictable results.
+
+00:50:08.469 --> 00:50:14.259
+Drivers, IOKit drivers should be
+installed to system library extensions.
+
+00:50:14.260 --> 00:50:19.300
+Library extensions while not used right now is reserved
+for future use so please don't put anything there.
+
+00:50:19.300 --> 00:50:25.320
+Also, try to please avoid using symlinks the booter can
+not resolve them and it can result in some other hard
+
+00:50:25.320 --> 00:50:28.470
+to diagnose problems with the various kext tools.
+
+00:50:28.469 --> 00:50:33.789
+When installing generic kexts they can be
+installed anywhere and we recommend in putting them
+
+00:50:33.789 --> 00:50:39.059
+in system library extensions so that tools like
+kextlibs can find them, but you can also put them
+
+00:50:39.059 --> 00:50:41.659
+in your application bundle or support folder.
+
+00:50:41.659 --> 00:50:47.170
+Library extensions is still reserved so don't put them
+there and please don't put them in your User's folder.
+
+00:50:47.170 --> 00:50:52.010
+If you're actually installing the
+kextfiles on releases prior
+
+00:50:52.010 --> 00:50:57.780
+to Snow Leopard meaning you're either creating a custom
+install or a package for installer.app we require
+
+00:50:57.780 --> 00:51:02.830
+that you have admin access and that you
+install or uninstall the whole kext atomically.
+
+00:51:02.829 --> 00:51:07.170
+And what I mean by that is you write your kext
+to temporary folder on the destination volume
+
+00:51:07.170 --> 00:51:14.710
+and then use a postflight script to set the owner and group
+to root wheel and remove writable permissions from the kext.
+
+00:51:14.710 --> 00:51:21.309
+Finally, move the kext into the destination
+folder, for example, /System/Library/Extensions/.
+
+00:51:21.309 --> 00:51:25.860
+Then to reset the kext system on releases prior
+to Snow Leopard you can validate the kext caches
+
+00:51:25.860 --> 00:51:32.480
+by touching the destination folder which is, again, usually
+System Library Extensions, and then you can trigger a rescan
+
+00:51:32.480 --> 00:51:38.920
+of the extensions folder and restart driver matching
+on 10.2 and earlier by just requiring a restart.
+
+00:51:38.920 --> 00:51:44.210
+10.3 and later you can send a SIGHUP to kextd and on Leopard
+
+00:51:44.210 --> 00:51:49.090
+and later this is all done automatically
+kextd watches the destination folder for you
+
+00:51:49.090 --> 00:51:56.210
+so after a small delay it will handle all of this
+regenerating the caches and resetting the kext system.
+
+00:51:56.210 --> 00:52:01.990
+Once this is done it's safe to go ahead and load generic
+kexts and the user can go ahead and attach device.
+
+00:52:01.989 --> 00:52:08.469
+You can get more information on this by checking out
+Q&A QA1319: Installing an IOKit Kext Without Rebooting.
+
+00:52:08.469 --> 00:52:17.019
+There's some installer.app changes in Snow Leopard that you
+can take advantage of when installing your kext on products
+
+00:52:17.019 --> 00:52:19.369
+that support only Snow Leopard and later.
+
+00:52:19.369 --> 00:52:24.909
+Installer.app already performs atomic installs of
+all files and it will invalidate the kext caches
+
+00:52:24.909 --> 00:52:28.409
+for you following the post flight script.
+
+00:52:28.409 --> 00:52:34.279
+It does not, however, send a kextd a SIGHUP
+so if you can't wait that small delay
+
+00:52:34.280 --> 00:52:43.300
+that kextd has before it restarts matching and
+regenerates the caches you can force immediate matching
+
+00:52:43.300 --> 00:52:49.420
+by touching the destination folder
+again and sending SIGHUP to a kextd.
+
+00:52:49.420 --> 00:52:51.680
+Finally, a note on the kext caches.
+
+00:52:51.679 --> 00:52:57.460
+The cache formats and locations have changed with every
+release and I promise you we will change them again
+
+00:52:57.460 --> 00:53:03.050
+in every release so please make no
+assumptions about them not even where they are.
+
+00:53:03.050 --> 00:53:10.320
+Just touch the install destination folder usually
+/System/Library/Extensions/ to get those caches regenerated
+
+00:53:10.320 --> 00:53:15.550
+and if you find any unexpected behavior
+file a bug and we'll get it fixed.
+
+00:53:15.550 --> 00:53:20.660
+A side note, if you're creating a bootable DVD there
+are some caveats with this so you can either find us
+
+00:53:20.659 --> 00:53:24.039
+in the labs or contact Developer Support.
+
+00:53:24.039 --> 00:53:29.079
+>> Nick: So in summary we've made a ton of changes
+to the kext system, introduced a lot of new features,
+
+00:53:29.079 --> 00:53:35.559
+there's a new developer tool kextutil, we have
+64-bit kext and cross architecture tools support
+
+00:53:35.559 --> 00:53:39.000
+to support those kexts along with
+architecture specific properties.
+
+00:53:39.000 --> 00:53:45.579
+There's an improved kext runtime that includes
+programmatic kext loading and repeats source requests
+
+00:53:45.579 --> 00:53:48.440
+in the kernel and it's all backwards compatible.
+
+00:53:48.440 --> 00:53:49.470
+So thank you very much for your time.

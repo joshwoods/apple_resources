@@ -1,0 +1,165 @@
+---
+Title:  I/O Kit: Storage Drivers
+Year:   2001
+Web:    https://nonstrict.eu/wwdcindex/wwdc2001/204/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Over the last couple of years with working with the developers and working with Apple's engineering team, we've learned a lot about what Mass Storage device drivers need to do and what we were doing wrong in Mac OS 9. So hopefully you'll find with what we're doing in 10 to be a much more powerful solution for you to create device drivers without necessarily needing to write the entire driver. You can leverage off of major portions of ours and to sort of describe that overall architecture, I'd like to bring up Craig Marciniak. Craig?
+
+Good evening, I'm Craig Marciniak, Senior Engineer at Apple. I've been working on Mass Storage in X for about a year now. And tonight we're going to delve in and get into all the details of that architecture. I've partitioned this talk into really two pieces: third party hardware vendors that want to bring their hardware to the platform, and utility writers and people that need to talk to hardware from application space. The second group that want to talk to applications from user space will find the first half semi-interesting because it exposes how things work in the kernel, which will help you understand and debug talking to those drivers from user space.
+
+So we're going to really expose and get into the details of the architecture. I'll do this mostly by showing how the driver stack is instantiated, how to subclass support for given devices, how to talk to drivers. How to talk to those devices from user space. And most importantly, how to get more information. And if there's time at the end, we'll do some Q&A. How many people here have a comfortable understanding of the basic concepts in I/O Kit?
+
+That's about what I expected. So drivers are kernel extensions. We refer to them as KEX. They're written in a restricted subset of C++ that is most notably missing RTTI and Templates, Multiple Inheritance, and Exceptions. Thank you. I/O Kit makes a big distinction between family versus drivers. Families are an encapsulation of all the commonality and drivers in the vernacular of I/O Kit are really instances of device specific things that you would subclass over.
+
+I'm going to keep refining that. It may seem a little repetitive, but it's really an important concept. I've been doing drivers in 9Space for a decade and when I hear the word driver, I tend to think of this monolithic giant driver that encompasses a lot more than what drivers mean in I/O Kit. We refer to them as leaf classes of the family.
+
+Another concept that's really important is the registry. A registry is a dynamic database. It's a tree that contains a whole bunch of properties that get filled up over time. And these properties are used for matching so that devices and objects can be instantiated and built up. There's some other sessions this week that go into detail and depth and they'll be enumerated at the end of this presentation. There's some appropriate URLs sprinkled through this and summarized at the end.
+
+uh... there's a New book that just got released called Inside Mac OS X: The Kernel Environment that has a very good overview of I/O Kit concepts. And finally, there's always Darwin. I've spent a lot of time reading the header, especially of ioservice.h and looking at the implementations in ioservice.cpp, which really can help a lot.
+
+I'm going to put the whole thing into context here. We have devices that we find and the first layer is the physical interconnect layer. This layer encompasses a whole bunch of a collection of objects of bus specific things. These are the SCSI drivers, the SCSI bus drivers, the controller drivers, excuse me, the firewire controller drivers, the USB controller drivers, and all the objects that are needed to support that layer.
+
+The transport driver layer is where requests get packaged up and turned into commands to go down to the appropriate bus. We're going to go into more detail in that in a minute. The device services layer is a generic layer. It contains partitioners and a generic driver. And then finally we have, the yellow line there represents the user kernel boundary and above that we have clients, ultimately your applications. So we're going to zoom in and get into the details of the transport driver layer.
+
+Historically, we were looking at 9 and we had a sense of deja vu because we kept pretty much writing the same driver over and over again. And we had no reusability and invariably there were subtleties in implementation from one interpretation of how to do this and that and another. And over time, all kinds of metadata bled into those drivers. Partition information, special commands, special control and status calls. And we're going to be able to finally get away from that.
+
+What we did in 10 is we had a chance to really reuse that commonality. We wanted to reuse that commonality. I/O Kit gave us an object framework to actually achieve that. So we were discussing how are we going to do this. And it turns out that there was a formal document that served as a really good guideline to do this. It's called SAM.
+
+SAM is a SCSI architectural model. And I want to stop and make a distinction here. When I say SAM and I mean SCSI in the sense of SCSI architectural model, I'm not referring to SCSI hardware. I'm not talking about SCSI hard drives. I'm not talking about SCSI scanners.
+
+I'm not talking about anything. When I mean that, I'll say SCSI parallel. So SAM was this wonderful document that really was a blueprint for us to do exactly what we wanted to achieve by implementing and specifying a partitioning of the command sets in the internet protocols. Not internet, interconnect protocols.
+
+You can go to the URL in the bottom to get more information in the formal SAM document. When we started on SAM a year ago, When we started on SAM a year ago, I believe we were using Draft 5. And it has been, it is not ratified at this point, but it is definitely farther than when we started. Another thing is half the challenge of understanding this is getting the subtleties of all the language. We used a lot of the wording and terminology out of the SAM document in our class and implementation. So that's where all this comes from.
+
+So, The Transport Driver layer is split into two natural layers. The SCSI Protocol layer, which is bus specific, and the SCSI Application layer, which is device specific. What I mean by that is, We ship bus specific drivers for USB, TAPI, Firewire, bus specific stuff at the protocol layer. And we expand this other layer into the SCSI application layer.
+
+We have this peripheral device type nub. The peripheral device type nub's job in life is to really send an inquiry command down to the device and discover what kind of peripheral device type it is. Is it going to be one of the peripheral device types? In Kernel we have above that a logical unit driver.
+
+We have a peripheral device type 00 which is block storage, peripheral device type 5 which is multimedia, 7 which is magneto-optical, and E which is reduced block commands. So what happens is the peripheral device type nub populates the registry with the peripheral device type type so that it's not just a block type. a logical unit driver can be instantiated appropriately.
+
+So there's one other thing above that, and it's the service device layer. And this is just some linkage objects that link the logical unit driver to the appropriate generic system driver above it. In a typical instance, what will happen is, let's say we have plugged a device into the USB bus, that we would instantiate an I/O USB Mass Storage Class Protocol driver, which would in turn instantiate the peripheral device nub, which would in turn query and populate the registry with the appropriate device type, and if it was a block storage device, in the case of a hard drive, a peripheral device type 00 logical unit driver would be instantiated. So up until this point, I've only been talking about the functional stacking and layering of how all these pieces interrelate.
+
+You have to work with me here a little bit. This slide may be kind of confusing at first. A little bit of convention context here. These puzzle pieces aren't components, they're not extensions, they're objects. This is just an object hierarchy. You usually see them as ovals. I don't know if you can tell, but the darker purple means that it's a concrete class, excuse me, an abstract class, and the lighter purple are concrete classes. Now, at the SCSI protocol layer, the base class is I/O SCSI protocol services. We subclass a family for a given bus off that. So if we wanted to support SCSI, we would do an I/O SCSI parallel transport subclass of the I/O SCSI protocol services.
+
+The next layer in the stack is the SCSI application layer object hierarchy. Here are basically the pieces that represent the logical unit drivers. So in the case of a block storage driver, the peripheral device type 00 is subclassed off of the SCSI block commands device and the base class in this layer is the I/O SCSI primary commands device.
+
+So I'm going to bring this all kind of together right now. Here's an example of a FireWire drive. At the physical interconnect layer, the appropriate objects are instantiated and built up. What I'm showing here is this driver stack to the left and the object hierarchy works this way.
+
+So what will happen is once the appropriate objects have been built up, a peripheral SCSI protocol driver will be instantiated. The base family will be I/O Firewire/CeoBus protocol transport, which in turn instantiates that peripheral device nub, which in turn would
+
+[Transcript missing]
+
+Now this is the magic slide here to put this all together.
+
+I keep referencing the subclassing and exactly really what does that mean, how does it fit into context. When we subclass something, in this case we're going to subclass the Peripheral Device Type 00 driver with my device subclass. All we're doing is inserting a new leaf class and shifting the object hierarchy to the right.
+
+So if I want to subclass and add some support to the SCSI protocol layer, I would simply subclass the IO Firewire Serial Bus Protocol Transport that would, when we instantiated the stack, that is the name that would actually show up in the registry, and we would shift that hierarchy one to the right.
+
+So, matching is really important. The matching heuristics are a little bit different in implementation, given on what layer you're on. The highest probe score wins. At the... In the previous slide, above the peripheral device type nub and where the logical unit driver gets instantiated, we have this kind of matching logic. The peripheral device type chooses what logical unit driver, if any, is going to get instantiated.
+
+Then if we have a vendor match, the probe score goes up. If we have a product ID, the score goes even higher. And then finally, if we have a revision ID, we've actually honed in to a specific instance of a device that we want to add certain support for.
+
+Sometimes you want to refer to the previous matching, that's all passive matching, just using the properties that are in the registry tree. Sometimes you need to have active matching in which we override a probe method. Overriding probe, sometimes you might have a property that has some bits scrolled the way up and you have to mask them out and pull them out to determine what kind of device you are.
+
+You'll know your requirements more than we will. Be careful if you use probe not to reference or count on the state of member variables because other potential candidate drivers could be loaded and could have changed the state of the device behind you. To see an example of how all this works, you can look in Apple FireWire Mass Storage Drivers. There's a good example of overriding probe that's quite extensive. Now for me, the best thing, I come to WWDC, I see the slides, and it all starts with the data.
+
+I come to WWDC, I see the slides, and it all starts with the data. It all seems pretty and makes some sense, but it's kind of abstract. And I learned the most by standing over a competent engineer's shoulders and watching him do it. And that's what we're going to do right now. We're actually going to go in, I'm going to bring up Chris Sarcone, and we're going to subclass a logical unit driver.
+
+Thanks, Craig. If we could bring up demo one, please. All right. So I'm going to go ahead and fire up Project Builder. We're going to go ahead and create a subclass of a peripheral device type driver. So we're going to create a new project. We're going to scroll down here and choose I/O Kit Driver. And we're going to call this MyLogicalUnitDriver.
+
+Okay, Project Builder goes ahead and creates us a new project. And inside here it'll place a dummy header file and a C++ file. What we want to do is we want to go over to the Targets pane right now and take a look at the bundle settings. Craig just went into some details about how we do matching and how a driver gets instantiated. We do this by creating an I/O Kit personality inside of our text. So what I'm going to go ahead and do here is create a new child and we're going to call this child MyLogicalUnitDriver.
+
+if I could type and the I/O Kit personality is a dictionary. Inside of it we will have more properties which we will add. So I'm going to go ahead and change that to a dictionary and I'm going to create a whole bunch of properties here. From experience I know I need to create six properties here. Depending on what type of driver you write you will need to add more properties or have less properties. It all depends on what kind of driver you're writing.
+
+The first item that should be inside of your personality is the CFBundle identifier. Since we are going to load a code fragment from this bundle that we've created we're going to paste the same CFBundle identifier in. You can of course have a personality which loads code from another module. If you do do that then you need to make sure that you have the correct code. The next property that we need to add is an IOClass.
+
+We need to instantiate a particular class when we load our kernel extension. So we're going to put in my logical unit driver because that will be our class name. The next thing that I/O Kit needs for matching is a provider class. This tells I/O Kit to consider your driver for every instance of this class. The class that we want to attach to is the I/O SCSI Peripheral Device node.
+
+Now, this is where IO Kit's generic matching services stop, and this is where the I/O SCSI architecture model family-specific matching begins. Craig mentioned that we score on peripheral device type first, so we need to specify a peripheral device type. Which is of course a number. Now if you want to subclass a block command device, you would want to have a zero here.
+
+I don't have one of those devices here on this machine, but I do have a CD-ROM drive and that shows up as a peripheral device type 5. So we're going to go ahead and subclass the CD-ROM driver for this machine. The next two properties that we need to have are a vendor identification and a product identification.
+
+Now, to find these values, we need to look in the I/O Kit registry. I'm going to go ahead and fire up terminal and type ioreg-c ioskzperforaldevicenub. This goes ahead and prints out the contents of the I/O SCSI peripheral device nub entry. What I am interested in here are the vendor identification right here, which says this is a Pioneer drive. So I'm going to go ahead and copy paste that directly into my vendor identification here. And then it also tells me the product identification.
+
+I'm going to paste that into my driver here. Now, if you wanted a driver that matched on all Pioneer drives, you could of course remove this product identification property and take your chances that your driver will match. Of course, if somebody had a Pioneer DVD-RW-DVR-103 driver, that would get considered for matching before yours would.
+
+So, for vendor and product identification, it's very important that you have those keys in there to get your driver considered for matching. Now, if you only want to match on a specific firmware revision for the device, you could also add that in, and that is the product revision level, which you would see right here.
+
+We're not going to add that key today. So, that is it with our personality here. A couple more properties that we need to add to our text are the OS bundle libraries. This key allows you to specify families that you require to have your module loaded into the kernel. I know from experience that I need to have two of such modules. One is the OS bundle library.
+
+ComApple I/O Kit: I/O SCSI Architecture Model. And the other one is... IOSCSI Multimedia Commands Device. And in the string category here, you just put the revision level of that kernel extension that you require. Both of these can be 100 for now. And the last piece that we need is to make sure that we get loaded at boot time. So to add that key, we have OS Bundle required.
+
+and that is local-root. If you need more specifics on what each of these properties does and which ones are required, I ask you to consult the inside Mac OS X kernel extension or-- is it inside kernel or kernel extension? One of those books has the correct information and of course you can reference the website.
+
+And now we need to actually write some code for this driver. We can go ahead and add code to subclass a particular function. We can go ahead and add code to write an entire logical unit driver if we want. What I'm going to do is actually open up some prefab files that I did already.
+
+And I'm going to copy paste that into As you can see we're working with a peripheral device type 05 driver which is a CD-ROM driver and I'm most familiar and most comfortable with the read table of contents command. So I have decided to subclass the read talk command and inside the C++ file, all I've done is add a status log. The status log here is and will print out an IOLOG message to the system log.
+
+So when this driver gets loaded, anytime we do a read table of contents command, it will get spit out to the console. And we can go ahead here and build this. And it succeeded in building our kernel extension, so let's go ahead and put it on this machine and load it.
+
+And I'll go ahead and copy this over. So I'm going to copy the directory into The extensions folder. We're going to go ahead and reboot this machine and you will see that it is really that easy to subclass and add vendor specific functionality to your device, or for your device rather.
+
+There was already a driver loaded for the CD-ROM driver here. Of course, if we had a FireWire drive or a USB drive, which we could dynamically load a driver for, we could have loaded the driver into the kernel. And as long as it was the kernel extension, the I/O Kit personality matched for that drive, we could definitely load for that drive. So as soon as this starts up here, I'll go ahead and pop up terminal again. You'll see that in the IR registry, our driver will be loaded for this computer.
+
+So let me go into a couple of reasons as to why you might want to subclass. You might want to subclass a logical unit driver to add some sort of functionality to your device, like say you have password protection or say you're developing a product that has SDMI support in it and you want to send those commands to your drive.
+
+That would be a very good reason to just subclass the generic support that we bring to the table with the generic I/O functionality and then just add your vendor specific functionality to it. And you'll see here, my logical unit driver got loaded right above the peripheral device node. So with that, I'll turn this back over to Craig. He can finish his presentation.
+
+Thanks a lot, Chris. Okay, I hope that made sense. So close to it, it's sometimes hard to know if we're actually telling you what you need or making too many assumptions. So up until this point we've talked really about instantiating the stack and all the pieces that get put together for that. We've gone into the hierarchy, the object hierarchy of those functional pieces. There are other objects in the SAM implementation that we need to talk about.
+
+The SCSI task is a very important object. A SCSI task is an encapsulation of a CDB, data buffers, error information, just about everything you need to take and actually process a CDB and A really good place to understand what we mean by this is basically what we've done is we've made an object out of the SCSI command model in the SAM document, which is Chapter 5. In fact, the names come right out of the guidelines in that chapter.
+
+So another thing we provide is this command builders. These are utility classes that build up command set specific commands for you. Obviously we have block commands for peripheral device type 00 and the multimedia MMC commands and reduced block commands. In the future if a new set of commands come out you would want to probably build a utility class for that.
+
+So how are SCSI tasks processed? We've talked about just instantiating and building these stacks up. So what happens? An I/O request is going to come in from the system for something and it's going to get into the transport driver layer and it's going to get packaged up into a SCSI task.
+
+That SCSI task is then going to get handed off to the SCSI protocol driver layer and that's going to get packaged up into the appropriate for the target device. So in the case of FireWire, the SCSI task will get turned into an orb. The orb will be thrown out onto the bus, processed. It all happens asynchronously and the completion routine will fire back up the stack.
+
+So, device compliance. We really don't want you to have to reinvent the wheel here. By subclassing and adding your device specific stuff, you get power management, you get driver lifecycle stuff, hot plugging support, all the termination, all the gnarly undocumented stuff that you really don't want to do.
+
+What we mean by device compliance is that your device will process commands as they're documented in the command sets in the official SCSI documentation. Always override the whole stack. All you need to do is outscore the probe at the protocol layer and do anything you want. We will not prohibit that.
+
+So what's supported in X as it ships today is we have a TAPI support, FireWire support, and USB support. Ironically, we don't have SCSI parallel support at this time. It's a work in progress and we're investigating it and working on it. And ATA just doesn't apply because it doesn't use a SCSI compliant command set.
+
+In theory, we were discussing that it would be possible to actually make a shim layer and wrap up ATA requests and use our architecture, but it added an extra layer that we didn't want to take the performance hit on. So we decided to use a monolithic ATA driver instead. So, I want to grab some water.
+
+Accessing Devices from Applications. There's a lot of compelling reasons you want to do this. By resources we mean if you don't have to wire memory down in the kernel, we don't want to. That's really precious stuff. There's a much better tool environment up in user space. You have a source level debugger.
+
+You have much better tools. You don't have to use GDB from the command line. And system stability is another thing. If you blow up in user space, there's less of a statistic probability you'll take the whole machine down. If you blow up in the kernel, it's much higher risk.
+
+Examples would be utilities that need to set some kind of intrinsic device feature with a vendor specific CDB and any out of kernel driver. What I mean by that is we ship a block storage, a multimedia, magnetic optical and a RBC logical unit driver that are in kernel.
+
+And if you have a tape drive, which is a peripheral device type one for sequential access, it really doesn't need to be in the kernel. As a general rule of thumb, if your device doesn't require booting and it doesn't require a file system, its driver does not need to be in the kernel.
+
+User clients are nothing more than a mechanism to negotiate the user kernel boundary. There may be other places in this big stack that you want to connect. You might want to have a user client connect to the physical interconnect layer. In the case of FireWire, if you look in their SDK, they have a user client that allows you to connect to the SPP2 layer. You might want to have a utility that does firmware that connects at a lower device, or a lower point in the stack.
+
+Also, this is a good place to point this out, on our website, in the developer documentation, there's a document called "Accessing Hardware from User Space" that just recently was updated and went from like 50 to 100 pages. And that's something you want to really get your hands on, especially because there's a summary of the I/O Kit that's a lot more extensive than what I've got into here. I found it to be a good reference for getting my head around some of the basic concepts of I/O Kit.
+
+The SCSI Task User-Client is what we've implemented at our layer for user-client access. We have two access points. We have the Peripheral Device Type Nub access point. If you think back to the diagram I showed, This is the point where you would attach a non-in-kernel logical unit driver. And we also have the generic service layers for multimedia, and this is for authoring. and I'll get into more details in the next slides.
+
+The user client uses a COM-like CFPlugin architecture. Again, the document I just referenced, the Accessing Hardware from User Space, goes into some of the rules on that. There are some tools that we'll provide in the SDK to show you how to do all that. We have three interfaces into our SCSI client. The first one is the MMC device interface.
+
+This is only for the authoring needs. It basically exists so you can get device and media information for the purposes of authoring. We have a SCSI device interface which lets you create, release, and do all the maintenance things that you need. Create the callback handlers and connect up the CF run loops, etc. And finally there's the SCSI task interface. Once you've actually connected up, this is where you send and this is the interface you use to send raw SCSI tasks that encapsulate the CDBs to drive your device.
+
+So we have two access models. We have an exclusive access model and a non-exclusive access model. Once you have instantiated the user client, that user client is the logical unit driver. So I'll have a diagram in a few slides that will really bring this home. But there are no restrictions. The client has absolute control.
+
+We don't filter or disallow any kind of commands. And this last point, if you happen to be using the generic services for multimedia, the authoring APIs, and you need to transition to exclusive access, what has to happen is you have to unmount any mounted media, any mounted partitions, and obtain a reservation for that media through disk arbitration. And in our SDK, we'll have an example code to show how to do this.
+
+The non-exclusive access model is for the generic services multimedia access point only. This is, like I said before, only to get device and media specific information for the purposes of offering. It is API driven. You cannot send raw CDBs. And if an existing client, a user client, has got exclusive access, it will not allow non-exclusive access.
+
+So here's an example. If we have a tape backup drive that gets discovered by the physical interconnect layer, in this example it's FireWire again, it would be instantiated and built up and there'd be a SCSI protocol driver instantiated and it would build up and the I/O peripheral device would issue an inquiry, find out that it's a peripheral device type 1, populate the registry with it and just stop.
+
+Then what will happen is you will launch an application up in user space and the SCSI test user client that we provide straddles the user kernel boundary and once the application is launched it will look for the appropriate peripheral device information through a command called, I always get this wrong, IOServiceGet. At that point the client application is the logical unit driver and it can drive that device.
+
+The other interesting one is in the case of authoring where we have a DVD device that's been instantiated up and we have an internal driver, a peripheral device driver type 5 that's going to drive this device and we might have been doing I/O to it all day long and eventually an application will get launched and your user client will be-- this is the second type I was talking about. You can use the APIs to get device information and media information and in a non-exclusive fashion, at some point you will have unmounted the media and you will seize control and become exclusive access.
+
+You would again call the I/O, create CFPlugin for service, at which point the client application has become the logical unit driver and we will acquiesce the in kernel peripheral device type driver 5. So now the user client logical unit driver has absolute control over the device and can do whatever it needs to do.
+
+And in summary, it should be relatively straightforward and easy for you to, instead of having to ship gigantic monolithic drivers for all of your stuff, to bundle up and ship out strategic small keks and make everybody happy. resources. So I've covered most of this in the slides already. There's nothing here that I haven't.
+
+Later this week, the IOC update was yesterday, the PCI drivers are tomorrow morning. FireWire in-depth and both USB in-depth is a good place to go if you need to get more information on bus specific stuff. If you have a bridge that your company is providing that has unique requirements, it might be interesting or helpful for you to go there.
+
+I'll be there if anyone has any protocol transport specific information they'd like to ask me about. Finally, we have a mailing list that you can get on. This is a place where we'll be making announcements of where you can get SDKs and help on everything we have. If you have any questions at all, please feel free to get a hold of Craig Keithley.

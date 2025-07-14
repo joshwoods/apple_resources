@@ -1,0 +1,2682 @@
+WEBVTT
+
+00:00:13.109 --> 00:00:14.919
+>> Good afternoon everyone.
+
+00:00:14.919 --> 00:00:20.460
+I'm Ben Trumbull I'm an Engineering Manager in Core
+Data and Developer Tools and I'm going to be presenting
+
+00:00:20.460 --> 00:00:23.320
+about designing Cocoa applications for concurrency.
+
+00:00:23.320 --> 00:00:32.240
+So we're going to talk a little bit about the different
+design challenges faced with writing multi-threaded code
+
+00:00:32.240 --> 00:00:37.679
+and in particular we're going to put up with a lot of this
+complexity because we're interested in better performance.
+
+00:00:37.679 --> 00:00:40.170
+So we want more responsiveness from our applications.
+
+00:00:40.170 --> 00:00:45.770
+We want more raw speed and we also want to use the resource
+of the computer all these extra cores more efficiently
+
+00:00:45.770 --> 00:00:52.020
+and we're going to take that time saved and we're going
+to spend it on new features of a better user experience,
+
+00:00:52.020 --> 00:00:56.130
+unless you just like making things faster.
+
+00:00:56.130 --> 00:01:02.719
+And one of the particular challenges is faced is how big
+to split up your application into the separate pieces.
+
+00:01:02.719 --> 00:01:06.030
+If the pieces are too big you're not
+going to get very much concurrency.
+
+00:01:06.030 --> 00:01:08.340
+Obviously if you only one piece you're not going to get any.
+
+00:01:08.340 --> 00:01:14.810
+At the same point in time if you flip over to the other
+extreme and the pieces are too small then you're going
+
+00:01:14.810 --> 00:01:17.980
+to have more overhead and more complexity.
+
+00:01:17.980 --> 00:01:25.650
+So in particular the focus of this session is on finding
+the right granularity for the tasks that you're going
+
+00:01:25.650 --> 00:01:30.950
+to be offloading to other threads or other queues
+and so in this case we're going to be a little bit
+
+00:01:30.950 --> 00:01:36.980
+like Goldilocks, not too big, not too small.
+
+00:01:36.980 --> 00:01:41.719
+And the perfect task granularity varies for everybody but
+it's going to be limited by the amount of overhead each
+
+00:01:41.719 --> 00:01:47.730
+of your individual tasks incur and this is particularly
+due to the coordination mechanisms that you're going to use
+
+00:01:47.730 --> 00:01:54.040
+to manage these tasks and the amount of resource
+contention these tasks start incurring as they operate.
+
+00:01:54.040 --> 00:02:00.960
+So in this session we're going to overview
+a cast of characters so define some terms.
+
+00:02:00.959 --> 00:02:08.009
+We're going to review some of the coordination
+mechanism that are typically used in most programs.
+
+00:02:08.009 --> 00:02:11.519
+Examine a variety of resource contention
+issues where this is really going
+
+00:02:11.520 --> 00:02:18.260
+to impact how fast your tasks can operate
+independently and then sort of sum that together
+
+00:02:18.259 --> 00:02:21.289
+in looking at how to balance a task granularity.
+
+00:02:21.289 --> 00:02:26.259
+And then we're going to explore two particular
+issues that impact a lot of Cocoa applications
+
+00:02:26.259 --> 00:02:30.519
+as multi-thread notifications and
+general DUI layer and these are issues
+
+00:02:30.520 --> 00:02:33.500
+that tend to trip up a lot of Cocoa developers.
+
+00:02:33.500 --> 00:02:41.139
+So for our cast of characters there's some
+basic introductions and the terms that I'm going
+
+00:02:41.139 --> 00:02:45.449
+to be using throughout the presentation I assume you're
+probably familiar with most of them but a little quick
+
+00:02:45.449 --> 00:02:53.060
+over view on tasks, threads, the difference between dispatch
+queues and NSOperation queues, locks, atomic operations
+
+00:02:53.060 --> 00:02:57.099
+and this thing that pops up every
+once and now again called futures.
+
+00:02:57.099 --> 00:03:03.909
+So, tasks in computer science mean a lot of different things
+and for the purposes of this presentation I'm just going
+
+00:03:03.909 --> 00:03:07.810
+to refer to a unit of work and
+there's a distinct grouping of code.
+
+00:03:07.810 --> 00:03:14.400
+It might be executed either by a thread or a dispatch queue;
+this would be for instance a block on a dispatch queue
+
+00:03:14.400 --> 00:03:17.490
+or an NSOperation object within an NS operation queue.
+
+00:03:17.490 --> 00:03:20.370
+And for the thread this is going
+to be the main function typically.
+
+00:03:20.370 --> 00:03:26.009
+So we're not going to refer to
+something like a process or an NSTask.
+
+00:03:26.009 --> 00:03:30.129
+Threads: I assume you all know what threads
+are but they're something of the protagonist
+
+00:03:30.129 --> 00:03:33.409
+or perhaps the antagonist of our presentation today.
+
+00:03:33.409 --> 00:03:39.849
+So this is your thread of execution, an independent
+flow control and its key distinguishing feature is
+
+00:03:39.849 --> 00:03:44.799
+that it has a shared address space with all the other
+threads and this is what makes them different from processes
+
+00:03:44.800 --> 00:03:50.250
+and this is a really powerful feature of threads but it's
+also their Achilles heel and we're going to spend most
+
+00:03:50.250 --> 00:03:54.080
+of the presentation resisting the urge
+to leverage this feature too much.
+
+00:03:54.080 --> 00:04:01.460
+So dispatch queues: This is Grand Central
+Dispatch and this is new in Snow Leopard.
+
+00:04:01.460 --> 00:04:03.659
+They are easier and more efficient than threads.
+
+00:04:03.659 --> 00:04:06.669
+It's basically a way of coordinating different work units.
+
+00:04:06.669 --> 00:04:12.129
+There are three separate presentations on dispatch
+queues this week so I'm not going to go in too heavily
+
+00:04:12.129 --> 00:04:18.879
+on what exactly they are other than they're a
+way of managing and enqueuing different tasks
+
+00:04:18.879 --> 00:04:25.540
+and in addition Grand Central Dispatch has a library of
+common operations that you would have to write your own code
+
+00:04:25.540 --> 00:04:31.950
+for if you're working directly with
+threads so they're really very convenient.
+
+00:04:31.949 --> 00:04:34.599
+Operation Queues: This is NSOperationQueue.
+
+00:04:34.600 --> 00:04:41.210
+It's a Cocoa API for work queues so you're basically
+enqueuing tasks similarly to Grand Central Dispatch
+
+00:04:41.209 --> 00:04:45.620
+and on Snow Leopard it's built
+on top of Grand Central Dispatch.
+
+00:04:45.620 --> 00:04:52.970
+One thing to note is this is available actually on 10.5
+and also on iPhone OS without Grand Central Dispatch
+
+00:04:52.970 --> 00:04:58.410
+and it builds some additional functionalities and dependancy
+analysis and some conveniences that the Cocoa layer on top
+
+00:04:58.410 --> 00:05:01.780
+of Grand Central Dispatch on Snow Leopard.
+
+00:05:02.839 --> 00:05:08.109
+So locks are one of our primary
+mechanisms for coordinating between tasks.
+
+00:05:08.110 --> 00:05:16.050
+They're a simple way of excluding resources from being over
+used so they typically prevent just one thread at a time
+
+00:05:16.050 --> 00:05:20.699
+and there's going to be a wide
+range available for you to use.
+
+00:05:20.699 --> 00:05:23.639
+Atomic operations are basically
+hardware supported primitives.
+
+00:05:23.639 --> 00:05:27.019
+They're typically basic arithmetic
+or bit shifting instructions,
+
+00:05:27.019 --> 00:05:33.490
+plus compare and swap is another very common one, and
+one way to think about it is if the destination address
+
+00:05:33.490 --> 00:05:39.639
+of your complication basically had a teeny tiny
+encapsulated lock in it and that's kind of how they behave.
+
+00:05:39.639 --> 00:05:46.360
+So when you add something together atomically the address
+of that summation is going to act like its own lock.
+
+00:05:46.360 --> 00:05:52.580
+And then futures are place holders that
+get passed around for an unknown value.
+
+00:05:52.579 --> 00:05:58.000
+They're typically returned by asynchronous APIs and
+they're used to improve the responsiveness of these APIs.
+
+00:05:58.000 --> 00:05:59.910
+They're a little bit like a coat check ticket.
+
+00:05:59.910 --> 00:06:05.160
+You don't necessarily need something back
+right away but you do need a handle back to it.
+
+00:06:05.160 --> 00:06:10.270
+So there won't be any blocking
+until you absolutely need them.
+
+00:06:10.269 --> 00:06:16.599
+So that brings us to the first section in which we're going
+to use these terms and this is the coordination mechanisms
+
+00:06:16.600 --> 00:06:21.850
+that are going to help us coordinate between all the tasks
+we create within our application and they're also going
+
+00:06:21.850 --> 00:06:25.640
+to represent some of the cost of having separate tasks.
+
+00:06:25.639 --> 00:06:30.789
+And the reason why we have all of these
+different coordination mechanisms is
+
+00:06:30.790 --> 00:06:33.040
+to address some problems we're experiencing with threads.
+
+00:06:33.040 --> 00:06:36.870
+First of all as you're no doubt aware
+of threads are very non-deterministic.
+
+00:06:36.870 --> 00:06:44.019
+The execution between threads is interleafed pretty
+chaotically and sharing resources and data between threads
+
+00:06:44.019 --> 00:06:47.740
+without extra steps is going to have a
+lot of side effects in your application.
+
+00:06:47.740 --> 00:06:56.420
+So this is just with two threads and this is just with
+2 to 32 instructions and you can see that the number
+
+00:06:56.420 --> 00:06:59.090
+of different interleavings between
+threads is growing exponentially.
+
+00:06:59.089 --> 00:07:08.869
+I don't know about you but most of my threads do more than
+32 instructions and already this has gotten out of hand.
+
+00:07:08.870 --> 00:07:15.420
+So our goals of coordination are going to be to prune the
+complexity back from our application to reduce the amount
+
+00:07:15.420 --> 00:07:21.520
+of non-determinism that using all these threads
+induces and to safely share resources between threads.
+
+00:07:21.519 --> 00:07:31.469
+That brings us to locking which is going to be the simplest
+and most frequent form of coordinating between tasks.
+
+00:07:31.470 --> 00:07:36.280
+For preventing simultaneous access either
+to a resource or to a second of code
+
+00:07:36.279 --> 00:07:40.469
+and it's it's really the most prevalent,
+it's very easy to use.
+
+00:07:40.470 --> 00:07:44.080
+Unfortunately, it does have the
+disadvantage that we have a lot
+
+00:07:44.079 --> 00:07:47.469
+of locks together you find yourself prone to deadlocking.
+
+00:07:47.470 --> 00:07:55.280
+Some of the common locks that you'll find on Mac OS X
+are the @synchronized keyword and the objective sealing
+
+00:07:55.279 --> 00:08:05.369
+with itself, NSLock in Cocoa, OSSpinlock in the
+kernel offered by OS Atomic and the ptthread library
+
+00:08:05.370 --> 00:08:09.240
+which has a reader writer lock and a bunch of other things.
+
+00:08:09.240 --> 00:08:15.960
+Now from a design perspective most of the locks are going
+to behave fairly similarly in terms of a strategic level.
+
+00:08:15.959 --> 00:08:20.279
+Tactically they have very different performance
+characteristics and some of them have different features.
+
+00:08:20.279 --> 00:08:23.649
+Obviously ReaderWriterLock is doing something
+a little bit different than a spinlock
+
+00:08:23.649 --> 00:08:29.209
+but for the most part you can learn about these things
+in the Mac OS X Threading Programming Guide which will go
+
+00:08:29.209 --> 00:08:38.039
+into a lot of detail about the different
+locks you have available to you on Mac OS X.
+
+00:08:38.039 --> 00:08:42.429
+So I mentioned that having lots of
+independent locks is prone to deadlock
+
+00:08:42.429 --> 00:08:44.319
+and so what do I mean by an independent lock?
+
+00:08:44.320 --> 00:08:50.850
+And this is when you have locks that you can
+acquire and release in any order and you can call
+
+00:08:50.850 --> 00:08:53.509
+out to other pieces of code while you hold these locks.
+
+00:08:53.509 --> 00:08:58.509
+So these locks don't really have any
+dependencies between each other, they stand apart
+
+00:08:58.509 --> 00:09:02.409
+and a thread can accumulate multiple of these locks.
+
+00:09:02.409 --> 00:09:08.909
+So this thread for instance can have both Lock 1 and Lock
+2 at the same time and can be used in code that depends
+
+00:09:08.909 --> 00:09:13.610
+of those locks and it can release
+them later whenever it feels like.
+
+00:09:14.909 --> 00:09:22.389
+This is contrast to an encapsulated lock where an
+encapsulated lock is something that's hiding behind API
+
+00:09:22.389 --> 00:09:25.710
+and it's going to be released when that API returns.
+
+00:09:25.710 --> 00:09:31.139
+So it's released at the end of the scope and one of the
+key features is there's no call out to arbitrary code.
+
+00:09:31.139 --> 00:09:37.669
+So this makes it impossible for a thread to hold onto
+multiple different encapsulated locks at the same time
+
+00:09:37.669 --> 00:09:43.490
+and as you might imagine this is going to make
+it much easier to avoid problems like deadlock.
+
+00:09:45.129 --> 00:09:52.409
+Specifically, if you end up being able to take
+different locks and then calling out to arbitrary code
+
+00:09:52.409 --> 00:09:55.620
+which might need more locks you
+find yourself in the situation
+
+00:09:55.620 --> 00:09:59.990
+where multiple threads might have say half
+the locks they need to get their job done.
+
+00:09:59.990 --> 00:10:05.799
+So this is a fairly text book deadlock where 1
+thread has the first lock and it needs two locks
+
+00:10:05.799 --> 00:10:08.859
+and the other thread is holding on to that second lock.
+
+00:10:12.570 --> 00:10:19.080
+As an aside, for extra style points it is
+possible to deadlock yourself on a single thread
+
+00:10:19.080 --> 00:10:24.000
+and this is a common problem with
+spinlocks because they're non-recursive
+
+00:10:24.000 --> 00:10:27.769
+if you hold a spinlock and then
+you call out to arbitrary code.
+
+00:10:27.769 --> 00:10:30.309
+If that code just starts calling back into you,
+
+00:10:30.309 --> 00:10:36.049
+which is fairly common in object oriented
+programming, you have managed to deadlock yourself.
+
+00:10:38.029 --> 00:10:46.329
+So the most frequent way managing all these
+independent locks is something called lock ordering.
+
+00:10:46.330 --> 00:10:52.009
+If the problem with deadlocking is we're requiring
+multiple locks in an inconsistent order and we need
+
+00:10:52.009 --> 00:10:57.279
+to define an order and sort of build a protocol
+in which sort of on the honor system if you will.
+
+00:10:57.279 --> 00:11:03.019
+We're going to acquire the locks in a fixed order
+and then we release them in the opposite order
+
+00:11:03.019 --> 00:11:11.159
+and in this way these two threads now, are both using
+the two locks but actually cannot deadlock each other.
+
+00:11:11.159 --> 00:11:19.339
+So this works and we can build up more locks
+but there's some obvious limitations to it.
+
+00:11:19.340 --> 00:11:25.320
+You have to use this locking protocol all the
+time consistently and it can be a little fragile
+
+00:11:25.320 --> 00:11:28.650
+when you're maintaining large code
+bases; your adding new features.
+
+00:11:28.649 --> 00:11:32.659
+For example one thread might think
+it only needs the second lock.
+
+00:11:32.659 --> 00:11:39.969
+So it doesn't necessarily grab the first lock all the
+time and then later on you add more code and that piece
+
+00:11:39.970 --> 00:11:42.360
+of code is calling out to your new feature which it does
+
+00:11:42.360 --> 00:11:45.870
+in fact use the first lock and so
+you you've broken the protocol.
+
+00:11:45.870 --> 00:11:52.149
+So in this way you probably want to avoid having more
+than two independent locks participating in any kind
+
+00:11:52.149 --> 00:11:56.250
+of lock ordering scheme just to
+keep in mind some of the limits
+
+00:11:56.250 --> 00:12:01.970
+as you develop your application,
+add new features and what not.
+
+00:12:01.970 --> 00:12:08.180
+As an aside, the reason why it's two as
+opposed to three is because three is too many.
+
+00:12:10.000 --> 00:12:20.460
+Yes and so some some years ago I worked on a different
+project and I was tasked with adding multi-threading support
+
+00:12:20.460 --> 00:12:26.920
+to an existing frame work which is also something you
+probably shouldn't do because there there's a bunch
+
+00:12:26.919 --> 00:12:29.750
+of API already in place and you have an
+architecture that's already in place.
+
+00:12:29.750 --> 00:12:34.379
+So it can be very difficult to design
+properly multi-threading in that environment.
+
+00:12:34.379 --> 00:12:40.799
+But one of the key issues was that there were three
+separate resources that all needed independent locks
+
+00:12:40.799 --> 00:12:47.929
+and because they were different layers in this API it was
+very difficult for these locks to participate in any kind
+
+00:12:47.929 --> 00:12:53.099
+of fixed ordering in particular different
+layers didn't necessarily even know what kind
+
+00:12:53.100 --> 00:12:55.159
+of locks the other layers had.
+
+00:12:55.159 --> 00:13:01.649
+So it it got to be very difficult and I
+spent many months, six months or something,
+
+00:13:01.649 --> 00:13:04.179
+this was a long time ago so my memory is a little hazy.
+
+00:13:04.179 --> 00:13:10.889
+But I basically spent an entire release cycle debugging
+this this one set of issues, these multi-threading issues.
+
+00:13:10.889 --> 00:13:15.600
+So three is definitely too many locks.
+
+00:13:15.600 --> 00:13:24.710
+And here's sort of a graphic that I'd wished when I was
+younger that I had sat down to think about and here we go
+
+00:13:24.710 --> 00:13:32.410
+from four different permutations of locking with two
+locks and two threads to eighteen permutation of how all
+
+00:13:32.409 --> 00:13:35.289
+of these locks might be acquired
+with three locks and three threads.
+
+00:13:35.289 --> 00:13:40.519
+So you can also see again and this is sort of
+reoccurring theme with multi-threading that the complexity
+
+00:13:40.519 --> 00:13:48.620
+of your application is going to grow exponentially
+if you don't take steps to bring it back.
+
+00:13:48.620 --> 00:13:54.710
+So the three locks have eighteen permutations and just
+for fun about a third of them are going to work correctly
+
+00:13:54.710 --> 00:13:58.170
+or well, correctly may not be the right, they will function.
+
+00:13:58.169 --> 00:14:05.029
+So again this is going to make it more challenging to debug
+multi-threaded code when you've over extended yourself.
+
+00:14:05.029 --> 00:14:09.850
+Alright so there are going to be a bunch
+of different locks available to you.
+
+00:14:09.850 --> 00:14:14.560
+The Mac OS X Threading Programming
+Guide has a wide list of them.
+
+00:14:14.559 --> 00:14:19.699
+In general you're going to want to prefer encapsulated
+locks where a lock is hidden behind an API boundary
+
+00:14:19.700 --> 00:14:23.860
+and it doesn't allow call outs so
+it will control a particular scope.
+
+00:14:23.860 --> 00:14:29.050
+But when you need to use independent locks you're
+going to want to have an order and you want
+
+00:14:29.049 --> 00:14:33.579
+to have a protocol that you're building on top of them.
+
+00:14:33.580 --> 00:14:38.490
+So if all of these independent locks aren't
+going to scale very well to having lots
+
+00:14:38.490 --> 00:14:41.529
+and lots of them we have another
+technique to use and this is sort
+
+00:14:41.529 --> 00:14:44.669
+of the antithesis of locking and it's called isolation.
+
+00:14:44.669 --> 00:14:55.279
+And the goal here is like locks to turn a very complex
+set of interactions between tasks into something else.
+
+00:14:55.279 --> 00:14:57.329
+In particular this is something fairly simple.
+
+00:14:57.330 --> 00:15:04.379
+If you imagine a single thread spawns off
+four subtasks which then rendezvous back
+
+00:15:04.379 --> 00:15:11.490
+with a result this is something I feel much more confident
+about debugging and at the same point in time we can see
+
+00:15:11.490 --> 00:15:14.810
+that you can actually get some real concurrency out of it.
+
+00:15:14.809 --> 00:15:18.129
+And one of the key points to note is these
+subtasks are not talking to each other.
+
+00:15:18.129 --> 00:15:20.340
+So they're not locking.
+
+00:15:20.340 --> 00:15:22.730
+They they really have no particular interaction.
+
+00:15:22.730 --> 00:15:25.080
+They're quite independent.
+
+00:15:25.080 --> 00:15:29.509
+But in the real world we do have some constraints
+and sometimes that's not always possible.
+
+00:15:29.509 --> 00:15:36.069
+So at least here we have four separate clusters and
+well the subtasks are not necessarily perfectly isolated
+
+00:15:36.070 --> 00:15:42.450
+at least these clusters are isolated and we have the
+opportunity to focus our debugging efforts within a cluster
+
+00:15:42.450 --> 00:15:48.330
+and not have to worry so much about what
+other threads in other clusters are doing
+
+00:15:48.330 --> 00:15:51.440
+because they're not going to be changing our state.
+
+00:15:51.440 --> 00:15:58.980
+So we're going to focus on sub dividing a
+multi-thread application into set a serial pieces
+
+00:15:58.980 --> 00:16:03.980
+to reduce our complexity and in this
+way isolation to concurrency a lot
+
+00:16:03.980 --> 00:16:06.529
+like encapsulation is to object oriented programming.
+
+00:16:06.529 --> 00:16:12.779
+This is a pretty fundamental technique when
+basically what we're talking about doing is trying
+
+00:16:12.779 --> 00:16:17.009
+to keep all these threads from
+interacting directly with each other.
+
+00:16:17.009 --> 00:16:23.700
+It's also called confinement and we're going
+to and the reason for that is we're going
+
+00:16:23.700 --> 00:16:27.980
+to confine resources scope to a specific thread.
+
+00:16:27.980 --> 00:16:32.690
+So other threads are not going to have direct
+arbitrary shared memory access to those resources.
+
+00:16:32.690 --> 00:16:35.690
+They're going to have to enqueue
+requests formally by a specific channel.
+
+00:16:35.690 --> 00:16:47.540
+Now this comes up to if we're not going to be doing
+locking between these tasks what are we going to do
+
+00:16:47.539 --> 00:16:52.899
+with the shared structures is the task we're working
+with and the first approach is more tractable than a lot
+
+00:16:52.899 --> 00:16:58.829
+of people might think and that's we're going to give each
+of these subtasks their own copy of the data to work on.
+
+00:16:58.830 --> 00:17:04.230
+That's not always practical but it actually turns
+out to be more reasonable than you might imagine.
+
+00:17:04.230 --> 00:17:10.559
+The other alternative is to basically create
+a resource centric view of a particular task.
+
+00:17:10.559 --> 00:17:17.319
+So instead of having a task that's owning a resource you
+actually give a resource its own task and people who want
+
+00:17:17.319 --> 00:17:22.529
+to use that resource are going to have to
+enqueue requests specifically for that resource.
+
+00:17:22.529 --> 00:17:26.329
+So those are two alternatives to doing a
+lot of locking on a shared data structure.
+
+00:17:26.329 --> 00:17:32.829
+You can see an example of this kind of pattern with the web.
+
+00:17:32.829 --> 00:17:35.359
+Here clients and servers own their own resources.
+
+00:17:35.359 --> 00:17:43.059
+I can't go poking around whatever NFS mounts
+news.yahoo.com might be using and at the same point
+
+00:17:43.059 --> 00:17:46.849
+in time the servers don't necessarily
+know everything that my client is doing.
+
+00:17:46.849 --> 00:17:54.289
+There's the formal communication channel that's very well
+defined; http and this really allows us to encapsulate a lot
+
+00:17:54.289 --> 00:17:56.779
+of complexity between the clients and servers.
+
+00:17:56.779 --> 00:18:04.170
+So this is a really it's probably the most commercially
+successful example of the isolation design pattern
+
+00:18:04.170 --> 00:18:09.180
+and it's true this is for distributed computing more than
+concurrent programming but this is the kind of pattern
+
+00:18:09.180 --> 00:18:13.080
+that we're going to want to consider
+bringing into our own applications.
+
+00:18:13.079 --> 00:18:18.549
+And the nice feature about this is the servers and
+the clients can themselves be very complicated.
+
+00:18:18.549 --> 00:18:25.480
+They don't necessarily have to use isolation and
+we we created clusters that are fairly independent.
+
+00:18:25.480 --> 00:18:33.890
+So in a single web address might be backed by huge server
+farm or Safari might be doing a new JavaScript engine
+
+00:18:33.890 --> 00:18:39.350
+and it might be talking to multiple different websites
+simultaneously and the servers don't need to worry
+
+00:18:39.349 --> 00:18:47.259
+about what Safari's doing and Safari doesn't need to worry
+about the server farm backing some kind of DNS striping.
+
+00:18:47.259 --> 00:18:55.670
+So some typical examples mechanisms for this
+kind of isolation: Dispatch queues themselves,
+
+00:18:55.670 --> 00:19:01.490
+Grand Central Dispatch; each of these queues is going
+to default to being serialized so each block registered
+
+00:19:01.490 --> 00:19:05.309
+with a dispatch queue will execute in order one at a time.
+
+00:19:05.309 --> 00:19:10.589
+So if the queue owns a resource and
+nobody that is outside of that queue gets
+
+00:19:10.589 --> 00:19:17.679
+to access it then you basically have an isolation mechanism
+where the blocks will take turns using that resource.
+
+00:19:17.680 --> 00:19:21.100
+NSOperationQueue defaults to being fully concurrent.
+
+00:19:21.099 --> 00:19:25.769
+However you can turn the concurrency down to one
+and now you've recreated the same kind of pattern
+
+00:19:25.769 --> 00:19:30.670
+that Grand Central Dispatch is using and so
+in this way any kind of resource that's owned
+
+00:19:30.670 --> 00:19:38.000
+by a specific NSOperationQueue is going to be isolated
+from concurrency that are occurring on other queues.
+
+00:19:38.000 --> 00:19:44.170
+In Snow Leopard with Grand Central Dispatch we're
+discouraging people from using thread local variables
+
+00:19:44.170 --> 00:19:47.769
+because dispatch queues are going to be
+managing a lot of these things for you
+
+00:19:47.769 --> 00:19:53.440
+but sort of the classical old school case
+thread local variables were used to hold state
+
+00:19:53.440 --> 00:19:56.980
+that we wanted isolated from other threads.
+
+00:19:56.980 --> 00:20:04.230
+And well not nearly as fancy, very functionally
+just having a plain old context pointer pass off
+
+00:20:04.230 --> 00:20:09.190
+to the work functions is another great way to isolate
+segments of a data structure and this is the kind
+
+00:20:09.190 --> 00:20:12.799
+of thing you can see with re-entered functions like queue -r
+
+00:20:12.799 --> 00:20:20.099
+which is taking a context pointer
+and then operating on them.
+
+00:20:20.099 --> 00:20:27.209
+So a diagram now of isolation with queues; we
+have some serial queues and you can see that each
+
+00:20:27.210 --> 00:20:31.650
+of these queues owns a particular
+resource and the tasks on each
+
+00:20:31.650 --> 00:20:36.780
+of the queues are basically unable to
+really leverage the other resource.
+
+00:20:36.779 --> 00:20:44.289
+So for those of you who aren't quite as familiar with queues
+
+00:20:44.289 --> 00:20:47.289
+within a particular queue these
+tasks will execute and order.
+
+00:20:47.289 --> 00:20:54.149
+So task 1, 3, and 4 are going to execute in that
+order and there's no particular concurrency there.
+
+00:20:54.150 --> 00:21:02.420
+However, there is concurrency between queues so all of
+those tasks can execute concurrently with respect to task 2.
+
+00:21:02.420 --> 00:21:08.990
+However most queues do offer the option of run
+concurrently and in this case task 4 and task 6 can run
+
+00:21:08.990 --> 00:21:13.880
+at the same time whereas task 1 and
+task 3 can never run at the same time.
+
+00:21:13.880 --> 00:21:20.810
+And in this case in order to provide isolation each of
+the blocks on that queue would need their own resource.
+
+00:21:20.809 --> 00:21:29.179
+So isolation is going to work like an API boundary
+between tasks and resources are going to be confined
+
+00:21:29.180 --> 00:21:31.529
+to particular tasks kind of like private ivars.
+
+00:21:31.529 --> 00:21:39.379
+One of the nice features this has is it avoids any
+kind of locking overhead or the potential for deadlock.
+
+00:21:42.369 --> 00:21:46.589
+So isolated tasks do upon time actually
+need to communicate with each other
+
+00:21:46.589 --> 00:21:50.089
+and in this case they're going to
+use a pattern called message passing.
+
+00:21:50.089 --> 00:21:53.829
+This is the formal communication panel I was talking about
+
+00:21:53.829 --> 00:21:58.259
+and it's avoiding using shared memory
+to change another thread state directly.
+
+00:21:58.259 --> 00:22:03.589
+Instead we enqueue our request and that other thread
+will integrate those state changes at its leisure.
+
+00:22:03.589 --> 00:22:06.159
+So this is the kind of pattern you see with the NSRunLoop.
+
+00:22:06.160 --> 00:22:13.190
+It's a pattern you see in the http response cycle and
+the key point is that the receiver controls message queue
+
+00:22:13.190 --> 00:22:20.710
+so arbitrary state changes to its own objects
+aren't happening out from underneath it.
+
+00:22:20.710 --> 00:22:27.029
+So, in Cocoa, just sort of to sum up the message passing.
+
+00:22:27.029 --> 00:22:29.329
+The main thread has a bunch of special support
+
+00:22:29.329 --> 00:22:33.759
+for you that's very convenient; we'll
+see it working later with the DUI.
+
+00:22:33.759 --> 00:22:39.150
+In NSOperationQueue you can get a reference to the
+main queue and then you can add operations to that.
+
+00:22:39.150 --> 00:22:45.160
+With Grand Central Dispatch there's a function to get
+the main queue and you can dispatch blocks to that
+
+00:22:45.160 --> 00:22:53.860
+and then more old school all NS objects have perform main,
+select, or un-thread which also works quite conveniently
+
+00:22:53.859 --> 00:23:02.689
+and the NSRunLoop has a way of getting the main
+run loop that you can add additional tasks to.
+
+00:23:02.690 --> 00:23:05.710
+By in large most of these are actually
+fairly well integrated.
+
+00:23:05.710 --> 00:23:10.930
+So performing a selector and adding an operation
+to the main queue are going to be fairly similar.
+
+00:23:10.930 --> 00:23:18.000
+So you'll want to use whichever one is
+a little more convenient to your tasks.
+
+00:23:18.000 --> 00:23:22.799
+So, overall our goals for coordination are
+going to be to prune away this complexity
+
+00:23:22.799 --> 00:23:28.460
+that adding all these threads generates, to manage our
+resources safely and typically we're going to use locks
+
+00:23:28.460 --> 00:23:32.460
+and isolation as our as our main bread
+and butter for achieving these results.
+
+00:23:32.460 --> 00:23:40.380
+But in particular this time isn't spent doing our real work.
+
+00:23:40.380 --> 00:23:45.490
+So we have some additional overhead that we've
+added whether it's to copy data to isolate tasks,
+
+00:23:45.490 --> 00:23:48.930
+the communicating channel or just having locks.
+
+00:23:48.930 --> 00:23:55.740
+And so it's worth bearing in mind that locks and
+communication channels are themselves resources
+
+00:23:55.740 --> 00:23:59.160
+and this is going to introduce problems of its own.
+
+00:23:59.160 --> 00:24:08.730
+So this is this is going to be one of the key getting
+factors on how small a task we can make and that extra set
+
+00:24:08.730 --> 00:24:13.440
+of problems that we're adding by
+generating more coordination
+
+00:24:13.440 --> 00:24:19.420
+between our tasks is basically resource contention
+and this is something that a lot of people who are new
+
+00:24:19.420 --> 00:24:21.170
+to multithread programming underestimate.
+
+00:24:21.170 --> 00:24:30.160
+So in particular, application level tasks typically
+have a lot of different resources that they're using.
+
+00:24:30.160 --> 00:24:36.050
+This isn't quite like say open CL,
+data parallelism with graphics.
+
+00:24:36.049 --> 00:24:40.349
+Cocoa applications typically do a
+mixture of a various different things.
+
+00:24:40.349 --> 00:24:48.389
+Such as they'll have CPU intensive tasks and I/O all sort of
+together bundled up and so we're going to need to be mindful
+
+00:24:48.390 --> 00:24:51.300
+of the different kinds of things that our tasks are using.
+
+00:24:51.299 --> 00:24:56.680
+In particular I/O and network latency are going to
+create bubbles in our tasks and we're going to need
+
+00:24:56.680 --> 00:24:59.799
+to treat locks as if they were resources as well.
+
+00:25:02.869 --> 00:25:08.779
+So the nice thing about this is CPU scheduling
+gives us a lot of support from the operating system.
+
+00:25:08.779 --> 00:25:12.289
+Their threads which we've been using
+for a long time and in Snow Leopard,
+
+00:25:12.289 --> 00:25:14.990
+there's Grand Central Dispatch and dispatch queues.
+
+00:25:14.990 --> 00:25:21.190
+We have in NSOperationQueues on Leopard and iPhone
+OS and there's also processes which is sort of more
+
+00:25:21.190 --> 00:25:23.680
+of an old school web server kind of way
+
+00:25:23.680 --> 00:25:27.200
+of actually achieving a fair bit amount
+of concurrency in a single machine.
+
+00:25:27.200 --> 00:25:30.880
+So the OS gives us a lot of support here which is nice.
+
+00:25:30.880 --> 00:25:36.090
+Unfortunately there's a lot less support
+for these other kinds of resources like I/O
+
+00:25:36.089 --> 00:25:43.669
+or locks so when we find ourselves having
+to manage resources by hand one way to think
+
+00:25:43.670 --> 00:25:46.019
+about it is sort of the airline reservation model.
+
+00:25:46.019 --> 00:25:50.559
+Here we want to overbook a resource, at least a little
+bit, because we don't want to leave resources idle.
+
+00:25:50.559 --> 00:25:54.359
+This is time we could have spent
+using that core for something else.
+
+00:25:54.359 --> 00:25:58.539
+Or if the resource is the hard drive it's
+something that another task could be doing.
+
+00:25:58.539 --> 00:26:03.319
+So we want to keep them overbooked but we also
+want to avoid overwhelming these resources.
+
+00:26:03.319 --> 00:26:14.849
+Similarly, we can invert the problem a little bit and
+we can actually leverage some of the CPU scheduling
+
+00:26:14.849 --> 00:26:19.649
+by pairing the resource with a queue
+or a thread directly and then we have
+
+00:26:19.650 --> 00:26:24.620
+that queue is basically managing a
+resource and not doing anything else.
+
+00:26:24.619 --> 00:26:28.669
+So this is again as I mentioned a sort
+of a resource centric version of a task.
+
+00:26:28.670 --> 00:26:34.210
+And this allows us to leverage the CPU scheduling
+resources that the operating system provides
+
+00:26:34.210 --> 00:26:36.680
+in order to manage a particular resource.
+
+00:26:36.680 --> 00:26:48.350
+And the reason why I'm focusing a lot of time on resources
+here is because we have some constraints for these resources
+
+00:26:48.349 --> 00:26:53.709
+and as we have more and more cores we
+still have some limitations for instance
+
+00:26:53.710 --> 00:26:58.809
+on network bandwidth or seek time latency on the hard drive.
+
+00:26:58.809 --> 00:27:01.490
+But something that catches a lot of people off guard is
+
+00:27:01.490 --> 00:27:07.279
+as we overload a resource many important
+resources degrade very, very badly.
+
+00:27:07.279 --> 00:27:13.029
+So they don't degrade linearly where you have twice
+as many people using it as they should instead
+
+00:27:13.029 --> 00:27:16.279
+of being two times slower it's much slower.
+
+00:27:17.529 --> 00:27:24.710
+So when we look at I/O which is the beginning factor in
+a lot of applications we want to keep in mind as we break
+
+00:27:24.710 --> 00:27:32.069
+up our applications into a variety of different tasks
+we don't necessarily want to chunk up the I/O in a way
+
+00:27:32.069 --> 00:27:34.929
+that has lots of small, random access I/O.
+
+00:27:34.930 --> 00:27:39.950
+You want to remember that sequential I/O is
+going to be much faster than random axis I/O
+
+00:27:39.950 --> 00:27:43.000
+and fewer larger requests are also
+going to perform much better.
+
+00:27:43.000 --> 00:27:49.609
+So if we create a lot of tasks and they all do some small
+I/O requests we're going to start getting hit by the fact
+
+00:27:49.609 --> 00:27:52.569
+that the hard drive has a fairly large seek time.
+
+00:27:52.569 --> 00:27:57.319
+So if these tasks are working with different files for
+instance spread out over the drive then we're going
+
+00:27:57.319 --> 00:28:02.349
+to add a lot of extraneous bubbles into our pipeline.
+
+00:28:02.349 --> 00:28:07.559
+And also something to keep in mind as you debug your
+applications where your performance between them is
+
+00:28:07.559 --> 00:28:12.129
+if you're doing that on desktop the
+laptop drives are really much slower.
+
+00:28:15.190 --> 00:28:23.509
+So, to give a more concrete example about these
+problems with I/O and subdividing your application;
+
+00:28:23.509 --> 00:28:29.109
+a few months ago someone came to me with a
+problem in particular regarding data base I/O
+
+00:28:29.109 --> 00:28:34.049
+and they were experiencing a really egregious slow down.
+
+00:28:34.049 --> 00:28:36.960
+It was much much slower than it should have been.
+
+00:28:36.960 --> 00:28:41.210
+So actually they gave me a sample.
+
+00:28:41.210 --> 00:28:50.690
+The SQL used to talk to data base and some files and steps
+to reproduce and of course it works fine on my machine,
+
+00:28:50.690 --> 00:28:55.440
+naturally, multi-frame problems always work fine on
+my machine which is why whenever possible I give them
+
+00:28:55.440 --> 00:29:02.519
+to my engineer with the worst karma, so I
+suppose in some ways that's a vicious cycle.
+
+00:29:02.519 --> 00:29:09.069
+So, it turns out that a wee bit of
+detail had been left out from the context
+
+00:29:09.069 --> 00:29:14.519
+and that was how many other threads were performing I/O
+at the same time that this data base work was going on.
+
+00:29:14.519 --> 00:29:23.599
+So in this particular case we had thread 1 is basically
+the main thread and it's responding to the user interface
+
+00:29:23.599 --> 00:29:30.589
+and at a certain point in time the user executes a task
+that causes a new subsystem to need to be easily initialized
+
+00:29:30.589 --> 00:29:36.669
+and at this point in time there are actually two
+new subsystems that need to be brought on line.
+
+00:29:36.670 --> 00:29:45.080
+So in sort of a good design pattern these are offloaded
+to separate threads so they don't block the UI.
+
+00:29:45.079 --> 00:29:49.750
+Unfortunately these two separate patterns
+are both doing a lot of I/O so what ends
+
+00:29:49.750 --> 00:29:56.099
+up happening is not only are thread 2 and thread
+3 contending over being scheduled on the CPU
+
+00:29:56.099 --> 00:30:01.089
+but they're also interfering with each
+other's access to the I/O subsystem
+
+00:30:01.089 --> 00:30:03.629
+and basically causing the drive to seek around additionally.
+
+00:30:03.630 --> 00:30:11.240
+So with a two line code change which is let's not spawn
+the third thread at all and let's call that main function
+
+00:30:11.240 --> 00:30:15.269
+on the second thread once we're done, its 40% faster.
+
+00:30:15.269 --> 00:30:18.440
+So this is about basically improving
+the locality of reference
+
+00:30:18.440 --> 00:30:23.080
+that the drive is using, less seek
+times and fewer contentions.
+
+00:30:23.079 --> 00:30:29.869
+So keep in mind that just because you have eight cores
+does not necessarily mean that you have eight hard drives.
+
+00:30:29.869 --> 00:30:37.049
+If you do have eight hard drives in your RAID
+system I'm very jealous and in particular for a lot
+
+00:30:37.049 --> 00:30:40.899
+of Cocoa applications I/O is going to be
+one of the more expensive tasks you perform.
+
+00:30:40.900 --> 00:30:46.220
+So you're going to want to be careful as you
+subdivide your application to be very mindful of this
+
+00:30:46.220 --> 00:30:51.650
+and that many small random access I/O's
+will be bad for sort of an inefficiency
+
+00:30:51.650 --> 00:30:53.950
+between each of the tasks that you spawn off.
+
+00:30:53.950 --> 00:31:00.200
+So just as we're talking about trying to find the
+the just right granularity for the tasks you divide
+
+00:31:00.200 --> 00:31:05.140
+up in your application you're also going to want to
+be mindful of this similar kind of pattern for I/O
+
+00:31:05.140 --> 00:31:15.080
+and here's the thing that is again also surprising
+to many people new to multithreading and in point
+
+00:31:15.079 --> 00:31:18.069
+of fact actually I had an Apple
+engineer that he didn't believe me.
+
+00:31:18.069 --> 00:31:22.829
+So this is something that becomes a surprise to people.
+
+00:31:22.829 --> 00:31:29.879
+This in particular sample data from the Kernel Team
+doing work on performance of locks so I responded
+
+00:31:29.880 --> 00:31:34.430
+with whatever and so here we have one lock.
+
+00:31:34.430 --> 00:31:40.000
+This is in fact a spinlock so it's a very,
+very fast lock and it degrades quite rapidly
+
+00:31:40.000 --> 00:31:46.130
+as you have more threads competing for it and in
+fact the eight thread case is not eight times slower,
+
+00:31:46.130 --> 00:31:47.700
+it's 50 times slower.
+
+00:31:47.700 --> 00:31:49.990
+So this is this is huge.
+
+00:31:49.990 --> 00:31:54.819
+This is really orders of magnitude orders
+performance than we would really want.
+
+00:31:54.819 --> 00:32:01.470
+So as we divide up our application locks are very, very
+fast when you have only a couple of threads using them.
+
+00:32:01.470 --> 00:32:04.860
+But if they're going to be a bottle
+neck in your tasks then you're going
+
+00:32:04.859 --> 00:32:08.159
+to start paying a really large performance hit for that.
+
+00:32:08.160 --> 00:32:12.800
+So you want to keep that in mind that you
+don't want to engineer your tasks in such a way
+
+00:32:12.799 --> 00:32:19.509
+that they all are starting to hammer on the same locks.
+
+00:32:19.509 --> 00:32:21.799
+In particular locks without contention.
+
+00:32:21.799 --> 00:32:26.129
+So that single thread without using a lock is
+only a tiny bit slower than no locking at all.
+
+00:32:26.130 --> 00:32:28.740
+So locks are really quite useful.
+
+00:32:28.740 --> 00:32:35.279
+Those contended locks get very slow, very quickly and
+these contention issues are actually generated by hardware
+
+00:32:35.279 --> 00:32:41.700
+as the different cores need to keep things in sync with
+their cache lines and they generate memory bus traffic.
+
+00:32:41.700 --> 00:32:51.539
+So this is very slow and something else to keep in mind is
+as I mentioned earlier atomic operations are kind of like
+
+00:32:51.539 --> 00:32:55.759
+that destination address is its own little mini lock.
+
+00:32:55.759 --> 00:33:03.079
+So for that reason atomic operations will actually
+degrade in this same way, which is very badly,
+
+00:33:03.079 --> 00:33:06.279
+if you have lots of threads all
+containing of the same address.
+
+00:33:06.279 --> 00:33:10.649
+The nice thing about atomic operations and the reason
+why a lot of people have sort of this this feeling
+
+00:33:10.650 --> 00:33:14.950
+that atomic operations are a lot faster
+than locks is because they naturally kind
+
+00:33:14.950 --> 00:33:18.230
+of encourage you to be locking many different addresses.
+
+00:33:18.230 --> 00:33:22.190
+So an atomic operation is kind of like you're
+using a separate lock for each address.
+
+00:33:22.190 --> 00:33:24.269
+But you'll see a similar performance problem
+
+00:33:24.269 --> 00:33:38.319
+if you start having many threads call an atomic
+increment for instance than a same global.
+
+00:33:38.319 --> 00:33:44.029
+So, in addition to I/O and locks we're going
+to be using memory and any pending tasks
+
+00:33:44.029 --> 00:33:48.649
+that aren't actually getting executed are
+just sort of lying around consuming memory.
+
+00:33:48.650 --> 00:33:52.090
+Now, blocks and queues in particular are cheap.
+
+00:33:52.089 --> 00:33:54.949
+So that's very nice, but they're not completely free.
+
+00:33:54.950 --> 00:33:56.910
+So we want to be careful about that.
+
+00:33:56.910 --> 00:34:01.360
+Threads on the other hand, creating new threads is actually
+very expensive, so we definitely don't want to do that.
+
+00:34:01.359 --> 00:34:08.829
+So in a sense we obviously want to create a bunch of
+separate tasks to leverage you know eight, sixteen cores
+
+00:34:08.829 --> 00:34:12.750
+but at the same point in time if we only
+have sixteen cores there isn't much point
+
+00:34:12.750 --> 00:34:16.630
+in having thousands of pending tasks all queued up.
+
+00:34:16.630 --> 00:34:23.430
+This is very inefficient use of memory.
+
+00:34:23.429 --> 00:34:27.730
+So one way to think about this is sort
+of a producer consumer style problem
+
+00:34:27.730 --> 00:34:31.500
+where tasks are being consumed by
+the cores as they get executed.
+
+00:34:31.500 --> 00:34:33.880
+So we want to avoid overwhelming the consumer's queue.
+
+00:34:33.880 --> 00:34:39.590
+And you know one of the easiest ways
+to do that is just to have the tasks
+
+00:34:39.590 --> 00:34:42.650
+and queue new tasks as sort of their last step.
+
+00:34:42.650 --> 00:34:50.410
+So instead of spawning off thousands of tasks all at
+once up front as each task gets finished its last step is
+
+00:34:50.409 --> 00:34:59.489
+to enqueue the next series of subtasks and this is called
+recursive decomposition and it's a fairly popular pattern.
+
+00:34:59.489 --> 00:35:03.039
+Sometimes you can't necessarily do that
+very conveniently and this would be a place
+
+00:35:03.039 --> 00:35:09.820
+where you might use something called a future where you're
+going to have a proxy for a whole collection of new tasks
+
+00:35:09.820 --> 00:35:15.539
+and you won't actually materialize those tasks
+until later where they're absolutely necessary.
+
+00:35:15.539 --> 00:35:24.259
+So at that point in time then the future will be
+responsible for enqueuing all those new tasks.
+
+00:35:24.260 --> 00:35:31.760
+And as I mentioned a few times a lot of Cocoa applications
+at this layer are going to use a very wide mix of resources
+
+00:35:31.760 --> 00:35:37.510
+and for this reason along with the thread complexity
+growing exponentially it's going to be hard to guess
+
+00:35:37.510 --> 00:35:39.960
+up front necessarily how all of
+these things are going to interact.
+
+00:35:39.960 --> 00:35:45.599
+So it's going to be very important that you identify the
+bottlenecks and that you start measuring these things
+
+00:35:45.599 --> 00:35:49.569
+and that way to give you an idea about whether or
+not more threads are actually going to help you.
+
+00:35:49.570 --> 00:35:53.480
+If you're I/O bound more and more threads
+is probably not going to help you very much.
+
+00:35:53.480 --> 00:36:00.539
+So you're going to need to find a way to design your task so
+that you're less I/O bound and in this way tools like Shark
+
+00:36:00.539 --> 00:36:06.480
+and Instruments are great for design debugging, not just
+performance debugging, but actually kind of identifying
+
+00:36:06.480 --> 00:36:10.840
+where in your application you're hitting
+bottlenecks and where it makes sense
+
+00:36:10.840 --> 00:36:13.390
+to divide your application up further to use more cores.
+
+00:36:13.389 --> 00:36:19.909
+So it makes it's actually quite valuable to actually
+profile your app throughout the design cycle
+
+00:36:19.909 --> 00:36:24.670
+as opposed to wait till the end.
+
+00:36:24.670 --> 00:36:30.789
+And in this way, thread safety is not concurrency and
+some of these resources are going to degrade very badly
+
+00:36:30.789 --> 00:36:35.480
+so you'll pay a really high penalty for over
+scheduling them, particularly I/O and locks.
+
+00:36:35.480 --> 00:36:38.869
+You're going to want to avoid overwhelming
+them and you might consider something
+
+00:36:38.869 --> 00:36:43.559
+like the airline model where you
+slightly overbook everything.
+
+00:36:45.019 --> 00:36:53.900
+Ok, so in terms in balancing these two
+things we want to manage the resources.
+
+00:36:53.900 --> 00:36:59.389
+We don't want to pay too much and inefficiency for
+coordinating between all the tasks we generate.
+
+00:36:59.389 --> 00:37:04.420
+We also need to keep in mind some correctness
+issues that catch people by surprise.
+
+00:37:04.420 --> 00:37:12.539
+And all these things kind of sort of group together into
+what I consider sort of a a theme for this session is
+
+00:37:12.539 --> 00:37:15.279
+that something that surprises a lot of people new
+
+00:37:15.280 --> 00:37:21.460
+to multi-thread programming is the most
+efficient task granularity is really quite large
+
+00:37:22.780 --> 00:37:25.130
+and there are a number of reasons for that.
+
+00:37:25.130 --> 00:37:31.019
+Single threaded code has a lot of advantages; no locking,
+no messaging, doesn't need to merge results together,
+
+00:37:31.019 --> 00:37:36.500
+doesn't need to spend more memory to represent all
+these pending tasks, there's no scheduling latency.
+
+00:37:36.500 --> 00:37:45.730
+So in particular the Intel chips can do an awful lot of work
+before you can actually even get another task scheduled.
+
+00:37:45.730 --> 00:37:53.829
+On top of that serialized algorithms have been around for
+a lot longer so they're often older and better researched
+
+00:37:53.829 --> 00:37:56.500
+and optimal, not even optimized but actually optimal.
+
+00:37:56.500 --> 00:38:01.510
+Serialized algorithms are widely available
+in open source software or as part
+
+00:38:01.510 --> 00:38:04.130
+of Mac OS X in the libraries available to you.
+
+00:38:04.130 --> 00:38:12.720
+So we're all kind of producing this new journey into multi
+core programming and so in some ways there's a little bit
+
+00:38:12.719 --> 00:38:15.329
+of a learning curve for the entire system.
+
+00:38:15.329 --> 00:38:26.299
+And one example of this this is concurrent string sorting
+using Grand Central Dispatch and this is a very simple thing
+
+00:38:26.300 --> 00:38:35.470
+where we have a huge list of strings and we're just sorting
+them and in particular one thing you can see is that up
+
+00:38:35.469 --> 00:38:39.989
+to roughly about 2,000 strings this
+is sort of the break even point
+
+00:38:39.989 --> 00:38:46.309
+at which actually the Intel chips can actually sort an awful
+lot of strings before it's worth spinning up another core.
+
+00:38:46.309 --> 00:38:56.559
+The other thing to take away from this diagram is the
+concurrent version has this lower bound around a fixed point
+
+00:38:56.559 --> 00:39:01.059
+and as you add more and more work to
+the queue to sort larger and larger sets
+
+00:39:01.059 --> 00:39:06.159
+of strings it actually performs roughly about the
+same which is actually very graceful and you can see
+
+00:39:06.159 --> 00:39:11.170
+that that reaches a point at which the the
+serial system really just can't keep up
+
+00:39:11.170 --> 00:39:15.340
+and degrades much worse as you add lots and lots of strings.
+
+00:39:15.340 --> 00:39:20.140
+So this lower bound is what we're really
+trying to achieve as we can add more features
+
+00:39:20.139 --> 00:39:25.730
+and do more work for the same amount of time.
+
+00:39:25.730 --> 00:39:30.719
+At the same point we need to when we divvy up our
+application we need to maintain some correctness.
+
+00:39:30.719 --> 00:39:37.000
+So what I mean by that is we have some implicit data
+dependencies typically in our objects and we need
+
+00:39:37.000 --> 00:39:41.980
+to avoid dividing a task so much that
+we've broken our own assumptions.
+
+00:39:41.980 --> 00:39:51.599
+So the assumptions typically involve multiple
+different properties on a specific object.
+
+00:39:55.960 --> 00:40:01.570
+Most objects actually assume that all their
+properties are in sync with themselves.
+
+00:40:01.570 --> 00:40:06.410
+So what I mean by this is if the properties were
+truly independent of them even if you could set
+
+00:40:06.409 --> 00:40:11.079
+and get them safely; if they were completely
+independent and had no real relationship
+
+00:40:11.079 --> 00:40:15.940
+to those other properties you probably would
+have written that API as two separate objects.
+
+00:40:15.940 --> 00:40:16.760
+This is something to know.
+
+00:40:16.760 --> 00:40:22.440
+It's not always true but there's this tendency where
+objects have a lot of assumptions about the state
+
+00:40:22.440 --> 00:40:25.530
+that their different individual properties are in.
+
+00:40:25.530 --> 00:40:31.510
+So as an example of this, sort of text
+book example, is first and last names;
+
+00:40:31.510 --> 00:40:33.480
+sending them on some kind of person object.
+
+00:40:33.480 --> 00:40:43.610
+So we're using locks, so this is all Fred
+safe, but it turns out that it's not correct.
+
+00:40:43.610 --> 00:40:53.000
+So we're setting each part of the name independently and
+in this case Thread 1 is trying to set set the person
+
+00:40:53.000 --> 00:40:58.719
+to be Ali Ozer and Thread 2 is trying to set them
+to be Ben Trumball and we jumble these things around
+
+00:40:58.719 --> 00:41:05.919
+and on my poor poorly karma inflicted
+engineers machine we get this execution order
+
+00:41:05.920 --> 00:41:08.360
+in which nobody has really come out ahead.
+
+00:41:08.360 --> 00:41:10.519
+So even though we've used locks and we've set each
+
+00:41:10.519 --> 00:41:15.159
+of these properties independently the truth is these
+properties really should never be set independently
+
+00:41:15.159 --> 00:41:21.549
+because we have this assumption that the person is going
+to have a consistency between these two properties.
+
+00:41:21.550 --> 00:41:29.370
+So that leaves us where Ali has become Ali and not
+only have we successfully set the name incorrectly
+
+00:41:29.369 --> 00:41:36.679
+but we have also implicitly changed the
+gender of this person to my dear cousin.
+
+00:41:36.679 --> 00:41:44.129
+So, as an overview, course grain tasks are going
+to have less contention, there are fewer of them
+
+00:41:44.130 --> 00:41:47.539
+so they're going to use resources more efficiently.
+
+00:41:47.539 --> 00:41:53.210
+You're going to amortize the coordination costs between
+these systems and there are going to be fewer independencies
+
+00:41:53.210 --> 00:41:56.500
+between these tasks overall making
+them much easier to debug.
+
+00:41:56.500 --> 00:42:01.369
+On the other hand, it's going to be
+more difficult to load balance all
+
+00:42:01.369 --> 00:42:04.269
+of these tasks because they are larger grain tasks.
+
+00:42:04.269 --> 00:42:08.190
+So for instance if we only had one really large
+task we're not going to get any concurrency
+
+00:42:08.190 --> 00:42:12.659
+and if we only had two tasks we're going
+to be limited to as many as two cores.
+
+00:42:12.659 --> 00:42:19.559
+So as we reduce the granularity of these
+tasks we have more scheduling opportunities
+
+00:42:19.559 --> 00:42:22.389
+and we can load balance all of these tasks better.
+
+00:42:22.389 --> 00:42:28.809
+Typically there's better responsiveness at the same time
+we're we're trading off for more coordination costs.
+
+00:42:28.809 --> 00:42:33.710
+So these tasks are going to have to communicate
+between each other more and typically do more locking.
+
+00:42:33.710 --> 00:42:40.720
+As your adjusting these knobs in your tasks and
+in your applications you're going to want to focus
+
+00:42:40.719 --> 00:42:43.719
+on the primary bottlenecks in these tasks.
+
+00:42:43.719 --> 00:42:52.449
+So, it it doesn't make necessarily much sense to optimize
+for CPU efficiency until you've dealt with I/O bottlenecks.
+
+00:42:52.449 --> 00:42:57.989
+You're going to want to manage the complexity of
+your applications just as much as the performance.
+
+00:42:57.989 --> 00:43:03.509
+So having something that is really fast that you
+can never debug is not going to be very helpful
+
+00:43:03.510 --> 00:43:07.730
+and in the future you'll probably
+learn about more advanced techniques.
+
+00:43:07.730 --> 00:43:13.099
+Lockless programming techniques lock striping, things
+like this and in general you're not going to want
+
+00:43:13.099 --> 00:43:14.849
+to sprinkle those throughout your application.
+
+00:43:14.849 --> 00:43:17.670
+You're going to want to reserve
+them for the most crucial problems.
+
+00:43:17.670 --> 00:43:23.869
+So that's why something simple like locking or like
+isolation is going to be your bread and butter for divvying
+
+00:43:23.869 --> 00:43:33.250
+up your tasks and overall you're definitely going to want
+to avoid guessing up front as your applications tasks
+
+00:43:33.250 --> 00:43:36.659
+for most applications are going
+to use a whole range of resources.
+
+00:43:36.659 --> 00:43:45.079
+In particular you'll want to keep in mind the break even
+threshold at which point it actually makes sense to spin
+
+00:43:45.079 --> 00:43:49.130
+up other cores to help you for a
+particular task and that's going to depend
+
+00:43:49.130 --> 00:43:54.530
+on the resources and again the coordination costs.
+
+00:43:54.530 --> 00:43:58.560
+So that brings us to something that trips up a lot
+
+00:43:58.559 --> 00:44:02.480
+of Cocoa application programmers and
+that's multithread notifications.
+
+00:44:02.480 --> 00:44:10.809
+Notifications are a very important piece of Cocoa
+programming and unfortunately it can be a little tricky
+
+00:44:10.809 --> 00:44:16.730
+to make these work well with lots of
+threads, or in the new world order, queues.
+
+00:44:16.730 --> 00:44:22.900
+So most threads are delivered synchronously
+NSNotification, key value observing by default.
+
+00:44:22.900 --> 00:44:27.820
+The observer actions that you register are
+going to executed in the observee's thread.
+
+00:44:27.820 --> 00:44:37.050
+So from the perspective of an observing thread that has
+a registration to observe notifications on a object owned
+
+00:44:37.050 --> 00:44:41.640
+by another thread the visibility of those
+changes is going to appear pretty random.
+
+00:44:41.639 --> 00:44:51.029
+And the problem that comes up with this with this
+synchronous notification delivery is if Thread 2 registers
+
+00:44:51.030 --> 00:44:59.650
+to receive notifications for an object known by thread 1
+what ends up happening is Thread 1 posts a notification,
+
+00:44:59.650 --> 00:45:04.650
+the NSNotification center or the key value observing
+mechanism is going to go through the call backs.
+
+00:45:04.650 --> 00:45:12.470
+It's going to call the method that Thread 2 has registered
+in the context of Thread 1 and then typically this is
+
+00:45:12.469 --> 00:45:16.230
+where things go array and that callback is now operating
+
+00:45:16.230 --> 00:45:24.670
+of Thread 2's data even though Thread 2 is somewhere
+else operating on the data at the same time.
+
+00:45:24.670 --> 00:45:29.250
+So this is where the shared memory approach
+can be really perilous and you're going to want
+
+00:45:29.250 --> 00:45:36.469
+to exercise a particular amount of self
+discipline And because of sort of the features
+
+00:45:36.469 --> 00:45:41.109
+of the notification design pattern where
+there's an API between the observer
+
+00:45:41.110 --> 00:45:48.070
+and the object posting its notifications that abstraction
+actually causes there to be a lot of dependencies
+
+00:45:48.070 --> 00:45:52.530
+between these two threads because the
+notifications can come pretty much at any time.
+
+00:45:52.530 --> 00:45:58.840
+So the behavior is actually particularly
+non-deterministic and if the observing thread is attempting
+
+00:45:58.840 --> 00:46:04.250
+to implement something like isolation
+then obviously this will break.
+
+00:46:04.250 --> 00:46:11.019
+And in particular when we talk about the complexity
+to remind you that notification is happening sort
+
+00:46:11.019 --> 00:46:17.320
+of randomly throughout your application is really going
+to run into this wall where different threads are going
+
+00:46:17.320 --> 00:46:21.809
+to interleave in many many different combinations.
+
+00:46:21.809 --> 00:46:32.230
+So the natural response to this is to to go to sort of our
+old standby which is to add some locks and this ends badly.
+
+00:46:32.230 --> 00:46:37.469
+It typically ends so badly that it needs
+to be the first bullet point on this slide.
+
+00:46:37.469 --> 00:46:43.980
+And the reason is when we have all these locks
+we want to set an order to having these locks,
+
+00:46:43.980 --> 00:46:51.750
+to manage multiple different locks but the API boundaries,
+the very feature of creating a notification system defeats
+
+00:46:51.750 --> 00:46:57.900
+that where the object posting the notification
+doesn't even know about the observers at all,
+
+00:46:57.900 --> 00:47:00.660
+the NS notification center is the
+one that knows about the observers
+
+00:47:00.659 --> 00:47:07.359
+and the observers themselves their notification actions
+can be fairly complicated and might need yet more locks.
+
+00:47:07.360 --> 00:47:14.039
+So the way notifications work prevent us
+from really creating a defined locking order
+
+00:47:14.039 --> 00:47:18.710
+for all the different locks we might want
+to use as part of a notification system.
+
+00:47:18.710 --> 00:47:20.760
+This makes it particularly prone to deadlock.
+
+00:47:20.760 --> 00:47:25.870
+Anybody who has tried to do this will will
+have experience many deadlocks in this kind
+
+00:47:25.869 --> 00:47:31.380
+of multithreaded notification system and I
+apologize this last line is a little typo.
+
+00:47:31.380 --> 00:47:38.150
+The observers often post a new notification during
+the callback and this is especially problematic
+
+00:47:38.150 --> 00:47:40.809
+because the callbacks are happening synchronously.
+
+00:47:40.809 --> 00:47:48.210
+So when an observer posts a new notification, so maybe
+it changed a value which creates a new KVINotification,
+
+00:47:48.210 --> 00:47:56.030
+or it runs something, it creates a new NSNotification,
+the entire chain of locks that are being used
+
+00:47:56.030 --> 00:47:58.810
+in the first notification are still being held.
+
+00:47:58.809 --> 00:48:05.920
+Ok so, locking doesn't work very
+well with multi-thread notifications.
+
+00:48:05.920 --> 00:48:13.690
+So we'll go to our other standby which is to use isolation
+and when we've combined association message passing
+
+00:48:13.690 --> 00:48:17.659
+for the purposes of notifications we
+call this the receptionist pattern.
+
+00:48:17.659 --> 00:48:26.049
+And the key point here is the observer's indirect
+so the observing studies is a proxy and the observee
+
+00:48:26.050 --> 00:48:32.400
+and the observer are isolated in the first thread
+and the observer's proxy then uses message passing
+
+00:48:32.400 --> 00:48:35.349
+to let the second thread know that
+a notification has occurred.
+
+00:48:35.349 --> 00:48:40.039
+So this looks much healthier.
+
+00:48:40.039 --> 00:48:48.739
+Basically, the the notification system instead of calling
+the action you've registered it's going to use a proxy
+
+00:48:48.739 --> 00:48:55.509
+for the second thread and that will enqueue a message
+and at some point in time Thread 2 will process
+
+00:48:55.510 --> 00:48:58.260
+that message queue and then handle the notification itself.
+
+00:48:58.260 --> 00:49:03.760
+So this is much easier to manage than using
+shared memory to directly make state changes
+
+00:49:03.760 --> 00:49:07.090
+into objects owned by Thread 2 during notification.
+
+00:49:08.809 --> 00:49:17.110
+The initial notification is completely isolated into
+the observee's thread so the observer proxy has a chance
+
+00:49:17.110 --> 00:49:23.269
+to work the notification data and wrap it up in such
+a way that it can be enqueued for the second thread
+
+00:49:23.269 --> 00:49:30.619
+and at a safe point in time in the future the
+observing thread will process that message queue.
+
+00:49:34.710 --> 00:49:42.539
+There's some new API in Snow Leopard, NS NotificationCenter,
+which actually kind of makes this a little bit easier to do.
+
+00:49:42.539 --> 00:49:49.820
+So here you can register a block to be an observer and
+it actually takes a queue for you so you can specify
+
+00:49:49.820 --> 00:49:55.019
+that when the notification is generated that you
+want the block to be executed on a specific queue.
+
+00:49:55.019 --> 00:50:01.739
+So the notification posting is still happening synchronously
+but this queue could be a queue that is working
+
+00:50:01.739 --> 00:50:10.009
+with the second thread a little more closely.
+
+00:50:10.010 --> 00:50:17.450
+And because notifications are such an important part of
+Cocoa programming there's going to be a lot more going
+
+00:50:17.449 --> 00:50:21.359
+on in the Cocoa tips and tricks
+session which will be on Thursday at 5
+
+00:50:21.360 --> 00:50:27.430
+and there will be a much more extensive
+example about using the receptionist pattern.
+
+00:50:27.429 --> 00:50:31.419
+But the summary is queues make really good receptionists.
+
+00:50:31.420 --> 00:50:37.240
+And once you've set up a receptionist you can keep in
+mind that actually a bunch of other things you can do now
+
+00:50:37.239 --> 00:50:40.319
+that those notifications are no
+longer being processed synchronously.
+
+00:50:40.320 --> 00:50:45.050
+You can filter and coalesce them pretty easily as you're
+processing the message queue on that second thread.
+
+00:50:45.050 --> 00:50:47.140
+You might even reprioritize them.
+
+00:50:47.139 --> 00:50:51.029
+The most common thing you'll do though is
+you'll start throwing away still notifications
+
+00:50:51.030 --> 00:50:54.990
+because the second thread is doing its
+own set of work and they might decide
+
+00:50:54.989 --> 00:50:57.389
+that it no longer cares about a particular notification.
+
+00:50:57.389 --> 00:51:01.690
+It might be say from an object that is now de-allocated.
+
+00:51:06.570 --> 00:51:12.780
+As we're pushing these notifications around and they
+have data that the threads want we need to keep in mind
+
+00:51:12.780 --> 00:51:15.500
+that passing data between threads can get a little tricky.
+
+00:51:15.500 --> 00:51:20.420
+We don't necessarily know when the
+receiver of that data will run.
+
+00:51:20.420 --> 00:51:26.000
+It might happen so basically the sender might
+lose lose access to the core it might be scheduled
+
+00:51:26.000 --> 00:51:29.579
+out immediately upon passing the message along.
+
+00:51:29.579 --> 00:51:36.009
+So the receiver might finish with the data and release
+it before the sender gets the chance to do anything.
+
+00:51:36.010 --> 00:51:40.970
+Or the receiver might experience a problem,
+either a page fault or some I/O latency
+
+00:51:40.969 --> 00:51:49.119
+and it might start many seconds later in the future
+long after the sender itself is done using that object.
+
+00:51:49.119 --> 00:51:54.769
+So there's really a very simple rule to keep these
+objects alive as you pass data between threads
+
+00:51:54.769 --> 00:51:57.769
+and that's the sender is going to retain
+and the receiver is going to release.
+
+00:51:57.769 --> 00:52:06.030
+This is just as true when you're passing dispatch queues
+and dispatch objects around as it is at the Cocoa layer.
+
+00:52:06.030 --> 00:52:10.130
+So the sender is going to retain one's for
+each of the receivers that pass along too
+
+00:52:10.130 --> 00:52:14.079
+and each of the receivers is going to get
+sort of an ownership of a retain account.
+
+00:52:14.079 --> 00:52:19.179
+So you're transferring one specific instance
+of a retain from the sender to the receiver.
+
+00:52:19.179 --> 00:52:22.579
+And this way no matter what order the
+senders and the receivers get scheduled
+
+00:52:22.579 --> 00:52:34.119
+in these data objects will remain alive until both
+the sender and the receiver are done with them.
+
+00:52:34.119 --> 00:52:39.210
+Which brings to key value observing which is a little
+bit different from the NSNotificationCenter style.
+
+00:52:39.210 --> 00:52:44.860
+Because we're observing specific properties there's just
+sort of a natural tendency that these notifications get
+
+00:52:44.860 --> 00:52:52.099
+to be smaller and because of their size that can be
+challenging to fit in with sort of the minimum granularity
+
+00:52:52.099 --> 00:52:53.860
+that we want to pass over to another thread.
+
+00:52:53.860 --> 00:53:00.539
+We really want to achieve that sort of break even threshold
+of communicating with other threads and if there's a lot
+
+00:53:00.539 --> 00:53:04.860
+of them, if we're observing a lot of properties and
+a lot of objects there can be a fairly high volume
+
+00:53:04.860 --> 00:53:08.510
+of these notifications which in many
+ways is a feature but as we work
+
+00:53:08.510 --> 00:53:13.450
+with different threads it's something to keep in mind.
+
+00:53:13.449 --> 00:53:17.730
+So in that sense KVO works best with isolation.
+
+00:53:17.730 --> 00:53:23.269
+Here the observers and the observees are all
+confined to a specific thread and we've amortized all
+
+00:53:23.269 --> 00:53:26.759
+of these coordination costs because
+well we're not actually passing any
+
+00:53:26.760 --> 00:53:29.780
+of the individual KVO notifications
+over to a different thread.
+
+00:53:29.780 --> 00:53:38.930
+So that's sort of how things work in sort of an idealized
+world where most applications actually aren't being written.
+
+00:53:38.929 --> 00:53:46.179
+So in order to start passing all these notification data
+over to other threads with KVO typically what you'll want
+
+00:53:46.179 --> 00:53:51.690
+to first is to coalesce all of these things together
+so you'll have a bunch of KVO notifications happening
+
+00:53:51.690 --> 00:53:58.639
+on one thread and when they reach a certain point of
+usefulness repackaged as a batch together then you'll pass
+
+00:53:58.639 --> 00:54:03.789
+that over to the other thread to work
+with a larger granularity of data.
+
+00:54:03.789 --> 00:54:07.840
+So this is just sort of an example
+of kind of how the natural tendency
+
+00:54:07.840 --> 00:54:11.380
+to use these two notification systems differs a little bit.
+
+00:54:11.380 --> 00:54:18.280
+The NSNotificationsTypically are a little less frequent
+and a little larger grained so they often fit naturally
+
+00:54:18.280 --> 00:54:25.630
+into granularity a little better and KVO on many
+properties on many objects is a little finer grained.
+
+00:54:25.630 --> 00:54:28.599
+So they have their different systems but they both
+
+00:54:28.599 --> 00:54:33.099
+as multi-thread notification systems have the same
+overall behavior they're all synchronously posted.
+
+00:54:33.099 --> 00:54:41.239
+So an example of using KVO with
+multiple threads is in core data.
+
+00:54:41.239 --> 00:54:47.759
+So here the manage objects and the manage object context
+so each of these manage objects if you're not familiar
+
+00:54:47.760 --> 00:54:54.920
+with core data; these are basically objects representing
+rows in a database and the context is a transaction scope.
+
+00:54:54.920 --> 00:54:59.760
+It's observing all of these particular
+objects and it's required
+
+00:54:59.760 --> 00:55:04.350
+that each thread have its own context
+and its own peer set of objects.
+
+00:55:04.349 --> 00:55:10.819
+So all the changes that you make to the properties on
+these objects and all the KVO notifications are happening
+
+00:55:10.820 --> 00:55:18.120
+within a single thread and the manage object context
+is observing all of these objects coalesces all
+
+00:55:18.119 --> 00:55:25.349
+of these changes together and at the end of the particular
+event it repackages them up to a courser grain notification
+
+00:55:25.349 --> 00:55:29.349
+and posts an NSNotification talking about
+sort of a higher level all the things
+
+00:55:29.349 --> 00:55:32.069
+that have happened over the course of a particular event.
+
+00:55:32.070 --> 00:55:36.360
+And that's probably the right level of
+granularity for most people to pass off
+
+00:55:36.360 --> 00:55:40.920
+to a receptionist and hand that off to another thread.
+
+00:55:40.920 --> 00:55:45.450
+So each of the context model objects are
+being confined to a single thread here.
+
+00:55:45.449 --> 00:55:49.179
+The properties are all completely observable
+within a thread; all of the properties
+
+00:55:49.179 --> 00:55:53.699
+and they can be changed quite frequently
+without any real performance hit.
+
+00:55:53.699 --> 00:56:02.949
+And the context is accumulating all of these changes to the
+end of the event and then it reposts them later as a batch.
+
+00:56:02.949 --> 00:56:09.889
+So in particular as you're working with multi-threaded
+notifications you're going to want to avoid locking, a lot.
+
+00:56:09.889 --> 00:56:13.239
+You're going to probably need to
+use something like message passing
+
+00:56:13.239 --> 00:56:17.389
+and the receptionist pattern is
+a really easy way of doing that.
+
+00:56:17.389 --> 00:56:21.059
+Queues, dispatch queues and NS
+operation queues make good receptionists.
+
+00:56:21.059 --> 00:56:24.340
+And as you're working with a lot of
+notifications if you have a high volume
+
+00:56:24.340 --> 00:56:29.940
+of notifications you're definitely
+going to want to coalesce them together.
+
+00:56:29.940 --> 00:56:34.809
+So this brings us to some specific
+challenges talking about the UI.
+
+00:56:34.809 --> 00:56:43.409
+This happens in Cocoa a lot that should be brought
+up as we're working with dividing our tasks in Cocoa.
+
+00:56:43.409 --> 00:56:45.879
+Specifically the UI is single threaded.
+
+00:56:45.880 --> 00:56:48.780
+This is actually true for most commercial UI's.
+
+00:56:48.780 --> 00:56:56.180
+Multi-threaded UI's have a tendency to end up
+deadlocking and the reason for this is the same problem
+
+00:56:56.179 --> 00:57:01.480
+that notification systems have with using locks is
+the different layers of API make it very difficult
+
+00:57:01.480 --> 00:57:08.230
+to create a consistent lock ordering which is
+what we need to manage multiple independent locks
+
+00:57:08.230 --> 00:57:15.110
+and there are two different vectors at which multi-threaded
+UI's suffer this inconsistent lock ordering problem.
+
+00:57:15.110 --> 00:57:20.950
+The actions being generated by an
+application flow in two different directions.
+
+00:57:20.949 --> 00:57:26.589
+So the user is going to be generating events through
+the keyboard, the mouse and so forth which get handed
+
+00:57:26.590 --> 00:57:31.329
+over to the operating system which then in
+turn fields them as events to the application.
+
+00:57:31.329 --> 00:57:38.799
+At the same time the application is generating its own
+events which get passed over to the operating system
+
+00:57:38.800 --> 00:57:43.690
+and then to external devices, saving
+files, drawing to the screen and so forth
+
+00:57:43.690 --> 00:57:52.300
+And the model view controller design pattern
+itself experiences a certain similar issue
+
+00:57:52.300 --> 00:57:58.560
+where the controller talks to the view and
+the view might be querying state on your model
+
+00:57:58.559 --> 00:58:02.909
+or the controller might be talking to your
+model which is generating change notifications
+
+00:58:02.909 --> 00:58:06.099
+and the view might be involved in those too.
+
+00:58:06.099 --> 00:58:11.059
+So it's hard to come up with one lock ordering
+that works as these things flow in both directions.
+
+00:58:11.059 --> 00:58:17.000
+For this reason most of UI's prefer thread confinement.
+
+00:58:17.000 --> 00:58:24.309
+They're they're using isolation for the core tasks and in
+Cocoa in particular the UI is bound to the main thread.
+
+00:58:24.309 --> 00:58:29.519
+The main thread is blessed and this is where most
+of your work with views and with controllers,
+
+00:58:29.519 --> 00:58:37.360
+in particular Cocoa bindings, is all going
+to need to be confined to the main thread.
+
+00:58:37.360 --> 00:58:43.800
+In another way I've seen a number of people, so I want
+to call this out specifically, a number of people attempt
+
+00:58:43.800 --> 00:58:51.220
+to fix this by adding locks and the problem is that
+AppKit and Cocoa bindings doesn't know about your locks
+
+00:58:51.219 --> 00:58:54.879
+so if you do something like you add locks to say valueForKey
+
+00:58:54.880 --> 00:59:01.950
+on your model objects it can really be it's pretty
+much impossible to find all the different places
+
+00:59:01.949 --> 00:59:08.359
+where DUI might be expecting to be working with
+those objects, confined to the main thread,
+
+00:59:08.360 --> 00:59:10.930
+simply because it doesn't know about your locks.
+
+00:59:10.929 --> 00:59:15.029
+None of its code is going to be expecting your locks.
+
+00:59:16.849 --> 00:59:22.420
+So that sounds unfortunate however
+it's not really that bleak.
+
+00:59:22.420 --> 00:59:27.829
+In particular the UI can dispatch all kinds of
+operations quite efficiently off the main thread
+
+00:59:27.829 --> 00:59:32.199
+to different work queues, to get you more responsiveness.
+
+00:59:32.199 --> 00:59:37.029
+And you know frequently in the past a lot of
+people have done this kind of thing using runLoops
+
+00:59:37.030 --> 00:59:40.630
+to move I/O intensive operations
+out of the main flow of control
+
+00:59:40.630 --> 00:59:46.300
+and these days these things are really the most common
+kinds of tasks that you use separate threads for.
+
+00:59:52.289 --> 00:59:58.039
+So the key challenges we're sending off these
+other tasks that are generated by the UI
+
+00:59:58.039 --> 01:00:03.279
+to background operations is merging those
+results cooperatively back into the UI
+
+01:00:03.280 --> 01:00:08.870
+and that's basically message passing which I
+talked about a little bit earlier and you're going
+
+01:00:08.869 --> 01:00:12.509
+to dispatch these things either onto the
+main queue or you're going to do something
+
+01:00:12.510 --> 01:00:16.540
+like performing a selector on the main thread.
+
+01:00:16.539 --> 01:00:20.150
+So here's an example of what this might look like.
+
+01:00:20.150 --> 01:00:24.150
+This is using blocks on Snow Leopard
+with NS operation queue.
+
+01:00:24.150 --> 01:00:30.920
+And you'd have a background queue in this case my
+app queue and it's going to add a new operation
+
+01:00:30.920 --> 01:00:38.320
+that performs a very long task and the last thing that that
+task does is it's going to get a reference to the main queue
+
+01:00:38.320 --> 01:00:44.519
+and then it's going to enqueue whatever code is
+necessary to merge those results back into the UI.
+
+01:00:44.519 --> 01:00:50.630
+So this is a really pretty simple pattern and you're
+going to see a lot of this with Grand Central Dispatch.
+
+01:00:50.630 --> 01:00:57.670
+If you want to see using the same pattern directly to
+Grand Central Dispatch here are the functions you'd use
+
+01:00:57.670 --> 01:01:00.470
+to dispatch asynchronously to a concurrent queue.
+
+01:01:00.469 --> 01:01:05.589
+Perform your long task there and then dispatch
+asynchronously back to the main queue.
+
+01:01:05.590 --> 01:01:18.840
+Ok, so to summarize, you're going to want to decompose
+all of your tasks above that break even threshold
+
+01:01:18.840 --> 01:01:24.220
+where splitting up additional cores is going
+to help you solve specific problems faster.
+
+01:01:24.219 --> 01:01:27.750
+And as you do that you're going to want to
+consider the resource limitations you have.
+
+01:01:27.750 --> 01:01:34.079
+You don't want to add too much contention over
+things like I/O or locks and you're going to want
+
+01:01:34.079 --> 01:01:40.610
+to avoid excessive coordination, particularly passing along
+a high volume of very small notifications for instance,
+
+01:01:40.610 --> 01:01:42.800
+is going to generate a lot of inefficiency.
+
+01:01:42.800 --> 01:01:48.550
+And as you're tuning application for performance you're
+similarly going to want to keep in mind that you really need
+
+01:01:48.550 --> 01:01:53.350
+to prune the complexity back from these applications.
+
+01:01:53.349 --> 01:01:58.319
+So some, some really good reading material here.
+
+01:01:58.320 --> 01:02:04.240
+Mac OS X "The Threading Programming Guide" talks a lot
+about what's available in the Mac OS X environment;
+
+01:02:04.239 --> 01:02:08.119
+Cocoa as well as lower level pieces of the operating system.
+
+01:02:08.119 --> 01:02:09.380
+This is a great resource.
+
+01:02:09.380 --> 01:02:13.030
+It talks about using runLoops as well as threads directly.
+
+01:02:13.030 --> 01:02:22.470
+Another thing that's available to you is an article called
+"Real World Concurrency" and it's written by two people
+
+01:02:22.469 --> 01:02:29.619
+from Sun and it's it's a great article looking at their
+experiences with engineering multi-threading systems
+
+01:02:29.619 --> 01:02:33.109
+and some of the same kinds of things
+that I've talked about today.
+
+01:02:33.110 --> 01:02:39.690
+Some of it in a little more in depth but these guys
+have done some really sophisticated multithreading work
+
+01:02:39.690 --> 01:02:47.970
+and again you know they talk about reserving very
+complicated systems for your core problems and focusing
+
+01:02:47.969 --> 01:02:56.259
+on getting a lot of tasks simply decomposed and
+working concurrently using fairly basic mechanisms.
+
+01:02:56.260 --> 01:03:03.080
+Another article which is one of my favorite articles for
+exploring the complexity multi-threading programming to kind
+
+01:03:03.079 --> 01:03:11.259
+of go into a little more detail about why all of this
+is really so cumbersome is from Edward Lee at Berkeley
+
+01:03:11.260 --> 01:03:16.050
+and it's called "The Problem With Threads," so
+it's another article you can get on the internet.
+
+01:03:16.050 --> 01:03:23.350
+And it goes into a lot of detail about what is so difficult
+with this multi-threaded programming and exploring how
+
+01:03:23.349 --> 01:03:28.549
+to control all of those different
+permutations that I showed little graphs for.
+
+01:03:28.550 --> 01:03:32.010
+And that brings us then to two hard cover books.
+
+01:03:32.010 --> 01:03:38.520
+One is "Java Concurrency in Practice" and I realize
+we're not actually talking about Java, however,
+
+01:03:38.519 --> 01:03:43.500
+a lot of this is relevant no matter what programming
+language you're in and it's one of the first books
+
+01:03:43.500 --> 01:03:49.239
+that I read that's focused on actual software engineering
+practices with concurrency which is a nice change of pace
+
+01:03:49.239 --> 01:03:56.929
+from API references or text books for people
+learning how to you know how to implement locks
+
+01:03:56.929 --> 01:04:01.079
+without actually having any locks and other
+things which might be academically fascinating
+
+01:04:01.079 --> 01:04:06.849
+but aren't particularly relevant to what we need
+to do today and finally there's the last book
+
+01:04:06.849 --> 01:04:09.360
+"Pattern Language for Parallel Programming."
+
+01:04:09.360 --> 01:04:17.700
+And this book is nice in that it gives an overview about
+lots of other different kinds of ways to decompose tasks
+
+01:04:17.699 --> 01:04:23.949
+so we focused today pretty much on one general purpose thing
+called task based parallelism and that's great for a lot
+
+01:04:23.949 --> 01:04:29.000
+of Cocoa applications but as you start working with
+this you'll find that you'll you'll be interested
+
+01:04:29.000 --> 01:04:35.000
+in exploring other ways of decomposing your application
+and to have a nice survey of lots of different techniques
+
+01:04:35.000 --> 01:04:40.139
+and design patterns for subdividing
+an application and specific problems.
+
+01:04:40.139 --> 01:04:41.429
+So there's a lot of good advice in there.
+
+01:04:41.429 --> 01:04:44.460
+It's a little dry but it provides a nice overview.

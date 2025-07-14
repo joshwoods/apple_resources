@@ -1,0 +1,2678 @@
+WEBVTT
+
+00:00:13.440 --> 00:00:14.510
+Hello.
+
+00:00:14.560 --> 00:00:17.240
+I'm here to talk about
+Network Kernel Extensions on Tiger.
+
+00:00:17.270 --> 00:00:21.970
+As you probably already heard,
+we've made a number of massive changes.
+
+00:00:22.640 --> 00:00:25.850
+To the networking stack,
+we had a few goals.
+
+00:00:26.030 --> 00:00:30.150
+We needed to get better SMP scalability.
+
+00:00:30.200 --> 00:00:33.540
+We've been chipping dual processor
+machines for a long time and the way that
+
+00:00:33.610 --> 00:00:38.190
+the locking model is set up in the Kernel
+in Panther and previous releases really
+
+00:00:38.190 --> 00:00:43.140
+didn't give us an ability to take full
+advantage of those multiple processors.
+
+00:00:43.650 --> 00:00:48.100
+In addition, we wanted to add support for
+64-bit user space processes.
+
+00:00:48.140 --> 00:00:52.530
+And these changes required--
+in order to implement this,
+
+00:00:52.660 --> 00:00:55.870
+we needed to make a lot of changes
+to data structures and move
+
+00:00:55.920 --> 00:00:57.790
+a number of functions around.
+
+00:00:57.920 --> 00:01:04.340
+And it really led to massive
+changes almost everywhere,
+
+00:01:04.360 --> 00:01:09.390
+which broke Kernel Extensions,
+the previous Network Kernel Extensions.
+
+00:01:09.450 --> 00:01:11.220
+So if you have a Network Kernel
+Extension today that's
+
+00:01:11.280 --> 00:01:14.000
+loading on Panther,
+it won't load on Tiger.
+
+00:01:14.110 --> 00:01:17.380
+If you're just an I/O Kit driver,
+an Ethernet driver or something,
+
+00:01:17.420 --> 00:01:18.860
+you'll be okay.
+
+00:01:18.900 --> 00:01:23.200
+But if you've been using the
+old DLL layer or socket filters,
+
+00:01:23.400 --> 00:01:27.930
+protocol filters, any of that stuff,
+you're going to need to make changes
+
+00:01:27.930 --> 00:01:29.990
+to your NKE to get it to work on Tiger.
+
+00:01:31.600 --> 00:01:34.120
+Some of these changes involve
+moving to using opaque data
+
+00:01:34.120 --> 00:01:38.100
+structures and accessor functions.
+
+00:01:38.100 --> 00:01:41.440
+We provide Kernel Programming
+Interfaces which are well-defined set
+
+00:01:41.480 --> 00:01:45.800
+of interfaces for interacting with
+these data structures and the stack.
+
+00:01:46.440 --> 00:01:49.570
+The initial implementation of
+these KPIs is available in the
+
+00:01:49.580 --> 00:01:52.500
+WWDC build that's on your CD.
+
+00:01:52.500 --> 00:01:56.640
+There are actually some bugs in
+the kernel on that that will lead
+
+00:01:56.640 --> 00:01:59.260
+to a panic in a few situations.
+
+00:01:59.260 --> 00:02:02.900
+So along with the previous session,
+session 103,
+
+00:02:02.900 --> 00:02:06.980
+there's some content that's available
+online and part of that is a new kernel
+
+00:02:06.980 --> 00:02:12.080
+that you can use when you're trying to
+test these kernel programming interfaces.
+
+00:02:12.080 --> 00:02:14.480
+So I encourage you to go ahead and
+download that and install that.
+
+00:02:14.750 --> 00:02:18.260
+There's a readme that explains how to
+get it installed and that'll let you play
+
+00:02:18.260 --> 00:02:21.810
+around with what I'm about to show you.
+
+00:02:22.260 --> 00:02:25.080
+So we're going to go over the
+Kernel Programming Interfaces.
+
+00:02:25.080 --> 00:02:27.440
+Again, these are available on Tiger.
+
+00:02:27.510 --> 00:02:30.010
+These should give us more stability
+so that when we make changes in
+
+00:02:30.010 --> 00:02:34.000
+the future we aren't going to keep
+breaking your Kernel Extensions.
+
+00:02:34.090 --> 00:02:37.750
+And moving over to these Kernel
+Programming Interfaces is required
+
+00:02:37.960 --> 00:02:40.040
+to get your KEX running on Tiger.
+
+00:02:40.100 --> 00:02:43.890
+Many of the symbols that you used
+to link against are no longer there.
+
+00:02:46.330 --> 00:02:49.710
+So, with a better SMP scalability,
+as I said, we've been shipping these dual
+
+00:02:49.720 --> 00:02:52.590
+processor machines for a long time,
+and we've been using this
+
+00:02:52.590 --> 00:02:54.980
+thing called a funnel,
+the network funnel,
+
+00:02:55.070 --> 00:02:57.370
+to protect all of the data
+structures inside the kernel,
+
+00:02:57.530 --> 00:02:59.060
+and it's basically one big lock.
+
+00:02:59.200 --> 00:03:03.240
+We've taken that one big lock and
+we've moved to finer-grained locking,
+
+00:03:03.570 --> 00:03:05.670
+where we use a bunch
+of locking primitives,
+
+00:03:05.750 --> 00:03:10.320
+such as the simple lock, a mutex,
+and multiple reader, single writer locks,
+
+00:03:10.320 --> 00:03:14.240
+and we've really broken it down so that
+we can have multiple processors running
+
+00:03:14.310 --> 00:03:16.150
+through the stack at the same time.
+
+00:03:16.910 --> 00:03:19.560
+One of the results of this is that
+the Kernel Extensions are responsible
+
+00:03:19.560 --> 00:03:21.200
+for protecting their own data.
+
+00:03:21.300 --> 00:03:24.600
+Since there's no longer one big
+lock that both the stack and the
+
+00:03:24.600 --> 00:03:27.940
+Kernel Extensions are running under,
+they have to be aware that
+
+00:03:27.940 --> 00:03:29.910
+they could be re-entered.
+
+00:03:30.560 --> 00:03:34.670
+The internal locking model that we use
+is mostly transparent to the NKEs and
+
+00:03:34.870 --> 00:03:38.470
+that was done intentionally so that we
+will be able to make changes to that in
+
+00:03:38.470 --> 00:03:41.760
+the future as we tune the performance.
+
+00:03:44.130 --> 00:03:45.780
+So in Panther,
+we have one big lock around
+
+00:03:45.780 --> 00:03:49.440
+networking and we have another
+big lock around the file systems.
+
+00:03:49.490 --> 00:03:52.900
+And in Tiger, for the networking stack,
+we moved to a bunch of smaller
+
+00:03:52.900 --> 00:03:55.400
+locks in various areas.
+
+00:03:55.490 --> 00:03:59.540
+And we're going to continue to
+fine tune the exact locking model.
+
+00:03:59.600 --> 00:04:02.430
+And the KPIs are intended to
+keep that transparent so that you
+
+00:04:02.430 --> 00:04:03.940
+don't have to be involved with it.
+
+00:04:03.990 --> 00:04:06.700
+And we won't break you if we change it.
+
+00:04:08.500 --> 00:04:13.390
+We did change the data structures in a
+lot of ways in order to implement this,
+
+00:04:13.400 --> 00:04:17.380
+adding locks to these structures
+and moving stuff around,
+
+00:04:17.380 --> 00:04:19.400
+adding reference counts.
+
+00:04:19.530 --> 00:04:22.150
+This did affect the binary compatibility.
+
+00:04:23.270 --> 00:04:27.040
+We're going to have all Kernel private
+data structures be opaque and we're
+
+00:04:27.040 --> 00:04:29.970
+going to provide accessor functions
+so that in the future when we need
+
+00:04:30.030 --> 00:04:35.280
+to make additional changes to these,
+it won't cause problems.
+
+00:04:35.330 --> 00:04:37.930
+We won't have to break your KEXT,
+you won't have to recompile,
+
+00:04:37.930 --> 00:04:39.510
+you won't have to deal with any of that.
+
+00:04:40.700 --> 00:04:42.360
+There are five main network KPIs.
+
+00:04:42.550 --> 00:04:45.280
+There's the Network Interface
+KPI for providing new interfaces
+
+00:04:45.280 --> 00:04:46.600
+to the networking stack.
+
+00:04:46.610 --> 00:04:49.090
+There's the Socket KPI for
+interacting with sockets in
+
+00:04:49.150 --> 00:04:51.600
+the stack inside the kernel.
+
+00:04:51.610 --> 00:04:55.440
+This is commonly used for
+network file systems such as NFS,
+
+00:04:55.440 --> 00:04:56.600
+AFP, and SMB.
+
+00:04:57.800 --> 00:05:09.800
+[Transcript missing]
+
+00:05:10.320 --> 00:05:13.990
+And finally we have the Network Interface
+Filter which gives you an ability to
+
+00:05:14.080 --> 00:05:16.780
+filter packets at the interface layer.
+
+00:05:16.850 --> 00:05:20.640
+There are a number of additional helper
+KPIs for getting access to various
+
+00:05:20.640 --> 00:05:26.340
+things such as mBuffs or communicating
+with a user daemon in user space.
+
+00:05:29.170 --> 00:05:31.330
+So we have a diagram of
+the networking stack here,
+
+00:05:31.330 --> 00:05:33.420
+and at the top layer we have the sockets.
+
+00:05:33.430 --> 00:05:36.540
+The items in blue can be
+provided by Kernel Extensions.
+
+00:05:36.620 --> 00:05:39.960
+So the Kernel Extensions can
+interact with the socket,
+
+00:05:39.960 --> 00:05:43.460
+they can create a socket filter,
+they can create an IP filter,
+
+00:05:43.470 --> 00:05:47.840
+they can create what we call plumbers,
+which I'll go into a little bit later,
+
+00:05:47.840 --> 00:05:51.170
+as well as interfaces
+and interface filters.
+
+00:05:52.700 --> 00:05:55.940
+So the Network Interface layer,
+it's actually broken up
+
+00:05:56.020 --> 00:05:58.600
+into two different sections
+or two different layers.
+
+00:05:58.690 --> 00:06:02.040
+There's the Interface layer,
+which has the interface itself,
+
+00:06:02.070 --> 00:06:04.600
+such as an Ethernet
+interface or PPP interface.
+
+00:06:04.600 --> 00:06:06.600
+And then there's the Plumber layer.
+
+00:06:06.720 --> 00:06:09.840
+And the Plumber is the glue
+between a specific protocol,
+
+00:06:09.840 --> 00:06:12.600
+such as IP, and an interface,
+such as Ethernet.
+
+00:06:12.600 --> 00:06:14.750
+So ideally the interface,
+such as Ethernet,
+
+00:06:14.750 --> 00:06:18.180
+would know nothing about the protocol,
+and the protocol shouldn't know
+
+00:06:18.180 --> 00:06:19.600
+anything about the interface.
+
+00:06:19.600 --> 00:06:23.760
+it's the plumber's responsibility
+to tie these two things together.
+
+00:06:24.510 --> 00:06:27.100
+If you're familiar with the
+Data Link Interface Layer,
+
+00:06:27.210 --> 00:06:31.390
+one of the things we've done is
+eliminate the Interface Family Modules.
+
+00:06:31.400 --> 00:06:34.200
+We found that a lot of the
+functionality that was provided by the
+
+00:06:34.210 --> 00:06:38.400
+Interface Family Module was already,
+was usually tied to the interface.
+
+00:06:38.400 --> 00:06:41.500
+So we just went ahead and rolled all
+that functionality into the interface,
+
+00:06:41.500 --> 00:06:44.400
+which makes it a lot easier to provide
+a new interface because instead
+
+00:06:44.400 --> 00:06:47.440
+of having to write an interface
+and an Interface Family Module,
+
+00:06:47.770 --> 00:06:49.800
+you just do it all in the interface.
+
+00:06:50.540 --> 00:06:52.640
+We've also eliminated DL tags.
+
+00:06:52.720 --> 00:06:57.490
+So when you're sending or receiving,
+the packets will--what used to be a
+
+00:06:57.490 --> 00:07:01.690
+DL tag is now identified by both the
+interface and the protocol family.
+
+00:07:03.670 --> 00:07:07.400
+So at the bottom of the stack
+we have Network Interfaces.
+
+00:07:07.460 --> 00:07:10.140
+And the Network Interface KPI gives
+you the ability to provide new
+
+00:07:10.140 --> 00:07:12.700
+interfaces to the networking stack.
+
+00:07:12.740 --> 00:07:15.840
+A Network Interface has five
+primary responsibilities.
+
+00:07:15.880 --> 00:07:19.200
+Network Interface is responsible for
+inputting packets into the stack,
+
+00:07:19.250 --> 00:07:22.360
+as well as demuxing the packets
+or determining which protocol
+
+00:07:22.940 --> 00:07:25.420
+a specific packet belongs to.
+
+00:07:26.380 --> 00:07:30.860
+As part of the DMUX, it has to handle,
+add, and delete protocols so that it can
+
+00:07:30.860 --> 00:07:35.150
+keep track of the DMUX descriptor
+mapping to protocol family mapping so
+
+00:07:35.150 --> 00:07:37.560
+it can match packets when they come in.
+
+00:07:39.180 --> 00:07:42.360
+The interface is also responsible
+for framing the outbound packets,
+
+00:07:42.530 --> 00:07:44.890
+basically putting an
+interface header on it,
+
+00:07:44.890 --> 00:07:49.580
+as well as outputting the actual
+packets and handling iOctals for cases
+
+00:07:49.660 --> 00:07:54.900
+where multicast filterless changes
+or other state changes are requested.
+
+00:07:57.270 --> 00:08:01.520
+The network interface is
+documented in net/kpi_interface.h
+
+00:08:01.520 --> 00:08:03.250
+in the Kernel Framework.
+
+00:08:06.180 --> 00:08:08.660
+Network interfaces go
+through a typical life cycle.
+
+00:08:08.740 --> 00:08:12.090
+The network interface is allocated,
+and then various parameters and
+
+00:08:12.090 --> 00:08:14.100
+properties of that interface are set.
+
+00:08:14.150 --> 00:08:17.200
+Once the interface is set up correctly,
+the interface is attached
+
+00:08:17.290 --> 00:08:18.780
+to the networking stack.
+
+00:08:18.780 --> 00:08:22.910
+At that point, the protocols attach,
+and then packets are sent and received,
+
+00:08:22.910 --> 00:08:25.410
+and then the interface
+can request a detach.
+
+00:08:25.460 --> 00:08:29.180
+The protocols detach from the interface,
+and then the interface itself
+
+00:08:29.180 --> 00:08:31.570
+is detached from the stack.
+
+00:08:40.600 --> 00:08:40.770
+So to allocate an interface,
+there's an IFNET allocate function and
+
+00:08:40.770 --> 00:08:42.070
+you fill out an IFNET init parameter,
+a param structure that defines most of
+
+00:08:42.080 --> 00:08:45.040
+the initial parameters of the interface.
+
+00:08:45.120 --> 00:08:48.360
+Part of that is a unique
+ID and an interface family.
+
+00:08:48.420 --> 00:08:51.400
+Right now,
+the networking stack keeps pointers
+
+00:08:51.420 --> 00:08:55.920
+to the network interface all over
+the place and it doesn't properly ref
+
+00:08:56.040 --> 00:08:59.080
+count its references to the interface.
+
+00:08:59.120 --> 00:09:02.320
+So we can't just get rid of the
+interface when your interface goes away.
+
+00:09:02.370 --> 00:09:03.400
+We end up recycling it.
+
+00:09:03.600 --> 00:09:05.670
+In the future,
+we hope to get rid of this,
+
+00:09:05.670 --> 00:09:07.830
+but for now we're kind of stuck with it.
+
+00:09:08.200 --> 00:09:11.060
+There are some little
+gotchas though with this.
+
+00:09:11.110 --> 00:09:14.310
+When you're allocating an
+interface and you specify a
+
+00:09:14.310 --> 00:09:18.220
+unique ID and an interface family,
+there must not be another interface
+
+00:09:18.220 --> 00:09:21.990
+that's currently attached with that
+unique ID and interface family.
+
+00:09:22.070 --> 00:09:24.510
+If there is an interface
+and it's detaching,
+
+00:09:24.540 --> 00:09:27.930
+then you may block until that
+detach is completed so that we can
+
+00:09:27.940 --> 00:09:30.140
+recycle to you the same interface.
+
+00:09:30.220 --> 00:09:34.690
+Again, the recycle mechanism is temporary
+and we provide an IFNET reference
+
+00:09:34.690 --> 00:09:38.000
+and IFNET release for handling
+the reference counting.
+
+00:09:38.120 --> 00:09:41.850
+For now, when IFNET release reaches zero,
+the interface gets recycled.
+
+00:09:41.990 --> 00:09:45.200
+In the future, we will free it.
+
+00:09:45.260 --> 00:09:49.250
+After you've allocated the interface,
+you can set additional properties.
+
+00:09:51.280 --> 00:09:53.320
+Once you've set up the interface
+the way that you want it,
+
+00:09:53.370 --> 00:09:57.000
+you can use IFNET attach to attach
+the interface to the networking stack.
+
+00:09:57.080 --> 00:10:00.170
+You can also specify a link
+layer address that will be
+
+00:10:00.170 --> 00:10:02.200
+associated with that interface.
+
+00:10:02.390 --> 00:10:05.560
+At this point the interface now
+appears in ifconfig and a kernel
+
+00:10:05.560 --> 00:10:10.460
+event gets generated to notify the
+stack and people in user space,
+
+00:10:10.560 --> 00:10:14.400
+or processes in user space,
+that a new interface has attached.
+
+00:10:14.400 --> 00:10:17.850
+And that may trigger protocols to attach.
+
+00:10:19.250 --> 00:10:21.510
+The protocol attaches usually
+triggered from user space in
+
+00:10:21.510 --> 00:10:25.210
+response to a kernel event that
+an interface has been attached.
+
+00:10:25.570 --> 00:10:28.730
+The Plumber code is responsible
+for handling the attach.
+
+00:10:28.820 --> 00:10:33.140
+Its Plumb function gets called to
+attach the protocol to the interface,
+
+00:10:33.250 --> 00:10:37.620
+which in turn triggers the
+interface's add protocol function.
+
+00:10:37.800 --> 00:10:43.300
+The interfaces add protocol function
+gets past a list of Dmux descriptors
+
+00:10:43.360 --> 00:10:47.940
+and those Dmux descriptors then
+map to a specific protocol family.
+
+00:10:48.060 --> 00:10:52.090
+It's the interface's responsibility to
+keep track of those mappings so that
+
+00:10:52.150 --> 00:10:58.100
+when the interface's Dmux function gets
+called to match a packet to a protocol,
+
+00:10:58.110 --> 00:11:01.050
+it can refer to that list that it stored.
+
+00:11:02.500 --> 00:11:05.190
+The protocol detach is also
+handled by the plumber.
+
+00:11:05.380 --> 00:11:09.800
+The plumber's unplumb function is called,
+which then calls a function to detach
+
+00:11:09.800 --> 00:11:12.200
+the protocol from the interface.
+
+00:11:12.320 --> 00:11:14.960
+The interface's delete
+protocol function gets called,
+
+00:11:15.010 --> 00:11:18.020
+which gives the interface an
+opportunity to clean up that demux
+
+00:11:18.110 --> 00:11:20.120
+descriptor to protocol family mapping.
+
+00:11:20.920 --> 00:11:23.400
+Once this is done,
+the protocol's detached callback is
+
+00:11:23.400 --> 00:11:27.580
+called to notify the protocol that it
+has been detached from the interface.
+
+00:11:29.520 --> 00:11:34.900
+The outbound packet path
+is a little bit complex.
+
+00:11:34.930 --> 00:11:40.250
+The protocol calls ifnet output,
+and ifnet output calls any interface
+
+00:11:40.250 --> 00:11:43.500
+filters pre-output functions
+and give the filters a chance
+
+00:11:43.600 --> 00:11:48.020
+to process the packet before an
+interface header has been prepended.
+
+00:11:48.340 --> 00:11:50.590
+Once that's done,
+the protocol's pre-output
+
+00:11:50.710 --> 00:11:52.080
+function is called.
+
+00:11:52.110 --> 00:11:54.860
+The protocol's pre-output function
+is responsible for determining the
+
+00:11:54.900 --> 00:11:56.780
+destination link layer address.
+
+00:11:56.800 --> 00:11:59.880
+This may require performing
+an ARP or whatever,
+
+00:11:59.880 --> 00:12:02.280
+neighborhood discovery for IPv6.
+
+00:12:02.280 --> 00:12:07.020
+The protocol's pre-output
+function is also responsible
+
+00:12:07.120 --> 00:12:10.250
+for determining the frame type.
+
+00:12:10.490 --> 00:12:13.470
+From there,
+the destination link layer address
+
+00:12:13.830 --> 00:12:16.770
+and the frame type are passed on
+to the interface's framer function,
+
+00:12:16.840 --> 00:12:19.480
+which then generates
+the interface header.
+
+00:12:19.790 --> 00:12:21.480
+At that point,
+the interface filters are all
+
+00:12:21.490 --> 00:12:25.490
+given an opportunity to filter
+the fully formed packet before
+
+00:12:25.490 --> 00:12:29.490
+the interface's output function
+is called to transmit the packet.
+
+00:12:30.520 --> 00:12:32.520
+On the inbound side,
+the driver is responsible
+
+00:12:32.600 --> 00:12:37.310
+for calling IFNET input to
+pass the packet to the stack.
+
+00:12:37.470 --> 00:12:41.260
+I have an input queues the packet
+and at a later time the input thread
+
+00:12:41.350 --> 00:12:43.560
+comes along and dequeues the packet.
+
+00:12:43.670 --> 00:12:47.080
+It then calls the interface's
+demux function to determine which
+
+00:12:47.080 --> 00:12:48.910
+protocol that packet belongs to.
+
+00:12:49.300 --> 00:12:52.000
+The protocol's interface
+filters are then called,
+
+00:12:52.000 --> 00:12:56.300
+and finally the protocol's
+input function is called.
+
+00:12:58.970 --> 00:13:03.880
+To request a detach from the stack,
+the driver can call ifnet detach.
+
+00:13:03.910 --> 00:13:06.960
+The detaches are
+asynchronous with a callback.
+
+00:13:08.000 --> 00:13:10.590
+When you call ifnet detach,
+there's a kernel event that
+
+00:13:10.640 --> 00:13:14.450
+gets generated to notify
+the stack and processes that
+
+00:13:14.890 --> 00:13:16.260
+the interface is going away.
+
+00:13:16.340 --> 00:13:20.940
+And this can lead to the protocol-- this
+leads to the protocols being detached.
+
+00:13:20.980 --> 00:13:22.980
+Once all of the protocols
+have been detached,
+
+00:13:23.030 --> 00:13:26.200
+the interface is removed
+from the list of interfaces.
+
+00:13:26.470 --> 00:13:29.400
+and the interfaces detach function
+is called back to let the interface
+
+00:13:29.400 --> 00:13:32.680
+know that it's safe to unload and
+that it won't be called again.
+
+00:13:32.740 --> 00:13:36.350
+At this point the stack releases its
+reference on the interface and if
+
+00:13:36.350 --> 00:13:40.350
+there are no other references the
+interface is either recycled or freed.
+
+00:13:42.520 --> 00:13:45.990
+There are some locking considerations
+when you're working with or supplying
+
+00:13:45.990 --> 00:13:48.540
+an interface to the networking stack.
+
+00:13:49.160 --> 00:13:52.020
+The access to your network
+interface is not serialized,
+
+00:13:52.070 --> 00:13:55.140
+so you need to protect any
+of your data structures.
+
+00:13:55.210 --> 00:13:58.900
+There are also some limitations in
+what you can do from your callbacks.
+
+00:13:58.960 --> 00:14:02.420
+You cannot add another interface or add
+a protocol from any of the callbacks that
+
+00:14:02.430 --> 00:14:05.520
+you supply through the network interface.
+
+00:14:05.790 --> 00:14:08.660
+In addition, if you're going to try
+and detach an interface,
+
+00:14:08.720 --> 00:14:13.290
+a protocol, or an interface filter,
+these operations will be delayed.
+
+00:14:14.030 --> 00:14:16.460
+You do get some
+protection with the demux.
+
+00:14:16.670 --> 00:14:19.010
+Your demux function will never
+be called at the same time that
+
+00:14:19.070 --> 00:14:23.170
+either your add protocol or delete
+protocol functions are being called.
+
+00:14:24.860 --> 00:14:26.620
+In addition,
+your add protocol function will never
+
+00:14:26.620 --> 00:14:29.100
+be called at the same time as your
+delete protocol function is called.
+
+00:14:29.750 --> 00:14:33.310
+So if you're using a linked list or
+something to keep track of the demux
+
+00:14:33.310 --> 00:14:37.780
+descriptor to protocol family mappings,
+you can manipulate that list in your
+
+00:14:37.780 --> 00:14:42.210
+add and delete protocol functions
+without worrying about locking it.
+
+00:14:43.890 --> 00:14:46.540
+Moving up the stack a little bit more,
+we have the Protocol Plumbers,
+
+00:14:46.590 --> 00:14:51.860
+which are responsible for
+gluing an interface to Protocol.
+
+00:14:52.050 --> 00:14:57.300
+and these have the knowledge
+of how a specific protocol
+
+00:14:57.400 --> 00:14:59.500
+runs over a specific interface.
+
+00:14:59.560 --> 00:15:03.580
+This is where knowledge of how to
+perform ARP or neighbor discovery or in
+
+00:15:03.580 --> 00:15:07.480
+the case of Apple talk AARP would live.
+
+00:15:08.620 --> 00:15:11.860
+The protocol plumber registers
+a plumb and an unplumb function,
+
+00:15:11.970 --> 00:15:15.010
+and the plumb function is responsible
+for attaching the protocol,
+
+00:15:15.020 --> 00:15:18.370
+and an unplumb function is responsible
+for detaching the protocol.
+
+00:15:18.530 --> 00:15:22.630
+The protocol plumbers are
+documented in net/kpi_protocol.h
+
+00:15:22.670 --> 00:15:24.370
+in the Kernel Framework.
+
+00:15:25.800 --> 00:15:30.920
+The Plum function typically calls
+IFNET attach protocol and it specifies a
+
+00:15:30.920 --> 00:15:35.250
+list of demux descriptors which describe
+in an interface specific way the type
+
+00:15:35.310 --> 00:15:38.880
+of packets that this protocol wants.
+
+00:15:40.040 --> 00:15:42.820
+The plumber also specifies an
+input function that will get
+
+00:15:42.820 --> 00:15:46.190
+called for any of the packets that
+are received for this protocol,
+
+00:15:46.240 --> 00:15:49.720
+as well as a pre-output function,
+an event function for handling
+
+00:15:49.760 --> 00:15:53.070
+events on the interface,
+an ioctyl for handling any
+
+00:15:53.200 --> 00:15:57.860
+protocol-specific event,
+ioctyls on that interface,
+
+00:15:57.900 --> 00:16:02.100
+and a detached function to get notified
+when the protocol has been detached.
+
+00:16:04.650 --> 00:16:07.310
+The protocol's input
+function is important.
+
+00:16:07.570 --> 00:16:11.500
+This is where any ARP packets get
+handled or something similar depending
+
+00:16:11.500 --> 00:16:13.500
+on which protocol you're supporting.
+
+00:16:13.500 --> 00:16:15.910
+In addition,
+if you need to strip any headers off
+
+00:16:15.910 --> 00:16:19.720
+or do anything else so that you can
+just pass a raw packet to the protocol,
+
+00:16:19.990 --> 00:16:25.500
+you do that in the Plumber input
+function before you call ProtoInput.
+
+00:16:25.500 --> 00:16:29.020
+ProtoInput is the function that
+you use to pass a packet to a
+
+00:16:29.020 --> 00:16:33.500
+protocol once you've taken anything
+out that's interface specific.
+
+00:16:35.220 --> 00:16:37.790
+The protocol plumber's pre-output
+function gets called on the
+
+00:16:37.790 --> 00:16:43.100
+outbound path just before the
+framer function for the interface.
+
+00:16:43.100 --> 00:16:47.100
+And this gives the protocol plumber
+an opportunity to perform any ARPs.
+
+00:16:47.100 --> 00:16:52.200
+The protocol plumber is responsible
+for determining the destination link
+
+00:16:52.200 --> 00:16:55.100
+layer address and the frame type.
+
+00:16:55.100 --> 00:16:58.970
+So that those can be passed to
+the interface framer function.
+
+00:17:00.700 --> 00:17:04.990
+When you're working
+with a protocol plumber,
+
+00:17:04.990 --> 00:17:08.790
+there are a number of
+locking considerations.
+
+00:17:09.060 --> 00:17:14.470
+The unregister is synchronous and
+the unregister won't actually detach
+
+00:17:14.580 --> 00:17:16.440
+your protocols from interfaces.
+
+00:17:16.490 --> 00:17:19.360
+So you need to keep account of how
+many times you've attached if you're
+
+00:17:19.360 --> 00:17:23.220
+supplying any function pointers such
+as the input or pre-output functions.
+
+00:17:23.280 --> 00:17:25.710
+Because until you've been
+detached from every interface,
+
+00:17:25.770 --> 00:17:27.340
+your code's still going to get called.
+
+00:17:27.390 --> 00:17:31.780
+And if you unload before
+you've been detached,
+
+00:17:31.830 --> 00:17:34.590
+you're going to run into a panic.
+
+00:17:35.750 --> 00:17:37.340
+There are some restrictions
+in what you can do in your
+
+00:17:37.490 --> 00:17:39.520
+plumb and unplumb functions.
+
+00:17:39.560 --> 00:17:42.060
+You really,
+you must not try and register or
+
+00:17:42.060 --> 00:17:46.640
+unregister another plumber and you
+also cannot trigger a plumb or unplumb
+
+00:17:46.700 --> 00:17:49.440
+function for any other protocols.
+
+00:17:49.450 --> 00:17:50.880
+If you do this you'll
+run into a deadlock.
+
+00:17:57.410 --> 00:18:01.060
+At the top layer we have sockets
+and the socket KPI gives you access
+
+00:18:01.060 --> 00:18:03.890
+to sockets inside of the kernel.
+
+00:18:18.430 --> 00:18:18.430
+The KPI is based on the user space APIs,
+and it only lets you get
+
+00:18:18.430 --> 00:18:18.430
+access as a client of a socket.
+
+00:18:18.430 --> 00:18:18.430
+You can't implement a protocol
+and interact with a socket in
+
+00:18:18.430 --> 00:18:18.430
+the ways that a protocol would.
+
+00:18:18.520 --> 00:18:22.540
+In place of a struck socket pointer,
+you now use a socket T.
+
+00:18:22.560 --> 00:18:25.560
+In user space, of course,
+you use file descriptors.
+
+00:18:25.600 --> 00:18:28.780
+But since this -- in the kernel,
+since the layout of a
+
+00:18:28.780 --> 00:18:33.980
+socket structure is private,
+we're moving to the opaque type socket T.
+
+00:18:34.550 --> 00:18:36.600
+Sockets go through a typical life cycle.
+
+00:18:36.630 --> 00:18:40.260
+The socket is created,
+various options are set.
+
+00:18:40.260 --> 00:18:43.880
+The socket is connected, data is sent,
+data is received,
+
+00:18:43.910 --> 00:18:45.630
+and the socket is closed.
+
+00:18:45.740 --> 00:18:51.390
+The socket KPI is documented in
+sys/kpisocket.h in the Kernel Framework.
+
+00:18:53.810 --> 00:18:56.440
+To create a socket,
+we use the function sock socket.
+
+00:18:56.440 --> 00:19:00.350
+It's very similar to the
+socket function in user space.
+
+00:19:00.380 --> 00:19:05.000
+The major difference is that it allows
+you to specify an up call function.
+
+00:19:05.040 --> 00:19:09.880
+And the up call function will let you
+get notification when data is ready.
+
+00:19:09.930 --> 00:19:13.380
+So in this example,
+we're creating a TCP socket.
+
+00:19:13.410 --> 00:19:15.780
+And we're going to get back the socket.
+
+00:19:15.790 --> 00:19:18.420
+We're passing in my up call
+as the up call function.
+
+00:19:18.440 --> 00:19:22.270
+And my cookie is a parameter that will
+get passed to the up call function.
+
+00:19:23.990 --> 00:19:27.140
+The Socket Sup call gets called
+when either data is waiting to be
+
+00:19:27.170 --> 00:19:31.640
+read or a connection is completed.
+
+00:19:31.730 --> 00:19:33.910
+Access to your upcall
+function is not serialized,
+
+00:19:33.910 --> 00:19:36.450
+so if you're going to be
+manipulating data in your upcall,
+
+00:19:36.500 --> 00:19:38.570
+be sure to take any locks.
+
+00:19:39.630 --> 00:19:41.430
+The upcall is also
+called on the fast path.
+
+00:19:41.500 --> 00:19:47.060
+If you make a blocking call in here,
+you'll actually stop all incoming data if
+
+00:19:47.120 --> 00:19:49.400
+you make a blocking call in the socket.
+
+00:19:49.430 --> 00:19:50.850
+In addition,
+if you do any processing that's
+
+00:19:50.890 --> 00:19:53.150
+going to take a little while,
+you should really do it
+
+00:19:53.150 --> 00:19:56.170
+elsewhere because you're going
+to hold up a lot of other stuff.
+
+00:19:57.040 --> 00:19:59.720
+In this case we have an up call function.
+
+00:19:59.720 --> 00:20:04.810
+The state's stored in the cookie and we
+check to see if we're connected and then
+
+00:20:04.900 --> 00:20:06.860
+we perform a read after taking a lock.
+
+00:20:07.120 --> 00:20:08.860
+We should take a lock
+where the comment's at.
+
+00:20:08.860 --> 00:20:11.800
+And then we deal with some of the data
+and then we would release the lock.
+
+00:20:16.020 --> 00:20:19.740
+You can use sock-set-sock-opt and
+sock-ioctal to set various options.
+
+00:20:19.880 --> 00:20:23.820
+There's also a sock-get-sock-opt
+to retrieve options.
+
+00:20:23.890 --> 00:20:26.670
+In this example,
+we can see sock-ioctal is being used
+
+00:20:26.910 --> 00:20:30.240
+to set the socket to non-blocking I/O.
+
+00:20:30.280 --> 00:20:35.620
+And the sock-set-sock-opt is
+being used to set the receive
+
+00:20:35.680 --> 00:20:37.960
+buffer size to about 32K.
+
+00:20:38.000 --> 00:20:40.640
+There is no...
+
+00:20:41.960 --> 00:20:45.770
+The function that you'd usually use to
+make a file descriptor non-blocking isn't
+
+00:20:45.780 --> 00:20:50.250
+available in the kernel because you're
+not working with a file descriptor here,
+
+00:20:50.250 --> 00:20:51.420
+you just have a raw socket.
+
+00:20:51.460 --> 00:20:56.610
+So in order to set non-blocking I/O,
+you really need to call sock_ioctal.
+
+00:20:58.320 --> 00:21:00.760
+Connecting a socket is
+pretty straightforward.
+
+00:21:00.860 --> 00:21:03.760
+Sock connect is based on
+the connect user space call.
+
+00:21:03.950 --> 00:21:06.340
+The difference between SOC connect
+and the old ESSO connect,
+
+00:21:06.340 --> 00:21:09.770
+if you've done any programming in
+the kernel before with sockets,
+
+00:21:09.770 --> 00:21:13.840
+is that SOC connect will actually block
+if the socket is a blocking socket.
+
+00:21:13.900 --> 00:21:17.290
+If you set the socket to non-blocking
+or you specify message "Don't
+
+00:21:17.290 --> 00:21:20.660
+wait" as the last parameter,
+then this will give you
+
+00:21:20.660 --> 00:21:22.580
+a non-blocking connect.
+
+00:21:23.680 --> 00:21:25.930
+You can use the function sock is
+connected to determine whether or not
+
+00:21:26.020 --> 00:21:28.860
+the socket has completed its connection.
+
+00:21:29.610 --> 00:21:32.510
+And your up call will get called
+when this connection completes
+
+00:21:32.510 --> 00:21:33.970
+with either success or failure.
+
+00:21:35.510 --> 00:21:37.500
+For sending,
+there are two different functions.
+
+00:21:37.530 --> 00:21:41.460
+Both of them are based on send message,
+so they use a message header.
+
+00:21:41.560 --> 00:21:44.290
+Socks_send will send data that's
+stored in a kernel buffer,
+
+00:21:44.320 --> 00:21:48.890
+and socks_send_mbuff will send data
+that's stored in a chain of mBuffs.
+
+00:21:48.980 --> 00:21:51.670
+In this example,
+we're filling out a message header,
+
+00:21:51.670 --> 00:21:56.640
+and we're setting the I/O vec to
+the kernel buffer that we have.
+
+00:21:56.700 --> 00:22:01.900
+And we set up the name to point
+to the destination that we want,
+
+00:22:01.980 --> 00:22:05.030
+and then we call socks_send
+to send the data.
+
+00:22:06.980 --> 00:22:09.390
+Receiving is very similar.
+
+00:22:09.500 --> 00:22:13.100
+There are two receive functions and
+they're based on receive message.
+
+00:22:13.210 --> 00:22:16.440
+So there's SOC_RECEIVE and
+SOC_RECEIVE_MBUFF.
+
+00:22:16.510 --> 00:22:20.750
+SOC_RECEIVE receives data into a Kernel
+Buffer and SOC_RECEIVE_MBUFF receives
+
+00:22:20.860 --> 00:22:24.690
+data into... receives data as the MBUFFs.
+
+00:22:25.800 --> 00:22:33.690
+In this example,
+we're calling sock receive and we're
+
+00:22:33.690 --> 00:22:33.690
+filling out our message header first and
+we're specifying a buffer in the kernel.
+
+00:22:35.830 --> 00:22:39.220
+And when you're all done with the socket,
+you use sock_close.
+
+00:22:39.220 --> 00:22:42.830
+You can't call sock_close on a
+socket that's associated with
+
+00:22:42.880 --> 00:22:46.760
+a file descriptor because that
+will really confuse the kernel.
+
+00:22:46.920 --> 00:22:51.910
+Since this API doesn't do anything
+with the file descriptors,
+
+00:22:52.010 --> 00:22:55.910
+you're going behind the
+file descriptors back.
+
+00:22:58.450 --> 00:23:01.120
+There are some locking considerations.
+
+00:23:01.330 --> 00:23:04.700
+Don't make calls to sockets
+concurrently on different threads.
+
+00:23:04.870 --> 00:23:07.750
+While you're protected in user space
+through the file descriptor layer,
+
+00:23:07.860 --> 00:23:10.420
+if you do this in the kernel,
+we're not going through
+
+00:23:10.420 --> 00:23:13.080
+the file descriptor layer,
+so that protection is pretty much gone.
+
+00:23:13.140 --> 00:23:15.840
+And especially if you're
+reading on one socket and close
+
+00:23:15.960 --> 00:23:18.820
+the socket on another socket,
+you're going to run into a
+
+00:23:18.820 --> 00:23:20.670
+kernel panic pretty quickly.
+
+00:23:20.900 --> 00:23:41.000
+[Transcript missing]
+
+00:23:43.650 --> 00:23:46.280
+So we have a socket filter
+KPI that lets you filter data and
+
+00:23:46.280 --> 00:23:50.830
+connections and other socket related
+operations at the socket layer.
+
+00:23:52.210 --> 00:23:55.160
+These are commonly used for implementing
+a socket layer firewall so you
+
+00:23:55.160 --> 00:23:57.510
+don't have to deal with keeping
+track of all the state yourself.
+
+00:23:57.560 --> 00:23:59.900
+You can actually let the stack do that.
+
+00:24:00.010 --> 00:24:04.180
+You can also use it for implementing
+privacy controls or content filters
+
+00:24:04.270 --> 00:24:06.460
+as well as transparent proxies.
+
+00:24:06.570 --> 00:24:11.530
+And the socket filter KPI is
+documented in sys/kpi_socketfilter.h
+
+00:24:11.550 --> 00:24:13.410
+in the Kernel Framework.
+
+00:24:14.800 --> 00:24:20.400
+[Transcript missing]
+
+00:24:38.590 --> 00:24:38.590
+So, I'm going to start off with a little
+bit of a brief introduction to the NKEs.
+
+00:24:38.590 --> 00:24:38.590
+I'm going to start off with a little
+bit of a brief introduction to the NKEs.
+
+00:24:39.070 --> 00:24:41.070
+If you specify that you
+want a global filter,
+
+00:24:41.070 --> 00:24:44.190
+that global filter will then be attached
+to any new sockets that are created
+
+00:24:44.260 --> 00:24:46.440
+after you've registered your filter.
+
+00:24:46.480 --> 00:24:49.760
+And if you specify a programmatic filter,
+those filters will be attached
+
+00:24:49.880 --> 00:24:54.200
+when somebody uses the SONKE socket
+option to request your filter
+
+00:24:54.280 --> 00:24:56.210
+be attached to their socket.
+
+00:24:57.500 --> 00:25:11.300
+[Transcript missing]
+
+00:25:23.770 --> 00:25:23.770
+When a socket filter is
+attached to a socket,
+
+00:25:23.770 --> 00:25:23.770
+the attach function gets called
+and this gives the socket filter an
+
+00:25:23.770 --> 00:25:23.770
+opportunity to allocate some data for
+storing state that will be associated
+
+00:25:23.770 --> 00:25:23.770
+with that connection to that socket.
+
+00:25:27.250 --> 00:25:29.230
+If you want to,
+you can return an error to
+
+00:25:29.300 --> 00:25:33.080
+prevent your socket filter from
+being attached to the socket.
+
+00:25:36.030 --> 00:25:40.780
+To unregister and detach your sockets,
+you can call SFLT_UNREGISTER.
+
+00:25:40.980 --> 00:25:44.110
+And this is also an asynchronous
+unregister with a callback to
+
+00:25:44.110 --> 00:25:45.900
+let you know when it's completed.
+
+00:25:46.040 --> 00:25:49.030
+When you call this function,
+it will prevent any more sockets from
+
+00:25:49.030 --> 00:25:52.280
+being attached to your socket filter,
+and it'll start detaching your
+
+00:25:52.370 --> 00:25:55.900
+socket filter from all of the sockets
+that it's currently attached to.
+
+00:25:55.900 --> 00:25:59.610
+So your socket filter will get
+detached when either the socket is
+
+00:25:59.690 --> 00:26:01.890
+closed or the filter is unregistered.
+
+00:26:01.900 --> 00:26:05.820
+The SF_UNREGISTERED callback
+that you can specify indicates
+
+00:26:05.920 --> 00:26:09.900
+that the detach has been complete
+and it's safe for you to unload.
+
+00:26:12.260 --> 00:26:14.940
+For filtering inbound data,
+in the past you had to
+
+00:26:15.900 --> 00:26:19.860
+filter or patch SB append,
+SB append data, SB append control.
+
+00:26:20.030 --> 00:26:22.340
+It was kind of complicated
+and convoluted.
+
+00:26:22.390 --> 00:26:26.790
+There's just one inbound data
+filter now called SFDataIn.
+
+00:26:27.790 --> 00:26:31.930
+This function is not called in the
+context of the socket owners process.
+
+00:26:32.030 --> 00:26:37.890
+So looking at the proc info to get
+information is not going to be useful.
+
+00:26:38.020 --> 00:26:41.290
+From this function you can modify
+the data in the mbuf chain.
+
+00:26:41.350 --> 00:26:43.800
+The return value from this
+function is very important.
+
+00:26:43.920 --> 00:26:46.080
+If you return zero,
+the data continues being
+
+00:26:46.080 --> 00:26:47.300
+processed as normal.
+
+00:26:47.360 --> 00:26:50.900
+If you return eGIS return,
+the processing is going to stop and
+
+00:26:50.900 --> 00:26:53.370
+it's going to assume that you've
+taken responsibility for that data
+
+00:26:53.640 --> 00:26:55.900
+and that data will not be freed.
+
+00:26:56.010 --> 00:26:59.540
+If you return any other error,
+the processing will stop
+
+00:26:59.540 --> 00:27:01.230
+and the data will be freed.
+
+00:27:01.410 --> 00:27:05.520
+If you do swallow the data by
+returning an error or e-just-return,
+
+00:27:05.520 --> 00:27:09.610
+the process that owns the
+socket won't be woken up.
+
+00:27:11.080 --> 00:27:13.870
+If you need to inject data later,
+you can use the
+
+00:27:13.920 --> 00:27:16.370
+SOC_INJECT_DATA_IN function.
+
+00:27:24.500 --> 00:27:24.500
+For outbound data, it's much the same.
+
+00:27:24.500 --> 00:27:24.510
+There's an SF data out
+callback that you can specify.
+
+00:27:24.510 --> 00:27:26.960
+This is usually called in the context
+of the socket owner's process.
+
+00:27:27.060 --> 00:27:30.520
+The data can be modified and the return
+values are just the same for data out.
+
+00:27:30.720 --> 00:27:32.840
+If you return a zero,
+then it processes as normal.
+
+00:27:32.840 --> 00:27:37.720
+If you return e just return,
+then the processing stops and
+
+00:27:37.810 --> 00:27:39.380
+you're free to hold onto that data.
+
+00:27:39.460 --> 00:27:42.040
+If you return any other value,
+the processing stops
+
+00:27:42.040 --> 00:27:43.220
+and the data gets freed.
+
+00:27:43.530 --> 00:27:47.870
+If you need to later inject some data
+that you had queued or something,
+
+00:27:47.870 --> 00:27:49.940
+you can use sock inject data out.
+
+00:27:51.750 --> 00:27:53.260
+You can also filter binds.
+
+00:27:53.310 --> 00:27:56.390
+This lets you either bind to a
+different address from the requested
+
+00:27:56.390 --> 00:27:58.970
+one or prevent the bind altogether.
+
+00:27:59.060 --> 00:28:01.600
+If you need to bind to
+a different address,
+
+00:28:01.730 --> 00:28:04.790
+call SOC bind again on the same socket,
+but with the new address
+
+00:28:04.820 --> 00:28:08.170
+that you want to bind to,
+and then return e just return.
+
+00:28:08.390 --> 00:28:11.660
+Or if you got an error back from
+your second call to SOC bind,
+
+00:28:11.660 --> 00:28:14.050
+you need to return that error.
+
+00:28:14.220 --> 00:28:17.620
+If you do intercept the bind
+and bind to a different address,
+
+00:28:17.890 --> 00:28:21.920
+you may want to also intercept the
+get SOC name so that you can keep
+
+00:28:22.230 --> 00:28:28.690
+the process thinking that it bound to
+the socket that it tried to bind to.
+
+00:28:31.040 --> 00:28:33.660
+You can also filter connects
+both inbound and outbound.
+
+00:28:33.830 --> 00:28:36.280
+For inbound connects you can
+only allow them or disallow them.
+
+00:28:36.360 --> 00:28:40.620
+You can't change the address that
+the connection is coming in from.
+
+00:28:40.860 --> 00:28:44.450
+For the outbound connections,
+you can allow or disallow.
+
+00:28:44.450 --> 00:28:46.700
+And you can also connect
+to a different address.
+
+00:28:46.700 --> 00:28:48.630
+If you need to connect
+to a different address,
+
+00:28:48.680 --> 00:28:52.060
+call SOC connect again and specify
+the new address and then return
+
+00:28:52.160 --> 00:28:54.350
+eJustReturn if SOC connect succeeded.
+
+00:28:54.560 --> 00:28:57.470
+If SOC connect failed,
+then go ahead and return the error
+
+00:28:57.660 --> 00:28:59.100
+that you got from SOC connect.
+
+00:28:59.320 --> 00:29:03.550
+And again,
+you can intercept getPeerName to keep
+
+00:29:03.550 --> 00:29:07.510
+the process thinking that it connected
+to the address that it had requested.
+
+00:29:09.380 --> 00:29:13.440
+There are some additional
+filter points for sockets.
+
+00:29:13.490 --> 00:29:16.620
+The SF notifies you of
+socket state changes.
+
+00:29:16.790 --> 00:29:20.500
+For example,
+when you're being disconnected or
+
+00:29:20.500 --> 00:29:22.300
+you're in the disconnecting state.
+
+00:29:22.300 --> 00:29:26.890
+You can also intercept socket
+options using the SF set option
+
+00:29:26.890 --> 00:29:29.300
+and SF get option callbacks.
+
+00:29:29.300 --> 00:29:30.290
+You can intercept iOctals.
+
+00:29:30.290 --> 00:29:33.170
+You can either handle them or block them.
+
+00:29:33.300 --> 00:29:37.310
+And you can also intercept listen
+to prevent processes from being
+
+00:29:37.310 --> 00:29:39.440
+able to create listening sockets.
+
+00:29:41.910 --> 00:29:42.420
+Moving.
+
+00:29:42.420 --> 00:29:44.930
+So moving down the
+stack a little bit more,
+
+00:29:44.930 --> 00:29:46.060
+we have IP filters.
+
+00:29:46.060 --> 00:29:49.880
+IP filters give you a chance to
+filter packets at the IP layer.
+
+00:29:50.090 --> 00:29:53.660
+And the really nice thing about
+IP filters is that the packets are
+
+00:29:53.660 --> 00:29:57.510
+passed to you after they've been
+reassembled on the inbound side,
+
+00:29:57.550 --> 00:30:00.030
+so you don't have to deal with fragments.
+
+00:30:00.030 --> 00:30:02.880
+On the outbound side,
+you get the packets before
+
+00:30:02.880 --> 00:30:04.710
+they've been fragmented.
+
+00:30:05.300 --> 00:30:14.790
+and the filter is also
+interface independent,
+
+00:30:14.790 --> 00:30:14.790
+so you don't have to worry about
+attaching a different filter to
+
+00:30:14.790 --> 00:30:14.790
+every single interface that comes
+up and has IP attached to it.
+
+00:30:15.230 --> 00:30:20.340
+You also get an opportunity to process
+the packets both before and after IPSec.
+
+00:30:21.720 --> 00:30:23.500
+The IP filters go through
+a typical life cycle.
+
+00:30:23.650 --> 00:30:26.880
+They're attached to either IPv4 or IPv6.
+
+00:30:26.880 --> 00:30:29.300
+And then they filter
+inbound and outbound data.
+
+00:30:29.300 --> 00:30:31.290
+And then they're detached.
+
+00:30:31.330 --> 00:30:34.960
+They're documented in
+that inet/kpi_ipfilter.h
+
+00:30:34.970 --> 00:30:36.860
+in the Kernel Framework.
+
+00:30:39.970 --> 00:30:45.260
+The IP filters are attached using
+IPF_ADD_V4 and IPF_ADD_V6 and they
+
+00:30:45.300 --> 00:30:50.600
+both use the same structure to define
+a input and output filter function.
+
+00:30:50.700 --> 00:30:53.820
+Calling these functions returns
+a filter ref that you use for
+
+00:30:53.900 --> 00:30:55.380
+later detaching the filter.
+
+00:30:56.900 --> 00:31:12.800
+[Transcript missing]
+
+00:31:13.160 --> 00:31:17.600
+called before we fragment the packet,
+but also before and after
+
+00:31:17.660 --> 00:31:19.780
+we do any IPSec processing.
+
+00:31:19.860 --> 00:31:22.540
+So the function gets called,
+and it's passed in the protocol.
+
+00:31:22.560 --> 00:31:27.700
+And the protocol specifies the protocol
+that we're currently processing at.
+
+00:31:27.700 --> 00:31:31.680
+And you also get an offset from the
+beginning of the packet to that protocol.
+
+00:31:31.680 --> 00:31:35.410
+So the beginning of the mbuf chain
+will always start at the IP header,
+
+00:31:35.490 --> 00:31:36.800
+or IPv6 header.
+
+00:31:36.830 --> 00:31:42.140
+And then for an IPSec packet,
+you might get called
+
+00:31:42.810 --> 00:31:45.570
+once with the ESP header,
+with the offset from the
+
+00:31:45.640 --> 00:31:47.400
+IP packet to the ESP header.
+
+00:31:47.410 --> 00:31:55.360
+And once IPSec has decrypted the packet,
+you'll get called again with TCP or ICMP,
+
+00:31:55.370 --> 00:31:59.690
+and the offset from the
+IP header to the ICMP header.
+
+00:32:01.300 --> 00:32:06.550
+You can use IPF inject input and
+IPF inject output to inject data.
+
+00:32:06.610 --> 00:32:10.960
+With IPF inject input,
+it injects the data right
+
+00:32:10.960 --> 00:32:14.100
+after the packets have been
+reassembled in IP input.
+
+00:32:14.200 --> 00:32:16.530
+If you pass a filter ref,
+it will prevent this packet from
+
+00:32:16.530 --> 00:32:19.660
+getting processed again by both your
+filter and any filters before you.
+
+00:32:19.900 --> 00:32:22.370
+If you've modified the packet,
+you shouldn't pass a filter
+
+00:32:22.370 --> 00:32:25.980
+ref because that'll prevent any
+filters from having a chance to
+
+00:32:25.980 --> 00:32:27.880
+look at the new modified packet.
+
+00:32:30.100 --> 00:32:36.080
+IPF inject output injects the data
+right into the IP output function.
+
+00:32:36.080 --> 00:32:40.490
+And again you can pass a filter ref
+to avoid processing the packets twice.
+
+00:32:41.590 --> 00:32:44.500
+To detach your filter,
+you call IPF remove.
+
+00:32:44.550 --> 00:32:49.050
+This detach is asynchronous and your
+IPF detach callback will get called
+
+00:32:49.150 --> 00:32:53.780
+to notify you when your filter has
+been detached and it's safe to unload.
+
+00:32:57.520 --> 00:32:58.220
+There are some
+considerations with locking.
+
+00:32:58.260 --> 00:33:02.540
+Again, access to your IP filter
+is not serialized,
+
+00:33:02.610 --> 00:33:08.730
+so you need to be sure and protect
+any data structures that you've got.
+
+00:33:08.810 --> 00:33:11.650
+In addition,
+if you're going to call to inject data,
+
+00:33:11.650 --> 00:33:14.650
+you need to drop the locks
+before performing the inject
+
+00:33:14.870 --> 00:33:17.080
+because there's a chance that you
+might get called re-entrantly,
+
+00:33:17.080 --> 00:33:21.020
+and if you try and take your lock again,
+then you end up with a deadlock.
+
+00:33:21.100 --> 00:33:23.420
+This is broken in the WWDC build.
+
+00:33:23.630 --> 00:33:29.790
+You'll need to use the kernel
+that comes as part of the
+
+00:33:29.790 --> 00:33:35.020
+session 103 supplemental stuff.
+
+00:33:37.590 --> 00:33:41.370
+Moving down to the bottom of the
+stack we have the Interface Filters.
+
+00:33:41.370 --> 00:33:44.340
+The Interface Filters let you
+filter inbound and outbound
+
+00:33:44.680 --> 00:33:46.680
+packets at the interface layer.
+
+00:33:46.680 --> 00:33:49.460
+You can also filter the iOctals.
+
+00:33:49.460 --> 00:33:52.870
+Interface Filters are commonly
+used for a packet layer firewall or
+
+00:33:52.870 --> 00:33:56.690
+something like a virtual packet switch.
+
+00:33:57.230 --> 00:34:01.590
+The interface filters are also the
+replacement for the old protocol filter.
+
+00:34:01.890 --> 00:34:04.580
+We no longer have protocol filters.
+
+00:34:05.170 --> 00:34:09.830
+The interface filters are documented
+in net/kpi_interfacefilter.h
+
+00:34:09.920 --> 00:34:11.880
+in the Kernel Framework.
+
+00:34:13.630 --> 00:34:18.410
+To attach an interface filter,
+you fill out an IFF filter structure,
+
+00:34:18.460 --> 00:34:21.810
+and then you call ifltattach.
+
+00:34:22.070 --> 00:34:25.840
+This gives you an opportunity
+to specify a protocol.
+
+00:34:25.840 --> 00:34:30.600
+It's important to note that the
+protocol doesn't specify -- you aren't
+
+00:34:30.600 --> 00:34:32.960
+attached to that protocol attachment.
+
+00:34:33.020 --> 00:34:38.540
+With the old protocol filters,
+if you wanted to attach to IP over EN0,
+
+00:34:38.590 --> 00:34:42.140
+you could only do that when
+IP was attached to EN0.
+
+00:34:42.190 --> 00:34:45.360
+With the new interface filters,
+you can specify that you
+
+00:34:45.360 --> 00:34:48.140
+want to get IP packets,
+and you can attach to EN0
+
+00:34:48.170 --> 00:34:50.190
+even when IP isn't attached.
+
+00:34:50.310 --> 00:34:54.080
+And your filter will remain
+attached until the interface
+
+00:34:54.080 --> 00:34:56.440
+goes away or until you detach it.
+
+00:34:56.490 --> 00:35:00.390
+You just won't receive any packets
+unless IP is actually attached.
+
+00:35:01.250 --> 00:35:05.420
+When you're ready to detach your filter,
+you call iflt_detach.
+
+00:35:05.490 --> 00:35:09.800
+And this is asynchronous with a callback
+to let you know when it's safe to unload.
+
+00:35:10.850 --> 00:35:15.270
+For filtering inbound packets,
+the interfaces demux function
+
+00:35:15.270 --> 00:35:18.540
+gets called first to give it an
+opportunity to match the packet to
+
+00:35:18.540 --> 00:35:23.320
+a protocol so that we can know which
+interface filters to pass this to.
+
+00:35:23.570 --> 00:35:27.180
+If you specify zero for the protocol,
+then you get all packets for any
+
+00:35:27.260 --> 00:35:31.660
+protocol or packets that don't match
+any protocol that's currently attached.
+
+00:35:32.630 --> 00:35:34.840
+Your IFF input function will get called.
+
+00:35:34.990 --> 00:35:37.180
+It's allowed to modify the packet.
+
+00:35:37.180 --> 00:35:40.880
+If it does need to modify the packet,
+it should verify that the
+
+00:35:40.980 --> 00:35:43.330
+checksums are correct,
+if it's going to make any changes
+
+00:35:43.430 --> 00:35:47.490
+that affect the checksums,
+and it should call mbuf_inbound_modified.
+
+00:35:47.670 --> 00:35:50.340
+And this will clear all of the
+checksum flags so that we don't
+
+00:35:50.340 --> 00:35:53.870
+try and perform a hardware checksum
+later and run into problems.
+
+00:35:55.880 --> 00:35:58.690
+The return values are important,
+like in the socket filter.
+
+00:35:58.730 --> 00:36:01.670
+If you return a zero,
+then the processing continues as normal.
+
+00:36:01.840 --> 00:36:04.640
+If you return eJustReturn,
+the processing stops,
+
+00:36:04.700 --> 00:36:05.770
+but the packet's not freed.
+
+00:36:05.800 --> 00:36:08.910
+So you're responsible for either
+queuing it and reinjecting it later,
+
+00:36:08.930 --> 00:36:10.800
+or freeing it,
+or doing whatever you want with it.
+
+00:36:10.800 --> 00:36:12.650
+But you're responsible for freeing it.
+
+00:36:12.800 --> 00:36:17.760
+If you return any other value,
+it'll end up freeing the packet,
+
+00:36:17.830 --> 00:36:19.800
+and the processing will stop.
+
+00:36:22.880 --> 00:36:26.130
+On the outbound side you have two
+different places that you can filter.
+
+00:36:26.200 --> 00:36:31.440
+There's a pre-output function that
+lets you handle the packet before the
+
+00:36:31.440 --> 00:36:35.800
+interfaces framer has had a chance
+to prepend the interface header.
+
+00:36:35.800 --> 00:36:39.260
+On the outbound,
+you also have the IFF output
+
+00:36:39.350 --> 00:36:44.550
+function which gives you a chance
+to process the fully formed packet
+
+00:36:44.550 --> 00:36:47.560
+which includes the interface header.
+
+00:36:48.200 --> 00:36:52.360
+If you're going to modify the packet,
+you should call mbuf outbound finalize,
+
+00:36:52.380 --> 00:36:55.600
+which will force it to do any
+checksums in software that would
+
+00:36:55.600 --> 00:36:57.800
+have been done in hardware,
+so you get a fully formed packet.
+
+00:36:57.930 --> 00:36:59.560
+And it also clears all
+the checksum flags,
+
+00:36:59.560 --> 00:37:02.540
+so if you reinject it somewhere else,
+you don't run into problems.
+
+00:37:02.640 --> 00:37:06.620
+This may perform additional work,
+such as inserting a VLAN header,
+
+00:37:06.890 --> 00:37:11.010
+although those packets probably
+won't get past your filter.
+
+00:37:14.390 --> 00:37:18.170
+The return value is important and it's
+just like the return values for the
+
+00:37:18.170 --> 00:37:21.300
+socket filter and the inbound filter.
+
+00:37:21.390 --> 00:37:24.300
+If you return zero,
+then processing continues as normal.
+
+00:37:24.300 --> 00:37:28.300
+If you return eJustReturn,
+then you get to hold onto the packet.
+
+00:37:28.410 --> 00:37:30.910
+If you return any error value,
+then the packet gets freed
+
+00:37:30.910 --> 00:37:32.300
+and the processing stops.
+
+00:37:34.330 --> 00:37:37.760
+There are some additional places,
+additional filter stuff you can
+
+00:37:37.760 --> 00:37:39.240
+set up at the interface layer.
+
+00:37:39.390 --> 00:37:43.470
+The IFF event lets you receive
+notifications of events on the filter,
+
+00:37:43.710 --> 00:37:46.030
+on the interface.
+
+00:37:46.930 --> 00:37:50.710
+Most common events are protocols
+attaching and detaching and
+
+00:37:50.720 --> 00:37:53.000
+the interface detaching.
+
+00:37:54.530 --> 00:37:59.100
+The IFF Ioctal lets you filter the
+Ioctal functions so you can either
+
+00:37:59.100 --> 00:38:03.110
+intercept and handle your own Ioctals
+or you can intercept Ioctals that
+
+00:38:03.110 --> 00:38:04.500
+would normally go to the interface.
+
+00:38:04.500 --> 00:38:07.200
+If you need to inject
+inbound or outbound data,
+
+00:38:07.320 --> 00:38:12.540
+you can use the IFNET input
+function and IFNET output functions.
+
+00:38:14.820 --> 00:38:18.570
+If you need to communicate
+with a user space process,
+
+00:38:18.570 --> 00:38:22.180
+the easiest way to do that is
+to use the Kernel Control KPI.
+
+00:38:22.520 --> 00:38:25.200
+Kernel Control gives you a
+way to send small messages
+
+00:38:25.200 --> 00:38:28.090
+over a socket to user space.
+
+00:38:28.090 --> 00:38:31.360
+It's commonly used for configuring
+a Kernel Extension or for retrieving
+
+00:38:31.360 --> 00:38:34.080
+information from a Kernel Extension.
+
+00:38:34.180 --> 00:38:38.970
+The Kernel Control KPI is
+documented in sys/kerncontrol.h
+
+00:38:38.990 --> 00:38:40.950
+in the Kernel Framework.
+
+00:38:42.010 --> 00:38:44.780
+Registering a kernel frame--sorry,
+registering a kernel control
+
+00:38:44.920 --> 00:38:47.850
+is done by filling out a
+Kernel Control Register struct
+
+00:38:48.040 --> 00:38:50.600
+and calling control register.
+
+00:38:52.370 --> 00:38:55.410
+This lets your Kernel
+Extension receive notification when
+
+00:38:55.440 --> 00:39:00.000
+a socket connects to your Kernel
+control or when it disconnects.
+
+00:39:00.040 --> 00:39:05.290
+It also lets you receive information
+from user land and you can handle
+
+00:39:05.390 --> 00:39:08.170
+get and set socket options.
+
+00:39:08.900 --> 00:39:14.000
+[Transcript missing]
+
+00:39:18.910 --> 00:39:21.450
+So when your control connect
+function gets called,
+
+00:39:21.450 --> 00:39:24.970
+you can allocate any data that
+you need to associate with that
+
+00:39:25.100 --> 00:39:26.980
+connection to a specific socket.
+
+00:39:27.010 --> 00:39:30.880
+And then you need to free that on
+your control disconnect callback.
+
+00:39:30.900 --> 00:39:35.980
+If you need to send data to the process,
+to the socket, you can use control and
+
+00:39:35.980 --> 00:39:38.380
+Q data and control and Q mbuf.
+
+00:39:38.430 --> 00:39:43.560
+Control and Q data works with a kernel
+buffer and control and Q mbuf works with
+
+00:39:43.790 --> 00:39:46.700
+data that's stored in an mbuf chain.
+
+00:39:48.590 --> 00:39:52.130
+With the kernel control,
+access to it is not serialized,
+
+00:39:52.130 --> 00:39:54.660
+but it is safe to send to
+the client at any time.
+
+00:39:54.720 --> 00:39:59.510
+So, with it not being serialized,
+you really need to protect any data
+
+00:39:59.510 --> 00:40:03.000
+structures that you interact with
+whenever you get a callback to notify
+
+00:40:03.000 --> 00:40:05.200
+you that there's data on the socket.
+
+00:40:08.150 --> 00:40:13.250
+In addition, there's another helper, KPI,
+the protocol layer.
+
+00:40:13.250 --> 00:40:16.410
+And this is documented
+in net/kpi_protocol.h
+
+00:40:16.540 --> 00:40:18.180
+in the Kernel Framework.
+
+00:40:18.210 --> 00:40:22.260
+This supplies to you the hooks for
+injecting packets into a protocol.
+
+00:40:22.310 --> 00:40:25.080
+There are two functions,
+the proto-input function and
+
+00:40:25.080 --> 00:40:27.090
+the proto-inject function.
+
+00:40:27.140 --> 00:40:31.870
+The proto-input function is intended
+for plumbers for passing packets
+
+00:40:32.100 --> 00:40:34.270
+up to IP or IPv6 or even AppleTalk.
+
+00:40:34.650 --> 00:40:37.580
+And they're really meant
+for the inbound packet path.
+
+00:40:37.640 --> 00:40:40.370
+If you're going to be injecting
+packets from anywhere else in the stack
+
+00:40:40.370 --> 00:40:43.070
+where you're not on the inbound path,
+you need to use the
+
+00:40:43.100 --> 00:40:44.600
+proto-inject function.
+
+00:40:44.610 --> 00:40:48.200
+And these are the replacement
+for the net_isr mechanism
+
+00:40:48.200 --> 00:40:52.320
+that used to queue packets and
+then wake up the input thread.
+
+00:40:54.850 --> 00:40:57.510
+In addition,
+there's an MBUF KPI that gives you access
+
+00:40:57.510 --> 00:41:00.360
+to the data that's stored in MBUFs.
+
+00:41:09.570 --> 00:41:09.570
+All of the packets in the stack
+are stored in mBuffs along with a
+
+00:41:09.570 --> 00:41:09.570
+bunch of other useful information.
+
+00:41:10.160 --> 00:41:14.710
+The mbuf KPI is based on the
+original mbuf interfaces and we've
+
+00:41:14.710 --> 00:41:17.200
+added a lot of accessor functions.
+
+00:41:17.200 --> 00:41:23.360
+The accessor functions names are based
+on the field name in the old mbuf.
+
+00:41:23.360 --> 00:41:27.340
+So for example mbuf_length
+gets the length of the mbuf.
+
+00:41:27.460 --> 00:41:30.340
+The headers in the mBufs
+have changed a little bit.
+
+00:41:30.340 --> 00:41:33.000
+And the result of those changes
+may be that you can't store quite
+
+00:41:33.000 --> 00:41:38.190
+as much data in an mBuf that has a
+packet header or even a regular mBuf.
+
+00:41:38.270 --> 00:41:40.490
+And the cluster sizes might also change.
+
+00:41:40.560 --> 00:41:43.350
+So don't make any assumptions
+about the amount of data that
+
+00:41:43.420 --> 00:41:44.760
+you can store in an mBuf.
+
+00:41:44.820 --> 00:41:51.410
+You can use mBufstat to get the values
+of all of the sizes for the various
+
+00:41:51.410 --> 00:41:54.910
+mBufs with headers and clusters.
+
+00:41:55.420 --> 00:41:56.860
+We may be changing these things again.
+
+00:41:56.970 --> 00:42:02.050
+We changed them in Tiger to
+add support for mbuf tags.
+
+00:42:03.610 --> 00:42:09.320
+The MBuff KPI is documented
+in sys/kpi_mbuff.h
+
+00:42:10.320 --> 00:42:12.300
+There's still a number of things that
+are missing and we're working to get
+
+00:42:12.300 --> 00:42:15.180
+these in there as quickly as we can.
+
+00:42:15.250 --> 00:42:19.030
+There's no access to the routing tables,
+which makes it a little bit
+
+00:42:19.030 --> 00:42:23.180
+difficult for the plumbers to
+perform their ARP code correctly.
+
+00:42:23.290 --> 00:42:27.180
+There's also no access to BPF,
+but we will be providing
+
+00:42:27.180 --> 00:42:28.560
+access for TIGER.
+
+00:42:29.290 --> 00:42:33.380
+There are no accessors for indicating
+that you support hardware checksums or
+
+00:42:33.380 --> 00:42:37.880
+for detecting that a packet requires
+or requests some hardware checksum.
+
+00:42:37.920 --> 00:42:41.090
+There are the two functions for
+clearing those flags on both
+
+00:42:41.090 --> 00:42:42.760
+the inbound and outbound side.
+
+00:42:43.820 --> 00:42:46.900
+There isn't a whole lot of sample code,
+but we're working to change that.
+
+00:42:46.900 --> 00:42:50.810
+In addition, the kernel framework hasn't
+been completely cleaned up yet.
+
+00:42:50.840 --> 00:42:54.630
+For Tiger GM,
+we're hoping to get the kernel framework
+
+00:42:54.830 --> 00:42:59.380
+cleaned so that there aren't any
+data structures or functions in that
+
+00:42:59.380 --> 00:43:01.980
+framework that aren't part of the KPI.
+
+00:43:01.980 --> 00:43:07.610
+In addition, the list of exported symbols
+through the BSD kernel text
+
+00:43:07.610 --> 00:43:11.000
+hasn't been cleaned up yet,
+so there are still some symbols
+
+00:43:11.000 --> 00:43:13.740
+in there that we don't want
+to have as part of the KPI.
+
+00:43:13.740 --> 00:43:18.230
+But for Tiger GM, we will clean that up.
+
+00:43:21.980 --> 00:43:24.390
+In addition,
+we really need your feedback.
+
+00:43:24.580 --> 00:43:28.540
+We have an email address set up,
+kpi-feedback@apple.com.
+
+00:43:28.610 --> 00:43:30.840
+And we need you to get started
+soon because the earlier
+
+00:43:30.840 --> 00:43:34.440
+that you give us feedback,
+the easier it's going to be for us to get
+
+00:43:34.440 --> 00:43:38.610
+the changes that you need into the kernel
+so that you can get your Network Kernel
+
+00:43:38.610 --> 00:43:40.580
+Extension working on Tiger.
+
+00:43:42.980 --> 00:43:45.320
+There are some resources
+for more information.
+
+00:43:45.370 --> 00:43:49.000
+Craig Keithley is the
+IO Technology Evangelist.
+
+00:43:49.080 --> 00:43:51.580
+And there's the
+KPI feedback email address,
+
+00:43:51.780 --> 00:43:54.730
+kpi-feedback@apple.com.
+
+00:43:55.620 --> 00:44:00.050
+In addition,
+we have some more reference stuff.
+
+00:44:00.340 --> 00:44:06.170
+The NKE, the Network Kernel
+Extension KPI reference is available
+
+00:44:06.510 --> 00:44:13.300
+online and also in the developer
+folder that gets installed with Tiger.
+
+00:44:13.520 --> 00:44:22.150
+There's some more reference stuff.

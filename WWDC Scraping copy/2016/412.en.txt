@@ -1,0 +1,165 @@
+---
+Title:  Thread Sanitizer and Static Analysis
+Year:   2016
+Web:    https://nonstrict.eu/wwdcindex/wwdc2016/412/
+
+[!] This transcript has potential transcription errors.
+---
+
+Hello, I'm Anna. Welcome to the Thread Sanitizer and Static Analysis talk. Since our team works on bug-finding tools, we are going to tell you about new ways of catching bugs. I'm going to start with giving a brief overview of Address Sanitizer and then dive much deeper into Thread Sanitizer which is a new feature we introducing this year. Later, Devin is going to come up and tell you about the new checks we've added to the Clang Static Analyzer.
+
+But let's start. Sanitizers, [inaudible] LEM tools that combine compile time instrumentation and runtime monitoring to find bugs at runtime. They're similar to Valgrind. However, their main advantage is that they have low runtime overhead. They work with Swift and Objective-C, and they have tight integration into the Xcode UI.
+
+So last year we've introduced Address Sanitizer to macOS and iOS. This tool finds memory corruptions such as stack and heap buffer overflows use up the freeze, double freeze. It's extremely effective at finding memory issues. So if you're not using it already, I highly, highly, highly recommend it. This year we've extended the tool to provide full support for Swift. Which will be especially exciting to those of you who love to live dangerously in Swift. So what does it mean if you are using unsafe pointer types? Run your test with Address Sanitizer turned on, it will find some bugs for you.
+
+Now, while Address Sanitizer mainly focuses on memory corruption issues, there is another large source of bugs that are threading issues. These are even harder to reproduce and debug. They're sensitive to timing. They might occur only in some certain circumstances which means that the appellations that contain them will have unpredictable behaviors. So this year we introduce support to another tool, Thread Sanitizer which will help you to both find and better understand your threading bugs.
+
+TSan reports mainly different kinds of bugs, so let's take a look at some of them. It will tell you about use of uninitialized mutexes. This might not seem like a big deal. However, if you are using a mutex that is not appropriately initialized that will lead to very subtle bugs in your applications because you're not actually getting any mutual exclusion when you use such a mutex.
+
+Another example are thread leaks. If your application has a lot of threads and if those threads are leaked, you will, and if there's memory leaks. Another one unsafe call in signal handlers and unlocks from a wrong thread. However, data races are by far the most common problem because they're so easy to introduce. They happen when multiple threads access the same memory location without using proper synchronization. So let's see how this tool works by going into an Xcode demo.
+
+So here I'm going to demo this Thread Sanitizer on an alpha version of last year's WWDC app. So here as you would expect, it brings up a schedule for the week. However, notice this interesting visual bug. Even though all the session's data has been downloaded, the network activity indicator keeps spinning. Now, I know I use a global variable to decide when to show and hide this indicator so there might be a threading problem. Let's see if Thread Sanitizer can help us find it. In order to turn on Thread Sanitizer, we go to edit scheme.
+
+Choose diagnostics tab. And click here on enable Thread Sanitizer. Now, here you can choose to pause in the debugger on every single issue and debug that issue right there. Or you could choose to keep running, collect all the threading issues that Thread Sanitizer report, and explore them later on. The second workflow is new in Xcode 8, and it's only supported by Thread Sanitizer, so let's take a look how that works.
+
+When your launch application under Thread Sanitizer, Xcode is going to rebuild your project with extra compiler instrumentation, and it's going to launch it in a special mode that tries to find threading issues. So here is our application is up. And Xcode tells us that Thread Sanitizer detected two issues by displaying this purple indicator in the activity viewer.
+
+Clicking on this purple indicator will take us to the issue navigator. And while previously we only used it to display build time issues such as compiler warnings, compiler errors, Static Analyzer issues. This year has been extended to provide support to runtime issues. And this is where Thread Sanitizer's issue found its home.
+
+So Thread Sanitizer reported two problems. Let's take a look at each one. The first one is use of uninitialized mutex. Now, this problem occurred as you were running that application sometime in the past. Thread Sanitizer is going to tell us about that exact moment by providing a historical stack trace.
+
+Even though this is not a live stack trace, you can walk its frames as if it was a live stack trace. So let's take a look. At some point we called acquire lock. That called pthread mutex lock, and passed an invalid mutex reference. That was called from reset feed status which was called from the initializer. Now, as you can see here we do initialize the mutex, but we initialize it after we use it. It's a simple ordering bug. So just reordering those to statement should take care of that. Okay, let's go on to the second problem which is a data race.
+
+Also, here Thread Sanitizer tells that there is a data race on the variable called activity count. Now, that's the same global variable that they use to decide when to show and hide that indicator. Since this is a data race, Thread Sanitizer will tell us about two events. The two race accesses. A read and a write here. So the read happened on thread 11, and the write happened on thread 13.
+
+Notice that neither of those are a main thread, and the stack traces are the same which means that they are probably executing the same cord from multiple threads without using synchronization. So let's take a look. Okay, here we are updating this activity account variable. Now, I could have fixed this race by adding a lock. But notice that this is just a symptom. The next line here updates the UI.
+
+And we know that the UI updates should happen on the main thread. So the proper fix here is to dispatch both the counter increment and the UI update onto the main cue with Grand Central Dispatch. This will both take care of the logical problem in our application and also take care of the race because all the threads will access that count variable from the same thread.
+
+Now, I'm sure I sound very convincing and you all believe me that I fixed the bugs. However, the best way of checking yourself is to run the tool again on your project. So we should rerun the application again with Thread Sanitizer turned on. And again it's going to rebuild your project with this extra checking and launch it in the special mode. Now, the application is up. We see that the strange visual UI bug is gone, and Thread Sanitizer doesn't report any issues. So all is well. Let's go back to slides.
+
+[ Applause ]
+
+So just to recap the demo, you can enable Thread Sanitizer in the Scheme Editor when you go to the diagnostics tab just like you did with Address Sanitizer. In addition to ASan's workflow of stopping in the debugger on the very first issue, Thread Sanitizer it supports an additional mode. Where you could keep routing as the issues that detected, and then you could explore them in the issue navigator. They will stay there until you launch an application again.
+
+So let's now talk about what Xcode does behind the scenes to make this all work. In order to use Thread Sanitizer, Xcode passes a special flag to both Clang and Swift compilers that instruct them to produce an instrumented binary. This binary links to a TSan runtime library that is used by the instrumentation to both monitor the execution of the program and detect those threading issues. So if you're building and running Cocoa command line, you can pass an option to either of the compilers. And Xcode will also support Thread Sanitizer by providing enableThreadSanitizer option.
+
+Now by default, TSan will keep running as the errors are detected. But you can instruct it to abort on the very first issue by setting this TSan options environment variables to halt on error equals 1 when you launch your process. That will allow you to have the same workflow as what you have with Address Sanitizer.
+
+So where can you use this tool? Thread Sanitizer is supported on macOS and in the 64-bit simulators. It is not supported on the device. So now you know how to use this tool, how to launch it, how to find issues. Let's talk about what, how you can fix the bugs it reports. And we'll focus mainly on data races because this is the biggest category of bugs it reports.
+
+So what is a data race? Data race happens when multiple threads access the same memory location without using proper synchronization and when at least one of those accesses is a write. And the problem here that you might not only end up with stale data, but the behavior here is unpredictable. You might even end up with a memory corruption.
+
+So what are the reasons for data races? Well, it often indicates that you have a logical problem in the structure of your program. And only you will know how to fix it. On the other hand, it also means that we are missing some synchronization. So let's talk about that second scenario.
+
+Here is an example of a data race in Swift. We have a global variable data. We have a producer that sets it for 42 and a consumer that prints it. If those two pieces of code are executed by two different threads, there will be a data race. So how about this code? We introduce another variable called is data available. And we set that flag after we update the data in the producer, and in the consumer we are going to wait until the flag is set and then if once it's set, we print the data.
+
+Well, this looks very logical. It seems like it should work. The problem here is what you see is not what will get executed. The instructions here can be reordered by either the compiler or the CPU, so you cannot assume that the flag is set after the data is updated. The order of the instruction is not guaranteed neither in the producer nor the consumer.
+
+So what is the point here of this slide? I just want to demonstrate that trying to roll your own synchronization methods is often not a good idea. What should we do instead? We should use something that's available already. For example, Grand Central Dispatch is a very good option.
+
+You can dispatch the recent accesses onto the same serial queue that will make sure that they execute it on the same thread, and there will be no data race. So now as you might recall Thread Sanitizer works for both Objective-C and Swift. So let's use Objective-C for our next example.
+
+Here is lazy initialization code. And we are implementing method called getSingleton. That makes sure that we return the same shared instance to all of its callers. Now, if this code is executed by multiple threads without proper synchronization, there will be a data race when both threads try to update the shared instance variable. Okay, so what about this code? We tried to fix the problem by allocating and initializing a local variable, and then we are using atomic compare and set operation to make sure that threads atomically update that global variable. So there will be no data race on the right.
+
+This might look like a step in the right direction, but this code still has problems. So let's take a look at them. First, it's very difficult to reason about memory management when you are using atomics. So, for example, here you will have use-after-free if you are using ARC. And if you are using MRR, this object will be leaked only in case there is a race.
+
+So that's not good. That's not the only problem. Another problem here is that since the read is unsynchronized, there could still be a race where one thread is trying to read that shared variable and another one is trying to atomically set it. So this is undefined behavior, and that's not good.
+
+What should you do instead? I mean, if you know the solution already, use Grand Central Dispatch. Dispatch wants performed laziness socialization for you. It's even simpler in Swift. Both global variables and class constants have dispatch one semantics. So you can choose either of those two solutions, whatever works best for your code.
+
+Okay, so just to summarize, you should use the highest level API that's suitable to your needs. And most people should be using Grand Central Dispatch. If that's not suitable, you can use pthread APIs or NSLock, for example, now, we do have a new OS unfair lock that's new on our platform this year, and it replaces OSSpinLock. And they also have C++ and C11 Atomics.
+
+They are supported by Thread Sanitizer. But as you've seen in the previous example, they're very difficult to use correctly. And besides the performance, being here is either not measurable or negligible. So don't choose to use those APIs if you did not measure that they actually have something on your application. So for more information about all of those APIs, please attend Concurrent Programming talk on Friday.
+
+So now let's talk about benign races. What are those? Some developers argue that on some architectures, for example x86, you do not need to insert synchronization between a read and a write because the architecture itself guarantees automaticity of those operations on pointer size data. Now, it's important to remember that any race, even at a benign race, is considered to be undefined behavior from C or C++ standard.
+
+So not only will you be surprised if that code with benign races write, runs on an architecture you have not tested well on before. But the compiler is free to reorder those instructions as if no other thread saw that. So the bottom line is that you might end up with very subtle bugs. So as our engineering lead for Thread Sanitizer [inaudible] "Fix all the bugs."
+
+[ Applause ]
+
+Now, to the most exciting part of our talk. As we all know, data races are hard to reproduce since they're so sensitive to timing. So the most interesting thing about Thread Sanitizer is that it can detect races that did not even manifest during that particular program run. Let's see how it does that.
+
+When you compile your program with Thread Sanitizer, it instruments every memory access, and it prefixes it with a check, with a code. But first, records the information about that access. And second checks if that access participates in a race. So let's take a closer look. For every aligned 8 bytes of application memory, Thread Sanitizer shared those state, keeps track up to four accesses. So suppose we have four threads. Thread one writes to that memory location. Thread sanitizer updates that, stores that information to shadow thread to reset memory location. Again, we record that, and we keep going on and on. So now what happens if you have more than four accesses?
+
+Thread Sanitizer uses an educated guess onto what cell to evict next. So here it evicts access to that same thread which lets it not lose precision. However, if we had access from a fifth thread, it would evict a random cell. So bounding the number of accesses like this means that we might not catch all races and all cases. Okay. Now, let's talk about how it detects data races. Thread sanitizer uses a well known technique of vector clocks for race detection. So how does that work? Thread local storage for each thread keeps track of threads own counter and the counters of all the other threads.
+
+This counter is initialized to zero, and every time a thread accesses memory, its counter is incremented. So, for example, here suppose thread one access two memory locations. Thread two accessed 22 memory locations. Thread three accesses 55 memory locations. Now, this timestamps are not comparable. Each thread uses those timestamps or counters to order the accesses to memory that it performs.
+
+Okay. So let's go back and bring back our memory location and its shadow and see how its threads interact and how they update the counters here. We'll also add the lock that threads used to synchronize access to that memory location. Okay, thread one writes. It's a well behaved thread. It's going to acquire a lock.
+
+It's going to update its counter. It's going to write to that memory location. Now, Thread Sanitizer sees that. It's going to update the shadow. Before updating the shadow, it sees that there is nothing in the shadow, stored in the shadow which means that that memory location has not been accessed before. So it just safe to go ahead and write that down.
+
+Now before releasing the lock, thread one is going to update it with its own timestamp, and it releases the lock. Now, it's time for thread two to write. Again, thread two is a very well behaved thread. It's going to acquire the lock. Now, acquiring a lock like this lets thread two see that thread one has implemented its counter.
+
+Now, thread two implements its own counter, it writes to that memory location. Thread Sanitizer sees that it's trying to update the shadow. Now, here it sees that there is something there it shadowed before, so that means that memory location has been accessed already, so it's going to check for races.
+
+By comparing the timestamps, Thread Sanitizer sees that thread two has synchronized after thread one has accessed the memory. So there is no data race. And we can just proceed with the update. Before releasing the lock, thread two is going to update with its own timestamp. And it releases the lock.
+
+Okay, now it's time for thread three to write. Thread three has been waiting for a long time. It's so excited to write to that memory location. Guess what, it forgets the lock. It implements the counter, writes to the memory location, Thread Sanitizer is there, it's watching. It's trying to update the shadow and check for races. So here the Thread Sanitizer sees that the old view of thread three is too old. The reads and writes stored in the shadow happened after thread three last synchronized. This allows Thread Sanitizer to catch the bug.
+
+[ Applause ]
+
+So what's important to know about this algorithm is that the sensitivity of timing that we associate with data races does not apply here. TSan can detect races even if they did not manifest during that particular run but could occur if you run your application again or your users run your application. And this makes using Thread Sanitizer much more effective than debugging and trying to reproduce those data races in the [inaudible] without the use of the tool.
+
+Now, another thing to remember here is that Thread Sanitizer is a runtime bug finding tool, so it will only catch races if you provided sufficient coverage. So please run all your tests with Thread Sanitizer turned on. And that was Thread Sanitizer new in Xcode 8. Use it. It will find bugs, it will make your applications better.
+
+[ Applause ]
+
+Now, off to Devin who will tell you about the checks we've added to the Clang Static Analyzer.
+
+[ Applause ]
+
+Thanks, Anna. Unlike the sanitizers, the Static Analyzer can find bugs without even running your code. It does this by systematically exploring all paths through the program. This makes it great at catching hard to reproduce edge-case bugs. It's supported for all of the languages that Clang compiles to, so C, Objective-C, and C++. This year, we've added three now checks to the Static Analyzer. A check for missing localizability, a check for improper instance cleanup in your manual retained release code, and a check for nullability violations. Let me tell you about them.
+
+A common bug in localized apps is to forget to localize a UI element. This can be very startling for your users. They'll be using your app in their own native language when all of a sudden, out of the blue a string in your language shows up in their UI. This is not a good user experience. So let me give you a demo of how the Static Analyzer can catch this kind of bug.
+
+Okay. So I'll demo the Static Analyzer on the same app that Anna used. To run the analyzer, you can go to Xcode's product menu and choose analyze. This will explore a large number of paths through your program and try to find a bug along each one. Just like Thread Sanitizer, if address, if the Static Analyzer finds an issue, it will display this blue Static Analyzer icon in Xcode's activity bar.
+
+If you click on it it will show you the issue navigator, so it looks like we have a localizability issue. A nonlocalized string is flowing to a user-facing property. So we should localize it. But looking at this method, I don't see anything immediately wrong. So I'm going to click on the diagnostic. This shows me more information about how this nonlocalized string ended up flowing to the user-facing property.
+
+I can explore this path with the path explorer bar at the top of Xcode's editor. Working my way backwards, I can see that this method is called from a TableView data source method, and then an intern it's passing in this nonlocalized constant string. So let's localize it. To do so, I'll use the NS localized string macro.
+
+This will load a translated version of the string at runtime. Now, it's really important when using this macro to also include a comment for your translator to help them correctly translate that string. So I will say "This is the button that resets the session filter." Okay. Let's run the analyzer again to make sure we fixed the issue. Looks great. So I'll switch back to slides.
+
+[ Applause ]
+
+To recap, you can run the analyzer from the product menu, and it will display any of the issues that it finds in the issue navigator. As we saw, it's super useful to click on that diagnostic to show the path. This makes it easy to understand the issue and ultimately how to fix it.
+
+So the analyzer can now find missing localizability as we saw. But it will also warn us if we've forgotten to provide that comment to our translators. Here I've provided a comment of nil which is not helpful at all. And so the analyzer will warn about it you can turn these checks on and other Static Analyzer checks in the Static Analyzer section of your project's build settings.
+
+The check for missing localizability will be turned on automatically by Xcode if your project has localizations in more than one language. The check for missing comments is off by default, but you should make sure to turn it on if you don't communicate these comments to your translator in some other way. For example, you might already be doing this directly in your strings file.
+
+This year we've also improved checking of dealloc in your manual retained release code. It's really important under manual retained release to not release instance variables that are synthesized for assigned properties in your dealloc. If you do so, this can cause an over-release when the owner of that value also releases it and can crash your program. So the analyzer now warns about this. On the other hand, you must release instance variables that are synthesized for retain or copy properties. Because if you don't, they will leak. The analyzer warns about this as well. Yeah!
+
+[ Applause ]
+
+So this is an awesome check. It found a bug in every single manual retained release project that we ran it on. So try it out. Of course, the best way to get rid of retained release issue is to update your project to automated reference counting.
+
+[ Applause ]
+
+Fortunately, Xcode can help you do this automatically. If you go to the edit menu and choose convert to Objective-C ARC. This will have the compiler handle all of the messiness of retained release for you. Finally this year, we've added a check for nullability violations. This builds on work from last year where we annotated our STKs to indicate whether methods or properties take or return nil. For example, Core Location's timestamp property is non-null. This is because every measurement of a location also has a corresponding date and time. In contrast, its floor property is nullable. That's because this property will return nil when the location is in a venue that's not indoor location enabled.
+
+You should annotate your own headers with nullability because it enables a new program and model where you communicate your expectations about nullability directly to your clients. This is important because violations of those expectations can cause crashes or unexpected behavior. In fact, we thought it was so important that we built it into Swift where the optional type requires you to check for nil before using a value. Now, it's important in Objective-C as well, and so we've added a check for nullability violations to the Static Analyzer.
+
+And this check is particularly useful for projects that mix Swift and Objective-C code. And it finds two kinds of issues. There might be logical problems in your code. Maybe you're returning nil when you shouldn't. Or you might have an incorrect annotation. So let's take a look at how to fix each of these two kinds of issues.
+
+A common mistake is to initialize a local variable with nil and then later fill it in with a series of non-exhaustive branches. This method, for example, returns a short description of a location. Either the name of a city or the country that contains that location. But we fail to consider an important case. What if the location is in international waters? Then there will neither be a city nor a country. And so this method will unexpectedly return nil. And the analyzer will tell us about it. Fortunately. This is awesome, too.
+
+[ Applause ]
+
+Fortunately, the fix here is simple. All you need to do is initialize your local variable with a nonnil default. In this case, we'll use the constant string Earth and, of course, we'll make sure to localize it. On the other hand, it could be that your code in the implementation is perfectly fine, and it's the annotation that's incorrect. And we found that one way that this commonly arises is when you use the convenient NS assume nonnull begin and end macros.
+
+These macros wrap a portion of your header and say that inside of the reins that they wrap, that types will be implicitly nonnull. This can save you a lot of typing, but it also makes it really easy to forget to mark a property as nullable. In this example, the pressure property returns nil when the device doesn't have a barometer. But the property is implicitly nonnull. Fortunately, the fix here is simple as well. We can simply explicitly mark that property as nullable inside of that region. And this will tell clients that they shouldn't expect pressure data to always be available.
+
+Now, you do need to be careful about this. That's because the nullability of your API is a contract. And so you shouldn't change it just to make the analyzer happy. Instead, you should carefully consider the API that you want to expose and use that. If you do decide to change your API, you'll also need to carefully think about backwards compatibility. This is particularly important in Swift where nullability changes how a type is imported.
+
+You might also find yourself in a situation where you can change neither the implementation of your method nor its annotation. And in these cases, you can suppress the analyzer diagnostic with a cast. One way that this commonly arises is in methods that defensively return nil when a precondition is violated. In this example, the method returns nil when an index is out of bounds.
+
+If there's existing code that relies on this behavior, then you can't remove that check and you can't replace it within a cert. Instead, the right thing to do is tell the analyzer that that's what you meant by casting the return value to nonnull. So that's what's new in the Static Analyzer and Xcode 8.
+
+[ Applause ]
+
+So let's wrap up. Today we told you about three great tools. These tools find real bugs. Address Sanitizer and Thread Sanitizer find memory corruption in threading issues at runtime. And the Static Analyzer can find bugs without even running your code. So please use these tools on your own projects. They will help you find your bugs before your users find them for you. If you're interested in more information, you can go to your session website. And there's also several related sessions that we think you might find helpful. Thank you.
+
+[ Applause ]

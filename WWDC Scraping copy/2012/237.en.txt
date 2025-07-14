@@ -1,0 +1,173 @@
+---
+Title:  Advanced iCloud Document Storage
+Year:   2012
+Web:    https://nonstrict.eu/wwdcindex/wwdc2012/237/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Good afternoon. Welcome to session 237. My name is Mark Piccirelli. I'm an engineer in the Cocoa Frameworks Group. Today I'm going to talk about advanced iCloud document storage. And what I mean by that, if you were looking at our documentation, you know there's iCloud Storage, which includes iCloud Document Storage and also Key-Value Storage. Not going to be doing any talking about Key-Value Storage today.
+
+Interestingly enough, from the title of the session, I'm actually not going to talk about documents at all either today. iCloud Document Storage is what we call the ability to store files in iCloud. And I'm not going to talk about storing what the user thinks of his files in iCloud. I'm going to talk about shoebox applications.
+
+So what do we mean by a shoebox application? Well, many applications, of course, do not deal in documents. They show the user their data, but they don't reveal that the data is stored in files on disk. So popular examples are things like iPhoto and iTunes. So-- and we call them this informally. It's an informal term and we tried to make formal term but we couldn't, so we just stick with this. It's like a shoebox of pictures or tapes.
+
+What's interesting from the point of view of this talk is that I'm going to be talking about the kind of applications where you don't get to use AppKit's NSDocument class or UIKit's UIDocument class because those provide a model. It's very useful, but it's just not appropriate for most kinds of what we call shoebox applications.
+
+[Transcript missing]
+
+So file coordination in the context of iCloud Document Storage is pretty important because iCloud Document Storage, maybe more than anywhere else, introduces multiple processes accessing the same file. Of course, there have always been situations where multiple processes are accessing the same file, but now with iCloud, they're really going at it. iCloud is downloading things to disk while your application is showing those things on disk to user.
+
+Of course, when I say disk, I also mean SSD about half the time. - But since these introduce a situation, we have to deal with problems like the fact that one process writing a file while another is reading is bad because the process that's reading might read inconsistent or incomplete contents because the first process is still writing stuff.
+
+So it begs the question, how does a process know when it is safe to read or write? Another thing that comes up is the fact that iCloud changes files and then your application must read them. It automatically downloads data from the network and leaves the files on disk and then your application has to bounce that up and show it to the user. So we need an answer to the question, how does a process know when it must read?
+
+and one last thing is that iCloud needs your files up to date on disk to do conflict detection. So in the example I showed you of a picture editor, when the user's editing things like the rating or adding keywords on there or something like that, there are times where iCloud needs you to stamp that stuff on disk because it needs to read it immediately. So we need an answer to the question, how does the process know when it must write?
+
+And the answer to all these questions is file coordination, which number one is a locking mechanism in that it prevents your application from reading while iCloud writes and vice versa, and actually also vice versa. So this is not totally novel. There have been plenty of locking mechanisms in the history of computers. But file coordination is also a notification mechanism in that it tells your application when iCloud changes have happened.
+
+And once again, this is not the first time this has happened. There's FS events, there's KQs, and there's Vino dispatch sources. But one good thing is that this is all one mechanism and it helps us avoid a lot of race conditions and things like that. But the most novel aspect of it is that it's also a triggering mechanism.
+
+In that when something like iCloud reads or writes files, your application gets a chance to do things first. So that's kind of new. The File Coordination API takes the form of, number one, a class called NSFileCoordinator, which you instantiate on the basis of, you know, one per fairly large-scale file operation, like saving a big batch of changes or moving the file or something like that. You instantiate it and then you use it to do coordinated file access.
+
+The other big piece of the API is a protocol called NSFilePresenter, and it's a protocol that you implement in your application to hear about coordinated file access done by other processes that are using NSFileCoordinator. So, and I mentioned NSDocument and UIDocument do a bunch of stuff for you, you know, in applications where those are applicable. This is one of the big things they do for you. They implement the NSFilepresenter protocol for you.
+
+[Transcript missing]
+
+So I'm not going to go through all the NSFileCoordinator API at all. Just for people who are brand new to it, I'm just going to give a little introduction here. These are the two most unsurprising methods in the class. CoordinateReadingItemAtURL and CoordinateWritingItemAtURL.
+
+[Transcript missing]
+
+So the NSFilePresenter, half of the API, there's two main ways to use it.
+
+The first one is that you register a file presenter of an individual file. So, you know, you instantiate some class of your own. It could be the application delegate, for example, and you invoke a method add file presenter. And when you do that, from then on, while you're registered, you'll hear about the file being changed by other processes and also being moved by other processes. Thank you.
+
+So you'll also get asked to save changes. I'll tell you in a little bit why iCloud might ask you to save changes, but the idea is that this is very generic. So you're not even really supposed to care why you're being asked to save changes. Just that, you know, the contract is that you have a file presenter and if you're letting the user edit what's being presented, when you're asked to, you write that to disk. You might also be asked to do what we call accommodating deletion. And accommodate is an intentionally generic term. What do you mean accommodate?
+
+Well, it depends on your application. You know, very often it means stop presenting that file to the user because it's going away. And if that's something that's selected in the UI, you know, select something else, the next thing in the list or something like that. And a somewhat more abstract concept is that you might be asked to relinquish to readers and writers. And I'll talk about that in a little bit.
+
+So the other thing you can do with NSFilePrecenter, even though its name is NSFilepresenter, it's actually kind of abbreviation for NSFile or FilePackage or other kind of directory presenter. You can register a file presenter of an entire directory tree to find out as files are changed and moved anywhere inside that directory tree.
+
+So in a substantial shoebox application, you'll probably end up using it both ways. Your shoebox has a directory full of files and you want to know as they come and go. But when your UI is letting the user focus on one particular item or something, you'll register as a file presenter of the file that backs that item.
+
+The kind of messages that you have to respond to when you're a file presenter include the ones where you get notified about an individual file. For example, presented item did change is sent to your application, your file presenter, whenever the file is changed, whether that's the contents or the metadata or what. The idea is that you're supposed to look at what's on disk and find out what changed. You also get messages about presented item did move to URL when it's renamed or moved. Your file presenter isn't merely notified about things. It also gets told to do important things.
+
+When you register, you register a file presenter, again, when you first present the corresponding item in the UI so that you get messages like this. And the idea is that you stay registered until you're done letting the user view or edit the item. So, you know, you don't want to let the file presenters pile up or something like that because you will get messages for each one of them when appropriate.
+
+In the context of iCloud...
+
+[Transcript missing]
+
+And in the typical usage, when a file's been deleted, the usual action, I say typically and I say words like should instead of must because, you know, there's going to be a great variety of applications that people write with us, so it's a little early to lay down a blanket rule. But you should deregister your file presenter when the file's going away.
+
+So the more abstract concept that I mentioned before, this concept of relinquishment, when something does a coordinated reading or writing of your file, your file presenter is asked to relinquish to it first. And this is another one of those intentionally generic names. Relinquish what? Well, it's relinquish doing whatever you can't do when something else is reading or writing the file. So it might be something that's reflected in the UI or it may make a timer stop or something like that.
+
+But aside from that, what's interesting about these methods is that they're both your first and last notification that something has happened. So notice, by the way, those methods take a block that returns, they take a block that returns a block. So what you do is when you're asked to relinquish a presented item to a writer, for example, you, when you are able to, you invoke the writer block that you're passed and you pass it what's called a reacquirer block. When that writer is done, your reacquirer block will be invoked. So you find out both the beginning and the end of operations by other processes.
+
+And what's interesting about that is that it ends up being a very handy way to delineate batches of the other messages that an NS file presenter gets. A pretty common situation in iCloud is that iCloud needs to both change a file because that's what the user did on another device and also rename it all in the same operation because that's what's happened in another device.
+
+So in response to messages like presented item did change or presented item did move to URL, very often you don't actually do anything right then other than note the fact that it happened. And when your file presenter reacquires the file, you handle both things at the same time, if that's what it takes to be correct in your application.
+
+So those are messages about individual files. You can, as I mentioned earlier, you can also use NSFilePrecenter to get notified about things in your directory. For example, presented sub-item did change at URL or presented sub-item at URL did move to URL. And these are the two most interesting ones that are other ones in the headers like presented sub-item did appear at URL. You should probably ignore that. If you've been experimenting with this, you find out it doesn't actually get sent in the context of iCloud.
+
+So when a file appears, you'll just get presented sub-item did change at URL. So let's go through, you know, a sequence of how this stuff ends up appearing to be used in a typical shoebox application. Here's our picture viewing application. It just has two pictures appearing. They're pictures of the numbers one and two. So and the user adds another one. They add a third item. So what the application has to do is it has to do a coordinated write of the file.
+
+to disk to the applications iCloud storage space. And a quick code sample, the way you do it is you instantiate a file coordinator and you invoke this method coordinate writing item at URL. And these kind of methods, by the way, you want to try avoid invoking them on the main thread because other processes might do other things before it's your turn to do things.
+
+But when it is your turn to write, your block will be invoked and then you'll use the APIs we've always had, things like NSData and NSFileWrapper, the POSIX APIs for writing to disk. The file coordination mechanism is something that you wrap around file access. So it doesn't actually introduce any new file access APIs of its own.
+
+So here's a pretty typical use of a file wrapper where this picture object that can save itself knows how to create a file wrapper and then just stamp it on disk where it goes. When the application has written the file to disk, iCloud, without any other action on your part, uploads the file to the cloud if the machine is connected to the network. If it's not, it waits until it is connected. So it's its job to deal with issues like that. All right.
+
+So, but iCloud is most useful when you have multiple devices connected to it. So in our example, we have the same application running on iPad.
+
+[Transcript missing]
+
+So that was the regular case of the application on one device writes to disk and that gets uploaded to iCloud and it gets downloaded onto another device and it's read there. But there are more complicated situations and they introduce the need for file versions.
+
+So users, of course, can edit on multiple devices at once. And at once can mean literally at once, though people probably don't do that that often. But it also means virtually at once where because one of the machines is disconnected from the network, one or both, and then eventually when it gets reconnected, a whole bunch of uploading to and downloading from the cloud happens. So and then all the other machines hear about it. So, and this can result in conflicts because the user can make a change on their iPad while it's in airport mode, for example, or airplane mode.
+
+And, you know, and then they get home and they start working on their Macintosh and they forgot they already changed the stuff on iPads, so they edit on Macintosh. And then they remember to take their iPad out of airplane mode and then everything, you know, crosses paths as things gets uploaded and downloaded. And now we have two versions of a bunch of files.
+
+So, and those are conflicts. So the iCloud machinery is pretty cool in that it senses conflicts and it picks a winner. So when you have a file and there's two possible contents because they're saved on two different machines, iCloud picks one. And I think the rule right now is it picks the most recent change, though it doesn't have to be that way. That's what it does. And it puts the winning contents actually in the file, in the file system where the application expects to find it.
+
+So and it does this even when your application is not running. And the idea is that every file always has some decent contents in it. It might not be exactly what the user wants because the user hasn't been told what they did yet. But there's always, you know, something in there and it's good.
+
+This matters a lot more in document-based applications where on OS X it's possible with the All My Files window to actually drag things out of iCloud, you know, onto the desktop or, you know, on the desktop. Or email them to somebody as an attachment. So we want to make sure that every file has something good in it. But even in the context of a shoebox app, it's good that when your application first launches, there is not, you know, something crazy in the files.
+
+So that's iCloud sensing. That's not really iCloud resolving conflicts, though. So who does resolve conflicts? Well, your application must resolve conflicts, either because it gets a message while it's running or the next time it's launched. So when I said iCloud picks winners, well, your application might have to look at the losers.
+
+And that begs the question, where did iCloud leave them? And the answer is that it leaves them in NSFileVersions. So NSFileVersion is a really generic API. I don't even know if it came up first for iCloud. It's also used by NSDocument's autosaving mechanism. If you go to the versions browser and something like TextEdit on OS X, you'll see multiple versions of your document. Those are all NSFileVersions.
+
+So the API is pretty generic. You can get the file version that corresponds to the current file and also NSFileVersions that correspond to other versions of a file. And where are they stored? Well, they're stored somewhere else on the volume. If you want to find out, just look at the URL for them.
+
+But, you know, if that's subject to change, you're not supposed to care too much. And if you're wondering, hey, doesn't this waste space? No, it diffs stuff. It just saves changes on disk. Amen. So, but for iCloud, what really matters are the versions that represent unresolved conflicts of any particular file. And you get a list of them using this method.
+
+And once you get an NSFile version, what you do, and it really depends on your application, how you do this, the UI that you use to do this, you present the different versions to the user. That can be as simple as, you know, a sheet that tells the user, here are your different versions, and they can be identified by localized name. You know, and when we say localized in our API, we usually just mean presentable to the user.
+
+So this is the display name of the file. And by the way, the reason this is a property of NSFile, is because files can get renamed but still be considered the same file. So that is something you can show to the user when the user creates conflicts that way. Also, the display name of the saving computer, that's a really important hint that you can show to the user about what this conflict is about, and also the modification date, when they changed it.
+
+And first of all, of course, is the URL. Where are the contents of the version? So, you know, you might want to show that to the user or you just use it, you know, you might want to show that to the user or you just use it, you know, when you resolve the conflict. In general, the way that you use NSFile version to resolve conflicts, well, there's a couple things.
+
+One of the methods NSFile version has is called replace item at URL. And what that is, is it takes the content, it takes the contents of a file version and puts it in, you know, a normal place in the file system. It makes a real file out of a version instead of something that's merely attached to another file as a version.
+
+And there's a couple different ways to use it. For example, if your application shows the conflict to the user and the user disagrees with what iCloud chose when it sensed the conflict, use this to override it. You can pass as the URL the URL of the original file when you invoke replace item at URL. You can replace the actual file that this version came from.
+
+[Transcript missing]
+
+So as I mentioned before, this stuff is kind of generic. Not all file versions represent conflicts. So when you do get one of these messages, you should check to see if it is a conflict. This is a Boolean property, just conflict. So conflicts can also be resolved from the point of view of your application running on a device at any time because the user might resolve the conflicts on another device.
+
+So it's pretty common for, you know, while you're testing to see conflicts, your conflict UI appear on two devices at the same time right next to each other because, you know, you're doing crazy things that a user probably wouldn't do but you still have to do them during testing.
+
+So but the result is that, you know, when you dismiss a sheet or whatever that you're using on one device, that should be dismissed automatically on the other device too. The user shouldn't have to repeat themselves during conflict resolution. So it happens on the other device, the one that the user... Didn't resolve the conflict on. It'll get messages like this.
+
+Presented item did resolve conflict version or presented sub-item at URL did resolve conflict version. So it's important to keep in mind, you know, while you're presenting UI for conflict resolution, you know, more of these messages will be coming and going. You know, more conflicts might be discovered if the user, you know, plugs in another device to the network or something or they might go away completely dynamically. So you have to keep listening for these messages even when you're handling... You know, you're not going to be able to get the same message back to the network or the same device.
+
+So you have to keep listening for these messages even when you're handling ones that you've already gotten. So what's it look like in practice? You know, how do these APIs show up when something is actually happening? Well, let's show up. Let's start with, you know, our iPad and our iMac again. But this time the iPad is in airplane mode.
+
+[Transcript missing]
+
+So it'll leave it on disk and that's where it'll stop for now. But when the user eventually does take the iPad out of airplane mode and lets it connect to the network, What happens is that the version that was in the cloud gets downloaded, the version that was on disk gets uploaded, and now both the cloud and the iPad have two versions on them.
+
+Actually, the Macintosh does too, but it's out of the picture right now. And so the applications file presenter on the iPad will receive a message that looks like this. Presented sub-item at URL did gain version. And the UI that you're going to do for this is very different for each kind of application.
+
+So, but what it should do is it should check to see if the version is a conflict. And really in the context of an iCloud application handling the files that it's put, you know, in its iCloud store on disk, of course it's going to be a conflict. But before you start doing conflict type things with it, you should at least check just to not crash, basically.
+
+When it does this, it finds out that there's a conflict for a file or a conflict version for a file. It should say, you know, is this a file I even recognize? In this case, this program has a method picture a URL. I don't, you know, do we even recognize this URL? And if so, and it discovers that there's a conflict of some sort for this picture, it should present that to the user.
+
+So, and while it's presenting that to the user, it still has to handle other messages of this sort coming in. So, but when your UI is all done, and the users made their choice, the application writes the contents on to disk. It actually probably isn't taking it from memory and writing it on disk. It probably just uses NS file version replace item at URL in this case.
+
+And once that's done, that is automatically propagated to the cloud by the iCloud machinery, the agents and demons running on OS X or iOS. And then that conflict resolution will automatically propagate to other devices like this Macintosh that's connected. So because the user chose the version that the user had edited on the Macintosh, there's actually no news to report to the file presenter on the Macintosh. So that one doesn't get another message. It's just that now the iPad and the Mac are showing the same items.
+
+So some tips and advice. First of all, at application startup, there's a new method for you to use to even find out if iCloud is turned on. There's a couple different ways to turn off iCloud. There is not being logged into iCloud at all. And then also in the iCloud preferences pane, there is a checkbox where you can turn off iCloud documents and data.
+
+And there's a bunch of checkboxes there, but this is the one we're talking about, the documents and data one. Your application, you know, is probably going to do different things depending on whether or not iCloud is turned on. It's still pretty early days in developing, you know, UI for this sort of thing.
+
+Some people just want to say, you know, my application only works if you're logged into iCloud. Other people are storing, you know, two copies of things so that in case the user logs out. So we'll see which kind of applications people like best. But when your application has to make decisions at launch time, this is the one that it should do.
+
+So what's interesting about ubiquity identity token is number one, this method is fast enough to use on the main thread, unlike this existing NS file manager method URL for ubiquity container. So this has been kind of a big issue. You know, what do I do during startup? I don't want my application to just block. Well, the answer is that you invoke ubiquity identity token.
+
+By the way, what's the... By the way, what's the token about it is it's a different token depending on what account the user logged into. So the user, of course, can log out and then log back into a completely different account. These tokens are both encodable if you need to record something to match, you know, what the user's logged into. And they're also comparable too.
+
+So you still have to invoke URL for ubiquity container at some point. The answer is it didn't get that much... It got a little faster, it didn't get that much faster. You should try not to invoke it on the main thread. So while you're doing stuff on your initial reading thread, you should be showing good UI, letting the user, you know, know what they're waiting for.
+
+And so because the user can log out or log back in or just turn off iCloud documents and data completely, you should be listening for this NS notification center notifications, not NS distributed notification center notifications. Yeah. And NS ubiquity identity did change. So and the ubiquity identity token stuff is new in OS X, 10.8 and iOS 6.
+
+So when you're reading files, as I showed you in the graphics before, coordinated reading can trigger downloading. And that, of course, can take a while. Everything that involves network access can take an unpredictable while. So this is something you want to avoid doing on the main thread. So I think, in general, the advice, don't do file system access on the main thread, is just getting repeated over and over again on both iOS and OS X. So the fact that reading is coordinated doesn't really change that.
+
+You still have to do good error checking. For example, NSFileCoordinator coordinate reading, it returns an NSError. It might be an error about something like the file couldn't be downloaded. Even if that doesn't return an error and your block, your reading block is invoked, you still have to do good error checking. The file might not even exist. And that's correct. So the file might have been deleted while you're away. You're waiting to read it. NSFileCoordination isn't going to call that an error just because somebody else deleted the file while you were waiting to read it.
+
+[Transcript missing]
+
+So, and then you might notice if you've already written code with this, had an NSFilePresenter, the file doesn't actually get deleted a lot of the time. A lot of the time it just gets moved. So that is iCloud's caching machinery. When a file like that gets deleted, it might come back pretty quick in a bunch of different situations. So iCloud isn't in a big hurry to delete it off disk. It will eventually. But in the meantime, it just moves it into a directory that was supposed to be kind of a secret.
+
+It ended up not being so secret. Whose name starts with .ubd. You only notice this if you don't deregister your file presenter when you're told that a file is being deleted. But what we want you to do is try not to take advantage of the implementation details like that.
+
+They will see if you don't deregister your NSFilepresenter. So when we say deletion in the context of NSFilepresenter or something like that, it's a pretty high level operation. It doesn't necessarily map exactly to, you know, the underlying POSIX calls. It's, you know, it's at a higher level what the user might think of as deletion.
+
+And of course, something like deletion to the user, you know, the item is gone doesn't necessarily mean that the file has to be gone. So this is kind of, it's kind of the thing throughout the file coordinator and file presenter APIs. They operate at a higher level. So you don't do, for example, a coordinated read for each individual POSIX call. You do it when you are loading a document's contents.
+
+Things like that. So then they're meant to wrap around sequences of lower level operations. Some advice that comes from, you know, watching how people have been using this already. Save settings in the right place. So preferences like scroll bar and window positions, it's kind of questionable a lot of the time whether or not those go in your document at all because all of our devices support different screen sizes.
+
+Even before then, there was always a possibility of giving something like a document to another person. But even when we're not even worrying about, you know, giving documents to other people, we're just talking about the same user using, you know, the stuff in their shoebox. They're still using multiple devices to do that. So it may as well be different users from the point of view of things like screen sizes. So be careful about what you write in files that get uploaded to iCloud.
+
+[Transcript missing]

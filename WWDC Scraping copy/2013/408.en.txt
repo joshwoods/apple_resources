@@ -1,0 +1,221 @@
+---
+Title:  Optimize Your Code Using LLVM
+Year:   2013
+Web:    https://nonstrict.eu/wwdcindex/wwdc2013/408/
+
+[!] This transcript has potential transcription errors.
+---
+
+Good afternoon. Optimizing Your Code Using LLVM. I'm Jim Grosbach and today, we're going to talk a bit about how you can help the compiler help you get the best results for your app. We're going to do that in three ways. First, we're going to talk about how Xcode communicates to LLVM about the appropriate optimization settings for the kind of code that's in your app.
+
+Then, we're going to talk about some specific LLVM optimizations and dig in a little bit deeper about the kinds of optimizations, those R and how you can write code that will enable LLVM to do its best to give you better performance. And then finally, we're going to talk about some new and improved optimizations available in LLVM with Xcode 5 and we think you're going to be just as excited about these new improvements as we are.
+
+So let's dig right in, build settings in Xcode with the LLVM compiler. We're going to be using the SciMark-2 set of numerical computing code as an example to show how carefully selecting your optimization settings in Xcode can yield fantastic performance improvements over just using the defaults. From when we first create our project to when we're done selecting the best optimization settings available, we're going to see four times faster results all without any changes to the application source code.
+
+So let's have a look at how that's possible. We use Xcode's build settings to do this. Xcode collects all of the information about how to talk to the compiler into build configurations. So all the command line options that get passed through to tell the compiler which optimizations to use to optimize your code.
+
+When we first create our project, we have two configurations, the Debug configuration which tells the compiler to optimize not per performance but rather for very fast compile times per iterative development and a vastly improved debugging experience, really good debug information. Then when it comes time to get ready to deploy our code to the App Store and to measure and tune our application for performance, we use the Release configuration which by default uses a balanced approach that we generate the fastest code we can without compromising on code size.
+
+But for SciMark-2, we want more than that. We want the compiler to be more aggressive and we're okay if we use a bit more code size to get better performance and to tell LLVM that, we use optimization setting O3 which we simply change for the Release configuration in Xcode to tell the compiler that we're dealing with very performance intensive code and we want more aggressive optimization. But as we all have experienced before, we don't know for sure what the effect of optimizations are going to be until we measure the results. So let's have a look at what this does for our SciMark-2 benchmark.
+
+When we first start out, we normalize our results so we have something to compare to. Then we enabled Release mode and we see we're already three times faster, so the kind of performance that basic optimizations can provide and then we tell the compiler to be more aggressive with O3 and we see another 10 percent or so improvements. So we're on the right track, but we haven't gotten really all that the compiler has to offer yet. We want to bring more information about the application to the compiler so that it has more possibilities to work with, and we do that with Link-Time Optimization.
+
+Traditionally, the compilerlooksat one source file at a time. It builds each file into an intermediate representation from whatever source language it comes from, optimizes that, lowers the machine code, creates the object files which the linker then pulls together to create the final executable. But that means that all of the information in each source file that we've processed is no longer available to the compiler when we move on to the next source file. That's a lot of information that is potentially very useful and very valuable that's being thrown away.
+
+Link-Time Optimization takes the intermediate representation, puts that into the object files, moving the optimizations into the linker which now allows us to see a whole program at a time optimization. So now, all of the information for the whole program is available to the compiler allowing significantly better results because we have more information. In particular, this is going to result in much more effective in-lining and other inter-procedural analyses.
+
+In Xcode, to enable Link-Time Optimization, we tell it to do so via the Link-Time Optimization setting which passes the LTO flag to the compiler and then on to the linker so that the compiler and linker can cooperate to make sure that everything flows through and all of the information is available when optimizing your code. So now let's have a look at what this does for SciMark.
+
+Even beyond just O3, Link-Time Optimization has allowed the compiler to utilize its information about the entire program to gain an additional 25 to 30 percent improvement so we now have a 4x improvement from where we started, all without changing a single line of source code by simply recognizing that the kind of code that we're working with is what will benefit from specialized settings in Xcode. So it's worth it for your application to experiment with these settings and find out what is most effective and what is right for your app.
+
+Now, I'd love to promise that you're all going to get 25 percent improvement in performance using LTO. But that would be a little bit much. SciMark is a very compute-intensive piece of code so it really works very well. That said, we have seen fantastic results using LTO at Apple.
+
+For example, the compiler itself is built using LTO and we see approximately 6 percent compile time improvement as a result. The iOS kernel is built with LTO and sees up to a 20 percent improvement on important I/O benchmarks. So this is real world and I encourage you to try it.
+
+Do be aware however that moving all of this work into the link stage can have impact on your build times. The compiler is doing more and it's doing it all at once instead of splitting it up into multiple chunks that will then be split into -- across multiple cores. The impact is going to vary some apps. It has a huge impact on build time, others not so much. Again, try it, evaluate it and decide if it's right for you.
+
+So now, let's look a little bit more deeply into some specific optimizations that LLVM performs analyses, how LLVMlooksat your code and how you can structure things to enable LLVM to be even more effective. Let's start with memory, in particular pointers. Memory accesses on modern architectures are expensive compared to most other operations.
+
+The compiler tries very, very hard to hide that cost by moving memory accesses around, removing redundant operations, killing dead code, but to do that effectively, the compiler needs to be able to analyze which pointers may possibly be referring to the same memory locations, that is, which pointers may alias.
+
+Thankfully, the C family of languages do provide us some information that we can use to do this, specifically the type system. We use what we call type-based alias analysis or strict aliasing which is enabled via the strict aliasing flag which has been on by default since Xcode 4.6.
+
+So if you created an app since then, this is already working and bringing its power to bear for you. If you have an older app, I encourage you to check the setting, make sure that it's enabled, look carefully at your code because there are some hidden tricks that if you're using undefined behavior by typecasting between pointer types, there may be some hidden problems there, so be very careful, but do try it out, it does bring real world benefits.
+
+In our example here, we see three pointers. Pointer C refers to an integer type which we're loading twice and storing into two different locations after converting to floating point. When we pass this code to the compiler, it recognizes that because pointer C refers to a different underlying type than A or B, it doesn't need to load it twice. So, it simply reuses the value from the first load and stores the result back to both locations.
+
+It would be great if this would take care of all of our problems. The real world isn't quite that simple and type information isn't always enough. So, let's make this a little bit harder for the compiler to deal with. Let's make all of our pointer types refer to the same underlying type. Everything is an integer now.
+
+The compiler has to be conservative. It has to believe that alias may exist between pointer C and pointer A and thus it loads the value again because it's not sure whether it's been changed by the store via pointer A. But as the author of this code, I know that I am never going to invoke this function with pointers at alias.
+
+So, I want to tell the compiler that to enable it to be more effective and optimize a way what I know to be a redundant load. And we do this via restricted pointers. This is via the restrict keyword in C and C++ and to Objective-C which simply specifies to the compiler that the object reference by the restricted pointer cannot be aliased by any other pointer in the scope of that restricted pointer. So, let's look at how that impacts our example. If we add the restrict keyword to the pointer C, we see the compiler can now fold away the redundant load yielding much more effective code and better performance.
+
+That said, do not immediately go and sprinkle restrict keywords everywhere in your app. Be very careful because if you do have aliasing pointers and use restrict, those bugs are I can promise you, you're not going to want to debug that. So be careful, it's very powerful. It's very important, but it's a gun loaded right at your foot. Don't pull the trigger.
+
+So now, let's talk about another area where the compiler really wants to be aggressive and really wants to give good optimizations, but there are complications based on the underlying language, so about the floating point. We all like to look at floating point as being an approximation of the mathematics that we use every day.
+
+But there are a few gotchas in the representation that make things difficult for the compiler to do, otherwise obvious transformations. For example, floating point considers negative zero to be a distinct value from positive zero. And the result of this is the compiler has to be very careful when folding away constants involving zero. Adding zero to an unknown value cannot be optimized away because if that input value were negative zero, the result has now been changed by the optimization, which means that we have now changed the semantics of the source program. So that's not allowed.
+
+Likewise, there's the concept of a NaN or Not a Number, which means that a result of a previous operation has come up in a way that is not representable in floating point. This must be preserved through the rest of the chain of operation. So if we have a multiplication by zero, we can't fold that away because the input might be a NaN.
+
+Then there's reassociation. We normally would expect that the order of operations between adding multiple values together isn't going to matter. For floating point, however, it does because the rounding between the intermediate results can change the final value. Let's take a little bit of a closer look to that because this is subtle and very important to be careful with. Here we have three floating point values. None of them are extreme, nothing hugely large, nothing incredibly small. We add them together and we change nothing but the order of evaluation and our result changes in the least significant bits.
+
+This is very important to some classes of applications. Scientific computing for example cares very much about these results being very reproducible, always the same no matter what compiler optimizations get applied. Other sorts of applications are okay with these sorts of things, changing very slightly as long as the code is optimized aggressively and very quickly.
+
+Basic simulations in games for example are a prime candidate for very aggressive compiler optimizations of this nature. So, as an opt-in, the compiler allows you to specify that you want more aggressive floating point optimization. And we call this Fast Math. You tell this to the compiler via the Xcode setting to relax IEEE compliance and now the compiler will be much more aggressive about these particular representational challenges and many others. So, let's have a look at a brief example again in arm assembly code about what this can mean.
+
+Here, we're simply computing a dot product between two three-dimensional vectors. But our second vector is a constant value where the Y value is zero. Likewise, we initialize our product to zero. We would like the compiler to take advantage of this information and eliminate some of the redundant calculations because we know that they're going to involve a zero.
+
+But because we don't know anything about the other input value in vec1, we can't do that. So, the compiler must be conservative to be correct and generate the full calculation chain. If we specify fast math however, the compiler is now able to be more aggressive and fold away the extra calculations giving much faster results.
+
+So we encourage you to think about this, investigate the implications for your application and decide if fast math is right for you, experiment with it, find out if it gives you good results. It's very powerful. We want you to try it, but do be careful. It has consequences. So now, let's talk about a little bit deeper level. Let's talk about vectorization.
+
+Modern architectures offer vector instruction sets. On OS X, we have SSE and all its variance. We have AVX, now it has WellMax, we have AVX2 which bring even more powerful instructions to bear. On iOS, we have ARM NEON and we want to use all of these instructions to get the best performance in our apps.
+
+So, how do these work? How do they give us better performance? Well, many calculations are performing the same basic operation on large quantities of data all in a row. So a vector instruction simply pulls those things together with a common operation and performs them all at the same time with a single instruction.
+
+This allows far fewer execute -- instructions to execute performing the same amount of work, giving the result and speed up and better performance. This is particularly valuable in loops. Let's take a look here. We're add -- simply adding the values in two arrays storing the result back into a third array. Normally, we would have to go through one at a time just as the source code does. But with vectors, we can do better.
+
+We compile four elements at a time giving a very, very powerful improvement to our application's performance. That's fantastic. So, how do we write code that does this? Well, the compiler provides several mechanisms to get to this power. The first being vector intrinsics. Here we see some ARM NEON intrinsics, specified arm neon dot h is a helper header file that defines all of these intrinsics for the compiler. And these basically represent the underlying in CPU instructions that the compiler is going to eventually generate.
+
+So when we compile this code, which simply doesn't multiply add from three point values stores the result back out, we get -- oop, there we go. Now, we get ARM assembly which does the operation. Now, you'll notice, the compiler is a little bit smart here. It knows the semantics of these instructions.
+
+So, it notices that we're doing a multiply and then accumulate, and it knows the ARM NEON has an instruction that does exactly that. So, it brings those operations together and uses the VMLA instruction. But this code has a few problems. First, it's totally target specific. We want to be able to write code that will bring vectorization to the app for OS X and for iOS all at the same source code. And this is not going to do that.
+
+Second, I don't know about you guys, but that's really hard for me to read. That's not very expressive, it's effective, but I have to look at that for a minute before I figure out really what it's doing. I'm used to reading C code, so LLVM provides target independent vector extensions that allow us to put the vector information into the type. Now, we can use ordinary C operators to express the exact same semantics as our previous intrinsics and tell the compiler that we want to perform these operations four at a time using vectors.
+
+So then when we compile this down to ARM assembly, we see we get the exact same generated code. We still fold the multiply and we add into a multiply accumulate instruction and we get good results. We're a lot closer, but there's still a few challenges remaining. While the code itself is now target independent, some of the underlying assumptions are not. This code assumes that it knows which operations are going to be efficiently performed as vectors. It assumes that it knows the underlying vector width of the target architecture.
+
+AVX and NEON have different vector widths, 256 bit, 128 bit. So, which should we use in our source code? We now have target dependencies again. But the compiler knows how big the vectors are on the target architecture that we're working with. The compiler knows which instructions are available and what they do. So surely, we can do more here. And now, with LLVM and Xcode 5, we can. And now here to tell you about auto-vectorization in LLVM. Please welcome Nadav Rotem.
+
+Hi, so Jim told you how you can accelerate your code using intrinsics and using the extended vector syntax. But he also talked to you about some of the disadvantages of this method. I mean, who wants to maintain multiple versions of their code for different processors? It's difficult. Well, I'm excited to tell you about our new feature in LLVM 5, it is the auto-vectorizer.
+
+The auto-vectorizer will analyze your code and look for opportunities for using vectors in your code. And when it finds it, it'll accelerate your code. The auto-vectorizer supports both ARM and Intel processors and it even supports Haswell so that you can target and optimize for the products that we announced earlier this week.
+
+And if you have compute intensive code with a lot of tight loops, then when you enable the loop vectorizer then you should expect to see massive performance increases. Not everybody can enjoy the benefits of vectorization. Not all applications can benefit from vectorization. So, only applications that have compute-intensive loops can benefit from vectorization.
+
+And you can find these loops in different domains. So for example, in linear algebra, in physics simulations, in image processing applications, you can find these loops. And from our experience, you can really find these loops in games and games really benefit from auto-vectorization. But not all programs, for example, your user interface is not very likely to benefit from vectorization because it's not very compute-intensive. Also, if you're sending a packet over a network or if you're accessing a database, you're not very likely to benefit from vectorization.
+
+So, let's look at some performance numbers and see who may benefit from vectorizations. So, all the way to the left, you see gzip. This is the famous command-line utility for compressing files. We see even from gzip which is not a very likely candidate, you see nice or very minor improvements due to vectorization.
+
+Moving on the next one is -- to the right is RC4, that's the stream cipher and we see nice games due to vectorization. After that, we have compression utility which benefits from vectorization. And all the way to the right, you can see two linear algebra programs that's a nice -- very nice speedups due to vectorization, 2.6 and 2.9x only due to vectorization, just by enabling vectorization.
+
+But you're probably thinking to yourself, "Well, I don't have a lot of linear algebra in my app." I write apps and even though I like linear algebra, I want to make sure that I'll benefit from vectorization. So, I'm here to tell you about one app. So this app is very popular. You can find it on the Apple App Store. It is the Facetune app.
+
+And a few weeks ago, we've given them a copy of LLVM 5 and Xcode 5 and we let them -- we let them try it. So, Facetune is an application which allows you to beautify your portrait photo. So, it's a very compute-intensive application, have a lot of filters.
+
+And when they enabled vectorization, they saw a 30 percent drop in the execution time -- in the runtime of one of their computer-intensive filters which is great because now their filters are running faster. Their app is more responsive and at the end of the day, their users get a better product. So they're very excited about vectorization and I hope that once you enable vectorization, you'll get -- you'll experience similar results.
+
+So, how do you enable vectorization? Well, that's simply. What you got to do is go to the Xcode 5 build setting, search for vectorization and turn the switch. And once you enable vectorization, the compiler will start analyzing your loops, find these loops that can benefit from vectorization and start accelerating your code. Now, earlier this week, we also told you about the command-line options that Xcode 5 has. So if you're using a command-line, you can also use a vectorization. What you need to do is simply add the flag, -fvectorize and the compiler will vectorize your loops.
+
+Now, I want to talk to you, I want to take the next couple of minutes to talk about the way that you can write your code to affect vectorization and the way that vectorization affects your binary, the one that you submit to the store. So, this is the loop that Jim showed you earlier.
+
+It's a very simple loop. All we do in this code is load from two arrays, add the numbers together and save them to a third array. That's a very basic loop, right? And this is the code that you get when you vectorize, when you compile for the iPhone.
+
+So, in the yellow, you can see vector instructions. On top, you see two vector loads. And at the bottom, you see a vector add and a vector store. And if you look closely in the red, you'll see the number four. In this instruction, we're incrementing the loop counter by four. This means that we're processing four elements at once which is great because when you process four elements at once, we go faster.
+
+And when you compile your code for a Mac, this is the assembly that you get. Again, in the yellow, you can see the vector instructions. But this time, if you look closely, you see the number eight in red. This means that we're processing eight elements at once. Because Haswell processors can process eight elements using the AVX 2 instruction set and we support this instruction set.
+
+But this loop may look simple but it's actually pretty challenging to vectorize. Can you think why this is challenging to vectorize? Well, we have two problems that we need to overcome. This is the first one. So if we have this array, we're processing the array in chunks of four or chunks of eight, but when we get to the end of the array, we have a few remaining interactions, we have a few remaining elements that don't fit in a vector so what do we do.
+
+How do we handle these last few iterations? We have to handle them and this is a serious problem because actually, most loops are not a multiply of the vector width. They're not a power of two and in many cases, we don't even know the number of iterations at compile time.
+
+The compiler only sees some variable or some argument for function and it could be anything from a user input or a number that it reads from the disc. So, this is a real problem and we do want to vectorize all of these loops. So what do we do? What does the compiler do to vectorize these loops?
+
+This is what we do. So before we only had one loop, this is the original loop that handled all of the array. The first thing that the compiler does is modify the original loop to only handle the last few iterations. Then, we add the new loop. This is the vector loop. This is the fast vector loop to handle most of the iterations except for last few iterations.
+
+So we're processing all of the array really quickly using the vector instructions, and then when we get to the end or almost to the end of the array, we start using the original loop to handle the last few iterations. Okay, so problem solved. But I say that there are two problems. And this is the second problems -- this is the second problem. Pointers. So let's take a look at the code that we have right here.
+
+This is a very simple loop, right? It's a four loop and we're copying memory from source to destination. So this is a memcpy, right? All we do is copy from source to destination. We should be able to vectorize it, right? I mean, we should be able to load the vector from source and save it to destination. It should work. Well, it works except for one interesting case. What if source and destination were adjacent, were pointing to adjacent memory locations? Let's see what happens. So, we're loading from source storing to destination then moving on.
+
+Hey, we just loaded the value that we stored. So, at the end of this, the whole array is filled with the first element. So it's not memcpy, it's memset. It's counterintuitive. I didn't think it would happen. All right, let's see what happens when we use vectors. So, let's load a vector, push it back, load another vector and we have a problem. We skipped a few elements, right? It's not the memset that we expected. We got a different result. So what is the problem?
+
+The problem is that we changed the order in which we read and write for memory and we can't do that, it's illegal. We can only do it -- we can only vectorize the code if source and destination point to separate memory locations, only then we can vectorize. But just like with the first problem, we don't know a lot of times at compile time where the pointers point to, right? I mean, who knows we get two pointers that can point to the same memory location, they can point to separate memory locations. So how do we handle that?
+
+This is what we do. Before every loop, we add some code to check if the pointers that we're using overlap. And if they do, then we fall back and use the original loop, the slow loop. But if they don't, and this is the common case, this is what happens in most cases.
+
+If they don't, then we can use the vector, the fast vector loop to process all of the elements except for the last few iterations. So, problem solved. But there is an overhead, right? So before -- this is annoying because before every time that we vectorize -- that we execute vectorize code, we have to run these few instructions that check our pointers, right?
+
+And this can be -- it's not a big problem, but it's still inefficient and we also have to keep the original loop around so it increases our code size and we'd like to get rid of it, and we can. Remember how we tell the compiler that pointers don't point to the same memory location, we use the restrict keyword. And when we do, the compiler understands that source and destination or in and out don't point to the same memory location. So it can get rid of the runtime checks.
+
+But we also want to get rid of the original loop. How can we get rid of the original loop? Well, if we specify the exact number of iterations, then the compiler knows that it can process the entire array using the vector loop. So this is great. Now, it's probably not a good idea to go and mark all of your pointers with restrict and after all, it's not a big deal to have all these few instructions out before we execute the fast vectorize loop.
+
+So, my recommendation is don't add restrict everywhere but just be aware that this is one of your tools that you can use in some cases. And there is also another thing that you can do. So, Jim talked to you about LTO, Link-Time Optimizations. And Link-Time Optimizations can improve vectorization. How? That's simple. When we do LTO, when we perform Link-Time Optimizations, the compiler is able to look at the entire program together. And when it can look at the entire program together, it has more information and it can make better decisions, better optimizations based on this information.
+
+Let's see how LTO helps vectorization. So the interesting loop is the one at the top left corner. And unfortunately, this loop is not vectorizable. We can't vectorize it. We can't vectorize it because there's a function call in the middle of the loop and we don't have any information unless we inline the function call, and then let's see what happens.
+
+Now, we have all the information that we need. We know that we can vectorize this loop. This is great. But we're still going to have these few instructions that check our pointers and we're still going to have the scalar loop at the end because we don't know how many iterations we have, and we don't know where the pointers come from, unless we inline the loop into the main of our function.
+
+And after we do, we have a lot more information. Now, we know exactly how many iterations we have and we also know that in and out are actually pointers A and B and we allocate them here locally, so of course that they point to separate memory locations. So this is great. So LTO helped us in getting rid of all the runtime checks and getting rid of the original loop. So this is good.
+
+But there is something I want to talk to you about in this context. So, the vectorizer in order to vectorize a lot of loops has to have runtime checks and keep the original loop around because for most loops, LTO is not going to be able to save us, and you're not going to write the restrict keyword all over your loops. But when the compiler chooses to add the runtime checks and keep the original loop around, it's not the end of the world. The code growth is less than 1 percent which is okay. You probably don't mind a 1 percent increase in the code size.
+
+But if you listened carefully earlier, Jim said that the default Build Setting for Xcode 5 is optimized for speed and size. This means that Xcode tells the compiler, "You cannot add runtime checks and you cannot keep the original loop around. You have to choose either vector or scalar. You can't have both. It'll increase code size."
+
+Well, the vectorizer can't work under these conditions. It says, "I can't do that. I can only vectorize a small number of loops." So, if you want to be able to vectorize a lot of loops, what you need to do is go to the Build Setting and change it from OS to O3. And when you do, Xcode will tell the compiler, "It's okay to increase code size a little bit if you can vectorize more loops." So if you want to use the vectorizer, it'll probably be a good idea to enable O3 in your Build Setting.
+
+Now, I want to talk to you about one interesting example of vectorization. I want to talk to you about reduction loops. And reduction loops are very, very interesting. Reduction loops are loops in which we scan the entire array, and at the end, we come back with one number.
+
+For example, we can add all the numbers in the array or we can search for the highest number in the array. And we have an example right here. And LLVM has two powerful optimizations that come together to optimize these loops. Let's take a look. The first example is vectorization.
+
+So how do we vectorize this code? How do we vectorize the code that adds all the numbers together? We do it by adding the temporary variable, the temporary vector variable. We vectorize this code by taking chunks of the array and adding them into temp or vector variable. So throughout the loop, temp is going to hold the partial sums of the array. So we're processing all million elements in the array into this temp variable. And at the end, all we got to do is take the numbers that are in this vector and add them together, and that's it, we're done.
+
+This is how we vectorize reduction loops. And this is pretty good. This is a very powerful optimization, but we can actually do better. Let's see what we can do. So, modern processors are called "out-of-order" processors because they can execute multiple independent calculations in parallel and they also have the resources to do it. So modern processors have multiple execution units to handle parallel computations. And, you know, your iPhones have them and your Macs have them, so they are very popular. Every modern processor is an "out-of-order" processor. And the compiler optimizes for these processors.
+
+So, the compiler looks at the code that we have right here. This is the sum loop, and it compiles it and then the CPU executes it. And this is a smart CPU, it's a smart processor, the processor that we're talking about and it looks ahead. It knows that we're inside of loop and it looks ahead and it sees that we have another addition and then another one, the loop after that.
+
+And it really wants to execute these additions in parallel, right? It has all these resources and it really wants to optimize, you know, execute them in parallel but the processor can't because the adds depend on one another. So with all the resources that the processor has, it can't execute these instructions in parallel. So, what do we do?
+
+This is what we do. The compiler optimizes the code by unrolling it a little bit. And the compiler should do it, not you. Because the compiler knows exactly how many execution units the processor has and what is the level of the parallelism and it has a lot of information on the processors.
+
+So the compiler should do it. And after the compiler does it, after the compiler unrolls your loops, you'll see that we have two independent chains of calculations. The adds don't depend on one another anymore. So, if we take a look at Iteration 1, we have two adds and two loads. These two adds and two loads can be executed in parallel. So this is great.
+
+So, let's put these two optimizations together, unrolling and vectorization. So this is the array that we have. We need to partition it. We need to break it into two groups. So we have the greens that one independent -- that's one chain of calculation and we have the purples. And the size of each chunk is a vector width. And when we add them together, this is the code that we get.
+
+So on top, in the purple, you can see the instructions load and add, and then the green at the bottom, you see load and add. And these two loads and adds can be executed in parallel because they're independent of one another. And this is the code that you get when you compile our loop to iPhone 5.
+
+So let's look at -- take a look at some numbers. On the left, you see the sum loop when compiled to an iPhone 5. All the way to the left, you see 1X. We normalized our score to 1X. And when we vectorize our loop, we get a three and a half, almost 4X boost in performance which is great. The vectorizer did a good job.
+
+But when we enable unrolling, we get almost 4.5X boosting performance which is great. It's a very good optimization. And when we take the same code and compile it to a Mac, we get something similar. Again, we normalize that into 1X. When we vectorize, we get almost 8X, almost 8X boost in performance because Intel processors can process eight elements at once. But when we unroll, we get almost -- an almost 10X boost in performance which is really nice. You got to admit it's a good --
+
+[ Applause ]
+
+Thank you. Okay, but I got to warn you on one thing. If you look carefully, when we added all these numbers together, we changed the order in which we add in them. And this is okay for integers, but it's not okay for floating point numbers because we have to deal with NaNs and negative zeros and all these things. So, if you really care about the accuracy of your numbers, then you shouldn't enable fast math. But if you do want the vectorizer to vectorize a lot of loops then you should probably enable fast math.
+
+Now, I also want to talk to you about something else that you can do to help vectorization, and this is data layout. So on top, you can see a pixel, red, green, and blue. And pixels are usually more interesting when they come together in groups. They can create pictures and other interesting things. And there are really two ways in which you can organize your pixels together. One way is to take these pixels and each pixel is really is a struct that has red, green, blue, and we can all put them together in one array.
+
+And this array will look like this, will look like red green blue, red green blue, red green blue. And the other way in which you can organize your pixels is to take all of the reds and put them in one array, then take all of the greens and put them in one array, and take all of the blues and put them in another array.
+
+Then take these three arrays and put them in a struct. So the first method is called Array of Struct, AoS and the second one is called a Struct of Arrays, SoA. And these two ways really have a significant effect on the performance of your application. So let's take a look.
+
+In the code that we have right here, you can see that we're doing a very simple filter in graphics. We're taking the greens and we're adding them to the reds. That's pretty simple. Let's see how it works for AoS, for Array of Structs. So, to add the greens to the reds, the first thing that we need to do is gather all of the greens. Now this is a pretty expensive operation because the greens are not consecutive in memory, you have to collect them together.
+
+And you need to do the same thing with the reds. And this is very expensive. I lost track of how many loads we had. I think it's eight. And then we add them together, that's pretty simple and that's very efficient because we have the vector instructions to form this addition.
+
+And then we need to put the reds back in place, and this is very inefficient. And the compiler will recognize that and it will not vectorize your code. It's smart enough to know that we shouldn't mess with this code. But what if we were to organize our data slightly different? This is the SoA.
+
+So, this time all of the reds are consecutive in memory and all of the greens are consecutive in memory. So, it's pretty simple to vectorize this code. We just load the greens, load the reds. That's very cheap. Add them together and save them back, pretty easy. So now this code is beautifully vectorized.
+
+But I want to tell you that the compiler is going to vectorize your code, but it's not going to change the data layout for you. If you decided to go with Array of Structs rather than Structs of Array, then the compiler is not going to optimize your code. So you need to decide on what is the right data layout for your program.
+
+Now, I also want to talk about something else. I want to talk about the C programming language. The C programming language has a few details that can affect vectorization and can affect the performance of your code. So let's take a look. Right here we have two loops that are almost identical.
+
+The one on top gets vectorized but the one at the bottom does not. Now, what is the big difference between these two loops? The only difference is that the one on top uses signed indices and the one at the bottom uses unsigned indices. Well, let's go the spec and see what it says.
+
+The C spec says that unsigned indices are allowed to wrap but signed indices are not because that's undefined behavior. And someone may decide to scan their array in this funky way, they can start towards the end of the array, get to the end of the array, wrap around and end at the beginning and the vectors can't do that, they just don't do that, they can't wrap around. So, vectorizer will detect that and it will not vectorize your code. So what do you do? What is your recommendation? Well, if you were to write your code using size t or signed indices, then the vectorizer will be able to vectorize your code.
+
+So, to summarize, we talked about a couple of things today. And the main conclusion is that, if you want to get the most out of -- out of LLVM, it's better to write simple maintainable code that the compiler can optimize and you need to choose the right optimization flags.
+
+And we talked about a lot of different optimization flags, let's see if I can remember all of them. We talked about O3. We talked about fast math. We talked about the vectorizer. We talked about strict-aliasing. We talked about LTO. There are so many of them, I can't remember.
+
+It's -- did you write this down? I can't repeat this. We talked about O3, fast math, vectorizer, strict-aliasing, and LTO. No one can remember that, really and that's why we decided to bring some of these optimizations together into a new mode. We call it -Ofast. And now, there are only two things that you need to remember. LTO will look at your entire program together.
+
+-Ofast tells a compiler to enable a lot of aggressive optimizations including vectorization. That's what you need to remember, -Ofast and LTO. So, -Ofast enables O3, vectorization, strict-aliasing, and fast math. And do you remember the warning about fast math? It's important. If you care about the accuracy of your calculations, don't enable -Ofast and fast math.
+
+But for most people, most people should be able to use -Ofast. And how do you enable -Ofast? That's simple. You go to the Build Setting and your select fast math and then you use it. Now, I'm glad to have the opportunity to talk to your today about vectorization and the performance of LLVM, and we'd be happy to answer more of your questions. So you can always contact us and we'll answer your questions. So, thank you very much and enjoy the rest of WWDC.
+
+[ Applause ]
+
+Thank you.
+
+[ Applause ]

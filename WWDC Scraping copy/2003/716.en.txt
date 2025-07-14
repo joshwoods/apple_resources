@@ -1,0 +1,255 @@
+---
+Title:  Advanced QuickTime Programming Techniques
+Year:   2003
+Web:    https://nonstrict.eu/wwdcindex/wwdc2003/716/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Welcome back to our advanced QuickTime programming techniques topic. So advanced, we brought our own XServe, which all our demos will not be running on the XServe, in fact. What we're going to be talking about today is topics that a lot of people find pretty important. One is thread safety and multi-threading in QuickTime. A second topic we're going to cover is some integration we've done in QuickTime 6.4 and Panther for ColorSync.
+
+And lastly, we'll be talking about the complicated topic of Audio-Video Startup Sync. And just an overview of some of the technology frameworks we'll cover today. QuickTime, obviously, ColorSync, Quartz, Quartz 2D, and Core Services for some of our multi-threading APIs. And now I'd like to introduce Sam Bushell to come and talk about multi-threading. Thanks, Tim.
+
+Good afternoon. I think I could get in trouble if I put my water bottle on that thing. QuickTime's heritage on Mac OS versions 6, 7, 8, and 9 meant that many of its APIs were designed to be run from a single thread. Mac OS X brings us not only multiprocessing, the ability to do multiple things in multiple applications at once, but also it removes some of the traditional limitations on what we could do with multiple threads within an application. I'm going to talk about some of the work we've been doing inside QuickTime to allow you to use multi-threading with the QuickTime APIs to make your application more responsive and more powerful.
+
+First, let's talk about the basic problem with single-threaded APIs. If everything were instantaneous, no one would care. It would be OK if everything had to run from the same thread. But many common operations are slow. And it's a bad user experience when these slow operations delay application responsiveness.
+
+It's inconvenient to users when they can't export two movies at once, or export a movie and play a movie at the same time. So from our perspective, the urgent need is to allow developers to move these slow jobs to background threads so they can free up the main thread to provide a responsive user interface.
+
+In Panther, the particular operations we have in mind are still image import and export, opening movies, rendering movies, recompressing movies, exporting movies. But in Panther, we are not changing the way that movies are played back. Playback is already implemented in a way that avoids blocking the user interface. It's been that way since QuickTime 1.0. It's these other operations that have become UI hogs. We want to make these things safe to perform on background threads.
+
+So in Panther, the model we're aiming for is to allow independent threads to work on disjoint sets of QuickTime objects. This is the most important thing I want you to take away from my session today, disjointness. If one thread has its set of QuickTime objects, and another thread has its own set of QuickTime objects, and never the twain shall meet, everything's going to be fine.
+
+But we're not making it safe for two threads to access the same object simultaneously. If two threads need to manipulate the same object, then those threads need to perform some kind of negotiation or locking around this. Now this is no different from any unprotected data structure you might implement in your own code. You need to have some kind of thread protection before you allow simultaneous access.
+
+The exception to the disjointness rule arrives with the file system. The file system has always been designed to allow multiple readers of a file. And so, in order to understand this slide, we need to make the distinction between a movie, which is a data structure in memory, with a capital M, and a movie file which sits out on a disk somewhere. It may or may not be a QuickTime movie, but maybe of some other format that's been imported and is viewed as a QuickTime movie.
+
+It's okay for two threads to each have their own movie data structure that points to the same movie file. And it's okay for them to be displaying or rendering different parts of that movie at the same time and moving around. It may or may not be okay for one of those threads to be modifying that file, obviously, but that should come as no surprise. So let me repeat this really important point again. Don't let two threads work on the same QuickTime object at once. It's you as the developer who has responsibility for making sure that this is the case.
+
+It's also the developer's responsibility to avoid going and creating a dialog or a window in a background thread. If you go and look in the headers, you'll see that the Human Interface Toolbox is not thread-safe. It's the main run loop that receives events. Whether in Carbon or Cocoa, UI needs to basically stay in the main thread.
+
+One more restriction, this stuff is only going to be safe to do from threads in Panther. Even if you install a spanking new version of QuickTime on Jaguar, you're still not going to get these thread safety improvements. Why not? Because there's a lot of plumbing underneath QuickTime that we rely on, a lot of APIs and core services that have been improved in order to enable this stuff, and that stuff is only available in Panther.
+
+So, now that I'm done telling you about all these restrictions, it's over to Tim to show you how great it is, because it is substantially nice to be able to run this stuff from multiple threads. Great, thank you. So, I have three applications I'm going to show you demos of, and they're going to be available on the Apple Developer Connection website under the QuickTime, etc., etc. WWDC will put up some URLs at the end.
+
+So, what we did was we wanted to be able to make some clear applications that showed not only the code that you need to do to make your applications thread-safe, but also demonstrate visually so that people could understand exactly what we're trying to enable. The first application, Thread Tester Pro, is basically trying to emulate what Finder or iPhoto would be doing in the preview mode of viewing graphics-imported images, and that's what this demo is showing. So, what I've done is I've opened a window, and I'm going to open a second window of this application. And before I go on, I'm going to set each window to use the main thread as opposed to the P thread.
+
+So, right now, there's one thread in this application that serves both windows. And then I'm going to select some images to preview. So, I'm going to pick some smaller images that I took when I was on vacation in Southeast Asia far too long ago. And I'm going to select some larger images in this other one. And while that one's loading, you can see I can basically load up these images and it's fairly responsive.
+
+But when I tell it to auto-run, which is basically going through every image, and I'll tell this one to auto-run, now these large images are what effectively are doing, they're blocking the other thread from processing that image because the images in the front window are much larger, they take longer to decode.
+
+And not only is that going on, but you can see that the UI is pretty non-responsive. I can't really click. It's kind of like waiting for things to get done. So let me stop that.
+
+[Transcript missing]
+
+So that is the first demo I wanted to show. That's graphics importers using the same application doing two sets of images on two different threads.
+
+So the second demo I'm showing is that we've done the same work for graphics exporters. One thing that you'll see here is that in the application, there's a menu that says only use thread-safe components. So we're able to detect through some techniques. Sam will talk about which components are thread-safe in the OS. And here I'm going to limit it to the ones that are. And again, I'm going to switch to the main thread and select the folder Export Files.
+
+So now it's loaded in a bunch of images, and I'm going to do the same auto-run. It's created a folder. It's basically spewing these all out in a different format. And while this is going on, you can see it's responsive because the images are small, but it's not exactly superb. So let me stop that and get rid of that guy.
+
+So back to the main thread, I'm going to open another window and again select the same export folder. and switch this window to use a Pthread. So now both windows are using Pthreads, and let me just get them both going. And again, now we have two applications bringing the images and exporting them to different formats. What it's basically doing is it's exporting them to all the formats that are shown here. So this is running, and we see that there's going to be two folders created here. And let me just stop that and stop the other one.
+
+and you can see what's done here. Just a couple of these images were loaded up in all the different formats. So once again, you can think of applications like iPhoto and other applications which are exporting images. They can now do these in the background. So that's pretty much the story for importing and exporting.
+
+And where did my window go? So my last demo is about movies. So with movies, you kind of have the same idea. You want to be able to do things in the background. You want to be able to do multiple operations in your application when you're doing things like exporting movies. So again, I have an application called Threads Export Movie. And I can select whether I want to use the main thread or P thread. In this case, I'm selecting a movie using the main thread. And here's the movie.
+
+and it's Kevin Mark's son once again. And now I'm gonna export and... Oh, I did that earlier today, no worries. So let me pick the settings. I'm gonna pick CinePack, nice and fast. It's thread safe. So now I'm exporting this movie to CinePack, and you can see, It's taking quite some time, and while it's doing this thing, I can't do anything with the application. Not very, very good user experience.
+
+So let's just wait for this to be up. So what we're going to then do is we're going to switch this and be able to do it on background thread. And when you're doing that, the application will be responsive. So let's switch this guy to be on a P thread. And I'm going to open a new window.
+
+This time I'm going to select a long version of Andrew. And again, it's using a P thread. So let's export this guy. Test.move. Yes, replace that. And CinePack, the settings are good, so I'm going to start exporting that. While I'm doing that, I'm going to go back so it's responsive, and I'm going to go and export test2.move and replace that one. And again, I'm going to use CinePack so you can see that I'm able to do that export.
+
+And just for fun, I'm going to open a new window, select Andrew, and play this. And just so you can see what's going on, we're able to actually export two different movies and play one of the same movies at the same time. So basically, multi-threaded. Rendering and multi-threaded. Transcoding in QuickTime 6.4. Thank you. Thank you, guys.
+
+Thanks a lot. Perfect. Thank you, Tim. So Tim gets to show you all the good news. I get to tell you about the bad news. What's the bad news? Bad news is some components. are not thread safe. Even if we could make every component that we ship on QuickTime in Panther thread safe, QuickTime is an extensible system. And users can install third party components. And they might be last year's components. They may not be thread safe.
+
+We're going to have to cope with this fact that we have thread-safe code and thread-unsafe code in the system. When you do a high-level operation in QuickTime, maybe like opening a movie and starting to display it, or converting an image from one file format to another, that can involve maybe a dozen lower-level components. And often, you don't know which components you're going to use until you actually try and do it.
+
+So that means that some media files and some conversions cannot be safely performed from background threads. And your application is going to have to cope with finding that out dynamically. Now, a bad way for your application to find out dynamically would be for it to crash at random on users' machines. A better way is for it to get some kind of message.
+
+So the new rule is for applications who create threads, who call QuickTime, is you have to call this API to say, from this thread, please don't let me open any non-thread-safe components. It's a component manager call. It's in core services, hence the CS prefix. And it's in Panther.
+
+If the component manager is about to open a component, and it notices the component is not thread safe, then it will return-- it won't open the component, because even the open call might do things that are unsafe. And instead, it will return this error code. And that error code is likely to propagate back through other APIs to you. And if you receive that error from-- Any API in QuickTime, then you need to cope with that and shift the work over to the main thread.
+
+In the Panther seed, there's a mixture of thread-safe and non-thread-safe components. And you can see some of those on this chart. Others you'll have to work out for yourself. You can test that by checking the component thread safety flag just with Find Mix Component or Get Component Info. It's a flag defined in the Component Manager header file. So the most important still image formats are the ones we've gone and made thread-safe first. Magpaint is not.
+
+Not because we hate MacPaint, it brings a smile to all of our faces. The real reason is so that you have some well-defined test cases for exercising the migration feature. You should use the components that are thread-safe to exercise code like Tim demonstrated, but you should use the components that are on the right to exercise your code so as to make sure that it's safe, even if you encounter media that's supported by components that aren't thread-safe.
+
+In some situations, you're going to want to move a QuickTime object from one thread to another thread. Now, with graphics importers and graphics exporters, you can manage that with locking that you perform on your own. Just make sure that it's only being called from one thread at a time.
+
+But movies are kind of special because of the way that they work. Movies need to know which thread they belong to at any given time. And so there's a pair of APIs that you call to detach a movie from one thread and then to attach it to another thread.
+
+A bunch of QuickTime APIs let you install callback routines. These fall into several categories. There are some that have always been called back from funny threads. That hasn't changed. But there are other ones that, in general, get called back from whatever thread is doing the work. Now, in the past, that was always the main thread. But now you might move that work to another thread. And if you do, you need to take care with your callbacks and rethink whether they're actually thread-safe as well.
+
+In particular, you should take care with your progress callbacks. Don't just call setControlValue to adjust a progress slider, because that could cause the progress slider to be redrawn. And like I said earlier, header files say that the Control Manager and the Dialog Manager are not thread-safe. And that could cause-- simply calling setControlValue, although we think about it, it's just setting a value, it actually would cause quite a lot of code to be run in order to draw that. It may not always be immediately obvious that the code that you're running is not thread-safe. Thread-safety bugs can be nastily tricky and hard to reproduce, and it's better to be safer than sorry.
+
+If you're a developer who writes QuickTime components, good for you. Please make the next version of your component thread safe. And when you do that, you should set the thread safety flag on your component. It's just a component flag in the global space. What kind of things do you need to do in your component to make it thread safe?
+
+And what kind of things do you need to do in your application to make sure you're thread safe? Well, a bunch of that plumbing that I talked about beneath QuickTime, here are some good examples. It's now safe to create G worlds and draw in them from preemptive threads.
+
+It's now safe to open and close components from background threads. It's safe to resolve aliases. It's safe to create and manipulate handles from threads. In order to make that work safely, we made what was previously a global error variable for the memory manager, a mem error. We made that from a global variable into a per-thread variable. So the error you get back, the error code you get back from an API call on one thread won't interfere with the API call. you make on another thread.
+
+You may have read advice saying, "Stop using handles, use malloc instead." There's a little bit of confusion about that. If you're using New Handle to allocate private data structures inside your application, then it's a good idea to examine those and see if you can switch them over to use malloc or caloc instead.
+
+If they never change size, that might be the right thing to do. Because malloc is faster on Mac OS X. The handle implementation is built on top of it and it has to maintain some extra information that isn't necessary for malloc and caloc. It has to maintain the master pointer blocks, for example.
+
+However, we use handles in QuickTime and in the Alias Manager and so forth as a part of our dialogue of our API. We have over 400 APIs that pass handles around in QuickTime, and they're not going away. So your use of handles, if you're using it for those purposes, is obviously the right thing to do.
+
+There are some other managers and APIs that won't be becoming thread-safe. The Resource Manager APIs involve a global state called the resource chain. It's a list of open resource files. and effectively it's an implicit parameter passed to most of the resource manager APIs. And as such, it's not thread safe. However, the one-shot component manager calls that get component resources, such as get component resource, get component public resource, get component public resource list, these guys are thread safe.
+
+So, for example, in your component, if you, a common thing that happens in image decompressor components is that they need to get the CDCI resource to answer the question in get codec info, fill in this codec info slab. And a way that often this has been done is by calling open a resource file, get resource, and close a resource file. Because those APIs manipulate the resource chain, they're not safe to do. Instead, you can use the one-shot call, getComponentResource, and that is actually safe, and that's what we recommend you do inside your getCodicInfo call. There are other examples of this in other component types.
+
+Another common practice in components has been to have some shared global state that's shared between component instances. and generally people would use the component refcon as a way of storing where this state was. Now, when all components were used on the same thread and memory was scarce on your Macintosh LC, it was a good idea because you wanted to save memory.
+
+However, if you want your component to be used by multiple threads at once, it's now a bad idea and it's time to upgrade that code. Now, if you really need to share dynamic state between components and those component instances might be
+
+[Transcript missing]
+
+On the other hand, if you're using shared globals for constant tables, and maybe allocating them once and then hanging onto them later on, then the best thing you can do is to take those tables, generate some source code that builds those tables, label it as const, and just build it and put it in your executable.
+
+This might seem a little bit eager or a little bit weird, but it is actually a better thing to do for a number of reasons. If your data is constant and you tell a compiler, here's a big constant array, then instead of putting it in a place in private memory to one application, it'll put it in the read-only section of the executable, which for Unix-y reasons is called the text segment. I don't really understand that history.
+
+But this is the same place where your executable code is. And the nice thing about that code is that it can be shared between multiple applications. So as well as sharing these tables between multiple instances of a component inside one application, these are shared between multiple instances of multiple components across applications. That stuff needs only to be resident in physical memory once.
+
+And even better, if that memory needs to be pushed out for paging reasons, it doesn't need to be written back to the disk. It doesn't need to take up space in swap files because it's read-only. And so the kernel knows that it can bring it back any time it wants just by mapping it back from the read-only file. So that's the best thing to do in cleaning up your code in that area.
+
+So to summarize the thread safety part of this talk, we're giving you the opportunity to make your applications more responsive and more powerful by doing work in background threads. In return, your part of the bargain is that you need to structure your code so that it will cope with legacy non-threadsafe components. Component developers, please make your components threadsafe so that the application developers can take advantage of them. And this is a Panther-only feature. Now, there's one thing we haven't mentioned on the slide, which is that we have a seed. We have the opportunity to seed some of you.
+
+And we have set up an address that you can send mail to to request involvement, which is qtthreadseed at apple.com. That email address is going to be around just for next week. So you should send email to us in the next week. I have some reminder cards. You should come up to me after the session, and I'll give you a reminder card.
+
+And then you can take it back and arrange to tell us what you're going to do. And we can see if we can seed you. So now I'd like to hand things over to me. So if you've been asleep through the multi-threading part of the talk, it's time to wake up again. We're going to talk about QuickTime's integration with ColorSync. And I want to begin this by taking a sip of water.
+
+So let's start with a jargon update. The QuickTime has APIs for drawing still image files. And we have APIs for writing still image files. We talked about those earlier. They're graphics importers and graphics exporters. Colorsync provides services for matching colors between profiles. If you haven't heard of these terms, A profile describes how pixel values relate to the colors we see. It's a mathematical model of this relationship.
+
+and different devices like cameras, printers, scanners, and monitors. They each have different profiles. It turns out that the relationship between a pixel value stored in some kind of buffer and the color you end up seeing is going to be different for each of these different kinds of devices and often for different individual devices. Color matching, the big thing that ColorSync provides, color matching is translating pixel values to compensate for the differences between profiles so that you see the same color.
+
+So many kinds of still image files have different ways of embedding Colossing profiles. And part of the Graphics Importer and Graphics Exporter APIs since QuickTime 4.0 has been affordances to read these profiles and to write these profiles in new files. That was pretty much all we provided. To draw an image with color matching, you had to write some extra code. And to preserve a profile when converting between one image format and another, you had to write a little bit of extra code.
+
+It wasn't much. But because ColorSync has often been viewed as a pro feature, applications that didn't view themselves as pro imaging applications often didn't spend that effort. And this meant that the results are patchy. And even non-pro users are beginning to notice this and start to get a little bit tetchy about the fact that this picture they've got doesn't look the same everywhere.
+
+Here's what you had to do in order to draw an image using a graphics importer with color matching. You'd get a graphics importer for the file. Draw it into an off-screen GWorld or buffer. You'd get the ColorSync profile by making the call on the graphics importer. And then you'd choose some destination profile, often a generic RGB profile.
+
+Then you'd create a ColorWorld, which is a ColorSync API. And then you would match, which means actually performing the translation. You'd match from the GWorld to another GWorld and then copy that to a window. This is a little bit more work, and if you really cared, you probably did it, but it was still some work.
+
+If you wanted to preserve a profile, that wasn't quite such a big deal. You had to get it from the importer and set it on the exporter. And, you know, in QuickTime 4.0, this didn't seem like such a big deal for people to have to do. But if you didn't do it, then you lost some kind of important information. And people who are relying on that as part of their process, or people who just were messing around with some images, could become a little bit unhappy if they lost that.
+
+So here's what we're doing in Panther. Graphics importers will now draw using color matching by default. And we'll use the CMYK to RGB conversion that Colorsync provides by default, because it looks better than what we were doing, which was somewhat naive. Furthermore, when you convert image formats using graphics exporters, we will preserve the profile. We can only do this if you're plugging in a graphics importer directly into a graphics exporter or using some other mechanism that lets us automatically detect the profile and push it through.
+
+If you draw into some off-screen GWorld and then export out of that off-screen GWorld, the GWorld is not tagged. Other kinds of things like CG images and bitmap context and core graphics are, but the QuickDraw equivalents are not. We can help when we can help. Otherwise, you may have to do some work still yourself.
+
+But this is what you do now in order to draw an image using color matching. You just draw, and we will draw to generic RGB if you haven't told us to do anything else. We'll go and call ColorSync, and I might as well show you. So let's go to demo one. Wow. The export's finished.
+
+So all of the sample code that Tim showed you earlier and the sample code that I'm showing you now is available. But because it requires the Panther APIs, you have to go to the Apple Developer Connection site and log in. So you go to connect.apple.com, log in. And then if you look under Download Software and then the name of the developers conference, then you'll find a bunch of stuff.
+
+There's more stuff each day. And here I'm going to show you an application that you could be playing with if you'd known that. I, because it's an image application you drop images on and they get drawn, I called it DropDraw. That's the kind of unimaginative person I am.
+
+I mentioned the CMYK rendering because this we have had substantial complaints about in previous feedback forums. I've turned off this flag, used color sync matching to pretend that we're back in Jaguar. And this is what you get. This is a CMYK TIFF file. It's a picture of a palm tree. And this is recognizably a palm tree.
+
+But if you were a photographer, you probably wouldn't be very happy with that if that was the photograph you'd taken. This is what it looks like if you're using the color sync CMYK to RGB conversion. And it looks a whole lot better. You can see more depth of detail in the shadows, and the water looks less radioactive.
+
+So this is now what you'll get by default out of, if you're just drawing using QuickTime, and that's kind of nice. But because you're drawing using graphics importers, there's all these other features that we give you, like we give you the ability to crop, and that still works.
+
+This is a cropping using source extraction in source space. You can apply a rotation matrix. Let's do that. Let's rotate the image. We can clip. We can give it a clip region, and there's a fairly complicated clip region. We can do them all, which is the obvious thing to do. There we go. Here we go.
+
+So CMYK images look a lot better, and you can still do all of the things that you used to be able to do with graphics importers. We've introduced this feature in as orthogonal a way as we can. The difference between unmatched and matched images is a bit more subtle when you come to RGB images.
+
+And there, we can be forgiven for thinking that there wasn't much of a deal. If you look at this image, this is a picture that Ken Breskin took on holiday. He says that he was on safari. It's a bit hard to tell whether he was in a zoo, but we'll believe him.
+
+Here's a picture of some wild beast. It looks great, you know? If I got a bug report saying, "Look how bad you made my image draw," I wouldn't believe that, until maybe I saw what it looked like side by side with the matched image. And, you know, if you saw this image, if you were there in person and saw the animal and you know that it looked browner, then you'd be unhappy if it wasn't that brown. In fact, I think this -- I think it even looks hairier.
+
+Here's another example. This one's pretty good. Here's a picture of a lion. and here's the same line with color sync matching, and that looks a whole lot sexier. A much more romantic picture of a line. The photographer's side of this is, look how bad these things look. This is terrible. The programmer who isn't a photographer doesn't know what they're complaining about.
+
+But in fact, it's not necessarily a professional who's really going to care about this. I think anyone who's really getting into photography wants their images to look like they were. Otherwise, you feel your memory of the event was a little bit defaced. But the problem is, if you only see one of these, how do you know whether you did the right thing? So, going back to slides, we've got this problem.
+
+How do you know whether it's right or wrong? Could you pick? If you only saw one of these, could you pick the right one? I'm not sure that I could. So there's a bit of a problem for developers, and The ColorSync team has come up with a good solution.
+
+They've created some files with special profiles. It turns out that people have discovered that you can use ColorSync matching, because it does all of this color space conversion, you can use that for doing explicit image adjustment. You can say, make this a bit bluer or greener, make the sky blue, that kind of adjustment, and people use it for doing kinds of color correction on purpose, not just to make things look the same.
+
+And they've created some image files that have embedded profiles that do a whole lot of changing. In fact, they switch the colors red, green, and blue around. They all switch them around, and then they make one of them vanish. So, the image at the top is what it looks like if you don't do any color matching.
+
+and I don't know if you can read it. It says the embedded test profile is not used and is not double matched. But the second one where the text has gone green is if you do the correct compensation using color sync or something else. and it has switched the colors around and the first word, not, has vanished because of this special profile. And so it says the embedded test profile is used and not double matched.
+
+And should the compensation of the transformation between these profiles be applied again, then you'll find the image at the bottom, which has turned red, and the word not has vanished, and now it says it is double matched. But this is all coming from the same image file. So to work out whether you're doing the right thing or the wrong file, you can just drag this into your application. So let's have a look at this.
+
+These image files are also available if you go to connect.apple.com. There's these images with trick profiles. We've got a bunch of different image formats here, and I can go into my little application. So there's one which always looks blue because it doesn't actually have a profile. It's there as a baseline. It's there if you want to create other image formats by taking the profile out of one of the other. So here's a GIF, and here's the test text. The embedded test profile is not used, and let's make it be used.
+
+Look, it's used. Woo-hoo! So we've got a bunch of images here. I'll turn off that one, just show you that they all work. So this is in my application, which since you haven't downloaded the sources to, you don't know whether I'm actually doing anything very fancy. But I can show you in a few other applications that this is really a widespread effect, and we can make sure that things are doing the right thing.
+
+The finder's preview here, you can see that the finder is displaying these with matching. The finder does not call a color sync to do this stuff. Here's another application that... doesn't call ColorSync, as far as I can tell. Rich told me it didn't yesterday morning, and I believe him. BBEdit actually lets you open images and movies, I think. Well.
+
+There's an option in the preferences to do this. Let me try this other copy, see if this one works. Oh, here we are. Okay. So here's an image in BBEdit. In the preferences here, there's a choice whether you want to display images using QuickTime and even open movies. Kind of interesting for a text editor, but I've heard it doesn't suck.
+
+If your application's like BBEdit and it's just calling a graphics importer, so this is already working for you. Another Apple application, but not one that... You think of as an imaging application is iTunes. iTunes actually does call graphics importers. I have it on good authority. They use graphics importers to draw the album artwork. So, I can just drag my image file in. playing in the background. It's a really very 80s song.
+
+get your G5 upgrade today. Okay, what if your application already does color sync matching? Well, some of you are saying, oh my god, my application already does this. Has he broken it? And some of you are probably saying, what's the problem? Well, you don't apply that color sync image adjustment twice.
+
+That would be a bad idea, because then you'd overcompensate, and the photographers would be unhappy again. So it's difficult to... You might be concerned if you already have an application. The good news is that we did think of this. And we do maintain binary compatibility with applications that are already calling graphics supporters and doing the matching themselves, as we showed before. The way we do this is a little bit tricky.
+
+The graphics importer now lies. Well, it tells you the profile that it's going to match to when you ask it what the profile embedded in the image file is. So now, if it's going to draw the image matched to generic RGB, it'll tell you when you ask, say, what's the color sync profile of this image? It'll tell you, oh, it's generic RGB. And that means that if you then match again to generic RGB, color sync will say, that's a no-op. These are the same profile. And so the image will still only have been matched once.
+
+It's worth, if you have an application that does this, it's worth checking that this is the case. Because if you grab that profile ahead of time and store it somewhere else, or if you go through some other path that isn't quite this simple, then it's possible that there might be a situation in which you did match twice, you did get an erroneous double match. But you can easily detect that case and work out how to fix it by using those image files, which as I said, are up on the ADC Connect side.
+
+On the other hand, if you just want to tell us, don't do color matching, I'll do it instead. We have an API to do that. That's what we were using to turn off things and pretend we were on Jaguar. It's just setting a flag on the graphics importer, and since it's just a flag, it's safe to do that all the way back to QuickTime 4.0, in fact.
+
+In the panthecide that you have received, automatic color management only happens when you draw images. It doesn't happen in the utility APIs for getting images as pic handles or picture files or saving them as QuickTime images. We also have not yet done anything to modify importing still images or sequences of still images as movies.
+
+If you're a graphics-imported developer, you need to opt in to get this feature, because you need to enable the code that and the other two are going to be talking about the new version of the QCF. If you want to talk to me about it, I'll be downstairs in Sacramento, which is not up 80. I'll be in Sacramento tomorrow morning, and so will other people on the ICM team.
+
+So, we are making color management the default because we think that it's a better user experience, not just for pro customers, but for all of them. We're also making a strong effort to preserve binary compatibility because we think that's also a pretty important user experience. So, one more thing from me. I want to tell you about a couple of new APIs in QuickTime to help integrate with Quartz 2D.
+
+So we have a new API that's in the Panther seed to create a CG image from an image file. And this is great if you then want to draw that into a CG context. This was requested by a bunch of people. If you don't know what a CG context is, I encourage you to learn. Go to some Quartz sessions.
+
+Pick up a book. One tip, though, Quartz uses a floating point coordinate space. So if you want to center that image somewhere, you should be careful to round down the coordinates when you're dividing some number by two. Or else, you might draw that image at a half pixel offset, and then you get a blurry image.
+
+So round is your friend. Floor is your friend. Floor is the function. We've also introduced an API to create a new image. allow you to provide a CG image as the input to a graphics export operation. And so using this, you can take the smooth images that you've rendered by Quartz and write them out as Mac Paint files if you like.
+
+So that's it for me. I will have these little reminder cards. If you're interested in writing applications that take advantage of the multi-threaded abilities, please come and see me, and I'll give you one of these cards. And then you'll remember that you have to send some email to us. So let's switch to a totally different topic right now. From all this Threads Safety, ColorSync, and cross-2D support in QuickTime for Panther, and let me talk about Audio/Video Startup Sync.
+
+Before I do that, let's take a look at the current QuickTime AVSync model today. Today we have moving times, which is driven by time bases. And those time bases are driven by clocks. Basically, time bases have a definition of rate. They can stop the time, they can move the time forward or backward, whether the clock provide real-time clock information, which means that their time is always moving.
+
+So these clocks can be provided by external hardware device today, such as audio or video. If your movie is not attached to any of these devices, QuickTime internally will use the CPU clock. But the fact that QuickTime is capable of using this external clock to drive the time base of the movie let us play audio and video in sync over a long period of time.
+
+The issue we have today is that this model makes the assumption that the rate of a time base can change right away. and by making this assumption, what kind of trouble can we run into? Well, if you take the example of video clock, which is draw there, assuming this video clock is currently driving the time base of your movie, when your application asks QuickTime to start this movie, basically internally, we're gonna turn around and change the rate of this time base and assume it's going to change right now.
+
+But actually, this external device clock, we would like to see the rate changing not right now, but on the edge of the video scene, because it will be totally incapable of outputting the first sample before this edge. Well, if you look at this drawing, the second arrow is pointing at when the movie time has already started changing.
+
+So the audio track has already seen a time moving since the second arrow, when the video one will be totally not possible for it to display any sample before the third arrow. So by making this assumption that the rates can change, we introduce a gap, a tiny gap, between audio and video devices today.
+
+And we're not talking about seconds or minutes in this gap. This is about a couple of milliseconds today. Okay. But. When you are in the high-end audio and video space, they really don't care about what the scale of your gap is. They don't want to see any gap at all.
+
+So what do we need to do to fix this issue and get rid of this gap? Well, QuickTime needs to be able to understand this clock constraint, and as soon as we understand this constraint, we'll be able to provide some headroom before the rate of the movie changes.
+
+So how do we make that happen in Panther? Well, we've introduced two new APIs on the clock component side. The first one is clock getTimeForRateChange. And basically, this API-- we used to ask the clock, what time is it, and say, well, we'll change the time now. What we're going to do, we're going to say, well, we are about to change the rate from this value to this new one. Tell us what's the best time to change this value. The other API on the clock component side as well is clock get rate change constraint, which basically let QuickTime knows that the clock does have such a constraint.
+
+There is also in Panzer this new time-based API called GetTimeRateChangeStatus. So this one, you'll be able to call it after you change the rate of the movie, and you will be able to tell when the time will really start moving. There is also one new bit which has been added to an existing API called GetTimeBasedStatus. It's called time-based rate changing, basically telling you that you are within this gap I was just talking about.
+
+So what does that mean for your application? Well, if you use high-level movie toolbox API, you probably don't care about it, all that you really need to be aware of that the time-based rate can be not zero but the time is not moving. and actually the slide is talking about clock and I'm definitely out of sync with my slide. This should be really time-based. If you use low-level time-based API directly outside of a movie context, you might have more work to do.
+
+You probably need to check for this new flag returned by the get time-based status because it could generate some new behavior you've never seen before. So the last API added in Panther is a movie toolbox API called GetMovieRateChangeConstraints. So before you start a movie, you can query the minimum and maximum delay that you will see when you're about to change the rate of your movie.
+
+So let's switch to the demo machine to show you what this stuff is all about. So of course, I'm trying to demo something which is showing a millisecond delay when you start a movie. So that's not really something easy. So in order to have you re-understand what's going on, I modified the built-in audio clock on this machine, just because I can, and I advertised a constraint of two seconds rather than a realistic constraint, which is about a couple of milliseconds in real hardware devices. So you will be able to see what I'm talking about when the movie rate is changing.
+
+The other thing I have added to this standard QuickTime player is a custom panel, which is showing you a couple of things. The first one is the current rate of the movie, and the two other parameters basically are using the new APIs I was talking about. The first one is asking the movie to box with the constraint when you're about to start, and this is the two seconds I was talking about, building to this fake audio device clock, and the other one will basically monitor the time changing after I've changed the rate of the movie.
+
+So the player has not been modified at all. All that has been modified in this demo is the clock component which is used. And because this movie contains both an audio and a video track, by default, QuickTime will pick up the audio clock to take the time of this movie.
+
+So when I'm about to play this movie, you will see that the movie controller believes that the rate has changed. Well, we're gonna see that the rate actually will change in the future. So if I do that, nothing is happening, and you see the slider going down, and the movie restarting. - Thanks for coming to Apple today, Mary and Vivian. Do either of you work with computers at all?
+
+Let me do that again so you can understand what's going on. Everybody believe the movie has started, and the clock is running the time base of the movie. So even if the constraint is applied on the audio track, actually the video is going to wait patiently for this time to start playing.
+
+Do you know that Apple makes QuickTime for Windows now? Yeah, IBM. So to show you that it's really coming from the audio clock, what I can do, I can extract the video track from this original movie. And if I just show you the panel, the everything panel again, we'll see that there is no more constraint because QuickTime is not using the built-in audio clock anymore. And if I just play this movie, it does behave like any movie today, which means that the video can start right away.
+
+and there is nothing happening there, the rate changed instantaneously. If I extract just the, Audio Track of the original movie. Then, one more time, because QuickTime is using the built-in audio plug, is going to wait before the start happens. Are you now or have you ever used video for Windows? I've just experimented. I have-- Well, that's about all the time we have left for now. And that's all the time I have as well to talk about the service of the second pencil. Thank you.
+
+So Guillermo, Guillermo is not here. Guillermo is here and is coming up to wrap up the session. So now for the ending of the session, we're going to talk about what is still available for you as sessions. And we have, for tomorrow, we have QuickTime Streaming Server Programming. And we have QuickTime Alternative Programming Environments on Friday. But the thing that I want to highlight is the feedback forum tomorrow. It's at 3.30, if I remember correctly.
+
+And the important thing here is that it is scheduled to be in High Ashbury. And we have moved it to Marina because we think that we need more room for all the QuickTime people who are at the conference. So High Ashbury was going to be just too small for, we expect you all to be there. And this is enough to fill High Ashbury already. So please take note of that. We will be modifying all the displays around. the conference.
+
+[Transcript missing]
+
+That's my contact information. If Sam happens to run out of his cards, you can write to me and I'll make sure that he gets the information also. More information. This is all the... Sam Poco, that we have been talking about here, is already available for you to download from the ADC site.
+
+There is also new QuickTime documentation available that you can go and download. We have, every time we are trying to catch up with the new APIs and make that available to you. So, you, as attendees of the conference, can go today and download it. We will be making it available to all the developers as Panther goes out to more people. At this moment, only you have it.
+
+For documentation, you can go and get the new stuff right now. More information on ThreadTester, DropDraw, those are available from the download site already. And the QuickTime Lab, we have mentioned this many times for API developers. This is an important opportunity for you to talk directly with the QuickTime engineering team and have any questions or consultation that you want to make answered. We still have the rest of this afternoon and tomorrow and Friday for you.

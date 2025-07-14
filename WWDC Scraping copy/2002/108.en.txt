@@ -1,0 +1,347 @@
+---
+Title:  Managing Kernel Extensions
+Year:   2002
+Web:    https://nonstrict.eu/wwdcindex/wwdc2002/108/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Good morning, and welcome to the Managing Kernels Extension Session. I'm Craig Keithley. I'm Apple's USB and FireWire evangelist. As part of that, I work with a lot of people that work on kernel extensions. As we talked about in the past session -- and this is an important message to get across -- our preference is that folks don't write kernel extensions. And you can look even in our own system, where the printing I/O module in Tioga, the image capture architecture, camera modules, scanner drivers, etc. are all running in user space. They don't need to have kernel extensions.
+
+There are, of course, some situations where you need to do that. Network kernel extensions, certain file systems extensions, and mass storage drivers, those sorts of things do require kernel extensions. And that puts you as developers into some very important considerations. You need to be aware of how to handle the KEXT cache. You need to be aware of file write permissions, et cetera. So in order to go through the managing kernel extensions, I'd like to welcome Dean Reece, the I/O Kit Software Engineering Manager. Thank you.
+
+Good morning. Thanks for coming. Let's dive right in. So today I'm going to talk about -- start off with a little bit of what kecks are. By this time I suspect most of you know what kecks are. But I'll talk about it a bit anyway just to make sure everybody is up on the same page. I'm going to talk a little bit about when to use them and when not to use them.
+
+Craig's already covered that a bit. But I'll talk about some of the decision points to help you decide why you do or don't live in a kernel. And talk -- actually most of the presentation is about some of the details around actually deploying kecks, building them, debugging them, things like that. And we'll hopefully get you out of some pitfalls along the way.
+
+So by this time you've probably seen this slide a couple times. Everything I'm talking about today is down in the Darwin kernel. Everything that KEXTs do run entirely inside the kernel address space. So if you're in here interested in user space drivers, as Craig talked about, we won't be talking about those here. We'll be talking a little bit about how in kernel drivers can communicate to entities outside the kernel, but we're really focused on Darwin at this point.
+
+And to expand on the Darwin view a little bit, you'll see I/O Kit and drivers sort of off to the side there as a vertical stack. We're -- I/O Kit is based on Mach primitives. We're entirely mock-based. We do work with BSD since BSD provides our networking and our storage infrastructure, but I/O Kit itself doesn't have any BSD primitives or any BSD tie-ins. It's really a service provider to BSD.
+
+Okay. So most basic definition, Kernel Extensions provide you a way to extend the kernel, Mac OS X kernel. In particular, they're a bundle that will include the binary code that gets loaded and run in the kernel and some descriptive information about why to load it, when to load it, how to load it, and so on.
+
+Now, there are three kinds of Kernel Extensions that we make use of in Mac OS X. There are I/O Kit drivers and families. I kind of lumped those together. They're actually a little bit different, but for the purposes of KEXT management, you can really consider them the same. There are network kernel extensions, obviously things that plug into the BSD network stacks, and file system extensions. These would be typically loadable file systems.
+
+Now, as has been said in several previous sessions, you really want to avoid using loadable file systems or developing loadable file systems or loadable network plug-ins at this point as Apple is still evolving those APIs. We've had the power of Unix and the power of our BSD kernel is very, very powerful.
+
+But at the same time, the Unix kernel has grown up with the assumption that you rebuild things from release to release. So there hasn't been a lot of emphasis put on binary compatibility. And as a result, it's very hard for us to extend the BSD parts of the kernel in a way that don't break file system or network plug-ins.
+
+I/O Kit, of course, is a new development at Apple, and we knew that this was rebuilding drivers every time we released the OS was not going to be acceptable to our developers or our customer base. So I/O Kit has some infrastructure for dealing with binary compatibility. It's not perfect, but it goes a long way towards easing the problem. And so at this point, we recommend just developing I/O Kit drivers in I/O Kit-style libraries or families.
+
+So, obviously, if you can avoid shipping a Kernel Extension at all, that's the best possible solution. Development inside the kernel is of course harder than outside of the kernel because it's deeper in the system, it's harder to debug. crashes are fatal. If you're running inside the kernel and you hit something that would cause a user process to exit, that's going to cause the kernel to exit, which means the whole machine stops running.
+
+So if you can keep your code outside the kernel, then the system will be more stable. It's a better user experience. Also, kernel resources are more expensive, and it's kind of hard to quantify this, but keep in mind that by default, memory that you allocate inside the kernel is wired memory. The actual text of your driver, the binary, when it's loaded, that's wired memory.
+
+: In kernel threads have the ability to run at higher priorities than user land threads. So, again, you're going to be running it probably at a higher priority than an equivalent user land thread. You have some controls over that if you tune your driver in user land or kernel land, you can avoid that problem. But basically, running inside the kernel is going to be a little bit more expensive. It gets you closer to the metal, so it allows you to do things you couldn't otherwise do.
+
+For instance, if you have to respond directly to an interrupt, I don't mean running in the interrupt context per se, but if you have a driver that needs to take a hardware interrupt and do some work, then you probably need to live inside the kernel. Now, this shouldn't be confused with a USB interrupt pipe or soft interrupts that are used in other areas of the system. This would be like a PCI card generating an interrupt on the bus.
+
+The other reason to live inside the kernel is if your primary client lives inside the kernel. Now, examples of this would be storage drivers. They need to live inside the kernel because the file systems themselves live inside the kernel. Since 99% of the time, your media is going to be accessed through a file system, it would be inefficient to have the file system driver outside of the kernel and then have the file system driver itself inside the kernel because that data would have to make multiple trips across the user kernel boundary. There are some cases when that's perfectly reasonable.
+
+In particular, a low bandwidth case, that might be fine because the amount of data you're moving is small enough that the multiple crossings make sense. But if you have a data driver that's not going to be able to move, then you're going to have to make multiple trips across the user kernel boundary.
+
+In particular, a low bandwidth case, that might be fine because the amount of data you're moving is small enough that the multiple crossings make sense. So, if you have a data driver inside the kernel, you're going to have to make multiple trips across the user kernel. So, you want to have as few boundary crossings as possible. So, the storage drivers live inside the kernel. The file systems stack on top of them.
+
+So, to talk about what a KEXT looks like, to a user, it's just a thing. It's an icon they drag and drop. To developers, it's a folder containing resources. There's really two things in there that you're going to care about most of the time. The, really the only required thing is a property list. Now, if you're familiar with the Mac OS X bundle format, a kernel extension is just a bundle. There's nothing magic about it.
+
+But the property list is sort of the table of contents, you could say. It contains an XML property list that contains some standard keys like the CFBundle identifier, which is sort of a global name that your bundle goes by, versions, How you load, your matching criteria, what family you load on, all these things are specified in that XML property list.
+
+This is read in by the KEXT management system and used to determine when to load your driver and how to go about doing it. The other piece that most Kernel Extensions include is a binary. Now, it's actually not required. There are a few cases where you can have a perfectly useful driver that doesn't contain a binary. It seems a little odd.
+
+But this is the power of the XML property list. Because of the way that I/O Kit uses classes, you can actually provide a property list that contains a few overrides and say, "I actually want you to load the binary out of this other Kernel Extension, but you're going to pass in my personality as opposed to his." So in that way, you can override some behaviors.
+
+We don't use this a whole lot, but it is particularly useful if you have a generic driver that wants to allow a third party to, say, override one particular detail. And as long as the person who wrote that main driver is looking for that property and is expecting that override, a binary list driver is actually a pretty good way to go.
+
+Other things that can go inside the Kernel Extension bundle: localizable string files, icons. These are things that the KEXT management system pretty much ignores, but these might be useful if you've got a preference panel that wants to get the localized resources. Or other things: you can have utility binaries stuck in there, firmware images.
+
+Pretty much anything that you want to bundle along with your driver that you want, from the user's perspective, to be an atomic unit that they drag and drop as a single thing. Now, of course, the user can't tunnel down inside there to double-click something, so you're really not going to put an application down inside your Kernel Extension. But you could do that and create a link if you wanted to.
+
+The other thing that's important is you can put other kernel extensions inside your kernel extensions. There's a plugins folder I'll show you in a minute that contains a place to put them. Actually, let's get right to that. So the Info.plist I've already talked about. Here are the -- I managed to talk ahead of the slides here. So here's some of the properties that would be in the Info.plist.
+
+The CFBundleIdentifier is the global identifier for all bundles on the system, and drivers are no different. We recommend that you use a reverse DNS-style name here. Apple, for example, we use com.apple.driver or com.apple I/O Kit for our kernel extensions. But you would use whatever would be appropriate for your own. We'd ask that you not use com.apple for obvious reasons.
+
+The bundle version, again, is a standard property that uses more or less the Mac OS 9 vers-resource-style versioning. We're considering expanding this since it's kind of constrained on the number of digits you can have in each field, but for today we still enforce a vers-resource-style version here. The short version string is the same thing but with the build stage information removed.
+
+OS Bundle Libraries, I'll talk about more in a little while, but this is used to describe what you depend on, what your kernel extension depends on. And I/O Kit personalities obviously only make sense for I/O Kit drivers, but that would be where you would describe the matching information for your particular I/O Kit driver. This is the binary. As I said earlier, it's optional. It is in a Mako format. If you use our tools, that's what you'll get by default. There's nothing magic you have to do there.
+
+There are two standard entry points into a Kernel Extension's binary. They can be named whatever you want, but sort of generically we call them Module Start and Module Stop. And the idea here is very simple. When your module is first loaded, your Kernel Extension binary is first loaded, the start entry point is called. You can succeed or fail. If you fail, your Kernel Extension is unloaded.
+
+If you succeed, your Kernel Extension is considered loaded and is added to the list of drivers that show up under Kextstat, which you may have previously known as KModstat. Module Stop will get called later on when somebody tries to unload your driver, and again, you can succeed or fail.
+
+If you succeed, then your driver will be unloaded. If you fail, your driver sticks around and can be attempted to be stopped again later. Now, I/O Kit drivers don't implement these functions because that's done for you by I/O Kit. I/O Kit uses these hooks to get your classes published into our class management system, our runtime system, and then we use other techniques for actually starting your driver. But if you're writing a non-I/O Kit Kernel Extension, these are the only two entry points that are defined for Kernel Extensions by default.
+
+So the plugins folder is a place for you to put other bundles and, in particular, kernel extensions. So if you want to nest, The KEXT is a kernel extension that is built into a kernel. The kernel extension is a kernel That to the user appears to be one thing. You can also put other non-Kext bundles in there. Here in this example, you'll see there's a user client, a bundle that's used to get user-level access to this driver.
+
+You can put other completely unrelated bundle, well, un-IOKit or un-Kernel Extension bundles in there. Hopefully, they would be related to the driver. Important note though, we only support one level of Kernel Extension nesting, so you can't have a KEXT within a KEXT within a KEXT. The bottom level one will be ignored.
+
+Okay, obviously you're not required to have any plug-ins. And I think I've already talked It's a very powerful concept to deliver something to the user that appears to be very simple. You can have an arbitrary number of things, moving pieces in there, that the user sees as one thing.
+
+Now, Kernel Extensions can be used as libraries. This is something that most third parties haven't used. Some have if you have a complicated product that you're supporting. But this is very important. I want to spend some time talking about this. I/O Kit itself is largely presented to you, the developer, as a collection of library KEXTs. Now, when you set your OS bundle dependencies property, that's your way of telling our KEXT loading system what Kernel Extensions you need to link against.
+
+You also specify a version number in there, which is used to help us tell whether you're compatible or not. I'll talk more about that in a little while. But basically what you're doing is saying, "I depend on this other kernel extension." Now, those kernel extensions can in turn depend on other kernel extensions and so on.
+
+We build up a dependency graph at load time. When you want to load your driver, we look at its dependencies and its dependencies, dependencies, and so on, and we build up this graph of required kernel extensions. And then we flatten it, and then we start or load all those drivers. If we see that it's already loaded and has been successfully started, obviously there's nothing to do.
+
+But at the, sort of the end of this graph will be your driver. So once all of its dependencies have been met, your driver will be loaded. It's important to know, though, that by listing something as a dependency, your driver will be linked against them. So all the rules for static linking apply. If the module you're linking against exports 50 symbols, those symbols are now your symbols.
+
+And all of the dependencies that they have, you've just inherited those symbols. Now, those symbols that you've inherited, or that you're linking against, aren't necessarily visible to other kernel extensions, because they may not have listed the same dependencies that you have. But this is how you go about getting libraries. Now, you can build your own libraries in the same way. You can define a kernel extension.
+
+That contains 15 APIs that your collection of drivers all want to be able to share. You can put it in a kernel extension by itself, and you can provide the OS bundle compatible version property. This is the magic that turns your kernel extension into a library. That property tells us that your driver is expected to be used as a dependency by some other kernel extension. If this property is absent, then that's your way of saying you don't expect somebody to list you as a dependency. So the value of this property, the actual thing on the right-hand side of the assignment, is the oldest version number with which you are compatible.
+
+We'll make this really clear. So you have a CFBundle version number. Every driver does. This is the version of your current driver, your current kernel extension. The OS bundle compatible version specifies the oldest version with which the APIs you export are compatible, or binary compatible. So your CFBundle version and your OS bundle compatible version define a range of version numbers. Oldest is the OS bundle version, compatible version, and newest is CFBundle version. That range is what a client driver can use to determine if it's binary compatible. Actually, the KEXT system uses this. I believe I have an example of this here.
+
+So, if you have a driver that depends on a library that you provide, Let's say the library is version 2. It doesn't matter what version the driver is, but the library is version 2. Excuse me. The driver that you're loading depends on version 2 of the library. Now the library could be up to version 3, but as long as it says it's backwards compatible to version 1, that driver is considered compatible. And the reason is the range from 1.0 to 3.0, obviously 2.0 is included in that range.
+
+Okay. So we've talked about nesting kernel extensions. And we talked about using kernel extensions as libraries. Another thing that you can do is use I/OKit's built in matching capabilities, again if you're an I/OKit KEXT, to bring in other kernel extensions in your suite as needed. Now, if you look at any of our families, if you're writing an I/OKit KEXT then you by definition are looking at some family, your driver is going to match in on that family. That family is going to publish a nub, it's going to call register service on it, that's going to kick off I/OKit's matching, your driver will be considered as one of the possibilities and will be loaded and started and probed and all that stuff, or probed and started.
+
+: You can use that as well. Most of the machinery for that is built in I/O service. You just inherit it with your driver. So it need not be a public open family. It doesn't have to be something that, you know, anybody can use. It can be a sort of a private library that you make use of yourself or a private matching engine that you use yourself. So basically all you have to do is have your driver create a nub, and that nub can be any class. Generally we'll define some class, you know, I/O, my nub.
+
+It won't be I/O actually. That's reserved by Apple. So my nub. Hopefully with a little bit more specific name than When you've defined, instantiated one of those classes and it's registered itself, that causes the matching engine to kick off. The KEXT Management System is going to look for drivers that list that particular class as what it matches on.
+
+So the next piece of your driver suite can match in on that object. Now let's assume that your driver or your small set of drivers are the only thing that lists that as the class that they match against. Well, when you do that, Only your little private set of drivers is going to be in the running for that nub. They'll each be attached and probed.
+
+And in your probe routine for your driver, you can decide if this driver is appropriate or not. And your client driver, which is also your driver, since it's a multiple driver suite. can decide that it's inappropriate and unload, or it can continue and become part of the active set.
+
+But you can have as many different classes of nubs as you want. You can have your probe routine look at the nub to decide based on properties. It's a very flexible engine, and I recommend very strongly that if you're interested in dividing your drivers up this way, that you go off and look at Darwin and look at some of the source code for our families. It really doesn't need to be very complicated.
+
+So the reasons for breaking up a driver are really, you only want to do this for, basically for two reasons. So a NIT time code is one of them, but that's kind of a special case, because obviously you can just build a NIT time code into your driver. If your NIT time code is very large, particularly like a firmware image, having it in a separate loadable will help ease the cost of the memory footprint of your driver setup, because the runtime code will stick around, but you could unload your firmware.
+
+The two real reasons to divide up your Kernel Extension is if you have product variants that allow for mix and match drivers. You've got one PCI card family that has, you know, maybe three different kinds of functions on it. Maybe one product variant has an audio, a video, and some other kind of device, and a different version of the card also has a SCSI storage channel on it, and maybe a different variant of the card has something else on else.
+
+In that case, you probably don't want to have one big monolithic driver driving all those functions, but you could have one basic driver that matches on your cards, determines what's there, publishes nubs for each of the functions, and then has function-specific drivers match in. It's a perfectly appropriate use of I/O Kit matching.
+
+That's effectively what we do, if you think about it. You consider the PCI bus locating various functions, various devices hanging off of it, and probing each of those drivers. Well, you can think of your card, in that case, or your product, as a bus, so to speak, that a variety of devices may hang off of.
+
+Another reason to split your driver up is sort of the opposite. You've got one peripheral, but it may attach to the system in a variety of ways. Now, I'll use a generic ADB or USB device. We can say a mouse, but we have generic drivers for that. So, USB toaster or an ADB toaster.
+
+The device is the same. The actual packets that you're getting and processing may be the same, but your way of attaching to it is different. Now, you could attack this by providing two completely different drivers that have nothing in common at runtime. Maybe they share some source code, but one matches on the ADB family, one matches on the USB family. 99% of the code's identical. It's just duplicated.
+
+Or you can make use of something that I/O Kit allows, and that is to split your driver into two pieces. You can have one very small piece that matches on ADB, the ADB device, one small piece that matches on the USB device, and then those can instantiate a nub or can actually be the nub by simply calling register service on themselves. That will match in the one big driver that's common, the bulk of your driver that does all the real work.
+
+Now, if you've already shipped a product like this, maybe you have, there's absolutely nothing stopping you from putting all of those classes into one kernel extension. In fact, we would generally encourage you to put as much as you can into one kernel extension. The reason you split up in this case is because of the dependencies.
+
+Remember, when you declare that you're dependent on something, we have to load it, initialize it, and all of the things it depends on. On a modern Macintosh, the ADB family is pretty much not used. If you have one driver that depends both on the USB family and on the ADB family, it's going to bring both of those families in, whether or not you actually use them.
+
+So by splitting your driver into three kernel extensions, a USB-specific one, an ADB-specific one, and then the generic chunk that does all the work, only the appropriate one will match in. The USB one will match in or the ADB one will match in. and then they will match in the big one, but you won't bring the ADB family in if your device is plugged in via USB port, and vice versa on one of the older G3s that doesn't have USB by default.
+
+If you have your device attached by ADB, the USB family wouldn't be loaded. Keep in mind the difference between being loaded and being active. Being loaded simply means the code is resident in the kernel. It doesn't mean anybody is running it. Active or instantiated is when your driver is actually in use.
+
+Alright, I want to talk a little bit about when drivers load. This has been discussed on the Darwin groups a good bit. I believe that there's a document out there, I think on the next slide I've got a reference to it, that describes the various stages of bootloading.
+
+But by default, if you don't have this OS bundle required property in your kernel extension, Your driver will only be considered for loading relatively late in the boot process, well before the login panel, but after the machine has gone multi-user. Now, there are cases where you need to have a driver come in earlier. In theory, you should only have to do that if the driver may be used for the root device, the startup volume.
+
+So OS bundle required would be added in that case. There are a few other types of drivers that may need to come in early. And also I'm aware that a few of our families have generic drivers that will match in very early, so you might need to have this property in order to compete. But the next slide, I think I show the various levels.
+
+So what happens? Boot-ex is the piece of Mac OS X that starts the kernel. So it really has a couple functions. One of them is to load the kernel itself, and the other one is to load all the drivers necessary for getting to the file system, getting to the startup In order to make that fast, we create this cache file. We call it extensions.imkext. imkext stands for multicast. Now, if you've developed at all with 10.1, you've probably encountered this file.
+
+The whole point of it is to avoid the booter having to go and scan the whole extensions folder. So we decide based on modification date. If the cache is newer than the extensions folder, then we assume the cache is good. This is important. I'll talk a little more about this later. So the cache is basically just a compressed archive of all the drivers that have OS bundle root set to an appropriate value.
+
+If the cache is stale or missing, then BootX actually does go and scan the entire extensions folder, looking for drivers that have the right properties, and will load them individually. It's a much slower process, so obviously we want to boot off the cache as much as possible. So Boot-X just simply brings them in.
+
+It doesn't actually link them or try to make use of them. So it's loaded the kernel, it's loaded all of the drivers either in the cache or individually. Then it starts the kernel. At this point, the kernel is basically detached from the outside world. It has no ability to do I/O.
+
+All it has is the drivers that Budex brought in. So it's going to go through and as drivers are requested, it's going to choose from the list of drivers that Budex brought in and instantiate those and make use of them. And that's going to build up, hopefully, enough devices, enough access to get you to the root volume.
+
+Once you've got the root volume, BSD can finish its startup because it now has a root device. And Machinit runs and we can have other processes starting to run. At some point, the ETSI RC script runs and it will start Kextd. Kextd is the daemon that is responsible for keeping KEXTs loaded and unloaded as needed.
+
+At this point, Kexty contacts the kernel, the in-kernel code that manages the boot time stuff, and says, "I'm going to take over KEXT management duties." Again, this is part of that "kernel resources are expensive" mantra. We basically implemented this whole system twice, just because this heavyweight stuff doesn't need to live in the kernel after booting.
+
+So the kernel resident linking code is jettisoned to free up that memory, as well as all the images that Boot-Ex loaded that we didn't use. We speculatively load a lot of drivers. We may not need more than half of them or a quarter of them. So then Kexty processes KEXT load requests from that point on. The kernel talks to Kexty, says please load this kernel extension, and it gets loaded on the kernel's behalf.
+
+Now, why do Kernel Extensions load? I get this question a good bit. One of the very important things is we do not load a Kernel Extension simply because it's installed. This is sort of a philosophical point with the way KEXTs work. Something has to generate the demand for them.
+
+They're a way to extend the kernel. I/O Kit has a pretty extensive mechanism for this. The device detection and matching will bring the drivers in by calling Kexty. File system kernel extensions are loaded because you want to mount a volume that needs to make use of them. That makes sense, right? If you start the machine up and you never add another disk, you probably don't need to have all those other file systems loaded until you see new media. So doing it at mount time seems to make sense, and that works well.
+
+NKEs are typically loaded by startup items. In some cases, they're loaded by particular actions, like if you go to make a PPP connection, the PPP kernel extension may be loaded when it wasn't loaded before. But basically, throughout the system, a kernel extension isn't loaded just because it's there. It's loaded because something has said, "Yes, I have a need for this."
+
+This really goes back to the three universes I presented early on. I said there's I/O Kit, NKEs, and file systems. Your kernel extension needs to fit into a place carved out for it. It needs to count on having the kernel call into it. It needs to be able to call into the kernel and have APIs to talk to.
+
+Module start and module stop are not very interesting by themselves. You can run the Hello Kernel tutorial that shows you how to write a kernel extension that does nothing but print out, "Okay, I'm loaded." Beyond that, there's not very much interesting stuff you can do without having some sort of a deeper relationship with the kernel.
+
+Having something generate that demand is the way to go. If there really isn't anything, you've sort of stepped outside the universe of these three standard areas, and you're doing something sort of on the fringe. You need to have the kernel extension loaded all the time. It's not a file system. It's not an NKE, and you don't want to use I/O Kit because it's not a device.
+
+You can have a startup item that calls Kextload and loads that driver every time the machine starts. So that would be the workaround. That's the way to do that. That should be rare. You should really avoid doing something like that unless you just simply have no other way to accomplish your goal.
+
+So the exact rules for what generates the event is going to-- the load request event is going to vary depending on the situation. So what causes a kernel extension to unload? More or less the reverse. I/O Kit has class reference counts, or instance reference counts. So we track what classes you've defined, and we track how many instances there are of those, and instances of subclasses of classes that you've defined, and so on.
+
+And what we try to do is wait until all of your objects that have been allocated out of that driver have been freed, and no other drivers are loaded that list user dependency. We believe that at this point you're completely clean and can be unloaded. About a minute later, we'll unload you.
+
+Now, we included that time delay there because we figure somebody might be rearranging their desktop, unplugging a mouse, unplugging a keyboard or a camera or whatever to get this hub plugged in. And we don't want to have this instant flurry of unloading all the drivers, and then 15 seconds later when they plug it all back up, have a flurry of reloading them.
+
+So we kind of do it lazily. If you're a developer, that can be a little annoying because you're trying to do this load, debug, unload cycle. Be aware that you need to manually unload your driver if you want it out of there immediately. File system Kernel Extensions can unload in their unmount commands if they want at unmount time.
+
+NKEs typically don't unload. Sometimes they do, but they tend to be services that are available for the entire lifetime of the system, so they'll load in a startup item and stay loaded. But again, something like PPP, if you don't have an active connection, that Kernel Extension can be unloaded when the connection goes away.
+
+So, again, you can use the KEXT unload utility to try to unload a KEXT. Though the Kernel Extension has the final word there. I mean, they're wired into the kernel. They've got pointers everywhere. The KEXT unload request can fail. And, in fact, when you're developing Kernel Extensions, that's one of the first things you want to try to keep -- get working and keep working is making sure that your Kernel Extension can unload. Make sure you're not having references wired around. So, once you get that working, every time you rev the driver and test it again, make sure unloading still works. It's a sure sign you've got some kind of a reference count problem if we refuse to unload your driver.
+
+Binary compatibility. So as I said earlier, Kernel Extension management is based... Aside from the XML property list, everything that we do is based on static linking. The rules are very straightforward. It's all based on what symbols are there. You can use the NM utility to dump the symbols of a kernel extension binary to see what's there, what's defined, what's undefined, see how all the linking works. But basically, we've got what's in the kernel extension symbol table to work with, and that's it.
+
+So in order to be successful at having a driver that works on future releases, you have to list all the CFBundle identifiers that you depend on. Now there's a document, Kernel Extension Dependencies, it needs to be updated for this release and we'll be doing that shortly. But it describes what versions of what families shipped with the various releases of Mac OS X, so you can use an appropriate version that you depend on. But it's important.
+
+The kernel, the big monolithic block, mock-under-bore kernel, is divided into four separate areas. There's Mach, there's BSD, there's I/O Kit, there's libkern, and there's actually a few others. But these are the ones that you would list as dependencies in your kernel extension. If your kernel extension uses both BSD and I/O Kit headers, you really need to list both I/O Kit and BSD as a dependency.
+
+Today, if you don't do that, let's say you just list I/O Kit, but you're including BSD headers on the side. Imagine that in a future release, Apple decides, "Oh, we're going to split up the kernel and have I/O Kit and BSD and Mach loaded separately." I don't think we're likely to do that because it doesn't really buy us anything, but the architecture supports it.
+
+In that case, you would have an unexpressed dependency. You depend on BSD, but you didn't express it. So what's going to happen is we're going to try to load you. We think we've met all your dependencies. We linked you against I/O Kit. But you're going to have undefined symbols.
+
+It's exactly like having a binary that you're trying to compile, but you haven't listed all the libraries that you need. You can't get that final executable until you've listed all your libraries. So it's important that you get those right. Another thing that is important to understand, you need to build using the headers from the oldest version of the OS on which you want to run.
+
+This is particularly important for I/O Kit because of the way C++ works. But basically what you want to do is say, I want to run on Mac OS 10.1.0. So you pick the headers that were associated with that release, and you build using those headers, you'll get code that's compatible with anything from that release on.
+
+Our direction here is to provide a more configurable system sort of built into the headers so that we can, at build time, look at your dependencies, look at the versions you've listed for your dependencies, and make sure by using preprocessor tricks that you're only getting the APIs that were appropriate for that release.
+
+So if you're trying to use something that's outside of the version that you've declared a dependency on, you would get a compile time failure. We don't have that in place yet. That's what we're working on. So that would allow you to use newer headers as long as your dependencies were right. But for now, you need to stick with the oldest headers that are appropriate.
+
+GCC transition. Jaguar contains the ability to take an older driver and we call it remangling. We basically take the C++ symbols and remangle them into GCC3 symbols, which are different. And we can load them then. I/O Kit and the kernel's C++ infrastructure are natively GCC3 and Jaguar. In older versions, it was based on GCC295 or 297 or various minor variants there, but the ABI was pretty much 295.
+
+So if you want your driver or your kernel extension to run on a system prior to Jaguar, then you need to use the old compiler. Now, you can do this by taking the -- specifying the 295 compiler in Project Builder, or you can just use an older development tools, depending on what you're practicing. preferences are, but something to keep in mind.
+
+Okay, this has been said a few times, I just want to make it clear. If you can avoid direct use of Mach and BSD APIs, then your kernel extension is going to have a lot better chance of working on future releases. BSD and Mach are going to change.
+
+We're going to introduce new APIs that are forward supportable, and we're going to deprecate the existing APIs. Right now, we just simply advertise structures and internal components that are so intrinsic to the way the kernel operates, if we ever want to change those, we have to break binary compatibility. So if you can avoid use of those APIs, your life will be better.
+
+So how do you find out about the new APIs? Well, tracking the Darwin list is a really good way to do it. Most of the people working in the kernel space tend to linger there. We'll post important shifts like this there. Obviously, the new emerging APIs are likely to show up there first because they'll be checked in as we're evolving them. And of course, your normal developer relations contacts here at Apple will be able to give you the information on that.
+
+Another thing to avoid is mixing API sets. Now, since we've kind of told you to stick with I/O Kit for the time being for Kernel Extensions, a very important example Let's say you're writing an I/O Kit driver and you need to get access to a physical address. You really should be sticking with I/O Kit APIs if it's an I/O Kit driver. In particular, you should be using the I/O memory descriptor and I/O memory cursor classes to get at your physical addresses.
+
+If you call PMAP extract directly, you're going around I/O Kit, you're going into Mach, and that happens to be an API that is going to change. So you definitely want to try to migrate away from mixed use of API sets. Try to stick within the abstraction that you've chosen. If you're an I/O Kit driver, use all I/O Kit APIs except where you just absolutely cannot.
+
+So, manipulating a kernel extension from an application. This is really talking about installing them and uninstalling them. There have been a few problems, and I think Apple needs to be a little bit more clear on how you go about actually manipulating them. The problem here is the file system is the database. and we're limited by what the file system can do. The Kexty and KEXT management system that's sitting there watching for files to come and go, we don't have file notifications, so we can't tell that a file's popped up.
+
+So what I would recommend is to try to keep operations atomic. You should actually install your driver somewhere other than its final destination. Probably temp is a good choice. And then when you move it into the extensions folder, that kernel extension is going to show up as a single operation.
+
+Now, it hasn't really been a problem, but you can imagine what would happen is if, let's say the user is doing their install, and at the same instant they say, oh, I'll go ahead and plug my device in. So they plug in the device, and I/O Kit says, oh, okay, well, let's look for a driver for this.
+
+And it goes and finds the half-installed kernel extension. The Info.plist may be there, but the binary isn't there or isn't all there. You're going to get unpredictable results. So by installing it somewhere else and then moving it into place, you're guaranteed that it's either all there or all not there. So you get more deterministic behavior. Same thing for removing them. If you're removing a kernel extension, you should move it to slash temp. In fact, you don't even need to delete it. Our system will take care of that on the next reboot. All right.
+
+"A lot guarantees you're not going to have partially removed Kernel Extensions that we might try to load. Also, you don't even have to install your Kernel Extensions in the Extensions folder. In particular, if you have an application that it only makes sense for the Kernel Extension to be in use while that app is running.
+
+An example of that might be a security dongle. Now, hopefully this will be USB and you'll be able to make use of a user land driver for that, but let's say for whatever reason you really needed to load something into the kernel when the app was running for security purposes.
+
+You could actually put that driver inside your application wrapper, and it would never even be considered for loading at any other time until your app runs, and then the app can load the driver. What it needs to do is have a little separate set UID utility, a little binary that can run, and it basically forks and execs KEXT load.
+
+In the future, we want to come up with a library for KEXT management that you can do this programmatically, and we're also looking at the possibility of relaxing some of the restrictions on having to be root to load a kernel extension. But for now, these are the rules as we've had in the past.
+
+KEXT Preferences. I've had a number of questions about these lately, and I really would encourage people to come up with creative ways to avoid needing them, because if you have a setting that the user has to set, that's one move away from the ideal Macintosh user experience, which is no settings at all. You just use the system.
+
+More importantly, it adds state. This is state that may get corrupt. It's state that may get left behind when they remove the package, and now you've got some corrupt left on the disk. It's just state. And if you can avoid it, you're much better off. I fully recognize there are cases where you cannot avoid having state. And so we have a few mechanisms that you can use.
+
+We're working on improving them, as always. We want to make your lives easier. But at the same time, we don't want to make it so easy that drivers and kernel extensions become very stateful, because that would not be a good user experience, and nobody would benefit. First off, do not store preferences inside of your KEXT bundle. Consider your KEXT bundle read-only. Consider it something that's in ROM.
+
+Now, that being said, you do have your resources folder that the KEXT management system largely ignores, so you could put something in there. But in the future, we may choose to do things like do bundle signing, signature verification. And so if you have some part of your driver that's changing, your driver is going to violate its -- or -- The KEXT should be stored in a library of preferences. The file should be named for your CFBundle identifier, and the file should be an infop list, an XML file.
+
+You can use, in fact, CFPreferences you can use to manage those files. There's a whole set of APIs for doing that. You have to do it from user space, though. In kernel drivers and kernel extensions cannot directly access files in the file system. We do this to avoid circularity. We don't want the kernel generating I/O.
+
+The kernel is a service that's there for applications and environments and such to make requests of, but the kernel itself shouldn't be making a lot of I/O requests in general. So what happens is your driver suite, the set of things you ship with your driver, should include either a standalone app or a preference pane or something that the user can run to set the settings, and then it will modify that file.
+
+You're also going to need a utility. It can be the same as the one that you're using for the kernel. It can be the same one, in fact, to push the settings down to the driver. Now, what I'd recommend is let your driver have a reasonable default behavior. Again, you need to decide what to do in the case that the preferences haven't been set or the preferences are corrupt. So if you're going to have to have preferences, make sure that the absence of the preference isn't fatal.
+
+The utility, when it gets run, can look up your driver by class, can communicate with it, and can set whatever those preferences need to be for the remainder of the runtime. If you need to have some preference set very early in the startup, you probably have to have a startup item.
+
+Now, I would request again that you not do this, because that's something that's going to be run every time the system gets booted, and whether or not the user intends to use that device or not. So it's best if you can have the preferences attached with an action. For example, if you're making a PPP connection, you don't need to have your modem configured prior to that connection being made.
+
+If something is going to auto-answer the modem, say it's sitting around waiting for faxes, at some point it's going to attach to the modem and configure it for auto-answer. At that point, it can set up any preferences that are necessary along the way. Now, this obviously only works if you're owning the whole system. You can set up a stack from top to bottom, including the app. But that's the kind of thinking I would really encourage you to veer towards, is try to associate the preference with the action and not with the driver.
+
+So there are a variety of mechanisms for communicating with your kernel extension. I/O Kit has standard set properties mechanisms. We have I/O user clients. And if you're in the BSD space, you can use device nodes. You can use sockets. There's probably other mechanisms as well. Mach has certainly got plenty.
+
+Most of I/O kit's communication mechanisms are fundamentally based on Mach messaging. So you can look at the I/O Kit source in Darwin and see how we're doing that if you want. So just a few random tips that I want to throw out here. If you're trying to figure out how to get your driver loaded or unloaded, add the I/O Kit debug property.
+
+The KEXT is a property type set in your personality inside your property list. It's an integer value. Make sure that you set the property type to integer. And you want to set 65535, just all bits set. I'm not particularly familiar with what individual bits do. I'm not sure that they are even used. But if you set all the bits, you'll get all the debugging info.
+
+And in the system log, the families will log some information about why they did or didn't match on your driver. What's nice is since you're only setting this property in your driver, you're not getting logging information for every driver in the system, just your driver. Of course, when you go to ship your driver, make sure and take that property out or set it to zero.
+
+A couple other tools that are handy. IOReg, most of you probably use this. This is a very important tool. If you do IOReg-c in the name of your class, it's going to do sort of the skeleton outline of all the, everything in the registry, but it'll expand just your classes. This is a good way to find out, one, if your driver is instantiated and connected.
+
+And two, if your driver isn't unloading and it's still in the registry, well, that's why. Because if you're in the registry, then the registry has a reference against you, has a retain against you. And we don't unload you if you have any references. So obviously your driver won't unload until it's out of the registry at a minimum.
+
+Another thing that can be handy is the IO Class Count utility. You can give it any number of classes. What I recommend you do, and this is something I've done with drivers I've worked on, get a list of all the classes that you use.
+
+[Transcript missing]
+
+Run this command, plug the device in, run the command again, unplug your device, run it again. Do this about ten times.
+
+and make sure that the class counts stay more or less the same. Now, you'll want to do the first plug and unplug to let I/O Kit kind of settle. It's going to load your kernel extension on the first plug and that's going to cause some references to be taken and you can ignore those. But once everything is kind of steady state, plugging and unplugging the device, you would expect to see all of those classes--class counts remain flat.
+
+If they're not, you're probably leaking. I encountered this in a driver I wrote. Everything worked perfectly. Didn't have any problems at all, but I did this little trick on it when I was about ready to ship it and I noticed I was leaking I/O string references. And was able to fix that.
+
+And, you know, again, it's not a problem the user would see, but it can cause memory leaks, which is certainly a bad thing. It's a very -- this is a tool to catch those. Also, it'll help you figure out why you're not unloading. Oh, look, my class has still got two references. It's not in the registry, but it still has references. That would explain why your driver isn't unloading.
+
+So debugging panics and hangs. First off, you need to run this NVRAM command. Set your boot args to at least four. There's a, you know, a few different This bit basically says that you're going to allow the machine to be remotely debugged and that you can break in, particularly if there's a hang. Command power on -- I think it's command power on most machines will break into debugger connection. The machine will attempt to connect to a debugger, whatever it's running.
+
+So even if it's hung, and this is one of the hardest things to debug, everything works fine, all of a sudden the system freezes hard. You don't know what it is, whether it's even in your code. If you have this set and you break into the debugger, you can use a second machine to connect to it and look at all the stacks of every process running on the machine, get a tremendous amount of information. Another little tip there is don't put your driver in system library extensions.
+
+Don't have it be part of the normal boot-up set because it's kind of hard to filter what your driver is doing from the background noise of all the other drivers in the system being loaded. So have it in a separate directory and load it manually when you need to use it. That allows you to set up all of your test jigs.
+
+Make use of the two-machine debugging capability we have. I know a lot of people have been sort of hesitant to use it because it does take some getting used to. It's a little bit different way of debugging, but it's incredibly powerful. And in fact, it's the only way to get at some kinds of bugs.
+
+So the new KEXT suites that Nik is going to be talking about in a few minutes make it much easier to get the symbols out of your loaded kernel extensions. And again, GDB lets you do a tremendous amount of things. I will log in printf inside the We're aware that it's not synchronous, and we're aware that it has limited bandwidth.
+
+That's by design. I/O log is there to log sporadic events to the console that the user might want to know about or the system administrator might want to know about. It's not really intended to be a debugging mechanism. It's often used that way. But it has a limited buffer size, and it has a limited throughput. This is done on purpose because we don't want this service running on the system to be a resource hog. It's supposed to be invisible.
+
+Now, if you are using this, a little tip: Login -- when you get the login panel, login is greater than console. This will kill the Windows server and put up a raw text screen that is the Darwin console. From there, I believe IO logs are synchronous, or very close to it. So you get much, much closer logging to the actual hang or panic that you're trying to debug.
+
+And when you're doing that, if you need to, remotely logging in from another machine to trigger the panic condition is convenient. Okay, so to prepare Kernel Extension to deploy, first off, make sure the code is ready for release. This is stuff you already know, but I'll just put it out there. Make sure you don't have any asserts or debugger calls or anything like that that's going to cause the machine to trap.
+
+Get rid of diagnostic messages. We see -- we've even shipped them. I'm disappointed to say drivers still have diagnostic messages in them. Remove the I/O Kit debug property or set the value to zero. You can do either one. That will turn off the extra logging. And don't forget to set appropriate version numbers.
+
+So that's getting your source ready to ship. You need to build in Project Builder using the deployment build style. Now, if you go to, I believe, the Targets pane, one of the parts of that window pane will show you different build styles. There's, by default, only two. There's Development and Deployment.
+
+And with those two build styles, Development includes a lot more symbols. You don't really want those to go out because it makes your binary very big, and it's unnecessary information. If you don't build this way or it's not convenient for you, at least run strip-s on your binary inside your KEXT first. This will basically do the same thing as what Building for Deployment will do.
+
+Now when you package your kernel extension, use a tool like PackageMaker that Apple provides, and there's actually a document that walks you through all the process. You really don't need to multiply package your kernel extension. I've seen some that are a disk image of a stuffit file of a tar archive.
+
+Not a good user experience and it really doesn't help. You only need one level of packaging to protect the innards of the kernel extension. And again, if you have a sophisticated enough installer that can have an installation script, actually expand your kernel extension into temp or somewhere else, and then have the script copy it into the final destination.
+
+Always test your driver after you've run the official installer. We've seen cases where somebody has done all their QA on a driver that they've built using Project Builder, and then they put it in the package and ship it. The packaging process can actually mess your driver up. In particular, file ownership and permission is very important.
+
+This is something we didn't enforce properly in previous releases, and in Jaguar we now do enforce them properly, or going to be. Actually, the developer C that you have now has sort of a compromise for compatibility. All the files and directories in your driver, in your KEXT, have to be owned by root, and the group should be set to wheel.
+
+The permissions need to be 7.5.5 for directories and 6.4.4 for files. This is very important. The key thing we're getting to here is the KEXT, every piece of the KEXT has to be owned by root and may not be writable by any user other than root. So there are other variations of file permissions that can work, but if you meet those two criteria, you should be okay.
+
+Owned by root, may not be writable by non-root users. We recommend using these exact permissions, that's what we ship with and it's what our tools produce by default. Check that. After you package your KEXT and run the installer, check that it's installing with correct permissions. Okay, I'm going to turn the stage over to Nik Gervae now. He's the engineer responsible for the KEXT tool suite. And thank you for your attention.
+
+If you tried using any of the Qex tools by now, you've probably noticed a few changes. Let me get right into that. We've basically got a whole new code base and tool set. It's much more extensible and maintainable than the old stuff was. We'll be able to add features more easily.
+
+And it's built on a comprehensive library. In prior releases, some of the Qex tools were built using basically different libraries or not even using a library. So they didn't share the same logic. Now we do that. Although this library is not available for third-party use yet, we have to clean up the API. You can check it out and see how it works in Darwin under the I/O Kit user and Qex tools projects.
+
+The tools themselves now are Kextload, which takes over all of the features that Kmodload and KmodSIMS used to have, adds a lot of features for debugging, and nearly used up the alphabet adding options. It's installed with the base system. As Dean mentioned, this is what you use from applications to load a KEXT, and it's usage compatible with prior versions. Kextunload similarly obsoletes Kmodunload. It is installed with the base system, and it's usage compatible with prior versions.
+
+Two new ones: Kextstat obsoleting Kmodstat. You don't have to be root to run this anymore. And it's installed with the developer tools, not in the base system. There's a lot of conveniences added. This is mostly for developers. Kextcache obsoleting mkextcache is likewise installed with the base system. And then there's Kexty, which is not a tool per se. This is what tracks I/O Kit load requests.
+
+It is installed with the base system. You should consider it an implementation detail and not rely on it in your apps. Don't rely on the presence of the executable or the process. There are options that you can use to help in debugging, and the man page covers those.
+
+Now, using Kextload, some of the new options that are added is additional verbose logging. You have up to six levels of verbose logging, which can get pretty chatty. However, the seed you have has one bug. Don't use level 6 when you're loading a KEXT right now. To generate symbols, you use -s and give it the name of a directory to put the symbols in. It will automatically figure out your dependencies and generate dependencies for them all and dump them into that directory. You don't have to type kmodsims --d this --d that --d this --d that.
+
+If you don't want to load it when generating your symbols, you use -n, which means don't load, and you have a whole bunch of ways of doing that. The man page covers some of the usage cases. If you just say -n and -s, it will ask you interactively for each of the load addresses. Or you can specify each dependency's load address with -a. Or you can use -A, which means this is the machine that I'm getting debug symbols for. Find out what they are in the kernel and just do it.
+
+There's also -k which remains for specifying the kernel that you want to use if you're using a different kernel binary. More stuff using Kextload is that if you're debugging a driver start function, you can use -l which means load it only but do not start I/O Kit matching.
+
+Similarly, you can use -m which means the driver is already loaded but probably not matched against anything. So trigger the matching routine which will cause any start routines to get invoked. For other KEXTs that don't use the I/O Kit start routines, you have to use -i which basically pauses at each stage of loading, including right when the KEXT has been loaded into the kernel's VM space, but before its module start has been called.
+
+And there's a variant on that -I which will also pause for every dependency. So if you're debugging a library, you can use it there as well. Because Kextload figures all of the dependencies out for you, it might be a little inconvenient if you've got a problem with the kernel. So you can use -d to check a particular thing that you want to check, a particular dependency resolution scenario.
+
+To get over that, you can use -d, -r, and -e. -d specifies an explicit dependency that isn't in the library extensions folder. -r adds a whole new folder, so if you have a bunch of libraries that you've built and you don't want to put them in system library extensions, you can say -r and specify a directory and that's where they'll be.
+
+-e means skip the system library extensions folder altogether if you really want to be paranoid about what you're getting. Another convenience, during development you can use the -z option and it will skip authentication. You still have to be root to load a KEXT into the kernel. But -z will bypass any checks on the file ownership and permissions while you're doing the build cycle. Because you don't want to have to chown and chmaw your KEXT. Now the seed you have, that is in the base and the developer tools versions for when Jaguar ships. That option will not be present in the user version because it's a security hole.
+
+Also, KEXT load performs the new strict authentication in the seed if you use any of the new options as well as with -i. To maintain compatibility with older KEXTs and their installers, if it's just invoked with no options and with a KEXT, it will not perform the strict authentication. When Jaguar ships will be improving that somewhat and if we run into an older KEXT, we'll probably prompt the user and ask them if it's okay.
+
+Another option for verifying your KEXT, a lot of problems you've probably seen with debugging your KEXT is because it just won't load in the first place. You can use the "-t" option with Kextload now and it will perform a comprehensive set of checks on your KEXT, making sure the plist is okay, making sure the authentication checks are there, and making sure the dependencies can be resolved. And it will print out a nice little format showing exactly what's wrong.
+
+You can always run kextload "-nt" on your KEXT. You can do that as a test during development and before you ship your software. I highly recommend that part of your QA process have your people install the KEXT and then run kextload "-nt" on it and see if there's any diagnostics.
+
+The Kextcache tool, which replaces mkextcache, has some changes in behavior. There's different ways of specifying local and network boot. I don't know that many of you use that, but as you can see up here, the behavior is a little bit different. -l and -n honor things you name on the command line. If you specified a KEXT explicitly, you probably want it in there.
+
+But I've added -L and -N, which screens them all. This one also has one small bug. If you name a KEXT on the command line, it will not scan for plugins. I've already fixed that, of course, but too late for you guys to get it. A quick workaround for that is to put that KEXT into a directory and then specify the directory.
+
+To examine loaded KEXTs, you use KextStat. Again, it does not require running as root. Some conveniences are that you can skip all the ones built into the kernel by using -k, so the listing will be a little shorter. You can skip the top-level header with -l, which is useful for shell skip processing. And you can get information about a specific KEXT using -b and giving the bundle identifier.
+
+To find a KEXT from an application, we're adding some proper APIs to KEXT management. We call this function. KextManagerCreateURLForBundleIdentifier. That will go talk to Kexty, and if Kexty knows about that extension, you'll get back the URL to that extension so that you can get to the resources directory and load any icons or other resources that you need.
+
+Finally, we're going to wrap up with a little bit of history. Prior to now, the focus has been on getting KEXT management working. So for 10.0, it was boot time driver loading support. For 10.1, we wanted to improve boot time performance, so we added the mKext cache. And now with Jaguar, we're finally updating the toolset and building a base for new features. There's also some more improvements to performance in the footprint.
+
+Future directions will be paired between kernel and user space code. Right now the logic is a little bit different and we're hoping to make that be the same. Again, kernel APIs are evolving, so the kernel KMOD API, which I doubt any of you are using, don't use it anyway. Um, finally we're going to make the KEXT management library available to apps, probably add KEXT bundle signing, and get more input from you on what you want. And that leads us to the roadmap. So is Keith there?
+
+Just keep reading this? Okay. The next one is the Darwin roadmap, which already happened. Hope you were there. Another one that already happened is yesterday, Open Source, Apple and You, Session 103. We just had the Darwin kernel a little while ago, and after lunch today will be Feedback Forum 2 on Darwin. Who to contact? That would be Craig Keithley, who is right there. He's our USB and FireWire technology evangelist, and there's his email address right there. and for more information, Apple's developer website and the Darwin project website and mail groups.
+
+Documentation includes man pages. I rewrote all the man pages for these KEXT tools, so have a look at them. Kextload in particular has a very long man page with lots of usage scenarios, so if you're trying to figure out how to do one particular thing, read that. There's a release note and there's revised I/O Kit documentation on the website. And now it's time for our Q&A.

@@ -1,0 +1,3161 @@
+WEBVTT
+
+00:00:10.140 --> 00:00:10.960
+Good afternoon.
+
+00:00:11.000 --> 00:00:17.840
+Welcome to LLVM Technologies in Depth.
+
+00:00:17.840 --> 00:00:22.740
+I promise this will be the
+geekiest session you had at WWDC.
+
+00:00:22.780 --> 00:00:25.290
+We're going to look into compilers.
+
+00:00:26.340 --> 00:00:28.920
+Oh, my name is Evan Cheng.
+
+00:00:28.920 --> 00:00:31.280
+I'm the manager of the LLVM backend team.
+
+00:00:31.280 --> 00:00:33.850
+We work hard, so you don't have to.
+
+00:00:34.060 --> 00:00:38.540
+So let's, so just a quick road map,
+what we're going to talk about.
+
+00:00:38.780 --> 00:00:42.600
+The first half of the talk is
+about LLVM backend technology,
+
+00:00:42.760 --> 00:00:46.590
+code generation, optimization,
+what have we been doing in the past
+
+00:00:46.590 --> 00:00:48.250
+year to make the code run fast.
+
+00:00:48.250 --> 00:00:54.500
+The second half of the talk is going
+to be focusing on C++ and R migrator.
+
+00:00:54.500 --> 00:00:57.800
+Let's get started.
+
+00:00:58.890 --> 00:01:04.640
+Let's take a peek at the
+LLVM technology in the backend.
+
+00:01:04.730 --> 00:01:09.230
+The first thing we're going to talk
+about is type-based alias analysis.
+
+00:01:09.780 --> 00:01:12.860
+This is a very geeky subject.
+
+00:01:12.860 --> 00:01:13.850
+Alias analysis.
+
+00:01:14.110 --> 00:01:17.460
+Well, this is about C pointers.
+
+00:01:17.500 --> 00:01:21.840
+Basically, if you say two pointers can
+point to the same object,
+
+00:01:21.840 --> 00:01:23.040
+the alias.
+
+00:01:23.060 --> 00:01:27.930
+And the compiler needs to know about
+this to make good optimizations.
+
+00:01:28.290 --> 00:01:31.050
+Let's take a look at this simple example.
+
+00:01:31.250 --> 00:01:34.160
+You have pointer 1 and pointer 2,
+they're being signed different values.
+
+00:01:34.180 --> 00:01:36.770
+And if you add them together,
+what should it be?
+
+00:01:36.800 --> 00:01:37.760
+That's pretty simple, right?
+
+00:01:37.800 --> 00:01:39.560
+You would say 3.
+
+00:01:39.610 --> 00:01:42.120
+Well, not quite.
+
+00:01:43.240 --> 00:01:47.010
+If the compiler can prove they
+do not point to the same object,
+
+00:01:47.010 --> 00:01:50.770
+let's say they don't alias, you're right.
+
+00:01:50.860 --> 00:01:51.920
+It's 1 plus 2.
+
+00:01:52.100 --> 00:01:54.520
+However,
+if they point to the same object,
+
+00:01:54.540 --> 00:01:55.040
+it's not.
+
+00:01:55.160 --> 00:01:56.200
+It's 4.
+
+00:01:56.270 --> 00:01:58.680
+So the compiler has to be conserved here.
+
+00:01:58.700 --> 00:02:02.190
+It has to know exactly what's
+going on to do optimization.
+
+00:02:02.440 --> 00:02:04.830
+So that's why alias
+analysis is important.
+
+00:02:05.320 --> 00:02:08.320
+So what is type-based alias analysis?
+
+00:02:08.320 --> 00:02:12.300
+Type-based alias analysis
+uses C standard rules.
+
+00:02:12.320 --> 00:02:17.490
+It's basically saying if you have two
+pointers and they have different types,
+
+00:02:17.600 --> 00:02:22.200
+integer, floating point,
+the rules say they cannot possibly alias.
+
+00:02:22.200 --> 00:02:27.440
+That simple rule,
+and that's basically the basis of TBAA,
+
+00:02:27.440 --> 00:02:34.200
+we use that information to do good
+alias analysis and optimize your code.
+
+00:02:35.210 --> 00:02:39.970
+We'll show you later on what exactly that
+means and what kind of results it has.
+
+00:02:40.200 --> 00:02:45.100
+It's also important to point out
+this is not turned on by default.
+
+00:02:45.160 --> 00:02:49.070
+So I'll get back to this a little
+bit later on why that's the case.
+
+00:02:49.130 --> 00:02:51.940
+Let's take a look at a quick example.
+
+00:02:52.230 --> 00:02:56.090
+Here's a struct type with two fields,
+size and data.
+
+00:02:56.240 --> 00:02:57.030
+They have different types.
+
+00:02:57.140 --> 00:03:00.070
+One is integer, one is double.
+
+00:03:00.100 --> 00:03:03.100
+So you have a loop here
+that's pretty simple.
+
+00:03:03.190 --> 00:03:06.670
+That simply iterates through
+every element in a data
+
+00:03:06.670 --> 00:03:09.050
+array and increments by one.
+
+00:03:09.100 --> 00:03:13.090
+So if you've ever been curious
+and want to see what kind of code
+
+00:03:13.110 --> 00:03:17.270
+a compiler is generating for me,
+you might see something like this.
+
+00:03:17.950 --> 00:03:20.920
+This is x86 assembly code.
+
+00:03:21.050 --> 00:03:24.280
+It's not important for you to understand
+everything that's going on here.
+
+00:03:24.540 --> 00:03:27.550
+The important thing is,
+notice it's doing a lot more
+
+00:03:27.610 --> 00:03:29.400
+work than you think it is.
+
+00:03:29.400 --> 00:03:32.870
+Inside the loop,
+which is one block of code,
+
+00:03:32.870 --> 00:03:35.670
+it's doing more than just addition.
+
+00:03:35.950 --> 00:03:37.140
+What's going on?
+
+00:03:37.180 --> 00:03:41.380
+Well, the problem here is A size, A data.
+
+00:03:41.690 --> 00:03:43.580
+The compiler,
+if the compiler cannot prove
+
+00:03:43.950 --> 00:03:46.660
+they don't overlap or they
+don't point to the same thing,
+
+00:03:46.660 --> 00:03:50.910
+the compiler has to be very conservative
+in reloading them every time,
+
+00:03:51.030 --> 00:03:52.800
+through every iteration of your loop.
+
+00:03:52.820 --> 00:03:55.670
+This does hurt performance.
+
+00:03:56.200 --> 00:04:01.140
+With strict aliasing rule,
+we say they have different types,
+
+00:04:01.180 --> 00:04:04.700
+they cannot alias,
+we move the code out of your loop,
+
+00:04:04.730 --> 00:04:06.920
+and this code goes at least 20% faster.
+
+00:04:06.920 --> 00:04:11.720
+So that's a simple demonstration
+of the power of TBAA.
+
+00:04:11.720 --> 00:04:13.790
+So that sounds great.
+
+00:04:13.880 --> 00:04:17.240
+Why don't we just turn it on and
+you don't need to know about this?
+
+00:04:17.240 --> 00:04:20.840
+Well, the problem is there's
+a lot of code out there.
+
+00:04:21.470 --> 00:04:25.900
+So even though the C standard
+say that it's not legal to cast a
+
+00:04:25.900 --> 00:04:29.460
+pointer from one type to another
+and dereference the pointer.
+
+00:04:29.460 --> 00:04:33.700
+But people, not the people,
+not the audience here,
+
+00:04:33.700 --> 00:04:36.570
+but people out there that do
+that kind of stuff all the time.
+
+00:04:36.580 --> 00:04:40.560
+So, you know, it's really dangerous just
+turning it on by default.
+
+00:04:40.560 --> 00:04:44.340
+We really thought about it,
+but there's just so many cases
+
+00:04:44.340 --> 00:04:46.520
+the compiler cannot get it right.
+
+00:04:46.520 --> 00:04:50.420
+If your code doesn't kind
+of follow the C standard.
+
+00:04:51.610 --> 00:04:52.840
+Here's a very simple example.
+
+00:04:52.840 --> 00:04:56.120
+Simple function, have two parameters,
+a and b.
+
+00:04:56.120 --> 00:05:00.040
+One is pointing to integer,
+one is pointing to a floating point.
+
+00:05:00.060 --> 00:05:03.370
+They cannot alias if you follow
+the strict aliasing rule.
+
+00:05:03.380 --> 00:05:07.490
+So the dereference of b here,
+notice there are two of them.
+
+00:05:07.500 --> 00:05:09.960
+The second one shouldn't require a load,
+right?
+
+00:05:09.980 --> 00:05:14.100
+If you follow strict aliasing,
+because you dereference
+
+00:05:14.190 --> 00:05:15.850
+it and you store to a.
+
+00:05:15.860 --> 00:05:20.590
+Following the previous example aliasing,
+this should be fine.
+
+00:05:23.610 --> 00:05:24.780
+Wrong.
+
+00:05:24.870 --> 00:05:28.330
+If you do something like this,
+where you cast a pointer from
+
+00:05:28.340 --> 00:05:32.090
+integer to following point,
+the code is going to break
+
+00:05:32.170 --> 00:05:33.800
+with strict aliasing.
+
+00:05:33.990 --> 00:05:39.400
+And that is why this option is
+optimization is not enabled by default.
+
+00:05:40.530 --> 00:05:45.550
+So what can you do to make sure
+your co-workers' code is safe so
+
+00:05:45.550 --> 00:05:47.800
+you can enable this optimization?
+
+00:05:48.030 --> 00:05:49.990
+You do need to cast sometimes.
+
+00:05:50.030 --> 00:05:52.860
+You do need to convert types sometimes.
+
+00:05:52.930 --> 00:05:54.620
+Here's a quick example.
+
+00:05:54.650 --> 00:05:59.680
+You have an array with
+four 16-bit integer fields,
+
+00:05:59.710 --> 00:06:05.140
+and you want to convert from
+64-bit integer to four 16-bit ones.
+
+00:06:05.630 --> 00:06:09.190
+You need to do a cast.
+
+00:06:09.550 --> 00:06:14.940
+This is not entirely safe because, again,
+this is violating the C standard rules.
+
+00:06:15.130 --> 00:06:17.040
+Instead, you should use UNION.
+
+00:06:17.070 --> 00:06:19.410
+UNION is designed for this.
+
+00:06:20.140 --> 00:06:23.930
+So use union to convert
+from one type to another,
+
+00:06:23.930 --> 00:06:27.680
+and just try to get rid of as
+much of the pointer casting as
+
+00:06:28.080 --> 00:06:31.720
+much as possible in the code,
+and you'll be safe.
+
+00:06:31.740 --> 00:06:33.620
+It will be good to go.
+
+00:06:33.660 --> 00:06:36.580
+Because you do want the
+performance of this.
+
+00:06:36.790 --> 00:06:39.120
+Here are just a few examples.
+
+00:06:39.150 --> 00:06:42.900
+We have standard--
+
+00:06:43.000 --> 00:07:07.400
+[Transcript missing]
+
+00:07:10.590 --> 00:07:17.040
+They go from, well,
+24% faster to 50% faster just
+
+00:07:17.140 --> 00:07:19.900
+by using strict aliasing.
+
+00:07:21.550 --> 00:07:24.360
+So that's that on TBAA.
+
+00:07:24.390 --> 00:07:28.420
+Make sure you eliminate unsafe
+pointer casts from your code,
+
+00:07:28.420 --> 00:07:32.400
+and enable with -f strict-aliasing
+if you're a makefile-based project.
+
+00:07:32.470 --> 00:07:40.020
+Or if you're using Xcode,
+just go up to Xcode and turn on
+
+00:07:40.020 --> 00:07:40.020
+enforce strict-aliasing rule.
+
+00:07:41.200 --> 00:07:48.700
+And notice this feature is only available
+in LLVM compiler 3.0 in Xcode 4.2.
+
+00:07:48.700 --> 00:07:52.740
+So this is another reason why you really
+want to switch compiler right now.
+
+00:07:52.930 --> 00:07:54.160
+So that's TBAA.
+
+00:07:54.470 --> 00:07:57.040
+Like I say, it's a very geeky subject.
+
+00:07:57.040 --> 00:07:58.240
+It's a little bit heavy.
+
+00:07:58.380 --> 00:08:00.650
+Let's move on to something
+a little bit lighter,
+
+00:08:00.650 --> 00:08:05.730
+like resuscitation.
+
+00:08:08.690 --> 00:08:10.760
+So what's new?
+
+00:08:10.760 --> 00:08:14.740
+Well,
+the new Resolcator is a lot smarter.
+
+00:08:14.740 --> 00:08:16.160
+Let's put it that way.
+
+00:08:16.160 --> 00:08:19.850
+It knows exactly where is the most
+important part of your function,
+
+00:08:19.850 --> 00:08:25.020
+that computation-intensive part,
+that inner loops where you sweat so much,
+
+00:08:25.050 --> 00:08:26.660
+put so much effort into.
+
+00:08:26.660 --> 00:08:29.860
+We want to make sure that
+part is optimized perfectly.
+
+00:08:29.860 --> 00:08:34.400
+We do things like split life range,
+optimal code placement,
+
+00:08:34.410 --> 00:08:36.800
+spill code placement.
+
+00:08:36.800 --> 00:08:40.370
+We know everything about the targets,
+and optimize the code size of your
+
+00:08:40.370 --> 00:08:44.560
+inner loop to as small as possible.
+
+00:08:44.830 --> 00:08:46.620
+So what does that mean?
+
+00:08:46.960 --> 00:08:51.220
+Split life range, spill code placement.
+
+00:08:51.360 --> 00:08:54.080
+Yeah, you might be wondering what
+exactly am I getting into?
+
+00:08:54.080 --> 00:08:56.740
+Is that door at the back
+of the room still open?
+
+00:08:56.740 --> 00:08:58.510
+Is it too late to get out here?
+
+00:08:58.510 --> 00:09:02.970
+So I just want to make sure security,
+you know, I want to make sure everybody
+
+00:09:02.970 --> 00:09:04.660
+learn before they leave.
+
+00:09:04.940 --> 00:09:07.140
+Let's take a look at a
+really simple example here.
+
+00:09:07.220 --> 00:09:09.920
+I'll focus on the variable X.
+
+00:09:10.030 --> 00:09:11.710
+It's a floating-point variable.
+
+00:09:11.810 --> 00:09:14.080
+It's being incremented a couple
+of times outside the loop,
+
+00:09:14.090 --> 00:09:16.860
+and inside the loop,
+it's just being doubled every iteration.
+
+00:09:16.860 --> 00:09:19.740
+This is a completely contrived example.
+
+00:09:19.740 --> 00:09:21.240
+It's pretty simple.
+
+00:09:21.250 --> 00:09:25.810
+And you expect generated code
+to look something like this.
+
+00:09:26.270 --> 00:09:30.040
+Calling a function,
+adding it inside the loop,
+
+00:09:30.040 --> 00:09:32.500
+it's just basically doubled every time.
+
+00:09:32.500 --> 00:09:35.900
+And outside loop, add it again.
+
+00:09:35.920 --> 00:09:39.770
+The problem is that's not
+the code you're going to get.
+
+00:09:40.010 --> 00:09:41.000
+Why is that?
+
+00:09:41.030 --> 00:09:46.180
+Well,
+x86 ABI say if you have function calls,
+
+00:09:46.180 --> 00:09:50.760
+they become barriers,
+barrier for floating-point values,
+
+00:09:50.790 --> 00:09:55.580
+because every function call
+can clobber every XMM register.
+
+00:09:55.850 --> 00:10:01.490
+So that means there's no way to write
+the code in such a way that eliminate
+
+00:10:01.860 --> 00:10:04.790
+storing the value back into memory.
+
+00:10:04.920 --> 00:10:10.640
+So we spill X here onto your stack.
+
+00:10:10.640 --> 00:10:13.190
+We'll make a function
+call and add it again,
+
+00:10:13.220 --> 00:10:17.460
+but before we add it, we have to load it
+back from memory again.
+
+00:10:17.470 --> 00:10:19.820
+And we store it back.
+
+00:10:19.820 --> 00:10:24.490
+And inside loop, we do the same thing,
+loading back from stack.
+
+00:10:24.930 --> 00:10:29.600
+Double it, write it back into memory,
+and so on and so forth.
+
+00:10:29.640 --> 00:10:32.930
+Notice how much more code
+is there in the loop,
+
+00:10:33.010 --> 00:10:36.900
+just because the
+ABI specify such a property.
+
+00:10:37.120 --> 00:10:40.040
+You're making a three
+instruction loop into something,
+
+00:10:40.040 --> 00:10:43.400
+into a five instruction loop,
+and worse still, there's low,
+
+00:10:43.400 --> 00:10:46.850
+there's memory access inside loop now.
+
+00:10:47.420 --> 00:10:50.920
+So the new reciclator
+is just a lot smarter.
+
+00:10:50.920 --> 00:10:56.110
+It recognizes, hey, after this addition,
+there's really no barrier here.
+
+00:10:56.500 --> 00:11:00.730
+From here on, inside loop,
+we can treat this as a separate variable.
+
+00:11:00.730 --> 00:11:02.780
+Let's call X.1.
+
+00:11:02.820 --> 00:11:07.990
+And this can live in register
+rather than in memory.
+
+00:11:08.000 --> 00:11:10.870
+Let's eliminate the loads
+and store from the code,
+
+00:11:10.870 --> 00:11:13.280
+from the most important
+part of your code,
+
+00:11:13.290 --> 00:11:15.450
+the loop, and move an outside loop.
+
+00:11:15.540 --> 00:11:17.300
+This is what we mean by slip.
+
+00:11:17.370 --> 00:11:21.760
+So we have a splitting live range
+and optimal spill code placement.
+
+00:11:21.760 --> 00:11:25.710
+This is the kind of code you
+expect to get out of the compiler.
+
+00:11:25.750 --> 00:11:28.480
+And we work hard to
+make sure that happens.
+
+00:11:28.600 --> 00:11:32.120
+Your code is going to run
+significantly faster now.
+
+00:11:33.040 --> 00:11:35.970
+So the next example here,
+the next optimization we're
+
+00:11:35.980 --> 00:11:39.690
+going to take a look at,
+is how the new Resolcator knows
+
+00:11:39.700 --> 00:11:43.570
+so much about your targets,
+and is going to work really hard
+
+00:11:43.600 --> 00:11:45.660
+to reduce the size of the loop.
+
+00:11:45.700 --> 00:11:50.460
+This is ARMv7 code, Thumbto,
+where instruction can
+
+00:11:50.460 --> 00:11:54.140
+either be 8-bit or 16-bit.
+
+00:11:54.260 --> 00:11:57.940
+And that depends on, basically,
+Resolcation.
+
+00:11:57.990 --> 00:12:01.430
+Basically, the architecture say,
+if these instructions are
+
+00:12:01.430 --> 00:12:05.380
+available in both variants,
+it depends on how you Resolcate them.
+
+00:12:05.400 --> 00:12:08.880
+If you use only the low
+register from R0 to R7,
+
+00:12:08.970 --> 00:12:13.010
+you can reduce them to 16-bit variants.
+
+00:12:13.070 --> 00:12:16.030
+So this is not so much a
+code size optimization as
+
+00:12:16.030 --> 00:12:18.660
+a performance optimization.
+
+00:12:18.700 --> 00:12:22.100
+Because if your loop is
+as small as possible,
+
+00:12:22.110 --> 00:12:24.640
+the machine can work
+much more efficiently,
+
+00:12:24.750 --> 00:12:27.940
+can load more instructions,
+can execute them faster,
+
+00:12:27.940 --> 00:12:31.390
+and things just run faster.
+
+00:12:31.680 --> 00:12:37.030
+We're going to see pretty shortly
+just how much this benefits the code.
+
+00:12:37.460 --> 00:12:41.320
+So the new registocator is
+a big win on 32-bit Intel,
+
+00:12:41.320 --> 00:12:44.820
+where register is really,
+really-- it's very,
+
+00:12:44.960 --> 00:12:49.400
+very few registers available
+for the compiler to play with.
+
+00:12:49.430 --> 00:12:58.290
+So you see really very acrossable
+wins from single digits
+
+00:12:58.290 --> 00:12:58.290
+to high double-digit wins.
+
+00:12:59.640 --> 00:13:03.460
+On 64-bit Intel,
+the win is still across the board.
+
+00:13:03.550 --> 00:13:07.700
+You're not going to see as
+dramatic improvement as 32-bit.
+
+00:13:07.740 --> 00:13:10.740
+But again, this is free performance.
+
+00:13:10.750 --> 00:13:13.380
+All you have to do is switch compiler.
+
+00:13:13.820 --> 00:13:17.410
+On iOS, where the Bose optimization
+come into play,
+
+00:13:17.410 --> 00:13:22.560
+and you can see some dramatic improvement
+in the performance of your app,
+
+00:13:22.660 --> 00:13:27.140
+going up to 38% faster here
+with a crypto hash algorithm.
+
+00:13:27.140 --> 00:13:30.020
+Thank you.
+
+00:13:35.240 --> 00:13:37.240
+So that's a new Resolcator.
+
+00:13:37.240 --> 00:13:39.640
+It's a cross-border
+performance improvement.
+
+00:13:39.640 --> 00:13:43.250
+And the good thing is there's nothing
+for you to do other than to switch to
+
+00:13:43.260 --> 00:13:46.280
+the new LLVM compiler in Xcode 4.2.
+
+00:13:46.280 --> 00:13:51.300
+The new instruction scheduler-- well,
+let's take a look what is
+
+00:13:51.300 --> 00:13:52.920
+instruction scheduling.
+
+00:13:52.920 --> 00:13:55.940
+What's its primary responsibilities?
+
+00:13:55.940 --> 00:13:58.890
+So basically,
+it has two primary responsibilities.
+
+00:13:58.990 --> 00:14:02.170
+The first one,
+it needs to reorder the order of machine
+
+00:14:02.190 --> 00:14:06.980
+code optimally to get the best benefit
+of the code that's being generated.
+
+00:14:07.060 --> 00:14:11.400
+So on most architectures,
+simple arithmetic operations like add,
+
+00:14:11.400 --> 00:14:13.920
+addition, subtraction are really fast.
+
+00:14:13.920 --> 00:14:18.250
+On the other hand, load instruction,
+which loads from memory,
+
+00:14:18.250 --> 00:14:20.280
+tend to take a little longer.
+
+00:14:20.280 --> 00:14:25.110
+So if the scheduler is doing
+something pretty straightforward,
+
+00:14:25.430 --> 00:14:29.780
+like do add, followed by load,
+then subtract the two values together,
+
+00:14:29.780 --> 00:14:33.710
+it's going to incur one cycle
+panel T because they have to
+
+00:14:33.710 --> 00:14:38.620
+wait two cycles before the
+result is available from memory.
+
+00:14:38.810 --> 00:14:44.200
+So the scheduler must do the right
+thing here and reorder the instructions.
+
+00:14:44.430 --> 00:14:46.840
+to hide the latency of low instruction.
+
+00:14:46.920 --> 00:14:49.550
+So that's the first job of
+the instruction scheduler,
+
+00:14:49.690 --> 00:14:55.980
+is order the instructions in such a way
+so your code runs as fast as possible.
+
+00:14:56.910 --> 00:15:01.110
+Its second responsibility
+is resource allocation.
+
+00:15:01.440 --> 00:15:05.310
+Well, not so much resource allocation,
+but be aware of what resources
+
+00:15:05.420 --> 00:15:07.950
+are available in the code,
+on the machine,
+
+00:15:08.130 --> 00:15:15.160
+to make sure it doesn't cause spills,
+or doesn't kind of saturate
+
+00:15:15.160 --> 00:15:15.160
+the machine too much.
+
+00:15:16.450 --> 00:15:20.790
+So one example here is if you assume
+there's only two registers available
+
+00:15:21.910 --> 00:15:25.000
+and want to schedule this code.
+
+00:15:25.520 --> 00:15:29.090
+So let's say we have three loads here,
+and from the previous example,
+
+00:15:29.130 --> 00:15:34.860
+we know we want to schedule loads as
+early as possible to hide the latency.
+
+00:15:34.900 --> 00:15:38.820
+The problem here is if we only
+have two registers available,
+
+00:15:38.830 --> 00:15:41.420
+we just ran out of registers.
+
+00:15:41.540 --> 00:15:45.090
+So this is going to cause a
+register spill and actually
+
+00:15:45.110 --> 00:15:47.410
+end up causing us performance.
+
+00:15:48.020 --> 00:15:50.610
+So the scheduler will do the right thing,
+and here,
+
+00:15:50.660 --> 00:15:57.050
+and actually move the code around to make
+sure we can resuscitate them correctly.
+
+00:15:57.530 --> 00:16:02.040
+So that's basically the two primary
+responsibility of instruction scheduling.
+
+00:16:02.060 --> 00:16:05.010
+And the new instruction scheduler
+does both of them really,
+
+00:16:05.010 --> 00:16:05.940
+really well.
+
+00:16:05.940 --> 00:16:09.360
+It knows when to care for one,
+where to worry about the other.
+
+00:16:09.410 --> 00:16:14.110
+We find this to be a really,
+really great benefit.
+
+00:16:14.520 --> 00:16:19.480
+With all the information it has
+about machine resource models,
+
+00:16:19.520 --> 00:16:22.340
+it can do really both jobs equally well.
+
+00:16:22.560 --> 00:16:27.080
+On 64-bit Intel, we see dramatic
+improvements from Blowfish,
+
+00:16:27.210 --> 00:16:30.660
+which is a well-known
+cryptography algorithm,
+
+00:16:30.660 --> 00:16:35.640
+and several other algorithms,
+as well as MP3 encoding and decoding.
+
+00:16:35.680 --> 00:16:39.760
+We see significant wins on 64-bit Intel.
+
+00:16:41.060 --> 00:16:45.300
+So that's a quick summary of
+the new instruction scheduler.
+
+00:16:45.320 --> 00:16:51.000
+Make sure you use a new LLVM compiler
+in Xcode 4.2 and get the benefit of
+
+00:16:51.010 --> 00:16:53.890
+the work we've been doing in this area.
+
+00:16:55.450 --> 00:16:59.180
+So one last thing we're going to talk
+about here in the backend optimization
+
+00:16:59.630 --> 00:17:02.600
+is called Loop Idiom Recognizer.
+
+00:17:02.700 --> 00:17:06.900
+So this optimizer here has a simple job
+of turning loops that can be replaced
+
+00:17:06.900 --> 00:17:09.730
+with calls to building functions.
+
+00:17:10.340 --> 00:17:12.210
+So here's a couple examples.
+
+00:17:12.450 --> 00:17:15.280
+If you're iterating through
+an array and setting every
+
+00:17:15.280 --> 00:17:19.090
+element to some constant value,
+it's going to replace
+
+00:17:19.450 --> 00:17:21.200
+with a call to main set.
+
+00:17:21.200 --> 00:17:25.760
+If you have a simple loop that
+goes iterates through two arrays
+
+00:17:25.760 --> 00:17:31.190
+and copy from one to the other,
+it's going to replace with main copy.
+
+00:17:31.870 --> 00:17:33.700
+"It's pretty simple stuff.
+
+00:17:33.850 --> 00:17:35.310
+So why is this important?
+
+00:17:35.480 --> 00:17:37.600
+You say,
+'I would never write code like this.
+
+00:17:37.600 --> 00:17:41.190
+I know exactly what's
+the right thing to do.'
+
+00:17:42.510 --> 00:17:51.420
+Well, the optimization paths can reason
+about really a lot less trivial cases.
+
+00:17:51.620 --> 00:17:55.190
+Think about if you're writing
+C++ code and using templates,
+
+00:17:55.290 --> 00:18:01.160
+instantiation, and use standard fill,
+standard copy, you're going to run
+
+00:18:01.230 --> 00:18:03.050
+into this kind of code.
+
+00:18:03.410 --> 00:18:06.900
+And this kind of code
+does happen in real world.
+
+00:18:06.900 --> 00:18:11.580
+We've seen Viterbi decoding,
+which is pretty well known,
+
+00:18:11.590 --> 00:18:15.940
+just found this optimization
+to go up to four times as fast.
+
+00:18:16.690 --> 00:18:20.700
+It's important to know the system
+main copy and main set has been
+
+00:18:20.720 --> 00:18:22.980
+just optimized to the extreme.
+
+00:18:23.050 --> 00:18:30.290
+They perform really,
+really fast on Mac OS and iOS.
+
+00:18:30.560 --> 00:18:34.160
+So this optimization is really,
+really important.
+
+00:18:34.240 --> 00:18:38.440
+However, if you're implementing
+anything that's low level,
+
+00:18:38.500 --> 00:18:42.480
+and you do want to implement
+your own main copy or main set,
+
+00:18:42.480 --> 00:18:46.760
+just remember to turn it off
+with a -f no building option.
+
+00:18:46.790 --> 00:18:50.300
+That will disable this optimization.
+
+00:18:51.010 --> 00:18:54.170
+So that's all I'm going to
+talk about today about the
+
+00:18:54.170 --> 00:18:56.280
+code gen optimization part.
+
+00:18:56.280 --> 00:18:59.580
+The next part we're
+going to focus on C++.
+
+00:19:00.370 --> 00:19:05.300
+And I would like to welcome Doug Gregor,
+who is our C++ expert.
+
+00:19:05.390 --> 00:19:08.270
+So, here I'm going to talk a
+little bit about C++ OX,
+
+00:19:08.280 --> 00:19:12.300
+the upcoming revision
+to the C++ standard.
+
+00:19:12.420 --> 00:19:16.450
+So we talked about C++ OX a little bit if
+you were in the previous compiler talk,
+
+00:19:16.670 --> 00:19:21.160
+and the great news is we're giving
+you C++ OX support in Xcode 4.2
+
+00:19:21.620 --> 00:19:24.300
+through the Apple LLVM compiler.
+
+00:19:24.350 --> 00:19:29.300
+There's a pile of new C++ OX features
+we have for you to try out.
+
+00:19:29.300 --> 00:19:34.020
+I would love to talk about all of these,
+but I'm going to restrain myself this
+
+00:19:34.020 --> 00:19:37.050
+time and just talk about a couple
+of features and how you can use
+
+00:19:37.050 --> 00:19:40.300
+those in your application to write
+code faster and write better code.
+
+00:19:40.300 --> 00:19:45.140
+First off, we're going to look at
+type inference in C++ OX.
+
+00:19:45.300 --> 00:19:47.220
+So take a look at this loop.
+
+00:19:47.300 --> 00:19:49.770
+If you're a C++ programmer,
+you probably write this
+
+00:19:49.850 --> 00:19:51.270
+kind of loop all the time.
+
+00:19:51.300 --> 00:19:54.240
+You're walking through all of
+the elements of a data structure.
+
+00:19:54.300 --> 00:19:58.270
+The type to name this data
+structure is really long.
+
+00:19:58.300 --> 00:20:01.620
+It's a dictionary of synonyms,
+so it maps from a string
+
+00:20:01.620 --> 00:20:03.300
+to all of the synonyms.
+
+00:20:03.300 --> 00:20:07.300
+It has these nice nested structures,
+lots of angle brackets,
+
+00:20:07.300 --> 00:20:11.650
+and writing that iterator type
+just to walk over the elements in
+
+00:20:11.650 --> 00:20:14.090
+the loop is really infuriating.
+
+00:20:14.530 --> 00:20:16.590
+So this is what's great about C++ OX.
+
+00:20:16.700 --> 00:20:20.080
+With OX, we have the auto keyword.
+
+00:20:20.180 --> 00:20:24.320
+The auto keyword uses type
+inference techniques to allow
+
+00:20:24.320 --> 00:20:27.120
+you to just not write these big,
+long types anymore.
+
+00:20:27.120 --> 00:20:28.440
+Let the compiler do the work.
+
+00:20:28.520 --> 00:20:30.630
+And the idea here is very simple.
+
+00:20:30.630 --> 00:20:34.670
+Just write the auto keyword as
+the type of one of your variables.
+
+00:20:34.690 --> 00:20:37.880
+Now, that variable has to be
+initialized with something.
+
+00:20:37.880 --> 00:20:40.820
+So here,
+S is initialized with synonyms.begin.
+
+00:20:41.890 --> 00:20:43.810
+Compiler will go look at synonyms.begin.
+
+00:20:43.850 --> 00:20:44.850
+It knows what it is.
+
+00:20:44.850 --> 00:20:46.950
+It knows that it returns
+this iterator type,
+
+00:20:46.950 --> 00:20:49.410
+and it will fill in the details
+behind the scenes so you
+
+00:20:49.410 --> 00:20:51.670
+don't have to write the big,
+long types.
+
+00:20:51.680 --> 00:20:54.190
+If you happen to be an
+objective C++ programmer,
+
+00:20:54.190 --> 00:20:55.770
+you can also do this, right?
+
+00:20:55.780 --> 00:20:59.490
+There's a lot of redundancy in the
+way we write these declarations.
+
+00:20:59.500 --> 00:21:02.240
+So here,
+we're allocating an NSMutable array,
+
+00:21:02.240 --> 00:21:04.520
+initializing with a bunch of objects.
+
+00:21:04.560 --> 00:21:07.720
+Compiler knows this
+returns an NSMutable array.
+
+00:21:07.720 --> 00:21:11.670
+So why would we go write it again for us?
+
+00:21:11.720 --> 00:21:12.550
+Don't do it.
+
+00:21:12.590 --> 00:21:13.750
+Just write auto.
+
+00:21:13.750 --> 00:21:15.490
+It'll do the right thing.
+
+00:21:15.520 --> 00:21:16.630
+Like that?
+
+00:21:16.700 --> 00:21:18.390
+All right, good.
+
+00:21:25.100 --> 00:21:28.960
+Looking back at loops again,
+iteration over containers is
+
+00:21:28.960 --> 00:21:32.900
+something we do all the time
+in C++ and in Objective-C.
+
+00:21:32.900 --> 00:21:34.690
+Actually, in Objective-C,
+we have a good way to do it.
+
+00:21:34.760 --> 00:21:37.210
+C++, we have to write these big,
+long iterator loops.
+
+00:21:37.220 --> 00:21:41.190
+So C++ OX brings in
+the new for range loop.
+
+00:21:41.300 --> 00:21:44.540
+New for range loop, really simple.
+
+00:21:44.540 --> 00:21:46.500
+You just want to walk over
+the elements of a container.
+
+00:21:46.500 --> 00:21:48.320
+You write the new for loop.
+
+00:21:48.400 --> 00:21:50.720
+You name the container after the colon.
+
+00:21:51.490 --> 00:21:53.950
+Before the colon,
+you declare a variable that you
+
+00:21:53.950 --> 00:21:56.900
+want to use to capture each of
+the elements of the container,
+
+00:21:56.900 --> 00:21:58.760
+and then write the
+rest of your loop body.
+
+00:21:58.760 --> 00:22:02.060
+You don't have to go through the mess
+of creating the both begin and end
+
+00:22:02.060 --> 00:22:06.130
+iterators and walking through all those,
+doing the extra dereference steps.
+
+00:22:06.140 --> 00:22:08.090
+Just write the code the
+way you'd like to write it.
+
+00:22:09.380 --> 00:22:12.540
+Of course, this works with all of
+the standard containers,
+
+00:22:12.620 --> 00:22:14.920
+vectors, lists, maps, sets, etc.
+
+00:22:14.920 --> 00:22:18.300
+But it can also work with your
+own user-defined containers.
+
+00:22:18.500 --> 00:22:22.400
+All you have to do is follow the
+same conventions set out by the C++
+
+00:22:22.400 --> 00:22:27.060
+standard library by providing begin and
+end functions that return iterators.
+
+00:22:27.190 --> 00:22:31.180
+And the for-range loop already works
+with your data structures that way.
+
+00:22:32.230 --> 00:22:34.560
+Now, if we learned anything
+from the last slide,
+
+00:22:34.590 --> 00:22:38.250
+it's that pretty much any
+feature in C++/OX can be made
+
+00:22:38.250 --> 00:22:40.110
+cooler by the use of auto.
+
+00:22:40.360 --> 00:22:42.010
+So just stop writing the type.
+
+00:22:42.250 --> 00:22:43.470
+We don't need it anymore.
+
+00:22:43.600 --> 00:22:45.950
+Compiler can figure it out for you.
+
+00:22:47.740 --> 00:22:50.250
+So let's move to
+object-oriented programs.
+
+00:22:50.400 --> 00:22:53.810
+I'm sure a lot of you
+write these also in C++.
+
+00:22:54.190 --> 00:22:57.190
+In C++ OX,
+we have the notion of override controls.
+
+00:22:57.200 --> 00:23:02.760
+Override controls help you describe to
+the compiler and to fellow programmers
+
+00:23:02.760 --> 00:23:06.730
+how you actually intend your
+object-oriented hierarchy to be used.
+
+00:23:06.820 --> 00:23:09.360
+The first of those are final methods.
+
+00:23:09.360 --> 00:23:12.440
+So say you have a method that
+you've declared somewhere.
+
+00:23:12.440 --> 00:23:15.140
+Here I've put in the method F,
+and it's virtual,
+
+00:23:15.140 --> 00:23:16.760
+inside the window class.
+
+00:23:17.600 --> 00:23:21.320
+I inherit and override
+that F in a subclass,
+
+00:23:21.320 --> 00:23:24.400
+but I decide at this point,
+F should no longer be
+
+00:23:24.400 --> 00:23:26.100
+overridden by anyone.
+
+00:23:26.100 --> 00:23:29.940
+My class is not ready to handle people
+customizing behavior in this way.
+
+00:23:29.940 --> 00:23:33.060
+So in C++ OX, you can mark it as final.
+
+00:23:35.070 --> 00:23:39.240
+What that means is that if someone comes
+by and tries to override it again later,
+
+00:23:39.490 --> 00:23:42.100
+they're going to get an error
+out of the compiler that says,
+
+00:23:42.140 --> 00:23:44.400
+you are not allowed to
+override this function.
+
+00:23:44.400 --> 00:23:46.740
+The class is not prepared for it.
+
+00:23:46.780 --> 00:23:50.620
+And the programmer that wrote
+the widget class has told you,
+
+00:23:50.620 --> 00:23:52.430
+this isn't going to work.
+
+00:23:53.090 --> 00:23:58.060
+Final has a second place it can be used,
+which is for final classes.
+
+00:23:58.170 --> 00:24:02.680
+So final classes are the leaf nodes
+in your object-oriented hierarchy.
+
+00:24:02.750 --> 00:24:05.770
+They're classes from which you
+should not try to subclass.
+
+00:24:05.840 --> 00:24:08.540
+You should not inherit from these things.
+
+00:24:08.600 --> 00:24:12.210
+Use the final keyword before the
+opening brace here to describe that
+
+00:24:12.320 --> 00:24:17.720
+your class is one of these leaf classes,
+and inheriting from that class
+
+00:24:17.820 --> 00:24:20.190
+will be banned by the compiler.
+
+00:24:20.900 --> 00:24:23.940
+So, FINALE's good for documenting
+your intentions and how your
+
+00:24:23.940 --> 00:24:26.980
+object-oriented hierarchy actually works.
+
+00:24:27.110 --> 00:24:29.950
+It's also useful for the compiler.
+
+00:24:30.110 --> 00:24:32.190
+So remember,
+every time you do a virtual call,
+
+00:24:32.270 --> 00:24:34.610
+we're doing some indirect
+call through a Vtable,
+
+00:24:34.630 --> 00:24:36.340
+and that has a performance impact.
+
+00:24:36.580 --> 00:24:40.240
+It also makes it harder for
+the compiler to optimize it.
+
+00:24:40.320 --> 00:24:43.680
+If you've marked your final
+virtual methods that should never
+
+00:24:44.040 --> 00:24:47.220
+be overridden as final methods,
+well now when the compiler sees a
+
+00:24:47.260 --> 00:24:49.930
+call to one of those final methods,
+it knows it doesn't have
+
+00:24:50.070 --> 00:24:51.480
+to go through the Vtable.
+
+00:24:51.560 --> 00:24:54.800
+It can take the fast,
+direct call and optimize through that
+
+00:24:54.950 --> 00:24:58.790
+call if it's something that could
+be inlined and should be inlined.
+
+00:25:00.120 --> 00:25:06.010
+There's one more override control,
+and this is the override keyword itself.
+
+00:25:06.320 --> 00:25:10.570
+The override keyword describes
+programmer intention.
+
+00:25:10.850 --> 00:25:15.490
+It says, when I write this function,
+I'm declaring this function,
+
+00:25:15.490 --> 00:25:19.190
+I intend to override
+something from my base class.
+
+00:25:19.930 --> 00:25:23.150
+And if for some reason I have failed
+to override something from my base
+
+00:25:23.150 --> 00:25:26.680
+class because my base class changed,
+or I typed the signature wrong,
+
+00:25:26.820 --> 00:25:29.940
+the compiler's going to tell me, no,
+actually, you did not override
+
+00:25:29.940 --> 00:25:31.490
+something from the base class.
+
+00:25:31.540 --> 00:25:34.920
+Instead, you did something that's
+really hard to debug,
+
+00:25:35.010 --> 00:25:39.190
+which is you've hidden it with
+something that looks identical to you.
+
+00:25:39.750 --> 00:25:43.120
+I'm sure you've all seen the minor
+bug I put in this slide here of
+
+00:25:43.120 --> 00:25:45.190
+the extra const up in the top.
+
+00:25:45.240 --> 00:25:46.550
+This is a const member function.
+
+00:25:46.660 --> 00:25:49.490
+We tried to override it,
+but we didn't write the const.
+
+00:25:49.630 --> 00:25:52.700
+Simple, easy mistake would have cost
+a lot of time in debugging.
+
+00:25:52.810 --> 00:25:56.410
+But if you use override consistently,
+you're telling your fellow
+
+00:25:56.410 --> 00:25:59.510
+programmers what you intend to do,
+and you're telling the compiler just
+
+00:25:59.510 --> 00:26:03.000
+to check you work in case something
+changes or in case you missed something.
+
+00:26:03.140 --> 00:26:05.810
+With that, we're going to move on to
+
+00:26:05.840 --> 00:26:08.800
+A little bit heavier
+topic in the C++/OX arena,
+
+00:26:08.800 --> 00:26:11.380
+and this is move semantics.
+
+00:26:11.530 --> 00:26:15.330
+Take a look at this function
+signature for a couple seconds.
+
+00:26:15.820 --> 00:26:18.720
+If you're a performance-minded
+C++ programmer,
+
+00:26:18.820 --> 00:26:20.750
+this should make you cringe.
+
+00:26:20.950 --> 00:26:23.100
+This is slow, and why is it so slow?
+
+00:26:23.100 --> 00:26:24.240
+It doesn't look like it's slow.
+
+00:26:24.240 --> 00:26:26.290
+We just want to return
+a vector of strings.
+
+00:26:26.300 --> 00:26:26.970
+What's wrong with that?
+
+00:26:27.020 --> 00:26:30.130
+Well,
+the problem is that when you do return
+
+00:26:30.450 --> 00:26:34.780
+this vector of strings by value,
+it's going to require
+
+00:26:34.780 --> 00:26:35.990
+a copy in many cases.
+
+00:26:36.000 --> 00:26:41.010
+And that copy operation to return a
+vector of strings is really expensive.
+
+00:26:41.020 --> 00:26:43.590
+You have a bunch of string data in there.
+
+00:26:43.600 --> 00:26:47.990
+You need to allocate new storage
+within the vector for all of those
+
+00:26:47.990 --> 00:26:51.840
+strings and copy each of the strings,
+which means copying a lot of string data,
+
+00:26:51.840 --> 00:26:56.330
+allocating more storage just
+to return this vector of
+
+00:26:56.430 --> 00:26:59.400
+strings out of our function,
+which is actually a natural
+
+00:26:59.400 --> 00:27:01.300
+way to write the function.
+
+00:27:01.680 --> 00:27:06.200
+The really infuriating part about
+this is that the source of the copy,
+
+00:27:06.240 --> 00:27:10.100
+the vector of strings that was
+built up inside the split function,
+
+00:27:10.140 --> 00:27:12.720
+goes away immediately afterward.
+
+00:27:12.820 --> 00:27:15.810
+So we've copied away from a
+temporary resource and then
+
+00:27:15.810 --> 00:27:18.110
+destroyed that temporary resource.
+
+00:27:18.850 --> 00:27:21.400
+This is wasted performance.
+
+00:27:21.460 --> 00:27:25.130
+With move semantics,
+we address this problem by stealing
+
+00:27:25.130 --> 00:27:29.940
+resources from temporary objects
+that are going to go away anyway.
+
+00:27:30.100 --> 00:27:34.320
+So the idea is the vector of
+string inside the split function,
+
+00:27:34.430 --> 00:27:37.350
+it has these resources it stores,
+it has all these strings
+
+00:27:37.360 --> 00:27:40.310
+and this memory it owns,
+and it's going to give
+
+00:27:40.420 --> 00:27:42.310
+those up as soon as it dies.
+
+00:27:42.420 --> 00:27:45.450
+So rather than copying that data,
+which is a slow operation,
+
+00:27:45.570 --> 00:27:48.580
+we're going to steal it by
+stealing its internal resources,
+
+00:27:48.700 --> 00:27:52.400
+pretending they're our own
+outside of the function.
+
+00:27:52.470 --> 00:27:56.580
+And that's a constant time operation
+copying a couple of pointers,
+
+00:27:56.580 --> 00:28:01.300
+rather than this m by n copy operation
+that involves memory allocation.
+
+00:28:03.310 --> 00:28:04.240
+What's this do to performance?
+
+00:28:04.240 --> 00:28:06.060
+Well, it's an algorithmic win.
+
+00:28:06.060 --> 00:28:09.140
+So you can have huge
+effect on performance.
+
+00:28:09.140 --> 00:28:13.070
+Here's a little benchmark here where we
+have something like a vector of strings.
+
+00:28:13.070 --> 00:28:16.150
+So we have a vector of
+heavyweight objects of some sort,
+
+00:28:16.150 --> 00:28:18.600
+and we're constructing these vectors.
+
+00:28:18.600 --> 00:28:22.560
+As we're constructing the vectors,
+of course, the vector starts this big.
+
+00:28:22.710 --> 00:28:23.700
+We copy data in.
+
+00:28:23.700 --> 00:28:26.850
+Then we realize we have to
+reallocate it to make it larger,
+
+00:28:26.920 --> 00:28:29.210
+copy that data over,
+destroying the source,
+
+00:28:29.360 --> 00:28:31.640
+and so on and so on,
+and this takes quite a long time.
+
+00:28:31.720 --> 00:28:33.160
+So our access here is time.
+
+00:28:33.160 --> 00:28:34.930
+You can see it takes quite a while.
+
+00:28:35.010 --> 00:28:36.750
+We then sort that information.
+
+00:28:36.750 --> 00:28:38.760
+Of course, what does sorting do?
+
+00:28:38.780 --> 00:28:43.650
+It copies the data around until
+it's in the right sorted order.
+
+00:28:45.490 --> 00:28:47.680
+You can imagine move semantics
+would make this better.
+
+00:28:47.720 --> 00:28:51.220
+Rather than copying,
+which is an expensive operation,
+
+00:28:51.220 --> 00:28:53.900
+we do a move,
+which is a very cheap operation,
+
+00:28:54.050 --> 00:28:56.810
+and we see huge performance
+wins in this benchmark.
+
+00:28:57.020 --> 00:29:00.270
+Seven times faster for
+building these large vectors.
+
+00:29:00.270 --> 00:29:04.140
+Four and a half times faster
+when sorting these vectors.
+
+00:29:04.140 --> 00:29:07.780
+There are big wins here because
+they're algorithmic wins that
+
+00:29:07.780 --> 00:29:11.560
+eliminate a huge amount of work,
+rather than just making the work
+
+00:29:11.630 --> 00:29:13.620
+that's there slightly faster.
+
+00:29:14.080 --> 00:29:16.100
+So say you want to use move semantics.
+
+00:29:16.100 --> 00:29:16.640
+They're great.
+
+00:29:16.640 --> 00:29:18.840
+They can improve performance
+for your applications.
+
+00:29:18.840 --> 00:29:22.570
+The feature that actually
+supports move semantics in C++
+
+00:29:22.570 --> 00:29:24.920
+OX is called rvalue references.
+
+00:29:24.920 --> 00:29:28.620
+So to describe rvalue references,
+we're going to look at a
+
+00:29:28.620 --> 00:29:30.520
+simple numeric vector class.
+
+00:29:30.520 --> 00:29:34.210
+So this vector class has
+a pointer to doubles.
+
+00:29:34.520 --> 00:29:37.540
+This is the data, the numeric data that's
+stored in this vector,
+
+00:29:37.640 --> 00:29:40.750
+and of course the length of that data.
+
+00:29:41.070 --> 00:29:43.490
+Now in the copy constructor,
+this is a value object.
+
+00:29:43.660 --> 00:29:46.980
+So the copy constructor,
+when it gets a vector,
+
+00:29:46.980 --> 00:29:49.540
+it's going to make a
+deep copy of that vector.
+
+00:29:49.540 --> 00:29:52.890
+It's going to allocate new memory,
+copy all of the numeric data over,
+
+00:29:52.890 --> 00:29:55.280
+and it will own the
+memory that it allocated.
+
+00:29:55.300 --> 00:29:58.190
+The copy assignment
+operator works the same way.
+
+00:29:58.320 --> 00:30:00.420
+It frees its own memory
+if it has any now,
+
+00:30:00.480 --> 00:30:03.370
+allocates new memory that's
+the appropriate size for
+
+00:30:03.530 --> 00:30:07.180
+what we're copying from,
+and does a deep copy of the data.
+
+00:30:08.100 --> 00:30:12.740
+The destructor in this case is
+responsible for freeing that data.
+
+00:30:13.780 --> 00:30:16.260
+Let's move enable this vector class.
+
+00:30:16.360 --> 00:30:18.410
+The first thing we're going
+to do is introduce what's
+
+00:30:18.800 --> 00:30:20.990
+called a move constructor.
+
+00:30:21.330 --> 00:30:23.150
+Now,
+a move constructor looks a heck of a lot
+
+00:30:23.150 --> 00:30:25.740
+like a copy constructor in its signature.
+
+00:30:25.860 --> 00:30:26.760
+It's a constructor.
+
+00:30:27.000 --> 00:30:28.700
+It takes in a vector.
+
+00:30:28.910 --> 00:30:31.240
+Except here,
+rather than taking a constant
+
+00:30:31.240 --> 00:30:34.050
+reference to a vector,
+we're using this
+
+00:30:34.060 --> 00:30:35.930
+ampersand-ampersand syntax.
+
+00:30:35.960 --> 00:30:38.130
+That is an R-value reference.
+
+00:30:38.130 --> 00:30:42.930
+And what it means is that when the
+compiler goes to copy a vector object,
+
+00:30:42.930 --> 00:30:46.620
+it's going to make a decision
+between the move constructor
+
+00:30:46.620 --> 00:30:48.960
+and the copy constructor.
+
+00:30:48.960 --> 00:30:52.570
+And when the compiler knows
+that the source of the copy is
+
+00:30:52.570 --> 00:30:55.890
+going to go away and die anyway,
+so no one cares about it,
+
+00:30:55.950 --> 00:30:59.010
+it's going to pick the move
+constructor over the copy constructor.
+
+00:30:59.020 --> 00:31:01.790
+So in the move constructor,
+we're guaranteed that the
+
+00:31:02.110 --> 00:31:05.580
+source that we're talking about,
+it's an object that's going to die.
+
+00:31:05.580 --> 00:31:07.420
+We can steal its resources.
+
+00:31:09.190 --> 00:31:10.680
+So we do.
+
+00:31:10.710 --> 00:31:13.910
+We copy the data pointer,
+which is a shallow copy of a pointer,
+
+00:31:13.990 --> 00:31:14.720
+very fast.
+
+00:31:14.750 --> 00:31:18.180
+We copy the length,
+and then we zero out the data and
+
+00:31:18.180 --> 00:31:21.800
+length values within the source,
+so that when the source is destructed,
+
+00:31:21.910 --> 00:31:23.540
+it doesn't try and free any resources.
+
+00:31:23.590 --> 00:31:26.440
+This completes the resource
+transfer into here,
+
+00:31:26.540 --> 00:31:28.040
+and it's fast, right?
+
+00:31:28.040 --> 00:31:31.170
+Rather than a linear time copy,
+we've done a constant time
+
+00:31:31.200 --> 00:31:32.580
+copy of a couple words.
+
+00:31:34.120 --> 00:31:36.300
+So here we free our own resources.
+
+00:31:36.300 --> 00:31:40.590
+We steal the resources from our source,
+which we know is a temporary,
+
+00:31:40.590 --> 00:31:45.260
+because the compiler's going to decide
+between the copy assignment and move
+
+00:31:45.260 --> 00:31:50.300
+assignment operators based on whether
+the right-hand side is a temporary.
+
+00:31:50.300 --> 00:31:52.670
+Once we've stolen the
+pointer and the length,
+
+00:31:52.670 --> 00:31:55.460
+we zero out the pointer and
+the length from the source,
+
+00:31:55.460 --> 00:31:58.330
+and when it gets destroyed,
+it just does nothing.
+
+00:31:58.340 --> 00:31:58.340
+So here we free our own resources,
+and then we zero out the pointer
+
+00:31:58.340 --> 00:31:58.340
+and the length from the source,
+and when it gets destroyed,
+
+00:31:58.340 --> 00:31:58.440
+it just does nothing.
+
+00:31:59.430 --> 00:32:02.580
+You can go move-enable your own classes
+when you're building in C++ OX mode.
+
+00:32:02.580 --> 00:32:02.580
+You can go move-enable your own classes
+when you're building in C++ OX mode.
+
+00:32:03.450 --> 00:32:04.850
+And you can get benefits out of this.
+
+00:32:04.870 --> 00:32:08.700
+You'll get benefits whenever you
+pass your classes by value or
+
+00:32:08.820 --> 00:32:12.550
+return your classes by value,
+because you'll get the fast moves
+
+00:32:12.580 --> 00:32:16.210
+automatically from the compiler
+rather than the slow copies.
+
+00:32:21.090 --> 00:32:21.090
+It also means you can
+write functions like split.
+
+00:32:22.130 --> 00:32:23.470
+There's one catch.
+
+00:32:23.610 --> 00:32:27.300
+To really get the big wins,
+so that all of your data
+
+00:32:27.300 --> 00:32:30.920
+structures like vectors and maps
+can benefit from move semantics,
+
+00:32:31.070 --> 00:32:36.210
+you need your C++ standard library to
+implement move semantics throughout.
+
+00:32:36.350 --> 00:32:38.890
+So your data structures,
+just like the vector we
+
+00:32:38.890 --> 00:32:42.030
+saw in the previous slide,
+your data structures need to
+
+00:32:42.030 --> 00:32:45.290
+have move constructors and
+move assignment operators.
+
+00:32:45.410 --> 00:32:47.340
+The library has to go a bit further,
+though.
+
+00:32:47.460 --> 00:32:50.780
+It has to realize when it's
+performing an operation,
+
+00:32:50.890 --> 00:32:53.990
+there's effectively a move,
+and perform a move,
+
+00:32:53.990 --> 00:32:57.500
+or try to perform a move,
+instead of copy in cases where
+
+00:32:57.500 --> 00:33:00.010
+it doesn't need the source value.
+
+00:33:00.120 --> 00:33:01.800
+By doing this,
+we can get better performance
+
+00:33:01.800 --> 00:33:03.950
+across the entire library,
+and we can do this both in
+
+00:33:03.950 --> 00:33:07.250
+the data structures and within
+algorithms like sort and unique
+
+00:33:07.320 --> 00:33:09.110
+and so on that move data around.
+
+00:33:09.120 --> 00:33:13.390
+So this is one of the many reasons
+that we designed and built libc++,
+
+00:33:13.420 --> 00:33:15.680
+the LLVM C++ standard library.
+
+00:33:15.680 --> 00:33:20.450
+So we built this from the ground up
+with complete support for C++ OX and
+
+00:33:20.450 --> 00:33:24.560
+using all of the C++ OX features,
+like our value references
+
+00:33:24.560 --> 00:33:28.480
+for move semantics,
+to give a great C++ OX library.
+
+00:33:28.480 --> 00:33:33.570
+Of course, it's a C++ OX library,
+so we implemented all of the new
+
+00:33:33.570 --> 00:33:38.480
+features from the C++ OX standard,
+almost standard, not quite there yet,
+
+00:33:38.480 --> 00:33:43.740
+such as regular expressions,
+smart pointers, hash tables.
+
+00:33:43.910 --> 00:33:45.960
+So libc++ is finally available.
+
+00:33:45.960 --> 00:33:49.140
+It's available in Xcode 4.2,
+the same compiler,
+
+00:33:49.140 --> 00:33:53.440
+the same Xcode that brings the
+Apple LLVM compiler with C++ OX support.
+
+00:33:53.440 --> 00:33:56.470
+And if you build your
+application with libc++,
+
+00:33:56.470 --> 00:33:59.280
+you can deploy it back to Lion and iOS 5.
+
+00:34:00.870 --> 00:34:03.440
+Lib C++ is part of the LLVM project.
+
+00:34:03.570 --> 00:34:04.830
+It's open source.
+
+00:34:04.900 --> 00:34:07.020
+If you want to see how we
+do something in Lib C++,
+
+00:34:07.150 --> 00:34:10.750
+you can go check out the
+source code at libcxx.llvm.org,
+
+00:34:10.750 --> 00:34:13.310
+or if you're a C++ hacker
+and you want to get involved,
+
+00:34:13.310 --> 00:34:14.050
+come join us.
+
+00:34:14.050 --> 00:34:14.960
+It'd be great.
+
+00:34:15.600 --> 00:34:19.550
+Talked a bit about performance,
+so let's look at sorting performance.
+
+00:34:19.600 --> 00:34:21.720
+A little different aspect of this.
+
+00:34:21.750 --> 00:34:24.860
+So here we're sorting heavy objects.
+
+00:34:25.100 --> 00:34:28.950
+So this is similar to what we
+were discussing with the previous
+
+00:34:28.950 --> 00:34:31.160
+performance slide on sorting,
+where we have some
+
+00:34:31.530 --> 00:34:32.840
+container of heavy objects.
+
+00:34:32.840 --> 00:34:35.480
+So copying these objects
+around is expensive.
+
+00:34:37.990 --> 00:34:40.710
+Now we have a time access here,
+and what we're doing when we're
+
+00:34:40.710 --> 00:34:44.690
+sorting these objects is we're
+going to show the different standard
+
+00:34:44.700 --> 00:34:46.980
+libraries and C++ versus C++ OX.
+
+00:34:47.530 --> 00:34:51.430
+Our first bar here,
+it's taking 8,000 milliseconds to
+
+00:34:51.540 --> 00:34:56.970
+sort this array of heavy objects
+using the current standard library,
+
+00:34:57.020 --> 00:35:00.170
+lib standard C++ that
+we inherited from GCC.
+
+00:35:00.410 --> 00:35:04.120
+Now just switching to libc++,
+not even turning on any
+
+00:35:04.350 --> 00:35:07.900
+of the C++ OX features,
+so we're not getting move semantics here,
+
+00:35:07.980 --> 00:35:10.800
+we're just getting the better
+algorithms from libc++ that are
+
+00:35:10.810 --> 00:35:14.850
+more careful about not copying
+objects when they don't need to,
+
+00:35:14.850 --> 00:35:16.120
+we get a huge win.
+
+00:35:23.100 --> 00:35:25.440
+But we've been talking
+about move semantics,
+
+00:35:25.440 --> 00:35:26.000
+right?
+
+00:35:26.010 --> 00:35:28.440
+So what happens when you
+turn on move semantics?
+
+00:35:28.440 --> 00:35:32.020
+And this takes the remaining copies
+that show up in a sorting algorithm and
+
+00:35:32.020 --> 00:35:36.430
+replaces them with the super-fast moves,
+and we get another huge win to the
+
+00:35:36.430 --> 00:35:39.630
+point where we're 100 times faster.
+
+00:35:43.100 --> 00:35:43.860
+It's cool stuff.
+
+00:35:43.860 --> 00:35:46.110
+I highly recommend you go
+check out move semantics.
+
+00:35:46.240 --> 00:35:50.100
+Use it with the new compiler
+and the new library.
+
+00:35:50.170 --> 00:35:53.670
+We'll take a little bit of a look
+at some of the new functionality
+
+00:35:54.070 --> 00:35:58.840
+within libc++ that we get from
+the C++ OX standard library.
+
+00:35:59.250 --> 00:36:01.250
+One bit of functionality
+that a lot of people like to
+
+00:36:01.250 --> 00:36:03.290
+use are the smart pointers.
+
+00:36:03.400 --> 00:36:05.280
+Shared pointer, for example.
+
+00:36:05.400 --> 00:36:10.230
+So shared pointer is a smart pointer,
+comes as part of libc++,
+
+00:36:10.400 --> 00:36:14.490
+and it provides shared ownership of
+a resource via reference counting.
+
+00:36:14.670 --> 00:36:17.320
+Shared pointer is extremely easy to use.
+
+00:36:17.400 --> 00:36:21.420
+You just create a shared pointer over
+the given type that you care about,
+
+00:36:21.470 --> 00:36:25.920
+and you initialize it with an object
+that you just allocated from the heap.
+
+00:36:26.010 --> 00:36:28.680
+So as soon as you call
+new to allocate an object,
+
+00:36:28.680 --> 00:36:32.680
+hand that off to shared pointer,
+and it will manage the lifetime.
+
+00:36:32.680 --> 00:36:37.230
+Shared pointer is a smart pointer,
+so it works like a normal pointer.
+
+00:36:37.230 --> 00:36:38.210
+You can dereference it.
+
+00:36:38.270 --> 00:36:39.520
+You can use the arrow operator.
+
+00:36:39.520 --> 00:36:42.810
+You can make copies,
+and each of those copies will have some
+
+00:36:43.030 --> 00:36:45.620
+ownership over the resource that's there.
+
+00:36:45.660 --> 00:36:50.360
+Shared pointer uses reference counting,
+so when the last reference goes away,
+
+00:36:50.360 --> 00:36:54.580
+the object is destroyed,
+and then the memory is deallocated.
+
+00:36:54.580 --> 00:36:56.940
+Makes memory management fairly simple.
+
+00:36:59.360 --> 00:37:01.790
+Now just in case you've had
+some arc envy from seeing the
+
+00:37:01.930 --> 00:37:06.260
+weak pointer system there,
+libc++ also has weak pointer,
+
+00:37:06.410 --> 00:37:08.940
+which is the counterpart
+to weak in the arc system.
+
+00:37:09.020 --> 00:37:12.230
+The idea here is weak pointer
+is also a smart pointer,
+
+00:37:12.420 --> 00:37:15.780
+and a weak pointer holds weak
+ownership over an object.
+
+00:37:15.850 --> 00:37:18.690
+It won't keep an object alive.
+
+00:37:18.770 --> 00:37:22.110
+But when that object does go away,
+the weak pointer knows about it
+
+00:37:22.170 --> 00:37:26.820
+and effectively zeroes itself out,
+so that you can't dereference
+
+00:37:26.820 --> 00:37:28.230
+a dangling pointer.
+
+00:37:28.910 --> 00:37:31.100
+Here's an example of how
+to use a weak pointer.
+
+00:37:31.160 --> 00:37:34.440
+So we can initialize a weak
+pointer to a database with a
+
+00:37:34.440 --> 00:37:36.010
+shared pointer to a database.
+
+00:37:36.270 --> 00:37:39.320
+So we're saying we want weak
+ownership semantics of the object
+
+00:37:39.480 --> 00:37:42.080
+that that shared pointer points to.
+
+00:37:42.560 --> 00:37:46.400
+Now at some point, we're going to want to
+observe that object.
+
+00:37:46.490 --> 00:37:49.760
+And we need to do so
+in a way that's safe.
+
+00:37:49.920 --> 00:37:52.580
+So to do this safely,
+there's the lock method
+
+00:37:53.050 --> 00:37:54.560
+on the weak pointer.
+
+00:37:54.660 --> 00:37:57.420
+What the lock method does is
+it goes and queries whether
+
+00:37:57.420 --> 00:37:59.080
+the object is still there.
+
+00:37:59.150 --> 00:38:04.660
+If it's still there,
+it returns a shared pointer
+
+00:38:04.660 --> 00:38:08.630
+that actually has ownership over
+that object to the same object.
+
+00:38:09.050 --> 00:38:12.360
+If it doesn't exist,
+because the object has gone away,
+
+00:38:12.420 --> 00:38:15.600
+everyone else is destroyed,
+has given up on their shared pointers,
+
+00:38:15.810 --> 00:38:20.390
+the object's been destroyed,
+this will return a null shared pointer.
+
+00:38:20.920 --> 00:38:23.600
+By using this little if construct,
+we end up in this great
+
+00:38:23.730 --> 00:38:27.140
+place where inside the if,
+we know that the object is still alive,
+
+00:38:27.140 --> 00:38:29.700
+and we're keeping it alive,
+so no other thread can
+
+00:38:29.700 --> 00:38:31.050
+destroy this object.
+
+00:38:31.120 --> 00:38:36.350
+It's a safe transfer of semantics from
+weak ownership to strong ownership,
+
+00:38:36.350 --> 00:38:39.330
+using shared pointer and weak pointer.
+
+00:38:39.340 --> 00:38:43.680
+Last, we're going to talk about
+library interoperability.
+
+00:38:43.680 --> 00:38:47.690
+So libc++ is a completely new
+C++ standard library with a
+
+00:38:47.710 --> 00:38:50.000
+completely new C++ runtime.
+
+00:38:52.100 --> 00:38:55.340
+You build your application and
+your own frameworks against libc++,
+
+00:38:55.340 --> 00:38:58.400
+and there will come the day when
+you need to link against another
+
+00:38:58.400 --> 00:39:00.660
+framework that uses libstandardc++.
+
+00:39:00.780 --> 00:39:03.180
+We know this is going to happen.
+
+00:39:03.180 --> 00:39:04.250
+We support it.
+
+00:39:04.260 --> 00:39:08.370
+The way this works is we put
+libc++ and libstandardc++ into
+
+00:39:08.370 --> 00:39:11.110
+different versioned namespaces.
+
+00:39:11.120 --> 00:39:14.940
+So the libc++ string is a
+completely different entity
+
+00:39:14.970 --> 00:39:17.600
+from the libstandardc++ entity.
+
+00:39:18.760 --> 00:39:21.020
+They can both coexist
+within an application,
+
+00:39:21.020 --> 00:39:24.060
+but for any given translation unit,
+you have to choose.
+
+00:39:24.060 --> 00:39:24.880
+Is this libc++?
+
+00:39:24.990 --> 00:39:26.380
+Is this libstandardc++?
+
+00:39:28.510 --> 00:39:31.310
+Coexistence means you can
+link against other frameworks.
+
+00:39:31.460 --> 00:39:35.430
+Now, we do allow interoperability
+at the low levels where
+
+00:39:35.430 --> 00:39:39.760
+interoperability becomes crucial,
+such as memory management.
+
+00:39:39.760 --> 00:39:42.830
+You can call new in
+something that uses libc++,
+
+00:39:42.830 --> 00:39:46.370
+and then delete that same
+pointer in libstandardc++,
+
+00:39:46.370 --> 00:39:47.730
+and it will work.
+
+00:39:47.730 --> 00:39:50.340
+Runtime type information
+stays exactly the same,
+
+00:39:50.340 --> 00:39:52.860
+and exceptions,
+all that mechanism is the same,
+
+00:39:52.860 --> 00:39:56.250
+so you can pass exceptions between
+the two different libraries.
+
+00:39:57.130 --> 00:40:02.300
+So this provides us with a path forward
+to the new libc++ standard library,
+
+00:40:02.300 --> 00:40:06.320
+and it's a great C++ OX support,
+while also supporting applications moving
+
+00:40:06.320 --> 00:40:08.300
+incrementally over to this new library.
+
+00:40:08.300 --> 00:40:13.000
+I'm going to wrap up section
+on C++ OX in Xcode 4.2.
+
+00:40:13.000 --> 00:40:16.480
+So Xcode 4.2 has some
+great C++ OX support.
+
+00:40:16.480 --> 00:40:20.330
+If you want to go try it out,
+I highly recommend changing your
+
+00:40:20.630 --> 00:40:25.220
+C++ language dialect to C++ OX,
+and your standard library to libc++.
+
+00:40:25.840 --> 00:40:28.240
+To get the best C++ OX experience.
+
+00:40:28.250 --> 00:40:30.300
+Try it, play with it,
+we'd love to hear what
+
+00:40:30.340 --> 00:40:31.190
+you can do with it.
+
+00:40:33.320 --> 00:40:37.790
+With that, we're going to shift
+gears entirely to Arc.
+
+00:40:37.910 --> 00:40:41.530
+So automatic reference counting
+has been a big topic this week.
+
+00:40:41.660 --> 00:40:43.780
+It's a really cool feature.
+
+00:40:43.850 --> 00:40:48.680
+One of the features that came
+with Arc is the migration tool.
+
+00:40:49.490 --> 00:40:53.900
+And the migration tool takes code
+that uses manual retain release that
+
+00:40:53.900 --> 00:40:57.530
+we've been using for years and years,
+and rewrites it,
+
+00:40:57.640 --> 00:41:02.540
+converts it into this new world
+of automatic reference counting.
+
+00:41:02.670 --> 00:41:05.800
+Now the Arc Migrator is
+built on LLVM technology.
+
+00:41:06.080 --> 00:41:09.820
+It uses the Clang C, C++,
+and Objective-C parser that
+
+00:41:09.820 --> 00:41:12.460
+powers the Apple LLVM compiler.
+
+00:41:12.620 --> 00:41:16.530
+And I want to talk a little
+bit just about how we do this.
+
+00:41:17.180 --> 00:41:22.740
+So the way we do it is we use the
+compiler essentially as it is.
+
+00:41:22.900 --> 00:41:27.010
+So we take your code,
+which is in manual retain release mode.
+
+00:41:27.220 --> 00:41:29.960
+And we try to compile it in Arc mode.
+
+00:41:29.970 --> 00:41:32.320
+Now of course, this isn't gonna work
+the first time through.
+
+00:41:32.340 --> 00:41:35.260
+You have lots of retain
+and release calls.
+
+00:41:35.290 --> 00:41:38.720
+You have other code that
+possibly violates the new
+
+00:41:38.720 --> 00:41:40.930
+rules of Arc and Objective-C.
+
+00:41:41.160 --> 00:41:48.160
+So we capture all of these new
+Arc-specific errors inside the migrator.
+
+00:41:48.200 --> 00:41:50.220
+We look at what the
+form of these errors is,
+
+00:41:50.220 --> 00:41:54.290
+and we can decide whether we
+know how to eliminate them.
+
+00:41:54.990 --> 00:41:57.640
+We have a set of transformations
+that knows how to eliminate
+
+00:41:57.640 --> 00:41:59.160
+specific kinds of errors.
+
+00:41:59.340 --> 00:42:03.120
+We know how to eliminate the
+error that you called retain when
+
+00:42:03.120 --> 00:42:06.930
+you shouldn't be calling retain,
+or that you're doing a cast that could be
+
+00:42:06.940 --> 00:42:09.260
+described with a different kind of cast.
+
+00:42:09.390 --> 00:42:13.170
+So we apply these transformations to
+the specific errors that come out of
+
+00:42:13.200 --> 00:42:18.200
+this ARC compilation to fix your code,
+update the source code,
+
+00:42:18.200 --> 00:42:21.970
+so it's closer to being right for ARC.
+
+00:42:22.180 --> 00:42:23.770
+Then we repeat the same process.
+
+00:42:23.910 --> 00:42:25.850
+Try to compile it again.
+
+00:42:25.950 --> 00:42:26.940
+See how we did this time.
+
+00:42:26.940 --> 00:42:29.320
+Maybe we introduced more
+Arc-specific errors.
+
+00:42:29.550 --> 00:42:31.890
+We can go clean those up as well.
+
+00:42:31.970 --> 00:42:35.960
+And after numerous transformations,
+we end up with a program that
+
+00:42:35.960 --> 00:42:38.110
+compiles properly under Arc.
+
+00:42:38.310 --> 00:42:42.380
+We know it does because that's the
+process we use to get to this point.
+
+00:42:42.740 --> 00:42:46.360
+and we'll work in the new Arc world.
+
+00:42:46.380 --> 00:42:49.860
+Let's take a look at just one
+of these many transformations
+
+00:42:49.860 --> 00:42:51.760
+and how it actually works.
+
+00:42:52.100 --> 00:42:57.210
+So the simplest translation that
+you're going to see happen throughout
+
+00:42:57.230 --> 00:43:01.440
+your program when you migrate to
+Arc is the removal of sends of retain.
+
+00:43:02.570 --> 00:43:03.840
+We start with what's on the top.
+
+00:43:03.870 --> 00:43:04.760
+We have a retain call.
+
+00:43:04.970 --> 00:43:07.870
+We want to transform it down
+to what's in the bottom.
+
+00:43:08.140 --> 00:43:11.290
+Now, from the compiler's perspective,
+what we have is some sort of
+
+00:43:11.470 --> 00:43:16.880
+abstract syntax tree that describes
+the syntax of this message send.
+
+00:43:17.020 --> 00:43:21.100
+So it has a send node,
+which has children of another send node,
+
+00:43:21.100 --> 00:43:24.330
+the inner NSColor white
+color message send,
+
+00:43:24.400 --> 00:43:26.780
+and sends the retain message.
+
+00:43:27.050 --> 00:43:30.890
+From the abstract syntax tree,
+we could do transformation right here.
+
+00:43:31.060 --> 00:43:34.680
+We could say, look at the inner send
+of this retained send,
+
+00:43:34.800 --> 00:43:36.760
+and just pretty print it.
+
+00:43:36.850 --> 00:43:40.900
+We'll get something back from the
+pretty printer that probably looks nice,
+
+00:43:40.900 --> 00:43:42.200
+and it will compile.
+
+00:43:42.200 --> 00:43:44.300
+We can make sure of that.
+
+00:43:44.460 --> 00:43:48.270
+But it's going to destroy the formatting
+that you had in your source code.
+
+00:43:48.380 --> 00:43:51.480
+It's going to remove comments,
+maybe it'll expand macros.
+
+00:43:51.520 --> 00:43:55.200
+And this is going to be really,
+really ugly in your system.
+
+00:43:55.290 --> 00:43:56.960
+So we want to do something better.
+
+00:43:57.000 --> 00:43:59.840
+Instead, we're going to look at
+it not semantically as,
+
+00:43:59.860 --> 00:44:03.390
+look at the abstract syntax tree,
+pretty print out what we want to see.
+
+00:44:03.540 --> 00:44:06.090
+We're going to say,
+let's look at the syntax and
+
+00:44:06.220 --> 00:44:11.600
+actually edit the syntax bit by
+bit to get the right thing back,
+
+00:44:11.670 --> 00:44:15.530
+to get a nice clean transformation
+into the code you would have written
+
+00:44:15.540 --> 00:44:18.190
+had you been using Arc all along.
+
+00:44:18.500 --> 00:44:24.210
+So we use the super precise information
+inside the Clang abstract syntax tree to
+
+00:44:24.210 --> 00:44:27.490
+note the location of the opening bracket,
+and we can just delete it
+
+00:44:27.490 --> 00:44:29.020
+from the text entirely.
+
+00:44:29.540 --> 00:44:31.310
+could do the same thing for the retain.
+
+00:44:31.510 --> 00:44:33.900
+We know where that is,
+and we know where the close bracket is.
+
+00:44:34.060 --> 00:44:36.440
+So just delete those entirely.
+
+00:44:36.590 --> 00:44:39.810
+And we have a transformation
+that's almost perfect,
+
+00:44:39.880 --> 00:44:41.430
+if you follow these rules.
+
+00:44:41.540 --> 00:44:44.770
+Except you have this annoying
+little space between the close
+
+00:44:44.850 --> 00:44:46.480
+bracket and the semicolon.
+
+00:44:46.590 --> 00:44:49.760
+And what you're going to do after the
+arc migrator runs in this case is you're
+
+00:44:49.760 --> 00:44:53.050
+going to go through and you're going
+to delete every one of these spaces and
+
+00:44:53.180 --> 00:44:56.470
+curse us louder and louder each time.
+
+00:44:58.400 --> 00:45:00.460
+So we don't do that.
+
+00:45:00.530 --> 00:45:03.980
+Instead, what we try to do is
+we look at the inside,
+
+00:45:04.000 --> 00:45:07.340
+look at the receiver,
+this NSColor white color expression.
+
+00:45:07.560 --> 00:45:08.830
+We know where that begins.
+
+00:45:08.910 --> 00:45:09.520
+That's fine.
+
+00:45:09.740 --> 00:45:13.880
+We know exactly where it ends,
+so we can go one character past the end,
+
+00:45:13.880 --> 00:45:16.630
+which is really the
+beginning of the error,
+
+00:45:16.630 --> 00:45:18.790
+the place that we want to remove.
+
+00:45:18.790 --> 00:45:22.510
+If we remove from there,
+all the way to the square bracket,
+
+00:45:22.510 --> 00:45:24.740
+we get this nice, clean rewrite.
+
+00:45:24.750 --> 00:45:27.540
+It's exactly what you would
+have written yourself.
+
+00:45:28.830 --> 00:45:32.590
+That's part one of two for
+this simple transformation.
+
+00:45:32.730 --> 00:45:34.540
+So here we have common construct.
+
+00:45:34.610 --> 00:45:37.850
+If we got an object back,
+then we need to retain it.
+
+00:45:39.380 --> 00:45:41.490
+We apply the transformation
+from the last slide to this.
+
+00:45:41.590 --> 00:45:42.710
+What do we get?
+
+00:45:42.850 --> 00:45:44.170
+We get this great statement.
+
+00:45:44.180 --> 00:45:46.240
+Hey, those were the rules.
+
+00:45:46.330 --> 00:45:48.280
+We just decided on them.
+
+00:45:48.750 --> 00:45:50.710
+This will be really annoying,
+because now the compiler's
+
+00:45:50.820 --> 00:45:53.700
+going to complain that you
+have an unused value here.
+
+00:45:53.840 --> 00:45:54.310
+Fine.
+
+00:45:54.510 --> 00:45:55.000
+We could do that.
+
+00:45:55.150 --> 00:45:56.020
+So what we do is we track.
+
+00:45:56.120 --> 00:45:59.200
+We look at the receiver
+that's still there.
+
+00:45:59.230 --> 00:46:02.700
+After we remove the retain and determine,
+does it have any side effects?
+
+00:46:02.890 --> 00:46:08.220
+Because if it has no side effects,
+if it's something really simple,
+
+00:46:08.220 --> 00:46:10.700
+then we could just take it out.
+
+00:46:10.770 --> 00:46:12.690
+So that do nothing statement goes away,
+and we're left with something
+
+00:46:12.690 --> 00:46:12.690
+else that's ridiculous.
+
+00:46:15.220 --> 00:46:16.680
+Do some more analysis.
+
+00:46:16.690 --> 00:46:17.660
+Look at the if condition.
+
+00:46:17.660 --> 00:46:18.500
+Look at this if statement.
+
+00:46:18.680 --> 00:46:20.910
+The only thing that was
+in the if statement,
+
+00:46:20.910 --> 00:46:22.110
+we've removed.
+
+00:46:22.310 --> 00:46:23.830
+Since we've removed it,
+there's no point in
+
+00:46:23.840 --> 00:46:24.620
+having the if statement.
+
+00:46:24.720 --> 00:46:26.800
+The condition doesn't
+do anything interesting.
+
+00:46:26.840 --> 00:46:28.630
+The body doesn't do anything interesting.
+
+00:46:28.730 --> 00:46:30.710
+So just remove it all.
+
+00:46:30.800 --> 00:46:34.290
+When you run the Arc Migrator,
+you're going to see this,
+
+00:46:34.290 --> 00:46:36.860
+that we remove a lot of code,
+and we're very,
+
+00:46:36.970 --> 00:46:41.290
+very careful when we remove that
+code not to upset code around it,
+
+00:46:41.390 --> 00:46:44.620
+and to try to get back to the
+point of what you would have
+
+00:46:44.620 --> 00:46:46.930
+written had you had Arc all along.
+
+00:46:46.940 --> 00:46:50.640
+We talked a little bit about this retain
+transformation in a bit of detail.
+
+00:46:50.640 --> 00:46:51.640
+I thought it was simple.
+
+00:46:51.640 --> 00:46:53.000
+It turns out it wasn't quite so simple.
+
+00:46:53.000 --> 00:46:56.800
+There's a lot of these transformations,
+such as taking NS Auto Release Pools
+
+00:46:56.860 --> 00:47:01.990
+out and using new features
+such as @AutoReleasePool.
+
+00:47:02.000 --> 00:47:06.560
+There's a ton of these transformations
+that we perform to go from the
+
+00:47:06.690 --> 00:47:11.080
+non-Arc world to the Arc world,
+all of them being driven by the
+
+00:47:11.170 --> 00:47:15.880
+compiler as it's parsing and finding
+Arc problems in your program.
+
+00:47:16.130 --> 00:47:21.560
+transforming your code as cleanly
+as possible into Arc code.
+
+00:47:22.750 --> 00:47:24.340
+With that, I'm going to wrap up.
+
+00:47:24.390 --> 00:47:28.110
+We've talked about a grab
+bag of technologies here,
+
+00:47:28.310 --> 00:47:32.110
+from the LLVM code generator,
+the new type-based alias analysis,
+
+00:47:32.240 --> 00:47:35.830
+new register allocator, new scheduling,
+the loop idiom recognizer.
+
+00:47:35.960 --> 00:47:42.720
+From there, we popped up the stack about
+1,000 levels to C++ OX and libc++,
+
+00:47:42.740 --> 00:47:48.170
+and then peeked under the hood a
+little bit of the arc migrator and the
+
+00:47:48.170 --> 00:47:48.170
+LLVM technology that's behind that.
+
+00:47:49.180 --> 00:47:52.030
+If you're interested in more
+information about LLVM technologies,
+
+00:47:52.030 --> 00:47:55.980
+you can contact Michael Jurowicz,
+our developer tools evangelist.
+
+00:47:55.990 --> 00:47:57.580
+You can come visit us on the web.
+
+00:47:57.580 --> 00:47:58.880
+LLVM is all open source.
+
+00:47:58.880 --> 00:48:02.410
+You can come to LLVM.org,
+learn more about it.
+
+00:48:02.590 --> 00:48:05.040
+And of course,
+there's the Apple Developer Forums,
+
+00:48:05.040 --> 00:48:08.560
+where we can talk about more
+Apple-specific information.
+
+00:48:08.680 --> 00:48:12.210
+So a couple related sessions,
+both related to Arc.
+
+00:48:12.350 --> 00:48:15.350
+So we're doing a reprise of
+automatic reference counting
+
+00:48:15.350 --> 00:48:17.390
+tomorrow morning at 9:00.
+
+00:48:17.530 --> 00:48:22.200
+And then there's another session
+on Objective-C improvements and
+
+00:48:22.280 --> 00:48:27.880
+advancements that's going to go deeper
+into automatic reference counting,
+
+00:48:27.880 --> 00:48:28.290
+and also other Objective-C improvements
+that we've made.

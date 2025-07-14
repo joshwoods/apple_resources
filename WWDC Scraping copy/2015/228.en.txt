@@ -1,0 +1,166 @@
+---
+Title:  WatchKit Tips and Tricks
+Year:   2015
+Web:    https://nonstrict.eu/wwdcindex/wwdc2015/228/
+
+[!] This transcript has potential transcription errors.
+---
+
+[Applause]
+
+[Jake Behrens]
+Good morning. Welcome to "WatchKit Tips and Tricks." My name is Jake Behrens, and I am the watchOS Frameworks Evangelist at Apple. Now, today we are going to talk about various ways that you can optimize your existing watchOS applications under watchOS 1. There are going to be many things that we're going to talk about that are equally applicable to watchOS 2, and I will point those out as we move along.
+
+Now, leading up to the release of Apple Watch, we worked with many developers on their first Watch app experience, and we learned a lot along that way, and today I am going to share a lot of this with you, things like optimizing your networking, how you can decrease your loading times, and much more. So let's start with data and communication. As I mentioned previously, this is essential for getting information from your web service, or from the containing iPhone app, so that you have something to actually display to the user.
+
+Now, imagine that your user is waiting at the bus station. They raise their wrist, they are interacting with your application, and you kick off a network request. Suddenly, the bus comes around the corner, so they put their arm down, they get their stuff, they are hurrying to the bus, and then they get on the bus and get settled. Well, you want to make sure that the next time that they raise their wrist to go back to your application, that that data is there and waiting for them, not that you have to refetch it all over again.
+
+So how do you do this effectively? Well, the first part is you need to have a network request. This is how you are going to get your information. The next thing that you need to do is you actually need to ask the system for what's called a background task assertion. This is a way to ask the system and say, 'hey, I need some time because I may need to finish some process once you start suspending my WatchKit extension.'
+
+Even further, if you get that background task assertion, you are going to need to hold it open so that your network request actually finishes. So how are we going to do these things? We are going to walk through it together. The first thing that you are going to need to do is get your network request set up, and for this, we are going to use a default NSURLSession.
+
+Now, recognize that I am not using a background NSURLSession because in that case, if our WatchKit extension was suspended, then the completion would come back to our containing iPhone app. We want to do everything we can right in the WatchKit extension itself. So next we need to ask for that background task assertion. How are we going to do that?
+
+We are going to do that by using 'perform expiring activity with reason,' which is a method on NSProcessInfo. This is going to ask the system for a background task assertion and say, 'hey, I may need to still do something once you go to suspend the WatchKit extension.' So what happens is you pass in a debugging string. Here it says networkReq. And then this block is executed.
+
+Now, this block is going to be called immediately when 'perform expiring activity with reason' is called. Now, there are some things to keep in mind that are really important about this. The first thing is that this block is going to execute on an asynchronous queue. So your main queue is still freed up, the user can interact with the interface, there's no problem there. The user doesn't recognize that anything different is going on. And if expired is set to false, then that means that our time has not expired. So the system has given us a background task assertion.
+
+However, if expired is true, then this means that the system was unable to give us a background task assertion. This means that it said no. However, if it said that we did have a background task assertion, it could later execute this block again with expired set to true because maybe the system has decided we are completely out of time now. And so you're given a moment to make sure that you clean up any state that you have. Or something that you may need to do before the WatchKit extension fully suspends. So as I said, the key thing here is that this block executes on an asynchronous queue.
+
+The second really important piece of this is that once this block finishes executing, then your time goes away. It gives up that background task assertion. So how are we going to actually make sure that we have enough time to finish our network request? Could take two seconds. Could take ten seconds. Could take more.
+
+We are going to use something called dispatch semaphore. Dispatch semaphore is part of Grand Central Dispatch, or GCD, and this essentially allows us a way to pause execution over on that asynchronous queue. So you call 'dispatch semaphore wait, and that will pause execution. But then, when you need to get going again and resume, you can call 'dispatch semaphore signal.'
+
+Now, notice in the way I'm passing in a time, this is essentially a time out. I have set it to 30 seconds here, and it could be any number; however, I want to make sure that, you know, once it hits 30 seconds, I should have either gotten my data or I'm calling it lost. So this is a little abstract, and it's a little bit of an advanced concept. So let's actually take a look at the code in practice.
+
+Okay. So here I have a WatchKit extension built for watchOS 1. And I am here in a subclass WK interface controller. You can see that the first thing that I do is I create a property for an NSURLSession data task. This is the data task that we are going to use to get our information down from our web service.
+
+Next in will activate -- and realize you can do this wherever you are going to do your networking code. For simplicity's sake, in this example, I am doing it in will activate. First I am checking the state of the data task, and I am going to see if it is already running, because if the user raised their wrist, started interacting and kicked off a network request, put their wrist down, had background time going, and then raised their wrist again and it hadn't completed yet, I don't want to just kick off another network request.
+
+I only want to do another network request if I don't currently have one going. So next I am going to create a URL, and now this is just pointed to my web service. Here it's pointed to the metadata on the App Store. Once I have this URL, I create my semaphore by calling 'dispatch semaphore create.'
+
+Next I am calling a method that I wrote called 'ask for assertion with semaphore, passing in this newly created semaphore. So if we look down here at what's going on in this method, this is where we are actually calling 'perform expiring activity with reason.' We are passing in our debugging string, and if expired is set to false, then that means that we've gotten some background time, and I am passing in my timeout, and I am calling 'dispatch semaphore wait.' Remember, this is going to pause the execution of that asynchronous queue. The user can still interact with the application, no problem. It's just holding there, ensuring that we have enough time to finish our network request if the WatchKit extension were to go into the background.
+
+Now, if expired is set to true, which means that we either were not given a background task assertion or maybe we were but now the system has called it again saying you're out of time, well, we're going to call a method that I created called 'release assertion with semaphore, again, passing in that semaphore.
+
+And all this method does is actually call 'dispatch semaphore signal.' This allows execution to resume, and it allows the block to complete, and this is also very crucial to call because if we halt execution for too long, the system might think that our process has just hung, and that's no good because eventually it's just going to kill it outright.
+
+So we don't get any opportunity to save state or do any cleanup. We just get killed. Okay. So let's go back to will activate. So we've asked for our task assertion. And the next thing we are going to do is we are going to create that data task with the URL that we have. Now, notice that I am not gating this on whether I have a background task assertion or not.
+
+The background task assertion technique is a means to get some borrowed time, right? I mean, it's not guaranteed, but we're hoping for a better experience here. So I'm just going to create my network request because probably the user is interacting with the app at that time. The network request has kicked off and come back in mere moments, and everything's great.
+
+You'll also see here that there's a convenience completion handler for the data task, so when the request finishes, I am going to call in to 'release assertion with semaphore,' passing in that semaphore again. So we're allowing execution to resume on that asynchronous queue, which lets that block complete, and then the WatchKit extension can fully suspend.
+
+This ensures that the system doesn't think that our process has hung. Okay. So once we have created our data task, then we are just going to call resume on it to actually start it, so it can go to the network, grab the information, and we'll take care of the rest.
+
+So now you've seen a little bit of a nice technique that you can use to try and do all of your networking right from within the WatchKit extension itself. This is really great because moving on to watchOS 2, there's a whole lot of stuff for you to take advantage of there. And we'll talk about that in a little bit.
+
+But if you're already moving your networking to the WatchKit extension itself, this is going to prepare you so that things are already broken apart. I've seen many examples where open parent application is used to have the containing iPhone app actually do all the networking. This breaks that bridge.
+
+Now, in some cases our data isn't on a web service, and our data is actually in the containing iPhone app and we need to get that. So we actually need to reach across the process in watchOS 1 from the WatchKit extension to the containing iPhone app. We can do this by using 'open parent application, and this is a method on WK interface controller that allows us to send a dictionary of information over to the iPhone app, launch it in the background, allow it to do some processing, and then send a response.
+
+So on UI application delegate, we have 'handle WatchKit extension request reply.' This is going to take in that dictionary of information, do some processing, and then send back a reply. There are some things to think about when you are using this. First, if you are doing any asynchronous work in 'handle WatchKit extension request,' you should make sure that you're creating a background task.
+
+You want to do that right away, right when you enter into this method. The reason why is because if you go off and decide to do some asynchronous work, no matter how trivial, the system is going to say, 'oh, well, I guess we are not actually doing some work, so I am going to go ahead and suspend the iPhone app.' And then you are not going to get the chance to send the reply back.
+
+The other thing is when you are going to send your reply, if you are using custom objects, you should be turning those into NSData. If you have a custom binary format that you can use, that you can unpackage in the WatchKit extension, that's even better because the name of the game here is to make the data as small as possible so that transmission is quickest.
+
+Now, for true device-to-device communication, we've got a lot. Now, 'open parent application' is marked as unavailable in watchOS 2, and this is because it's no longer necessary. It's no longer needed. Because we now have the WatchConnectivity framework. The WatchConnectivity framework gives you so much. Not only can you send messages between the iPhone app and the Watch app, but you can transfer files. You can also -- and should also -- take advantage of the application context.
+
+So you can update this context with whatever your newest information is, and that allows you to get some information in your Watch app from the network -- maybe it's the latest in your feed -- and then you can say, 'well, the iPhone app is going to need this later, so I am going to pass that off.'
+
+It's going to be transferred over, but the iPhone app isn't launched because it doesn't actually need to process anything right now. So in this case, it's just waiting there for next time the iPhone app launches. This is a much more efficient way to do your communication between devices. Now, there's an awesome session called "Introducing Watch Connectivity," and you should definitely check it out if you haven't already.
+
+Now, once we have our data, then we're going to want to manage it and take care of however we need to have it on disk. Under watchOS 1, making use of app groups is a great way to do this. You can use the shared app group container to store some model data or some shared assets that both the containing iPhone app and the WatchKit extension can both point to and find.
+
+Now, you can also use shared NSUser defaults, but you should probably be using this for small state data, like a Boolean configuration or something like that, not for your model data. Your model data is probably pretty large, and it's probably best if it's sitting there as a flat file of some sort in your shared container or in your data store.
+
+In general, for watchOS 1 or watchOS 2, you should definitely think about simplifying your model. The experience on Apple Watch is very different from the experience on iPhone. And so you want to make sure that you only are actually getting the information there that you need. An example of this is the WWDC app. So over the years in the WWDC app, we've ended up adding quite a few entities to our Core Data models.
+
+And when we went to go create our experience for Apple Watch, I looked at it and I said, well, we don't actually need all of this on the Watch. And so we discussed it, and we realized at the end of the day that all we needed was a simplified version of this data.
+
+We just needed a simple list of the sessions, which are the sessions and labs, and favorites. So what we did was we created a process where any time the data in the containing iPhone app changes, it exports a simplified set of JSON files into the shared group container that the WatchKit extension can then just read and display to you. This worked really well.
+
+One final means of device-to-device communication is using Handoff. Handoff is an awesome way to allow your user to continue an activity from Apple Watch to iPhone. So an example of this would be, say you go to the WWDC app on Apple Watch. Then you will notice on the lock screen of the iPhone at specific areas, you are going to see in the bottom left-hand corner the icon for the WWDC app. Now, if you swipe up from that bottom left-hand corner, it puts you exactly where you need to be within the WWDC app on iPhone. This is really great for users.
+
+And using Handoff is really simple. You use update user activity, which is on WK interface controller, and you can send over, for the user info, an NS dictionary of data. Now keep in mind that this dictionary needs to include everything that you may need in order for the iPhone app to get the user exactly where they need to be. So whatever small data and bits of data you need in there, you need to send that across in that dictionary.
+
+Now, the system is going to do a lot for you automatically, and one of those things is it's going to automatically invalidate the user activity after some moments. And so you don't need to do anything. It's going to give the user enough time to take out their phone, get to where they need to be. Or if you call 'update user activity' again, then that's going to be the current activity.
+
+Or if they switch to another application and that calls 'update user activity, that will be the current activity. Now, if you've called 'update user activity' but then the user is interacting with your application, they tap a button and the context really changes, you can actually manually invalidate the user activity yourself. If that's not the situation, you don't have to do anything.
+
+So that's enough about data. I hope that the technique for watchOS 1 is useful for you, especially since it's going to help you get through that migration to watchOS 2 once you start using the WatchConnectivity framework over there. Now let's talk about interface elements. The last thing that you want your user to experience is the loading indicator while you invent the world and you are creating all this data, you are creating all these things for a controller. Everything the user may ever want or need.
+
+Let's look at some ways that we can optimize that experience. How can we load quicker? One of the ways that we can do this is by prioritizing how the content loads and when it loads. So you can see here the Weather app for watchOS 1, and we have this big, beautiful ring of information. Right? And we want to get this to the user immediately.
+
+But we also have this 10-day forecast, and this 10-day forecast includes additional images, table rows, data, and we don't necessarily want the user to be waiting while we load all of this as well. So we used a technique where we load this 10-day forecast within a 'dispatch async' call within will activate.
+
+Now, doing this allows will activate to finish, and once we have that graphic, that's the first thing that gets displayed. So we get that in will activate, it finishes, and then that 10-day forecast gets loaded, right immediately after. So the user doesn't actually see anything different. By the time they go to scroll down to the 10-day forecast, it's already there. But we've been able to give this impression that all the data has loaded immediately and a little bit quicker.
+
+Something else you can do is load fewer table cells up front. Right? If you have really complex cells that have images and data, then you might only need four or five of these cells up front to display to the user. You're probably going to be able to load in the rest after those have been loaded. So take a look at that.
+
+Also, only update the information that has actually changed. I have seen many occurrences where one tiny bit of data has changed and everything is reloaded. There's no need for that. Just only update what actually needs to be updated on the screen. Now, once we move into Interface Builder, you can see here that I've started creating my layout for a controller. And I'm using a lot of different groups. I am hiding and showing different groups because depending on certain data or heuristics, I am only going to show one at a time or maybe two at a time.
+
+But what happens is I actually have all of these objects in my controller, which means that the system is going to instantiate these all up front because we actually don't know when you are going to decide to hide things or show things. And so you can optimize this a little bit in some scenarios by breaking these out into separate controllers. If you have the ability to load whichever controller you actually need when you need it, then that's going to be most optimal.
+
+Now, moving through our interface elements, one that you probably use a lot are images. And images should be properly sized from your server or the containing iPhone app. I've seen many cases where there's a bigger image that's even bigger than the dimensions of the 42-millimeter watch, and it's just reused and rescaled everywhere.
+
+I mean, there is additional performance implications here for the scaling, and also that image isn't going to look as good as it could look because you didn't give it at exactly the size you needed to. So give properly sized assets. In watchOS 2, this also is going to be crucial for video.
+
+You can also optimize your images by using 'set image data' instead of just 'set image.' In this case, 'set image' is just going to use whatever default compression we use. With 'set image data,' you have the ability to have specific PNG compression or JPG compression, and then that turns it into this NS data blob for transmitting over to the Watch. So you can ensure that it's getting as small as you may need it to be.
+
+Also -- and I'm sure you have heard people banging this drum -- you should be using asset catalogs. Asset catalogs are not only a great way to organize your content, but they also do a lot of other things for you. You can set which specific devices that this asset is for, and you can set and easily see, 'okay, I've got a 2x asset here, a version for 38 millimeter, and a version for 42 millimeter.' Now, I have been asked by many developers when and where to use each of these slots. So let's go through these together.
+
+The first is the 2x asset. And this is going to be used for an image that you want to use at the same size on both devices. So if that's the case, you can just put it in the 2x slot, you are good to go. It will be used the same everywhere. You can also provide a specific asset for 38 millimeter. Now, this will probably be the same image that you would have put in the 2x slot, and that's okay.
+
+And then you can provide a specific asset for 42 millimeter, which will probably be a little larger, something will be different. Now, it's okay if you have a 38 millimeter and a 42 millimeter version, it's okay to have that 2x asset as well because we are going to fall back to that asset. So if there's a situation where we can't use that 38 or 42 millimeter version, we are going to fall back to that 2x asset. So that helps you future-proof your code base.
+
+One other technique, and we've found this really useful in the WWDC app, is using PDFs. By using PDFs you can get a whole lot of free work out of the tools. First, you can set the scale factors. You can also set the type of image rendering as template image, so if you are tinting this image, then it's just going to look at the alpha value of the PDF. Or you can set it to original image if you still want those colors that you specifically put into your asset.
+
+The neat thing here is that when the system builds your package, when you go ahead and build it, we are going to cut this PDF at all the sizes and scales that you need for the devices you support. So that's a whole lot of work just free. The other cool thing is that you can actually mix and match PDFs and bitmaps. So you could have that 2x asset be a fall back PDF, and you can have very specific assets as bitmaps for the 38 and 42 millimeter versions.
+
+Moving from images, let's talk about animated images. In watchOS 1, we have an animated image sequence that you can take full advantage of. You can do this in watchOS 2 as well. Just know that if you have multiple animated images on screen at the same time, well, that means more processing and more rendering.
+
+The other thing is that you should try and reduce and restrain yourself with the amount of frames that you have for an animation. Now, I have seen cases where for a two-second animation, there are 300 frames. Seems a little overkill. You would be really amazed with what you can do with fewer frames and still get that effect that you really want.
+
+Another thing that you can do with these animated image sequences is run them in reverse. You don't have to create a whole other image set. You can just take one that you are already using and set the duration to a negative value. Now, you do this when calling 'start animating with images in range.' You provide that negative duration. Notice that my range is still forward looking. It's going from location 0 to a length of 15. I haven't changed that. Just the duration.
+
+Now, if you like animations, there are a lot of things that you can do under watchOS 2. With watchOS 2, we are introducing an animation API as part of WatchKit, and this allows you to make really fluid, great effects within your Watch apps. This is similar to how UIView animations work, so you have a duration that you set, and then you have a block where you can reset some properties and they'll all be animated together. You can animate things such as height, width, alpha, content insets, and much more. I've seen some really incredible things that people have done with this so far, just using spacer groups and moving items. It's really, really great.
+
+There's a lot more if you want to check it out in "Layout and Animation Techniques for WatchKit." And as far as the image handling, I encourage you to check out the "Apple Watch Design Tips and Tricks" session today. It's going to take a lot of those aspects from the designer mentality, and they are going to talk about a ton of other great things that you can do and be aware of. So check it out. One final piece of configuration is the use of the text input controller. Now, I've been asked by many developers how can I get the user from my UI directly into the dictation UI?
+
+They don't want their users to be having to get to this intermediate screen and tapping on the microphone. This is really, really straightforward. All you do is when you call 'present text input controller with suggestions,' you set the suggestions to nil, and then you set the 'allowed input mode' to plain. This is going to take the user right from your app right into the dictation UI and then right back to your app again. Super easy.
+
+So let's also talk about notifications. Notifications are a really meaningful experience on Apple Watch, and a huge part of what makes it so convenient and so amazing. Let's take a look at an example payload for a remote notification. Let's go over some things that you should make sure that you are using in order to deliver the best and greatest experience to your user's wrist.
+
+The first thing to note is that you should be using the dictionary value for the alert key. This allows you to not only provide a body, but also a title. And this title is going to be used in the short-look notification. So when the user receives the notification on Apple Watch, the first thing that they are going to see is your app's big and beautiful icon, and then it's going to see your app name at the bottom.
+
+If you've provided a title in your payload, then you are going to see that title between the icon and the app name. This is an amazing way to provide a lot more context to the notification because a lot of users are going to look at their wrist, they are going to see that notification and decide off that information whether they are going to continue to the long-look notification or whether they are going to put it down and visit it later in Notification Center. So take advantage of this.
+
+The other thing to be using is the category. Categories allow you to specify which specific controller you want to use from your storyboard for which type of notification. So if you click on the notification category object, you can see here that you can set its name to that same name used in the payload, and so you can, per notification type, set a sash color and a title color. So you can provide other means of intricacy into your notifications to really give the user a great experience.
+
+Now finally, if you want them to receive the notification and hear that notification sound and receive haptic feedback, you need to set the sound value to default. This is going to make sure that they receive the sound and feedback. Now, I'm excited to tell you that you can do all of this with UI local notifications as well. So it's not just for remote notifications.
+
+Now, with notifications, you have two concepts. The first is the dynamic notification. Maybe you receive some information in that payload, you need to process it, you need to get an asset, you need to do something, and then you load that more rich content into your dynamic notification. There's also a static notification, and I have been asked many times where that's kind of used. So a static notification is always going to be used from Notification Center. So if the user taps on the notification from Notification Center, they will always see the static representation. So you should make sure that that experience is also a great one.
+
+The other time that the static notification is going to be used is if your dynamic notification is taking too long to load. Maybe you are processing some data, retrieving some asset from the network, and it's just taking too long. Then we're going to just call it a loss and give the user some meaningful information right now in the means of the static notification.
+
+Now finally, let's talk about Glances. With Glances, it's a great way to provide your users with meaningful, timely information. Now, maybe you've seen this, where you come to a Glance that you haven't viewed in a little while, and it shows that it's updating the content. You see this updated last title string at the bottom, and you see this spinning progress indicator in the top right. But maybe while it's been loading, you've seen this.
+
+So let's see that again. You're loading in the content, everything's going great, and then, oh, where did content go, and then boom, it slams in when it updates. Why does this happen? This happens because 'will activate' should be treated a little bit differently within your Glance controller. So what happens is that system-provided snapshot is going to be removed from the UI when 'will activate' finishes.
+
+So a little contrary to what you do within the Watch app itself, here you want to make sure that you are doing your full setup before 'will activate' finishes. You want to get all the information you need, set it so that the UI is up and ready to go so that when we remove that snapshot, it's right there. There's no in-between state of the whole screen disappearing. You might have placeholder text in your storyboard that you might see or something to that effect. That doesn't really provide a great experience.
+
+The other thing that you should do is reload the content deliberately. As a user is swiping between Glances, well, 'will activate' is going to get called on yours, and so if they swipe past yours and in 'will activate' you're loading a whole bunch of stuff, doing some processing, doing a network request, well, that's probably not the most efficient you could be doing that.
+
+So make sure that you are reloading very deliberately, depending on other circumstances and not just, 'hey, they looked at my content.' The other thing, as in with Watch apps, is to limit the number of alternate layouts. Because again, we are going to need to instantiate all those objects up front.
+
+Finally, you should be using WK interface date labels or absolute times and dates if you're displaying that kind of content in your Glance. So if you look here at an example, it says that this session started 35 minutes ago, and if this is at 1:00 p.m., well, it's kind of confusing. I am seeing that it's updating. I know. But it started 35 minutes ago, and it's giving me kind of like that knee-jerk reaction of, like, wait.
+
+What time is it actually? So the better thing to do here would be to give an absolute. It started at 10:00. This allows me already that affordance of, 'oh, it was earlier today because now it's 1:00 or 3:00.' I am not confused. That content is loading in, and it's all good.
+
+So we've talked about a lot of stuff. First, we talked about ways that you can already start optimizing your watchOS 1 application's networking so that the transition to watchOS 2 is even easier, and hopefully this will really help you in your application. Then we talked about ways that you can improve your layouts for performance to take down that amount of loading time and do much more. Then we talked about how to ensure that your Glance always has content visible so that you are not leaving an empty screen in front of the user.
+
+Finally, there's a ton to check into in watchOS 2. Aside from updates to watchOS 2 in WatchKit, we've got ClockKit to create complications for clock faces. We've also got the WatchConnectivity framework to do all this device-to-device communication. And you can still take full advantage of NSURL from the WatchKit extension itself.
+
+If you'd like more information, we have great documentation. We've got sample code. If you have technical questions, the Forums are there, as is Developer Technical Support for one-on-one help. Finally, if you have any general questions, please feel free to reach out to me. My email is there. Today we still have one amazing design session for Apple Watch, and that's "Apple Watch Design Tips and Tricks." They are going to go over a whole lot of really awesome information to help you create great Watch apps. We also had the "Designing for Apple Watch" session, the "Introduction to WatchKit for watchOS 2," and much more. With that, thank you very much. [Applause]

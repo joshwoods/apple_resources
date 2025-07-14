@@ -1,0 +1,3553 @@
+WEBVTT
+
+00:00:03.600 --> 00:00:07.500
+Here now for your afternoon
+session is Becky Willrich.
+
+00:00:07.520 --> 00:00:12.310
+Hello.
+
+00:00:14.250 --> 00:00:18.800
+So,
+we're here to talk about managing I/O,
+
+00:00:18.800 --> 00:00:22.280
+and in particular,
+how CFRunLoop fits into that,
+
+00:00:22.280 --> 00:00:26.180
+and then CFStream leveraging CFRunLoop.
+
+00:00:26.180 --> 00:00:29.680
+And I wanted to start out by sort
+of explaining the motivation,
+
+00:00:29.680 --> 00:00:32.600
+because CFRunLoop,
+most of you have probably
+
+00:00:33.160 --> 00:00:36.100
+heard of it before,
+but it's frequently frightening
+
+00:00:36.180 --> 00:00:39.340
+or confusing or difficult
+to look at and understand.
+
+00:00:39.340 --> 00:00:41.540
+So, we're going to hopefully
+dispel some of that,
+
+00:00:41.540 --> 00:00:45.730
+but also I want to explain why it
+came into being in the first place.
+
+00:00:48.120 --> 00:00:51.760
+So, when you manage I/O inside
+your application,
+
+00:00:51.760 --> 00:00:54.280
+you have this common problem.
+
+00:00:54.290 --> 00:00:56.540
+Compared to the other
+things you are doing,
+
+00:00:56.570 --> 00:00:59.920
+managing I/O is a very slow,
+lengthy process.
+
+00:01:00.070 --> 00:01:04.310
+You're just sitting there waiting
+for bytes to arrive from somewhere.
+
+00:01:04.670 --> 00:01:09.220
+On the other hand, once the bytes arrive,
+they don't require a lot of CPU time.
+
+00:01:09.460 --> 00:01:13.140
+So you don't want the computer
+sitting there waiting for the bytes.
+
+00:01:13.180 --> 00:01:17.270
+You'd really like to use the
+CPU for other things at the time.
+
+00:01:18.340 --> 00:01:21.520
+One traditional solution to this
+has been to go multi-threaded
+
+00:01:21.520 --> 00:01:24.440
+and let one thread sit blocking,
+waiting for I/O,
+
+00:01:24.540 --> 00:01:26.440
+while the other threads process.
+
+00:01:26.510 --> 00:01:30.220
+The problem with that approach is
+that multi-threading is complex,
+
+00:01:30.220 --> 00:01:35.220
+and you have to go through all of these
+hoops to protect and manage your data.
+
+00:01:36.980 --> 00:01:40.760
+So what would be really nice is
+if you could let someone else,
+
+00:01:40.760 --> 00:01:44.890
+some other part of the program,
+deal with watching the pipe.
+
+00:01:45.000 --> 00:01:48.820
+And you would simply be informed
+whenever processing needed to be done.
+
+00:01:48.900 --> 00:01:50.930
+So someone would essentially
+poke you and say,
+
+00:01:51.000 --> 00:01:52.440
+"Hey, there are bytes here.
+
+00:01:52.440 --> 00:01:54.560
+Please deal with them."
+
+00:01:55.010 --> 00:01:59.520
+That way you could handle the
+I/O in these small bursts as packets
+
+00:02:00.140 --> 00:02:03.480
+arrive amidst the other events,
+like the user moving the
+
+00:02:03.550 --> 00:02:05.640
+mouse or clicking on a button.
+
+00:02:05.640 --> 00:02:08.580
+The advantage here is that
+when you are dealing with I/O,
+
+00:02:08.650 --> 00:02:11.820
+you know that you're
+the only one running.
+
+00:02:11.880 --> 00:02:14.260
+You know that you own the CPU.
+
+00:02:14.260 --> 00:02:19.090
+So you don't have to go to all this
+extra work to protect your objects.
+
+00:02:21.030 --> 00:02:23.580
+So, how do you accomplish this?
+
+00:02:23.580 --> 00:02:25.280
+You need a multiplexer.
+
+00:02:25.280 --> 00:02:29.530
+You need some object that sits
+and watches a number of different
+
+00:02:29.530 --> 00:02:33.900
+inputs and shares out the
+CPU between them as events occur.
+
+00:02:34.530 --> 00:02:38.940
+Each input will only be triggered
+when work needs to be done.
+
+00:02:39.050 --> 00:02:42.130
+And then when that input
+has been triggered,
+
+00:02:42.140 --> 00:02:47.340
+it's promised that it's the only one
+doing any processing at that point.
+
+00:02:47.570 --> 00:02:49.820
+It knows it owns all the
+memory and all the CPU.
+
+00:02:51.640 --> 00:02:54.720
+So on our system,
+that fundamental multiplexer
+
+00:02:54.720 --> 00:02:55.990
+is the CFRunLoop.
+
+00:02:56.020 --> 00:02:59.870
+The inputs are represented
+by another cf.type,
+
+00:02:59.970 --> 00:03:05.340
+CFRunLoop source, and out of the box,
+there are several predefined inputs
+
+00:03:05.340 --> 00:03:07.300
+for a number of common sources.
+
+00:03:07.300 --> 00:03:12.120
+If that's not adequate to your needs,
+it is possible to define new sources
+
+00:03:12.120 --> 00:03:16.320
+that will then sit on the same
+underlying CFRunLoop mechanism.
+
+00:03:16.320 --> 00:03:21.750
+This way, all the user events,
+all the I.O., all the IPC gets
+
+00:03:21.750 --> 00:03:27.410
+multiplexed onto a single
+thread with a single mechanism.
+
+00:03:31.800 --> 00:03:36.030
+So that's sort of the motivation
+behind the run loop as a whole.
+
+00:03:36.180 --> 00:03:41.020
+What we're going to do now is
+talk some about CFRunLoop itself,
+
+00:03:41.140 --> 00:03:44.500
+look at the common
+sources that are provided,
+
+00:03:44.590 --> 00:03:48.520
+then we're going to move on to talk
+about CFStream for a little while.
+
+00:03:48.600 --> 00:03:51.580
+We'll talk about what it is,
+what it does.
+
+00:03:51.580 --> 00:03:57.950
+A stream has a fixed lifetime as
+it moves through a state diagram.
+
+00:03:57.950 --> 00:04:00.430
+We're going to look at those stages.
+
+00:04:00.910 --> 00:04:04.160
+And then finally we're going to
+look at how CFStream works with
+
+00:04:04.170 --> 00:04:09.300
+CFRunLoop to make it possible to manage
+sockets in particular on the run loop.
+
+00:04:11.650 --> 00:04:15.290
+And with that,
+I'd like to bring Doug Davidson up
+
+00:04:15.370 --> 00:04:17.550
+to introduce CFRunLoop to you.
+
+00:04:21.600 --> 00:05:58.500
+[Transcript missing]
+
+00:05:59.310 --> 00:06:03.040
+Now here's a sequence of events
+while the run loop is running.
+
+00:06:03.040 --> 00:06:05.080
+The run loop waits.
+
+00:06:06.360 --> 00:06:08.790
+Something interesting happens.
+
+00:06:08.850 --> 00:06:12.320
+The run loop decides which of its sources
+needs to be triggered as a result.
+
+00:06:15.120 --> 00:06:18.500
+The corresponding client
+receives a callback,
+
+00:06:18.500 --> 00:06:20.890
+and the callback returns and
+the run loop waits again.
+
+00:06:23.250 --> 00:06:27.200
+Now, there are many different
+interfaces to the run loop:
+
+00:06:27.210 --> 00:06:31.190
+Cocoa, Carbon, Core Foundation,
+CFNetwork,
+
+00:06:31.280 --> 00:06:35.980
+but they all deal with the same
+underlying run loop object.
+
+00:06:35.980 --> 00:06:38.130
+There is exactly one run loop per thread.
+
+00:06:38.130 --> 00:06:40.520
+You do not create it,
+you do not destroy it,
+
+00:06:40.580 --> 00:06:45.100
+it's just there automatically for you,
+and all these different
+
+00:06:45.100 --> 00:06:47.070
+interfaces act upon it.
+
+00:06:47.190 --> 00:06:50.290
+That's what allows us to
+integrate them all together.
+
+00:06:50.300 --> 00:06:55.190
+Carbon, Cocoa, Core Foundation,
+CFNetwork, they can all work together
+
+00:06:55.370 --> 00:06:59.320
+because they all deal with
+the same underlying run loop.
+
+00:06:59.570 --> 00:07:05.560
+Now, CFRunLoop is the core foundation
+level interface to the run loop.
+
+00:07:05.820 --> 00:07:10.480
+And you would use CFRunLoop if,
+for example, you wanted to use one of
+
+00:07:10.480 --> 00:07:14.190
+the run loop sources that's
+defined in core foundation,
+
+00:07:14.190 --> 00:07:16.470
+or if you're working with
+something that's defined at
+
+00:07:16.530 --> 00:07:20.620
+the core foundation level,
+like CFNetwork, or if you have a need to
+
+00:07:20.620 --> 00:07:22.280
+run the run loop yourself.
+
+00:07:25.460 --> 00:07:29.780
+Now,
+how does the run loop generally get run?
+
+00:07:29.870 --> 00:07:34.150
+If you are on the main thread in
+a Cocoa or Carbon application,
+
+00:07:34.170 --> 00:07:37.120
+then normally you will not need
+to run the run loop yourself,
+
+00:07:37.220 --> 00:07:41.800
+because it will be run for you as part
+of the application's main event loop.
+
+00:07:41.940 --> 00:07:45.390
+So, for example, in Carbon,
+running the run loop is at the
+
+00:07:45.390 --> 00:07:47.280
+heart of run application event loop.
+
+00:07:47.310 --> 00:07:50.520
+In Cocoa,
+NSApplication will typically run the run
+
+00:07:50.520 --> 00:07:54.510
+loop for you as part of its event loop,
+without you doing anything at all.
+
+00:07:55.390 --> 00:07:58.140
+If you're in some other situation,
+if you're on, say,
+
+00:07:58.180 --> 00:08:00.250
+a secondary thread in one
+of these applications,
+
+00:08:00.280 --> 00:08:03.690
+or if you're in something that
+doesn't use Cocoa or Carbon at all,
+
+00:08:03.810 --> 00:08:05.720
+then you may need to run
+the run loop yourself.
+
+00:08:05.960 --> 00:08:08.580
+And you can do that
+with the CFRunLoop APIs,
+
+00:08:08.780 --> 00:08:14.170
+either with the simple CFRunLoop run,
+or the more complicated
+
+00:08:14.170 --> 00:08:16.410
+CFRunLoop run in mode.
+
+00:08:18.100 --> 00:08:21.100
+Now, I guess this is the point at which
+I should say something about modes.
+
+00:08:21.100 --> 00:08:26.500
+A run loop may have many
+different sources attached to it,
+
+00:08:26.600 --> 00:08:29.480
+but you may not want to have all
+of them active at any given time.
+
+00:08:29.640 --> 00:08:33.850
+For example, you might have a timer that
+you don't want to fire while a
+
+00:08:33.850 --> 00:08:36.030
+control is tracking the mouse.
+
+00:08:36.040 --> 00:08:39.640
+To make this possible,
+we have a mechanism called modes.
+
+00:08:39.720 --> 00:08:43.000
+At any given time,
+the run loop is running.
+
+00:08:43.000 --> 00:08:46.570
+It's running with some specific mode,
+and any source that's registered
+
+00:08:46.570 --> 00:08:49.340
+with the run loop is registered
+with some list of modes.
+
+00:08:49.340 --> 00:08:54.200
+That source will be active and able
+to be triggered only when the run
+
+00:08:54.200 --> 00:08:55.920
+loop is running in one of those modes.
+
+00:08:57.760 --> 00:09:01.560
+Most of the time, the run loop will be
+running in the default mode,
+
+00:09:01.590 --> 00:09:05.200
+and most sources will be
+registered with at least that mode.
+
+00:09:05.260 --> 00:09:09.280
+But frameworks and subsystems
+can define their own modes.
+
+00:09:09.280 --> 00:09:13.170
+For example, in Cocoa,
+there is a special mode,
+
+00:09:13.170 --> 00:09:17.600
+the MotoPanel run loop mode,
+that is used while a MotoDialog is up.
+
+00:09:17.600 --> 00:09:23.450
+And there's another one that's used
+while controls are tracking the mouse.
+
+00:09:23.880 --> 00:09:25.900
+There is also one shortcut.
+
+00:09:25.900 --> 00:09:29.290
+You can register a source for
+the so-called common modes,
+
+00:09:29.310 --> 00:09:33.310
+and that is just those modes that
+happen to have been registered
+
+00:09:33.310 --> 00:09:38.440
+as being "common." For example,
+in Cocoa, that would be the default mode,
+
+00:09:38.520 --> 00:09:41.350
+plus those other two I mentioned,
+the event tracking mode
+
+00:09:41.350 --> 00:09:42.800
+and the modal panel mode.
+
+00:09:42.800 --> 00:09:47.770
+As I say, most of the time you'll
+be using the default mode.
+
+00:09:47.810 --> 00:09:50.800
+It is also possible to run the
+run loop in your own custom mode,
+
+00:09:50.800 --> 00:09:53.800
+and the point of that would
+be that if you do that,
+
+00:09:53.860 --> 00:09:57.270
+then you know for sure that only
+those sources that you yourself
+
+00:09:57.270 --> 00:10:01.780
+have registered with that mode
+can fire while you're doing that.
+
+00:10:01.900 --> 00:10:05.010
+Most of the time, though,
+you use the default mode.
+
+00:10:06.580 --> 00:10:10.340
+Now, the run loop by itself is
+not terribly interesting.
+
+00:10:10.450 --> 00:10:13.280
+What's interesting is the
+things that it can wait for,
+
+00:10:13.290 --> 00:10:15.060
+that is, its sources.
+
+00:10:15.060 --> 00:10:19.160
+So today I'm going to be talking
+about some of the run loop sources
+
+00:10:19.160 --> 00:10:23.920
+that are defined in core foundation:
+CFRunLoopTimer, CFMessagePort,
+
+00:10:24.000 --> 00:10:25.770
+CFMachPort, CFSocket.
+
+00:10:25.830 --> 00:10:30.660
+Becky will come back up and talk
+in much more detail about CFStream.
+
+00:10:30.660 --> 00:10:34.240
+Other frameworks and subsystems can
+define their own run loop sources,
+
+00:10:34.240 --> 00:10:36.600
+and you can even to find your own,
+although I'm not going to
+
+00:10:36.600 --> 00:10:38.810
+be going into that today.
+
+00:10:40.920 --> 00:10:44.310
+So before I get into specifics,
+I should say some general things about
+
+00:10:44.500 --> 00:10:48.160
+the core foundation run loop sources.
+
+00:10:48.160 --> 00:10:52.560
+One point to note is that in order to
+distinguish one source from another,
+
+00:10:52.630 --> 00:10:55.910
+core foundation usually allows
+you to attach to each source
+
+00:10:55.910 --> 00:10:58.890
+what's called a context,
+which is just a fancy name
+
+00:10:58.990 --> 00:11:02.440
+for an arbitrary pointer that
+you can use however you like,
+
+00:11:02.440 --> 00:11:05.090
+and some functions that
+it uses to deal with it.
+
+00:11:05.090 --> 00:11:07.870
+Becky will discuss that
+in more detail later on.
+
+00:11:08.950 --> 00:11:12.730
+Another point is that normally
+when you want to dispose of
+
+00:11:12.860 --> 00:11:16.590
+a core foundation object,
+you just release it.
+
+00:11:16.660 --> 00:11:19.890
+With the core foundation
+run loop sources,
+
+00:11:20.200 --> 00:11:25.390
+normally you will also have
+to invalidate the source.
+
+00:11:25.560 --> 00:11:28.220
+That tells it that it will
+never be needed again,
+
+00:11:28.250 --> 00:11:33.310
+that it can get rid of any underlying
+system resources that it may be using,
+
+00:11:33.310 --> 00:11:35.730
+and remove itself from run loops.
+
+00:11:35.730 --> 00:11:36.800
+Then you can release
+it and it will go away.
+
+00:11:37.060 --> 00:11:41.160
+Another thing that sometimes comes
+up is that the sources have an
+
+00:11:41.160 --> 00:11:45.900
+integer order for -- that comes
+into play only when there are many
+
+00:11:45.900 --> 00:11:49.340
+sources that are firing at once,
+and the run loop has to decide
+
+00:11:49.340 --> 00:11:51.000
+which one to call first.
+
+00:11:51.070 --> 00:11:53.190
+That's not terribly common.
+
+00:11:53.890 --> 00:11:56.880
+One more thing I should say is that
+although I'm going to speak about all
+
+00:11:56.880 --> 00:12:01.600
+these objects as run loop sources,
+because core foundation doesn't
+
+00:12:01.600 --> 00:12:05.610
+have a full object oriented system,
+in many cases there is a small
+
+00:12:05.610 --> 00:12:09.200
+auxiliary object which actually
+formally acts as the run loop source,
+
+00:12:09.200 --> 00:12:12.550
+and we'll see that in
+an example later on.
+
+00:12:13.610 --> 00:12:16.660
+So let me talk about the
+first kind of run loop source,
+
+00:12:16.740 --> 00:12:18.180
+the CFRunLoop timer.
+
+00:12:18.190 --> 00:12:21.350
+You remember I said that one of the
+things the run loop can wait for is
+
+00:12:21.350 --> 00:12:24.500
+the arrival of some predetermined time.
+
+00:12:24.500 --> 00:12:29.350
+CFRunLoop timer allows you to get
+a callback when some time arrives,
+
+00:12:29.440 --> 00:12:34.680
+or if you like,
+some repeating sequence of times.
+
+00:12:34.690 --> 00:12:38.280
+Now, the run loop is not a
+real time mechanism.
+
+00:12:38.460 --> 00:12:41.530
+What this means is that when
+the run loop has control,
+
+00:12:41.660 --> 00:12:44.610
+it checks to see if your
+timer's time has arrived,
+
+00:12:44.610 --> 00:12:48.370
+and if it has, then you get a callback,
+but only if the run loop is running.
+
+00:12:50.500 --> 00:12:55.580
+So to create a CFRunLoop timer,
+you specify a callback.
+
+00:12:55.960 --> 00:13:00.170
+And you specify the
+first time it will fire,
+
+00:13:00.400 --> 00:13:05.400
+and optionally some interval after
+which it will repeatedly fire.
+
+00:13:05.400 --> 00:13:09.820
+Then you add it to the run
+loop with some set of modes.
+
+00:13:09.850 --> 00:13:12.500
+And when the run loop is
+running and your time arrives,
+
+00:13:12.500 --> 00:13:15.420
+you'll get your callback.
+
+00:13:15.520 --> 00:13:18.830
+If you don't have the timer repeat,
+then it's automatically invalidated.
+
+00:13:18.830 --> 00:13:22.110
+It only fires once and is
+automatically invalidated afterwards.
+
+00:13:22.160 --> 00:13:24.930
+If it does repeat,
+then you have to invalidate it yourself
+
+00:13:24.930 --> 00:13:27.720
+when you're done with it and you no
+longer want it to fire ever again.
+
+00:13:30.240 --> 00:13:32.100
+Let's take a look at some code.
+
+00:13:32.100 --> 00:13:37.580
+First line here, we are creating a timer.
+
+00:13:38.230 --> 00:13:43.700
+We specify the callback, my callback.
+
+00:13:43.700 --> 00:13:45.980
+We specify the first time
+at which it should fire.
+
+00:13:46.130 --> 00:13:49.780
+Here that's CFAbsoluteTimeGetCurrent,
+which means now,
+
+00:13:49.830 --> 00:13:51.640
+i.e., as soon as possible.
+
+00:13:51.840 --> 00:13:54.430
+And an interval after
+which it will fire again.
+
+00:13:54.520 --> 00:13:55.760
+Here, 1.0 seconds.
+
+00:13:55.760 --> 00:14:01.130
+So it will fire one second from
+now and every second thereafter
+
+00:14:01.130 --> 00:14:01.130
+until it's invalidated.
+
+00:14:02.570 --> 00:14:07.530
+Now, you remember that I said there is
+exactly one run loop per thread.
+
+00:14:07.590 --> 00:14:09.780
+In almost every case,
+we'll be dealing with the
+
+00:14:09.780 --> 00:14:11.730
+so-called current run loop,
+that is,
+
+00:14:11.870 --> 00:14:14.190
+the run loop for the current thread.
+
+00:14:14.310 --> 00:14:19.000
+So we get the current run loop here,
+and we add this timer to the run loop.
+
+00:14:19.020 --> 00:14:23.870
+In this case, I've chosen to do it
+with the common modes.
+
+00:14:23.870 --> 00:14:23.870
+That's convenient.
+
+00:14:24.420 --> 00:14:27.750
+Now, if we were in a Cocoa or
+Carbon application,
+
+00:14:27.750 --> 00:14:28.910
+we'd be done.
+
+00:14:28.920 --> 00:14:30.510
+The framework would run
+the run loop for us,
+
+00:14:30.600 --> 00:14:34.440
+and all we'd have to do is sit
+back and wait for our callback.
+
+00:14:34.500 --> 00:14:37.140
+If we're in some other situation,
+we may need to run the
+
+00:14:37.140 --> 00:14:40.190
+run loop ourselves,
+and we can do that with CFRunLoop Run.
+
+00:14:46.600 --> 00:14:50.230
+Let me talk about another rather
+different kind of run loop source,
+
+00:14:50.350 --> 00:14:51.700
+the CFMessagePort.
+
+00:14:51.700 --> 00:14:54.030
+This is an IPC mechanism.
+
+00:14:54.170 --> 00:14:57.680
+There are many, many different
+IPC mechanisms in Mac OS X.
+
+00:14:57.790 --> 00:15:03.030
+CFMessagePort is the primary
+IPC mechanism that's defined
+
+00:15:03.040 --> 00:15:05.490
+at the core foundation level.
+
+00:15:05.600 --> 00:15:11.080
+This is lower level than Apple events
+in the sense that the messages that are
+
+00:15:11.090 --> 00:15:16.480
+transferred are not structured messages,
+they're just bags of bytes.
+
+00:15:16.480 --> 00:15:18.620
+This is a local IPC mechanism.
+
+00:15:18.670 --> 00:15:22.760
+You can use it between threads
+or processes on one machine.
+
+00:15:22.900 --> 00:15:27.700
+It has two modes,
+a one-way asynchronous mode and another
+
+00:15:27.700 --> 00:15:32.280
+mode that can be used where you've got
+to reply and call it synchronously.
+
+00:15:32.310 --> 00:15:37.690
+This is higher level than something like
+sockets or pipes in that it makes use
+
+00:15:37.760 --> 00:15:43.070
+of the core foundation abstractions and,
+in particular, the run loop.
+
+00:15:44.730 --> 00:15:49.890
+So to use CFMessagePort, one side,
+we'll call it the server,
+
+00:15:49.890 --> 00:15:54.960
+creates a local message port,
+CFMessagePort create local,
+
+00:15:54.960 --> 00:15:59.510
+and advertises it with a name,
+which is just a CFString.
+
+00:16:00.410 --> 00:16:05.590
+The other side, we'll call it the client,
+looks up that message port by that
+
+00:16:05.860 --> 00:16:11.410
+name and gets a reference to what
+to it is a remote message port,
+
+00:16:11.470 --> 00:16:13.750
+CFMessagePortCreatedRemote.
+
+00:16:13.910 --> 00:16:20.130
+The messages that are sent are,
+as I've said, just strings of bytes with,
+
+00:16:20.130 --> 00:16:21.940
+that is, CFDatas.
+
+00:16:22.030 --> 00:16:26.190
+You'll also get an integer message
+ID you can put on it if you like.
+
+00:16:26.240 --> 00:16:30.200
+The reply, if you have a reply,
+is also a CFData.
+
+00:16:30.200 --> 00:16:33.080
+And the client and the server simply
+have to agree on how these things
+
+00:16:33.150 --> 00:16:35.100
+are supposed to be interpreted.
+
+00:16:36.120 --> 00:16:37.660
+Learn to use this.
+
+00:16:37.680 --> 00:16:42.360
+The server will add its local message
+port to the run loop with some
+
+00:16:42.440 --> 00:16:44.410
+set of modes and run the run loop.
+
+00:16:44.450 --> 00:16:49.530
+The client will call
+CFMessagePortSendRequest.
+
+00:16:49.960 --> 00:16:53.340
+and if there's no reply,
+that just returns immediately.
+
+00:16:53.490 --> 00:16:58.220
+If you wait for a reply,
+then it blocks waiting for a reply.
+
+00:16:58.220 --> 00:17:01.080
+The message will arrive at the server,
+the server will get a
+
+00:17:01.100 --> 00:17:04.290
+call back in its run loop,
+and deal with it.
+
+00:17:05.670 --> 00:17:09.600
+If there's to be a reply,
+then the server returns the reply,
+
+00:17:09.710 --> 00:17:12.530
+comes back to the client,
+and the client's
+
+00:17:12.540 --> 00:17:14.900
+CFMessagePortSendRequest call returns.
+
+00:17:19.960 --> 00:17:22.770
+What if you want to go a little
+lower down in the system and
+
+00:17:22.920 --> 00:17:27.820
+actually deal with Mach messages,
+but you want to do it in the run loop?
+
+00:17:27.940 --> 00:17:32.880
+I'm not going to say anything
+detailed about Mach messages here,
+
+00:17:32.880 --> 00:17:36.110
+but those of you who have dealt
+with the Mach APIs will know
+
+00:17:36.110 --> 00:17:39.910
+that you can do many interesting
+and powerful things with them,
+
+00:17:39.910 --> 00:17:45.080
+like transfer portions of an address
+space from one process to another.
+
+00:17:46.060 --> 00:17:50.120
+It would be very convenient if you could
+wait for a Mach message in the run loop.
+
+00:17:50.240 --> 00:17:53.870
+For that, we have a run loop
+source called CFMockPort.
+
+00:17:53.900 --> 00:17:58.030
+And all it does is allow
+MockPort to serve as a run loop
+
+00:17:58.030 --> 00:18:03.180
+event source so that you get a
+callback when a message arrives.
+
+00:18:05.260 --> 00:18:08.340
+And you can create it with an
+existing mach port if you have one,
+
+00:18:08.340 --> 00:18:11.790
+or you can allow it to
+create the mach port for you.
+
+00:18:11.840 --> 00:18:15.570
+Again, you add it to the run loop
+with some set of modes,
+
+00:18:15.660 --> 00:18:19.040
+and when the run loop is running,
+when a message arrives on that port,
+
+00:18:19.090 --> 00:18:21.930
+you get a callback pointing
+you to the message.
+
+00:18:21.990 --> 00:18:22.490
+Very simple.
+
+00:18:25.380 --> 00:18:31.430
+So, now we come to the part of the talk
+that's most relevant for CFNetwork,
+
+00:18:31.430 --> 00:18:34.150
+and that is, what if you want to do
+the same sort of thing,
+
+00:18:34.160 --> 00:18:38.830
+not for a Mach message,
+but for a BSD socket?
+
+00:18:38.990 --> 00:18:43.320
+And for that we have another kind
+of run loop source called CFSocket.
+
+00:18:43.380 --> 00:18:46.840
+Now, this is not intended as some
+sort of complete wrapper over
+
+00:18:46.840 --> 00:18:48.400
+the BSD socket functionality.
+
+00:18:48.400 --> 00:18:52.950
+You still have the underlying socket to
+which you can do all sorts of socket-ish
+
+00:18:52.950 --> 00:18:55.900
+things like setSockOpt and so forth.
+
+00:18:56.030 --> 00:19:00.710
+But now in addition we have the CFSocket,
+which allows the socket to
+
+00:19:00.740 --> 00:19:04.840
+serve as a run loop source,
+which means that you can be notified
+
+00:19:04.960 --> 00:19:08.370
+in your run loop when interesting
+things happen to this socket.
+
+00:19:08.410 --> 00:19:11.870
+The interesting things,
+depending on what sort
+
+00:19:11.870 --> 00:19:15.900
+of socket you have,
+may be when data arrives to be read,
+
+00:19:15.900 --> 00:19:20.140
+when the socket is available for writing,
+when a connection
+
+00:19:20.220 --> 00:19:25.400
+arrives and is accepted,
+or when a connection attempt succeeds.
+
+00:19:25.650 --> 00:19:28.400
+Depending, again,
+on what sort of socket this is.
+
+00:19:28.530 --> 00:19:32.560
+And this can be essentially
+any kind of socket:
+
+00:19:32.560 --> 00:19:37.890
+TCP, UDP, IVv4, IVv6,
+even the local UNIX domain sockets.
+
+00:19:38.180 --> 00:19:40.010
+Doesn't matter.
+
+00:19:40.290 --> 00:19:43.670
+So, for example,
+what this means is that if you're
+
+00:19:43.840 --> 00:19:49.210
+writing a Cocoa or a Carbon application,
+you don't need to have a separate thread
+
+00:19:49.250 --> 00:19:51.600
+to handle your networking with sockets.
+
+00:19:51.600 --> 00:19:56.920
+You can create CFSockets for them,
+and you can be notified when things
+
+00:19:56.920 --> 00:19:59.970
+happen to them in your main event loop.
+
+00:20:02.250 --> 00:20:07.170
+Again, you can create a CF socket with an
+existing BSD socket if you have one,
+
+00:20:07.200 --> 00:20:11.790
+or you can choose to have CFSocket
+create the socket for you.
+
+00:20:11.800 --> 00:20:17.910
+And when you create the CF socket,
+you specify what callback will be called,
+
+00:20:18.400 --> 00:20:24.590
+and you specify what sort of
+events you want to be called for.
+
+00:20:24.590 --> 00:20:24.590
+Again, this will depend on what
+sort of socket you have.
+
+00:20:27.180 --> 00:20:30.110
+Now, I don't want to let you leave
+here without presenting a
+
+00:20:30.110 --> 00:20:32.340
+complete working code example.
+
+00:20:32.360 --> 00:20:37.080
+So I thought I'd present
+a little HTTP server.
+
+00:20:37.080 --> 00:20:40.570
+But to make it simple enough to present,
+I had to make it really simple.
+
+00:20:40.580 --> 00:20:43.100
+So we're not going to try to
+parse the incoming request at all.
+
+00:20:43.100 --> 00:20:45.990
+We're just going to return
+a single constant response.
+
+00:20:47.980 --> 00:20:54.020
+So this is going to use a TCP socket,
+and so it will follow a familiar pattern.
+
+00:20:54.070 --> 00:20:57.290
+That is, we have one socket that
+is bound to a port,
+
+00:20:57.440 --> 00:20:59.730
+listens, and accepts connections.
+
+00:20:59.770 --> 00:21:04.030
+When a connection arrives,
+there will be a new child socket for that
+
+00:21:04.040 --> 00:21:07.190
+connection that we use to read and write.
+
+00:21:07.390 --> 00:21:11.060
+And just now for each of
+these we'll have a CF socket.
+
+00:21:11.180 --> 00:21:14.510
+So first I'm going to create
+the socket that will be bound
+
+00:21:14.510 --> 00:21:16.400
+and listen for new connections.
+
+00:21:16.520 --> 00:21:20.670
+And I've decided to let
+CFSocket create it for me.
+
+00:21:21.060 --> 00:21:26.820
+And here in this creation call,
+I specify my callback, accept connection,
+
+00:21:26.920 --> 00:21:29.640
+and I specify what kind of events
+it's going to be called for.
+
+00:21:29.740 --> 00:21:31.640
+In this case,
+it's going to be called with
+
+00:21:31.730 --> 00:21:35.880
+KCF socket accept callback,
+that is, when new connections
+
+00:21:35.930 --> 00:21:37.570
+arrive and are accepted.
+
+00:21:38.150 --> 00:21:42.220
+And the other thing I have to specify
+is what kind of socket this is and
+
+00:21:42.380 --> 00:21:45.210
+what port it's going to be bound to.
+
+00:21:45.330 --> 00:21:48.240
+So for that I use a plain
+old struct SocketOrIn,
+
+00:21:48.240 --> 00:21:53.860
+in this case specifying port 1234,
+which I picked at random.
+
+00:21:53.860 --> 00:21:58.640
+And to pass that to CFSocket,
+I wrap it in a CFData.
+
+00:21:59.180 --> 00:22:02.690
+and include that in a structure
+called a socket signature,
+
+00:22:02.690 --> 00:22:06.690
+which all this does is it tells
+CFSocket what kind of socket this is.
+
+00:22:06.730 --> 00:22:10.220
+These are the standard
+BSD constants for a TCP socket.
+
+00:22:14.360 --> 00:22:18.330
+Now, remember that I said in some cases
+there is a small auxiliary object
+
+00:22:18.410 --> 00:22:20.080
+which acts as the run loop source.
+
+00:22:20.100 --> 00:22:21.490
+This is one of these cases.
+
+00:22:21.640 --> 00:22:26.310
+We call CFSocketCreateRunLoopSource
+to get the actual run loop
+
+00:22:26.310 --> 00:22:28.510
+source auxiliary object.
+
+00:22:31.270 --> 00:22:35.190
+Then, as in the timer example,
+we get the current run loop and
+
+00:22:35.190 --> 00:22:37.430
+we add the source to the run loop.
+
+00:22:37.470 --> 00:22:40.050
+In this case, I've chosen to do it
+with the default mode.
+
+00:22:42.900 --> 00:22:44.650
+Because I wanted this to
+be a standalone example,
+
+00:22:44.710 --> 00:22:49.060
+I'm going to run the
+run loop here myself.
+
+00:22:49.080 --> 00:22:51.320
+At this point,
+all we do is sit back and we wait,
+
+00:22:51.320 --> 00:22:55.480
+and we will get a callback when a new
+connection arrives and is accepted.
+
+00:22:55.480 --> 00:22:58.060
+So what does that callback look like?
+
+00:22:58.130 --> 00:23:01.950
+This callback is going to
+pass into us a new BSD socket
+
+00:23:01.950 --> 00:23:05.030
+for that accepted connection.
+
+00:23:05.040 --> 00:23:08.520
+And again,
+I want to create a CF socket for that.
+
+00:23:08.520 --> 00:23:13.240
+So here I use the form of creation that
+creates it with an existing socket.
+
+00:23:13.240 --> 00:23:16.280
+And I specify another callback,
+receiveData,
+
+00:23:16.280 --> 00:23:21.080
+that will be called when data
+arrives on this new connection.
+
+00:23:21.080 --> 00:23:25.110
+And I specify the KCF socket
+data callback type.
+
+00:23:25.220 --> 00:23:29.150
+That means I will be called,
+I will have CFSocket read the
+
+00:23:29.230 --> 00:23:32.300
+data for me and pass it to me.
+
+00:23:34.070 --> 00:23:35.630
+Same thing again.
+
+00:23:35.630 --> 00:23:38.920
+I get the run loop
+source for the CF socket.
+
+00:23:39.270 --> 00:23:43.670
+I add it to the current run loop with,
+again, the default mode,
+
+00:23:43.710 --> 00:23:46.790
+and I release it so I don't leak it.
+
+00:23:48.630 --> 00:23:52.800
+So the only thing left to do is to
+define the callback we will get when data
+
+00:23:52.840 --> 00:23:55.730
+actually arrives on this new connection.
+
+00:23:55.750 --> 00:23:58.260
+And that is a received data callback.
+
+00:23:58.270 --> 00:24:00.150
+As I said,
+I'm not going to try to do anything
+
+00:24:00.150 --> 00:24:01.890
+with this request that I'm getting.
+
+00:24:01.900 --> 00:24:05.130
+I'm just going to throw it away
+and return a fixed response.
+
+00:24:05.270 --> 00:24:11.750
+So I have a string here that is
+just "Hello World" in HTTP speak,
+
+00:24:11.750 --> 00:24:15.760
+and for use with CFSocket,
+and I'm wrapping that in a CFData.
+
+00:24:16.760 --> 00:24:22.650
+And then I use a CFSocket function that
+just sends data off on that socket.
+
+00:24:25.000 --> 00:24:28.240
+I release that data so I don't leak it.
+
+00:24:28.270 --> 00:24:29.290
+Now I'm done with this.
+
+00:24:29.290 --> 00:24:32.920
+We're not using persistent connections,
+so we're done with this connection.
+
+00:24:32.920 --> 00:24:34.390
+We're not going to use it anymore.
+
+00:24:34.530 --> 00:24:36.900
+The only thing left is to close it down.
+
+00:24:36.900 --> 00:24:41.280
+You remember that I spoke of
+invalidating run loop sources.
+
+00:24:41.280 --> 00:24:44.990
+So what we do at this point is
+that we invalidate the CF socket.
+
+00:24:45.020 --> 00:24:49.360
+That tells us--tells it that
+we never want to use it again.
+
+00:24:49.360 --> 00:24:53.870
+That closes the underlying
+socket and removes it from
+
+00:24:53.880 --> 00:24:55.910
+run loops--from the run loops.
+
+00:24:55.910 --> 00:24:58.470
+And then we release it, and we're done.
+
+00:25:00.900 --> 00:25:03.580
+That's a complete example.
+
+00:25:03.850 --> 00:25:07.300
+And now I'm going to turn
+things back over to Becky,
+
+00:25:07.330 --> 00:25:11.070
+who will talk to you in
+more detail about CFStream.
+
+00:25:13.500 --> 00:25:16.680
+Thanks, Doug.
+
+00:25:16.910 --> 00:25:20.500
+Okay, so now we want to spend a little
+more time about one particular
+
+00:25:20.770 --> 00:25:23.500
+kind of run loop source,
+a CFStream.
+
+00:25:23.660 --> 00:25:30.860
+Unlike the ones that,
+the sources that Doug spoke about,
+
+00:25:30.860 --> 00:25:34.870
+CFStream was new in 10.1.
+
+00:25:34.870 --> 00:25:34.870
+All the other sources have
+been around since 10.0.
+
+00:25:35.760 --> 00:25:37.620
+So, what is a CFStream?
+
+00:25:37.820 --> 00:25:41.590
+Well, at its heart,
+it's simply a one-directional
+
+00:25:41.710 --> 00:25:43.340
+stream of bytes.
+
+00:25:43.780 --> 00:25:47.530
+Part of the idea is that you
+don't need to know where you're
+
+00:25:47.560 --> 00:25:49.150
+writing to or reading from.
+
+00:25:49.550 --> 00:25:53.170
+The stream abstracts all of that away.
+
+00:25:53.380 --> 00:25:56.820
+There are two CF types
+to represent streams:
+
+00:25:56.860 --> 00:25:59.570
+CFReadStriem and CFWriteStriem.
+
+00:25:59.700 --> 00:26:03.540
+and as the stream exists
+inside your program,
+
+00:26:03.550 --> 00:26:08.170
+it will move through certain
+definite states in its lifetime.
+
+00:26:08.170 --> 00:26:11.600
+We're going to take a closer
+look at that lifetime now.
+
+00:26:11.640 --> 00:26:15.060
+So there it is drawn as a state
+diagram and we're going to walk
+
+00:26:15.060 --> 00:26:17.390
+through each of those step by step.
+
+00:26:19.140 --> 00:26:23.240
+When the stream is first created,
+it's in the not open state.
+
+00:26:23.350 --> 00:26:27.140
+At this point, the stream merely exists
+as memory in your program.
+
+00:26:27.500 --> 00:26:30.670
+It's not using any system resources.
+
+00:26:31.000 --> 00:26:33.750
+It's not doing any processing yet.
+
+00:26:33.830 --> 00:26:36.550
+This is the time when you
+want to configure the stream.
+
+00:26:36.710 --> 00:26:43.510
+You know nothing's going on,
+so you can set up the stream to behave
+
+00:26:43.510 --> 00:26:43.510
+precisely the way you want it to.
+
+00:26:43.950 --> 00:26:49.060
+Once the stream is fully configured,
+you move on to the next state by calling
+
+00:26:49.060 --> 00:26:51.110
+CFReadStriem or CFWriteStriem open.
+
+00:26:53.850 --> 00:26:59.130
+Once the stream has... pardon
+me... once open has been called,
+
+00:26:59.150 --> 00:27:02.180
+we're going to move
+on to the next states.
+
+00:27:02.630 --> 00:27:07.740
+This is the time when the stream is going
+to start reserving its system resources.
+
+00:27:07.740 --> 00:27:10.450
+And you should keep in mind
+that this process may take time.
+
+00:27:10.660 --> 00:27:13.500
+For instance,
+a socket may choose to wait until
+
+00:27:13.530 --> 00:27:21.690
+it's become fully connected,
+until the remote end has sent back an
+
+00:27:21.690 --> 00:27:21.690
+act saying that the pipe is fully formed.
+
+00:27:22.970 --> 00:27:24.800
+That's what the state opening is for.
+
+00:27:24.800 --> 00:27:28.690
+It means that the open has begun,
+but has not yet completed.
+
+00:27:28.810 --> 00:27:33.930
+Once opening has completed,
+the stream will move into the state open.
+
+00:27:37.130 --> 00:27:40.350
+Once the stream is open,
+and for most of the
+
+00:27:40.350 --> 00:27:43.410
+lifetime of the stream,
+you're going to be moving back
+
+00:27:43.410 --> 00:27:47.840
+and forth between the open state
+and the reading and writing state.
+
+00:27:47.990 --> 00:27:52.700
+Reading and writing occurs when you
+call readStreamRead or writeStreamWrite,
+
+00:27:52.720 --> 00:27:57.060
+matches the POSIX calls that
+you may have used before.
+
+00:27:57.100 --> 00:27:58.540
+It's going to return the number of bytes.
+
+00:27:58.680 --> 00:28:01.400
+You're going to give them a byte buffer.
+
+00:28:01.420 --> 00:28:05.860
+It's going to return to you the number
+of bytes filled if you're reading,
+
+00:28:05.900 --> 00:28:08.440
+or written out if you're writing.
+
+00:28:08.470 --> 00:28:11.940
+It'll return zero if you've
+reached the end of the stream,
+
+00:28:11.980 --> 00:28:15.300
+or negative one if some
+error has occurred.
+
+00:28:16.480 --> 00:28:19.990
+Now one thing to note is you don't
+actually have to wait for the
+
+00:28:20.110 --> 00:28:24.400
+state to transition to open before
+you start reading or writing.
+
+00:28:24.400 --> 00:28:27.680
+If you call readStreamRead
+or writeStreamWrite before
+
+00:28:27.680 --> 00:28:33.640
+the stream is fully open,
+CFStream will do the work of waiting
+
+00:28:33.640 --> 00:28:38.860
+for the open to occur before actually
+performing the read or write.
+
+00:28:38.860 --> 00:28:38.860
+But of course that means blocking.
+
+00:28:41.430 --> 00:28:44.900
+At some point you will reach
+the end of the bytes available,
+
+00:28:44.970 --> 00:28:48.310
+or the logical end of a write stream.
+
+00:28:49.900 --> 00:28:52.740
+This will happen when the read
+stream has been completely emptied,
+
+00:28:52.850 --> 00:28:54.900
+or the write stream has
+been completely filled,
+
+00:28:54.900 --> 00:28:58.790
+assuming you're not talking
+to an infinite source.
+
+00:28:59.550 --> 00:29:03.260
+At that point,
+the stream will move to state at end.
+
+00:29:03.300 --> 00:29:07.720
+Once you've reached this state,
+no more bytes will be accepted,
+
+00:29:07.750 --> 00:29:10.310
+no more bytes will be provided.
+
+00:29:13.800 --> 00:29:16.230
+Once that happens,
+some point in the future,
+
+00:29:16.230 --> 00:29:18.240
+you're going to close the stream.
+
+00:29:18.240 --> 00:29:21.620
+This is the stream's queue
+to release all of the system
+
+00:29:21.620 --> 00:29:23.940
+resources it's been holding.
+
+00:29:23.940 --> 00:29:26.390
+A closed stream can still be useful.
+
+00:29:26.430 --> 00:29:30.940
+You can still ask it for information
+for properties that it's collected
+
+00:29:30.980 --> 00:29:34.740
+or accumulated as the stream
+moved through its lifetime.
+
+00:29:34.750 --> 00:29:38.210
+But it's useless for
+the transfer of bytes.
+
+00:29:40.510 --> 00:29:43.360
+Finally, we are talking about I/O here.
+
+00:29:43.360 --> 00:29:47.400
+Something strange can happen at
+any point in the stream's lifetime.
+
+00:29:47.400 --> 00:29:50.690
+Once an error is detected,
+the stream will be moved
+
+00:29:50.740 --> 00:29:52.400
+into the error state.
+
+00:29:52.400 --> 00:29:55.680
+And errors for CFStreams
+are non-recoverable.
+
+00:29:55.680 --> 00:29:56.640
+All errors are fatal.
+
+00:29:56.640 --> 00:29:59.980
+You'll have to dispose the
+stream and start again.
+
+00:30:01.310 --> 00:30:03.690
+Oh, and there's a call:
+CFReadStreamGetError,
+
+00:30:03.770 --> 00:30:06.880
+CFWriteStreamGetError to retrieve
+the error and allow you to
+
+00:30:06.880 --> 00:30:08.740
+diagnose what the failure was.
+
+00:30:12.850 --> 00:30:16.340
+So, that's what a CFStream will do.
+
+00:30:16.550 --> 00:30:17.700
+How do you get one?
+
+00:30:17.700 --> 00:30:22.610
+Well, there are custom creation functions
+for each of the different kinds
+
+00:30:22.690 --> 00:30:24.460
+of streams you might want.
+
+00:30:24.480 --> 00:30:29.080
+Core Foundation provides
+in CFStream.h for files,
+
+00:30:29.190 --> 00:30:31.700
+sockets, and memory.
+
+00:30:31.860 --> 00:30:36.690
+CFNetwork adds HTTP streams
+to the top of that.
+
+00:30:40.390 --> 00:30:42.050
+So once you've got a stream,
+how do you use it?
+
+00:30:42.130 --> 00:30:45.130
+How do you drive it through its
+lifetime and actually get the bytes?
+
+00:30:45.200 --> 00:30:49.200
+There are three dominant
+models for using a CF stream.
+
+00:30:49.200 --> 00:30:53.920
+They're probably familiar models
+to you if you have done I.O.
+
+00:30:53.920 --> 00:30:54.730
+work in the past.
+
+00:30:54.800 --> 00:30:57.620
+You can use it in an
+event-driven fashion.
+
+00:30:57.620 --> 00:31:01.780
+You can use it in a blocking fashion,
+or you can pull.
+
+00:31:01.780 --> 00:31:05.960
+Of the three,
+we recommend you do event-driven.
+
+00:31:05.960 --> 00:31:07.110
+It's the most flexible.
+
+00:31:07.380 --> 00:31:10.560
+It's what's going to allow
+you to process your I.O.
+
+00:31:10.560 --> 00:31:14.220
+in small chunks,
+using the CPU for small amounts of time,
+
+00:31:14.220 --> 00:31:18.360
+and then freeing the CPU for
+other work the rest of the time.
+
+00:31:20.290 --> 00:31:24.790
+The way you use the event-driven
+model is create the stream,
+
+00:31:24.790 --> 00:31:26.800
+set a client on the stream.
+
+00:31:26.810 --> 00:31:31.220
+The client represents the
+entry point into your code.
+
+00:31:31.280 --> 00:31:34.430
+It's a callback function
+together with a refcon that's
+
+00:31:34.430 --> 00:31:36.770
+going to be passed back to you.
+
+00:31:37.330 --> 00:31:38.820
+Schedule the stream on a run loop.
+
+00:31:38.980 --> 00:31:44.140
+That's your way of telling the stream,
+"This is the thread I want you to use.
+
+00:31:44.240 --> 00:31:47.870
+This is the run loop I want you to
+use to watch for interesting events."
+
+00:31:49.540 --> 00:31:53.820
+Then open the stream and just sit back
+and wait for the callback to come in.
+
+00:31:53.990 --> 00:31:57.530
+The stream will do the work of
+scheduling any auxiliary objects
+
+00:31:57.530 --> 00:32:00.120
+that are needed on the run loop.
+
+00:32:00.120 --> 00:32:01.740
+The run loop will watch for events.
+
+00:32:01.930 --> 00:32:04.400
+As the events occur, it tells the stream.
+
+00:32:04.400 --> 00:32:07.180
+The stream looks at the event,
+interprets it,
+
+00:32:07.220 --> 00:32:10.960
+changes it into some notion
+of what has happened,
+
+00:32:10.960 --> 00:32:14.340
+like the stream has finished
+opening or bytes have arrived,
+
+00:32:14.370 --> 00:32:18.400
+and then it triggers your callback.
+
+00:32:18.650 --> 00:32:21.200
+So let's walk through it in code.
+
+00:32:23.090 --> 00:32:27.940
+So Doug said I would spend a
+moment to talk about contexts,
+
+00:32:27.980 --> 00:32:31.060
+so I think I'll go ahead and do that now.
+
+00:32:32.480 --> 00:32:35.440
+Core Foundation is a
+reference-counted system as a whole.
+
+00:32:35.440 --> 00:32:36.390
+You all know that.
+
+00:32:36.740 --> 00:32:41.620
+One of the implications is that any
+time you provide an info pointer,
+
+00:32:41.620 --> 00:32:46.400
+what you would think of as a refcon,
+to a Core Foundation object,
+
+00:32:46.500 --> 00:32:50.420
+Core Foundation needs to be prepared
+to reference-count that object,
+
+00:32:50.420 --> 00:32:52.810
+because you might very well
+want to send in a CF type,
+
+00:32:52.920 --> 00:32:53.460
+right?
+
+00:32:53.460 --> 00:32:56.850
+You might use, as I am in this case,
+a mutable array to just
+
+00:32:56.950 --> 00:32:58.220
+collect information.
+
+00:32:58.220 --> 00:33:02.300
+So it wants to play nicely in
+the reference-counting world.
+
+00:33:02.400 --> 00:33:06.880
+The only way it can do that
+is either by simply requiring
+
+00:33:06.880 --> 00:33:08.800
+that you always pass a CF type.
+
+00:33:08.810 --> 00:33:10.420
+Well, that's a little limiting.
+
+00:33:10.420 --> 00:33:13.360
+Or you can do what we
+have chosen to do instead,
+
+00:33:13.360 --> 00:33:17.580
+which is to accept a retain and
+a release callback at the same
+
+00:33:17.650 --> 00:33:19.540
+time as it accepts the pointer.
+
+00:33:21.160 --> 00:33:25.880
+When you provide a context
+to a core foundation object,
+
+00:33:25.950 --> 00:33:31.160
+it will call the retain callback as sort
+of its indication to your RefCon that,
+
+00:33:31.200 --> 00:33:35.340
+hey, I have now started
+remembering your object.
+
+00:33:35.370 --> 00:33:39.620
+When the core foundation object
+is done with your context,
+
+00:33:39.620 --> 00:33:44.560
+it'll call the release callback to say,
+okay, I'm not going to look at
+
+00:33:44.850 --> 00:33:46.640
+this info pointer anymore.
+
+00:33:46.680 --> 00:33:48.740
+As far as I'm concerned,
+you can dispose of the resources.
+
+00:33:49.400 --> 00:33:51.740
+At the same time,
+there's usually a third callback,
+
+00:33:51.870 --> 00:33:53.400
+the copy description callback.
+
+00:33:53.480 --> 00:33:57.220
+That one is purely for debugging use.
+
+00:33:57.220 --> 00:34:01.340
+It should, if you implement it,
+it should print out
+
+00:34:01.340 --> 00:34:04.420
+some kind of a string,
+it should actually return a
+
+00:34:04.450 --> 00:34:09.520
+CFString describing your info pointer,
+and it's automatically called by the
+
+00:34:09.580 --> 00:34:11.510
+debugging functions in core foundation.
+
+00:34:11.520 --> 00:34:16.260
+So if you call CF show on a stream,
+for instance, after it prints out
+
+00:34:16.260 --> 00:34:19.430
+the stream information,
+it'll then call the copy
+
+00:34:19.430 --> 00:34:23.680
+description pointer on your,
+excuse me, the copy description callback
+
+00:34:23.780 --> 00:34:27.090
+on your info pointer,
+and you can print out your specific
+
+00:34:27.180 --> 00:34:28.770
+state along with the stream.
+
+00:34:30.510 --> 00:34:35.340
+So in this case, I've chosen to use a
+mutable array as my context.
+
+00:34:35.410 --> 00:34:37.370
+That's my info pointer.
+
+00:34:37.490 --> 00:34:42.160
+Since it is a CF type,
+I can simply pass CFRetain, CFRelease,
+
+00:34:42.160 --> 00:34:47.030
+and CFCopyDescription as
+my callback functions.
+
+00:34:49.890 --> 00:34:53.960
+Now I describe which events
+in the stream's lifetime I'm
+
+00:34:54.030 --> 00:34:56.620
+interested in hearing about.
+
+00:34:56.620 --> 00:35:01.070
+Open completed happens when
+that opening process is done.
+
+00:35:01.180 --> 00:35:04.480
+Has bytes available means there's
+bytes available on the stream
+
+00:35:04.540 --> 00:35:06.620
+that need to be processed.
+
+00:35:06.620 --> 00:35:09.740
+End encountered happens when
+the stream reaches its end.
+
+00:35:09.810 --> 00:35:14.210
+And then if any error occurs,
+of course I want to hear about that too.
+
+00:35:16.110 --> 00:35:20.130
+Now I call setClient to pass all
+that information to the stream.
+
+00:35:20.220 --> 00:35:22.990
+First argument is a
+stream I wish to monitor.
+
+00:35:23.140 --> 00:35:26.490
+Second argument are the
+events I'm interested in.
+
+00:35:26.610 --> 00:35:27.930
+Then my callback function.
+
+00:35:28.670 --> 00:35:32.190
+Finally, the context.
+
+00:35:34.620 --> 00:35:37.220
+Okay,
+so now I've got the stream ready to go.
+
+00:35:37.280 --> 00:35:39.540
+I've set the client,
+that's the configuration work,
+
+00:35:39.540 --> 00:35:42.100
+and I'm ready to open the stream.
+
+00:35:42.220 --> 00:35:44.880
+Before opening it though,
+I would like the stream
+
+00:35:44.880 --> 00:35:49.080
+to know which thread,
+therefore which run loop,
+
+00:35:49.170 --> 00:35:50.840
+I want to receive my callback on.
+
+00:35:51.060 --> 00:35:54.410
+So I call schedule with run loop,
+pass the stream,
+
+00:35:54.410 --> 00:35:58.910
+pass the relevant run loop,
+here I'm using the current run loop,
+
+00:35:58.910 --> 00:36:03.070
+and pass the relevant mode,
+the common modes in this case.
+
+00:36:03.070 --> 00:36:03.780
+Then I call open.
+
+00:36:06.200 --> 00:36:07.200
+Here we go.
+
+00:36:07.330 --> 00:36:11.600
+Now I'm done, except for waiting for
+the callback to come in.
+
+00:36:11.600 --> 00:36:15.030
+So here's the callback
+function handling events.
+
+00:36:15.210 --> 00:36:18.310
+I'll just spend a moment on
+the signature of the callback.
+
+00:36:18.450 --> 00:36:21.760
+The first argument is the stream
+that's reporting the events.
+
+00:36:21.900 --> 00:36:24.260
+Second argument is what
+event has just occurred.
+
+00:36:24.300 --> 00:36:30.870
+Third argument is the info pointer out of
+that context structure that I passed in.
+
+00:36:35.890 --> 00:36:37.800
+This is just a simple code example.
+
+00:36:37.800 --> 00:36:39.350
+We're not going to go into much detail.
+
+00:36:39.450 --> 00:36:43.800
+I'm just going to create a string
+describing what event has taken place,
+
+00:36:43.830 --> 00:36:47.380
+and then append it to that
+mutable array I'm passing in.
+
+00:36:48.920 --> 00:36:53.180
+But in the case of hasBytesAvailable,
+I have to do a little more.
+
+00:36:53.180 --> 00:36:58.280
+When the hasBytesAvailable event occurs,
+the stream is telling you, "Hey,
+
+00:36:58.280 --> 00:37:00.180
+there are bytes waiting to be processed.
+
+00:37:00.180 --> 00:37:03.770
+Come and do something with them."
+And if you don't read them off,
+
+00:37:03.870 --> 00:37:07.060
+the stream's not going to
+give you any more events.
+
+00:37:07.070 --> 00:37:09.390
+It already told you that
+there are bytes waiting.
+
+00:37:09.390 --> 00:37:10.370
+You already know.
+
+00:37:10.530 --> 00:37:14.110
+So in order that the stream
+can advance in its lifetime,
+
+00:37:14.230 --> 00:37:18.270
+I'm going to call CFReadStr3m read
+and just pull off those bytes.
+
+00:37:23.500 --> 00:37:26.390
+So what events should I expect
+to see in that callback?
+
+00:37:26.460 --> 00:37:28.900
+Here's the basic event flow.
+
+00:37:29.330 --> 00:37:32.480
+Assuming you called
+readStreamOpen or writeStreamOpen,
+
+00:37:32.480 --> 00:37:37.600
+you will receive one open completed
+event when the open process completes,
+
+00:37:37.920 --> 00:37:43.040
+then zero or more hasBytes
+or canAcceptBytes events,
+
+00:37:43.190 --> 00:37:46.730
+then finally a single at end event.
+
+00:37:47.120 --> 00:37:50.250
+If something goes wrong,
+you'll receive a single
+
+00:37:50.250 --> 00:37:52.440
+error occurred event instead.
+
+00:37:52.490 --> 00:37:55.280
+And once you've received
+an error occurred event,
+
+00:37:55.400 --> 00:37:58.870
+that will be the last one you
+will ever receive for that stream.
+
+00:38:00.860 --> 00:38:03.870
+Now there's another,
+this next line focuses on that caveat.
+
+00:38:04.130 --> 00:38:07.040
+Once you've received a
+has bytes available event,
+
+00:38:07.140 --> 00:38:10.850
+you're not going to receive any more
+events until you take care of the
+
+00:38:10.850 --> 00:38:13.200
+bytes that are sitting in the stream.
+
+00:38:13.270 --> 00:38:15.440
+The same is true on the write side,
+of course.
+
+00:38:15.440 --> 00:38:22.060
+If you have a write stream,
+once you receive can accept bytes,
+
+00:38:22.060 --> 00:38:24.440
+you're not going to receive
+any more events until you
+
+00:38:24.440 --> 00:38:24.440
+actually perform a write.
+
+00:38:26.490 --> 00:38:29.840
+Finally,
+the client can be changed at any time.
+
+00:38:29.840 --> 00:38:33.440
+So if you're shuttling a stream back
+and forth between a number of different
+
+00:38:33.440 --> 00:38:36.440
+objects inside your own program,
+you're welcome to change the
+
+00:38:36.520 --> 00:38:38.400
+client and the callback function.
+
+00:38:38.780 --> 00:38:43.430
+However, keep an eye out for
+race conditions because,
+
+00:38:43.430 --> 00:38:48.470
+of course, events can happen on
+the stream at any time,
+
+00:38:48.470 --> 00:38:49.370
+and they're going to be
+dispatched to whichever client
+
+00:38:49.370 --> 00:38:49.370
+is there when it takes a look.
+
+00:38:54.700 --> 00:38:57.490
+so that's the event driven model now
+I'm going to spend a moment to talk
+
+00:38:57.490 --> 00:39:01.650
+about the other two models blocking
+model is probably the one you're most
+
+00:39:01.790 --> 00:39:06.690
+familiar with if you've worked with
+Berkeley Sockets or the POSIX APIs basic
+
+00:39:07.330 --> 00:39:12.070
+idea is very simple you open the stream
+you just read or write until the stream
+
+00:39:12.070 --> 00:39:17.530
+is empty each time you call read or
+write it's going to block until at
+
+00:39:17.530 --> 00:39:22.740
+least one byte can be read or written
+once at least one byte can be processed
+
+00:39:22.740 --> 00:39:26.750
+it will go ahead and process as many
+bytes as possible without blocking
+
+00:39:26.760 --> 00:39:31.910
+then the call returns and lets you
+know how far the stream has progressed
+
+00:39:32.040 --> 00:39:39.200
+and sends you back sorry then you
+loop and call read again and you wait
+
+00:39:39.200 --> 00:39:44.470
+until eventually you reach the stream's
+end when you're done you just dispose
+
+00:39:44.470 --> 00:39:48.360
+the stream so it looks like this
+
+00:39:51.250 --> 00:39:56.200
+If the stream fails to open,
+handle the error immediately.
+
+00:39:56.200 --> 00:39:59.700
+Now, why didn't I have this code
+in the event-driven case?
+
+00:39:59.700 --> 00:40:03.460
+I didn't test the return value
+of readStreamOpen in that case.
+
+00:40:03.650 --> 00:40:06.070
+Well, I didn't test it because
+I didn't need to.
+
+00:40:06.180 --> 00:40:10.200
+If the open had failed,
+that would have been an error.
+
+00:40:10.200 --> 00:40:14.460
+An error is an event that would
+have triggered my callback,
+
+00:40:14.580 --> 00:40:18.270
+so I could safely assume that
+my callback would be triggered
+
+00:40:18.270 --> 00:40:18.270
+to process the error then.
+
+00:40:20.900 --> 00:40:23.330
+Assuming the stream opens,
+now I'm ready to do the work
+
+00:40:23.330 --> 00:40:24.940
+of just reading the bytes off.
+
+00:40:24.940 --> 00:40:28.480
+So I'm doing that here:
+CFReadStreaM read, pass in the buffer,
+
+00:40:28.680 --> 00:40:31.900
+look at how many bytes have been read.
+
+00:40:31.900 --> 00:40:39.330
+For each buffer,
+I then go and process the bytes until
+
+00:40:39.330 --> 00:40:39.330
+I get a return that is non-positive.
+
+00:40:41.360 --> 00:40:44.360
+If I get a return value of zero,
+that means the stream's
+
+00:40:44.360 --> 00:40:46.140
+reached the end of its life.
+
+00:40:46.140 --> 00:40:48.900
+On the other hand,
+if I get a negative return value,
+
+00:40:48.930 --> 00:40:53.070
+an error has occurred,
+and I need to process that error.
+
+00:40:54.850 --> 00:40:58.830
+Finally, regardless of what has happened,
+I close the stream at the end.
+
+00:41:03.480 --> 00:41:06.400
+So that's the blocking model.
+
+00:41:06.400 --> 00:41:07.500
+Now for the polling model.
+
+00:41:10.180 --> 00:41:11.990
+Polling works about the
+way you would expect.
+
+00:41:12.200 --> 00:41:13.860
+You open the stream.
+
+00:41:13.900 --> 00:41:16.470
+At various periods,
+you want to look at the stream
+
+00:41:16.470 --> 00:41:18.600
+and see if it has bytes available.
+
+00:41:18.670 --> 00:41:23.030
+At those times, you call either
+CFReadStriemHasBytesAvailable
+
+00:41:23.180 --> 00:41:25.740
+or CFWriteStriemCanAcceptBytes.
+
+00:41:25.740 --> 00:41:31.740
+If those return true, well,
+then there are bytes
+
+00:41:32.030 --> 00:41:33.010
+available for you to read,
+or you can write in some new bytes.
+
+00:41:34.520 --> 00:41:38.850
+However, a stream that has errored out is
+not considered readable or writable.
+
+00:41:39.200 --> 00:41:42.640
+So you also have to check to see if
+an error has occurred on the stream.
+
+00:41:42.640 --> 00:41:44.390
+You can do that two ways.
+
+00:41:44.390 --> 00:41:48.320
+You can either ask the
+stream for its status,
+
+00:41:48.320 --> 00:41:50.910
+or you can call getError.
+
+00:41:51.580 --> 00:41:57.700
+If you call getError,
+it'll simply return zero
+
+00:41:57.700 --> 00:41:57.700
+if no error has occurred.
+
+00:41:58.540 --> 00:42:00.740
+So it looks like this.
+
+00:42:00.880 --> 00:42:05.160
+When I want to pull,
+I call CFReadStreaM has bytes available.
+
+00:42:05.220 --> 00:42:08.380
+If it returns true,
+I can now read without blocking.
+
+00:42:08.410 --> 00:42:10.940
+So I go ahead and do that.
+
+00:42:12.950 --> 00:42:15.120
+Look at the return value
+from readstream read.
+
+00:42:15.200 --> 00:42:17.930
+If it's positive,
+I have bytes and deal with them.
+
+00:42:17.990 --> 00:42:20.500
+If it's zero, I'm done, finish up.
+
+00:42:20.530 --> 00:42:23.380
+If it's negative and errors occurred,
+I go and handle that.
+
+00:42:26.400 --> 00:42:29.740
+But if there weren't bytes available,
+I need to make this extra call.
+
+00:42:29.740 --> 00:42:32.720
+I need to get the status of the
+stream and see if an error has
+
+00:42:32.780 --> 00:42:34.860
+occurred while I wasn't looking.
+
+00:42:34.880 --> 00:42:37.430
+If so, I go and handle it.
+
+00:42:40.610 --> 00:42:42.990
+So that's it for the basic
+handling of a stream,
+
+00:42:43.000 --> 00:42:46.740
+the basic process of shuttling
+bytes to and from a stream.
+
+00:42:46.810 --> 00:42:50.860
+Now I'm going to talk a little
+bit about stream properties.
+
+00:42:50.860 --> 00:42:55.230
+The properties on a stream represent
+any attribute that's not directly
+
+00:42:55.230 --> 00:42:57.350
+related to moving the bytes around.
+
+00:42:57.650 --> 00:43:00.450
+It could be something like
+the permissions on a file,
+
+00:43:00.450 --> 00:43:04.410
+it could be something like
+the HTTP headers coming
+
+00:43:04.410 --> 00:43:06.690
+off of an HTTP stream.
+
+00:43:06.790 --> 00:43:10.500
+Not actually considered part
+of the byte transaction.
+
+00:43:11.840 --> 00:43:14.410
+When I set properties,
+I'm configuring the stream.
+
+00:43:14.450 --> 00:43:18.360
+I'm telling the stream,
+"I want you to use SSL encryption.
+
+00:43:18.460 --> 00:43:22.060
+I want you to behave in
+the following fashion."
+
+00:43:22.410 --> 00:43:25.070
+When you fetch properties,
+you're getting out-of-band
+
+00:43:25.070 --> 00:43:26.560
+information from the stream.
+
+00:43:29.600 --> 00:43:32.250
+So the properties are
+all key value pairs,
+
+00:43:32.250 --> 00:43:37.060
+much as you might be familiar with
+in property lists in core foundation.
+
+00:43:37.140 --> 00:43:42.250
+The names are all CFStrings,
+and the values can be of any CF type.
+
+00:43:42.700 --> 00:43:45.840
+So to figure it out,
+you go to the relevant header file.
+
+00:43:45.860 --> 00:43:49.240
+It will have a list
+of the property names.
+
+00:43:49.240 --> 00:43:54.060
+With the property names,
+there will be a comment explaining
+
+00:43:54.060 --> 00:43:56.120
+what value you should expect,
+or what value you should provide.
+
+00:43:57.260 --> 00:43:59.350
+So where are those headers?
+
+00:43:59.510 --> 00:44:05.880
+CFStream.h provides most of
+the basic stream information,
+
+00:44:05.880 --> 00:44:09.000
+so that's files, simple sockets, memory.
+
+00:44:09.180 --> 00:44:15.720
+CFSocketStream.h in CFNetwork provides
+some more advanced socket options,
+
+00:44:15.750 --> 00:44:19.300
+including SSL encryption,
+SOX proxy settings.
+
+00:44:20.720 --> 00:44:27.120
+and CFHttpStream.h and CFNetwork
+provides the HTTP settings.
+
+00:44:27.950 --> 00:44:31.100
+Now, because the properties
+are so very generic,
+
+00:44:31.100 --> 00:44:36.210
+they're all named from strings,
+we need a mechanism to explain when we
+
+00:44:36.220 --> 00:44:40.080
+receive a property we don't recognize.
+
+00:44:40.260 --> 00:44:42.850
+If a stream receives a
+property it doesn't recognize,
+
+00:44:42.850 --> 00:44:47.200
+it's simply going to return
+null from copy property.
+
+00:44:47.240 --> 00:44:51.400
+Likewise, set property is going to
+return false if you give it a
+
+00:44:51.520 --> 00:44:55.990
+property it doesn't recognize.
+
+00:44:56.120 --> 00:44:56.190
+But there are, uh, there are
+
+00:44:56.260 --> 00:45:00.320
+sorry, but set property might also return
+false under another condition.
+
+00:45:00.320 --> 00:45:04.470
+Most of the time,
+you cannot configure a stream
+
+00:45:04.470 --> 00:45:06.330
+once the open has occurred.
+
+00:45:06.330 --> 00:45:09.290
+In fact,
+you should always assume you cannot
+
+00:45:09.300 --> 00:45:14.110
+set a configuration option on a stream
+if that stream has already opened.
+
+00:45:14.120 --> 00:45:16.400
+There are a couple exceptions.
+
+00:45:16.400 --> 00:45:19.310
+Most notably,
+you can negotiate up or down
+
+00:45:19.390 --> 00:45:22.570
+SSL encryption level on a
+socket stream on the fly,
+
+00:45:22.570 --> 00:45:25.980
+but those are all called out in
+the header files unless you can
+
+00:45:25.980 --> 00:45:27.980
+find documentation to the contrary.
+
+00:45:27.980 --> 00:45:28.910
+Don't do it.
+
+00:45:29.010 --> 00:45:31.060
+Configure the stream before you open it.
+
+00:45:34.920 --> 00:45:39.440
+Alright, so a word about using streams
+with multiple threads.
+
+00:45:39.440 --> 00:45:42.180
+So the stream APIs are all thread safe.
+
+00:45:42.280 --> 00:45:45.600
+However, the individual streams are not.
+
+00:45:45.600 --> 00:45:51.410
+In other words, you can create streams,
+or you can manipulate multiple streams
+
+00:45:51.550 --> 00:45:57.900
+for multiple threads without any problem,
+but if you want to use a particular
+
+00:45:57.910 --> 00:46:00.490
+stream on multiple threads,
+protecting that stream
+
+00:46:00.490 --> 00:46:00.490
+is your responsibility.
+
+00:46:04.360 --> 00:46:06.420
+Likewise with multiple run loops.
+
+00:46:06.420 --> 00:46:08.740
+Multiple run loops
+means multiple threads.
+
+00:46:08.740 --> 00:46:11.980
+Go ahead and schedule the stream
+on multiple run loops if you wish.
+
+00:46:11.980 --> 00:46:14.920
+This is a common technique
+when you're writing a server.
+
+00:46:14.920 --> 00:46:16.680
+You want to maintain a thread pool.
+
+00:46:16.690 --> 00:46:19.720
+You want whichever thread
+is free to handle the stream
+
+00:46:20.340 --> 00:46:22.880
+if something's available.
+
+00:46:22.880 --> 00:46:27.150
+So you schedule the stream on
+each of the various run loops.
+
+00:46:29.020 --> 00:46:31.230
+If you do that,
+the events are going to be
+
+00:46:31.230 --> 00:46:34.090
+dispatched in a first-come,
+first-served fashion
+
+00:46:34.090 --> 00:46:35.600
+between the run loops.
+
+00:46:35.610 --> 00:46:38.390
+The events will not be
+duplicated across all run loops.
+
+00:46:38.480 --> 00:46:42.000
+Just whoever gets to it
+first will process the event.
+
+00:46:42.190 --> 00:46:46.160
+And again, multiple run loops,
+multiple threads, protecting the stream
+
+00:46:46.160 --> 00:46:47.650
+is your responsibility.
+
+00:46:51.400 --> 00:46:54.500
+Okay, so that's it for the material.
+
+00:46:54.600 --> 00:46:57.830
+I wanted to take a moment
+and do a quick demo.
+
+00:46:58.060 --> 00:47:03.320
+I will warn you up front,
+this is probably the most boring demo
+
+00:47:03.320 --> 00:47:06.490
+you're going to see at all of WWDC.
+
+00:47:06.490 --> 00:47:06.500
+It's a simple...
+
+00:47:07.600 --> 00:47:12.290
+It is a simple echo server,
+and it's on the Jaguar CDs.
+
+00:47:12.390 --> 00:47:15.700
+If you go to developer
+examples networking,
+
+00:47:15.700 --> 00:47:17.130
+you'll find an echo server there.
+
+00:47:19.810 --> 00:47:22.160
+What I want to do is walk you
+through the code in that example.
+
+00:47:22.160 --> 00:47:28.910
+Now, if I wanted to write an echo server
+in absolutely the most compact
+
+00:47:28.910 --> 00:47:33.230
+fashion using CFSocket and CFStream,
+it would be somewhere
+
+00:47:33.230 --> 00:47:35.110
+between 50 to 100 lines.
+
+00:47:35.120 --> 00:47:37.580
+And I thought long and hard
+about doing that rather than
+
+00:47:37.580 --> 00:47:38.870
+showing you the sample code.
+
+00:47:38.880 --> 00:47:42.090
+In the end,
+I decided showing you the sample
+
+00:47:42.160 --> 00:47:45.570
+code was going to be more useful
+because then you can go back to that
+
+00:47:45.570 --> 00:47:47.200
+sample code and look at it yourself.
+
+00:47:48.480 --> 00:47:52.820
+And also, you know, brevity is not really
+the strong point here.
+
+00:47:52.820 --> 00:47:56.070
+I could probably write an
+echo server using native
+
+00:47:56.290 --> 00:47:59.840
+Berkeley sockets in about 100,
+150 lines,
+
+00:47:59.900 --> 00:48:01.670
+so you're not seeing a huge win there.
+
+00:48:01.680 --> 00:48:04.600
+But the structure of this
+example will show you,
+
+00:48:04.600 --> 00:48:07.960
+I think, a fair deal about how to use
+streams with the run loop.
+
+00:48:08.000 --> 00:48:10.780
+So here's the echo server.
+
+00:48:12.820 --> 00:48:14.360
+There are three basic source files.
+
+00:48:14.530 --> 00:48:17.200
+There's main, which we'll look at first.
+
+00:48:17.260 --> 00:48:20.120
+And then there's a server file
+that deals with the server,
+
+00:48:20.150 --> 00:48:21.700
+sort of the server object.
+
+00:48:21.700 --> 00:48:22.840
+And it's quite reusable.
+
+00:48:22.840 --> 00:48:27.290
+You could take it out,
+use it in your own code.
+
+00:48:27.480 --> 00:48:29.500
+That's in server.c.
+
+00:48:29.530 --> 00:48:31.260
+And then there's an echo context.
+
+00:48:31.420 --> 00:48:35.380
+It's what's actually doing the work
+of monitoring the accepted sockets,
+
+00:48:35.650 --> 00:48:40.360
+reading the bytes off,
+and then echoing them back out.
+
+00:48:40.360 --> 00:48:42.880
+So let's start with main.c.
+
+00:48:44.420 --> 00:48:47.120
+In main,
+what I do is I create the server.
+
+00:48:47.120 --> 00:48:51.850
+That represents the listen socket that's
+waiting for connections from clients.
+
+00:48:52.370 --> 00:48:55.950
+Then I connect it, saying, "OK,
+start listening now.
+
+00:48:56.100 --> 00:49:00.720
+Start waiting for connections."
+Assuming it connects successfully,
+
+00:49:00.890 --> 00:49:05.060
+I just run the run loop, sit back,
+wait for the callbacks.
+
+00:49:05.060 --> 00:49:09.970
+The server object does the work
+of setting up the listen socket,
+
+00:49:09.970 --> 00:49:15.370
+waiting for the connections to come in,
+automatically getting the new
+
+00:49:15.370 --> 00:49:19.820
+socket connected to the client,
+and passing it back to this
+
+00:49:19.820 --> 00:49:22.250
+callback accept connection.
+
+00:49:23.410 --> 00:49:26.960
+Accept connection then.
+
+00:49:27.050 --> 00:49:27.720
+It's right up here.
+
+00:49:30.580 --> 00:49:33.600
+What it's going to do is look
+and see if it's got a new client
+
+00:49:33.760 --> 00:49:36.770
+socket or if an error has occurred.
+
+00:49:37.500 --> 00:49:41.890
+Assuming it's a new client socket,
+all it's going to do is go and create
+
+00:49:41.890 --> 00:49:47.560
+the echo context to manage that socket,
+and then tell the echo context
+
+00:49:47.610 --> 00:49:49.490
+to go ahead and do its work.
+
+00:49:49.590 --> 00:49:52.990
+Listening on the socket,
+when it gets data,
+
+00:49:53.050 --> 00:49:58.990
+all it does is copy that data right
+out and return it to the client.
+
+00:49:58.990 --> 00:50:00.980
+Let's look at the server.
+
+00:50:02.160 --> 00:50:07.120
+Okay, so there's a lot more code here,
+like I said, that is really necessary.
+
+00:50:07.310 --> 00:50:10.870
+It's there primarily to provide
+you with an example of how
+
+00:50:10.940 --> 00:50:17.630
+to manage custom callbacks,
+how to manage the whole structure.
+
+00:50:17.640 --> 00:50:22.220
+What I'm going to do here is
+highlight those two functions,
+
+00:50:22.220 --> 00:50:26.060
+the create function,
+which creates the server,
+
+00:50:26.060 --> 00:50:27.890
+and then the connect function,
+which starts the listening on the socket.
+
+00:50:30.500 --> 00:50:33.770
+First chunk of code is here,
+where I set up the
+
+00:50:33.770 --> 00:50:35.830
+context for the socket.
+
+00:50:35.970 --> 00:50:39.030
+I'm going to set, use the,
+the server object,
+
+00:50:39.030 --> 00:50:44.410
+the server pointer as the
+info pointer for my socket.
+
+00:50:44.710 --> 00:50:47.660
+Now that's not a CF type,
+so I'm going to need to
+
+00:50:47.780 --> 00:50:49.640
+create custom callbacks.
+
+00:50:49.640 --> 00:50:52.200
+And here they are listed out here.
+
+00:50:52.210 --> 00:50:54.100
+Retain, release, and copy description.
+
+00:50:54.100 --> 00:50:57.620
+They're custom functions in this file,
+take a look at them
+
+00:50:57.620 --> 00:51:00.890
+when you get a chance,
+that do the work of managing
+
+00:51:00.890 --> 00:51:05.800
+reference counting and
+describing the underlying object.
+
+00:51:05.800 --> 00:51:07.630
+Create the server.
+
+00:51:09.720 --> 00:51:13.820
+Assuming all goes well,
+I set the info pointer to be
+
+00:51:13.820 --> 00:51:18.470
+the newly created server object,
+and then I go and create
+
+00:51:18.500 --> 00:51:21.780
+the listen socket,
+the listen CF socket
+
+00:51:21.780 --> 00:51:23.740
+that I'm going to use.
+
+00:51:23.740 --> 00:51:29.090
+So here I'm saying I want
+a typical TCP socket.
+
+00:51:29.500 --> 00:51:34.360
+I guess actually this is the part that
+describes it as a typical TCP socket.
+
+00:51:34.360 --> 00:51:38.500
+It's a listen socket,
+so I'm interested in the accept callback.
+
+00:51:38.500 --> 00:51:44.920
+Tell me when new clients have connected
+and I have accepted the new connection.
+
+00:51:45.810 --> 00:51:50.040
+There's my callback function,
+and then I pass in the context.
+
+00:51:53.000 --> 00:51:54.880
+Okay, so far so good.
+
+00:51:54.880 --> 00:51:59.280
+Now that socket is still
+dormant until I give it the
+
+00:51:59.330 --> 00:52:01.800
+address that it's to listen on.
+
+00:52:01.830 --> 00:52:06.180
+I do that down here in Server Connect.
+
+00:52:11.760 --> 00:52:15.910
+What I do is I create a struct
+sock adder in to describe the
+
+00:52:15.940 --> 00:52:19.820
+address the socket should bind to.
+
+00:52:22.140 --> 00:52:26.400
+The port number actually
+came from... Right,
+
+00:52:26.590 --> 00:52:30.700
+so the port number actually
+came in from main.c.
+
+00:52:30.700 --> 00:52:34.190
+It was passed in by
+the creation function.
+
+00:52:35.340 --> 00:52:38.250
+Before I connect the socket,
+I'm going to grab its run
+
+00:52:38.340 --> 00:52:40.240
+loop source and schedule it.
+
+00:52:40.280 --> 00:52:41.140
+So there's the run loop.
+
+00:52:41.140 --> 00:52:43.170
+I get the run loop source.
+
+00:52:43.470 --> 00:52:45.400
+I add the source to a run loop.
+
+00:52:45.430 --> 00:52:49.840
+Here I'm adding it to the current
+run loop in the common modes.
+
+00:52:49.840 --> 00:52:52.730
+The run loop is now
+holding on to that source,
+
+00:52:52.730 --> 00:52:54.080
+so I don't need to.
+
+00:52:55.090 --> 00:52:57.000
+Now I set up the socket address.
+
+00:52:57.000 --> 00:52:59.140
+There I'm setting the port.
+
+00:52:59.200 --> 00:53:03.500
+And here I'm using in-add or any,
+meaning I don't care what
+
+00:53:03.600 --> 00:53:05.880
+IP address you listen on.
+
+00:53:06.000 --> 00:53:10.150
+As long as the IP address is one
+of the addresses for this host,
+
+00:53:10.150 --> 00:53:12.590
+I will listen on it.
+
+00:53:13.230 --> 00:53:18.600
+Once that's done, I need to create a
+CFData around that address.
+
+00:53:21.400 --> 00:53:23.760
+And then it's ready to
+pass off to CFSocket.
+
+00:53:23.760 --> 00:53:27.200
+CFSocket set address,
+I pass the CFSocket,
+
+00:53:27.200 --> 00:53:29.130
+and I pass the CFData I created.
+
+00:53:31.690 --> 00:53:34.700
+This is what actually
+starts the socket listening.
+
+00:53:34.850 --> 00:53:39.430
+Once I've made this call,
+an underlying Berkeley socket has been
+
+00:53:39.430 --> 00:53:44.390
+instantiated and is actively sitting
+there listening for connections.
+
+00:53:45.610 --> 00:53:48.720
+So once again,
+I'm now ready to just sit back and wait.
+
+00:53:48.750 --> 00:53:53.040
+I'm waiting for the callback to arrive,
+telling me that some
+
+00:53:53.090 --> 00:53:55.660
+client has connected.
+
+00:53:55.660 --> 00:53:59.190
+So that callback is here.
+
+00:54:02.190 --> 00:54:02.940
+Really simple.
+
+00:54:02.940 --> 00:54:05.100
+We only registered for
+one type of callback,
+
+00:54:05.100 --> 00:54:09.900
+so we're only going to get one type
+of callback and accept callback.
+
+00:54:10.290 --> 00:54:12.230
+Grab the data that we were handed.
+
+00:54:12.390 --> 00:54:16.200
+Here I'm checking to
+see if that data is -1.
+
+00:54:16.200 --> 00:54:20.260
+-1 would mean that an error has occurred,
+otherwise it's the socket
+
+00:54:20.260 --> 00:54:22.160
+for the new connection.
+
+00:54:22.620 --> 00:54:24.810
+And now I'm going to call my callback.
+
+00:54:24.980 --> 00:54:28.660
+This is the callback that was
+passed in from main.c that
+
+00:54:28.770 --> 00:54:32.190
+accepts client connection,
+I believe.
+
+00:54:32.590 --> 00:54:36.070
+To tell my client,
+there's a new connection here
+
+00:54:36.070 --> 00:54:38.360
+that needs to be dealt with.
+
+00:54:38.360 --> 00:54:40.620
+So back to main.c.
+
+00:54:42.460 --> 00:54:47.220
+We've got a new connection,
+create the echo context, and open it.
+
+00:54:47.220 --> 00:54:50.070
+So let's take a look at the echo context.
+
+00:54:51.290 --> 00:54:53.070
+Here's the structure.
+
+00:54:53.260 --> 00:54:56.090
+There's not a lot here,
+but I want to call out these
+
+00:54:56.090 --> 00:54:57.830
+three run loop sources.
+
+00:54:58.050 --> 00:54:59.400
+I've got a timer.
+
+00:54:59.450 --> 00:55:01.370
+This is how I'm going
+to time out the stream.
+
+00:55:01.450 --> 00:55:07.450
+If after a certain amount
+of time has elapsed,
+
+00:55:07.450 --> 00:55:07.450
+if there hasn't been any traffic,
+I'm going to kill the socket.
+
+00:55:07.770 --> 00:55:12.800
+A read stream and a write stream
+for managing the socket itself.
+
+00:55:12.800 --> 00:55:17.780
+Then the mutable data is just my
+buffer where I'm going to hold bytes
+
+00:55:17.870 --> 00:55:23.260
+while I'm transferring them from the
+incoming side of the socket before
+
+00:55:23.260 --> 00:55:26.470
+writing them out to the outgoing side.
+
+00:55:26.550 --> 00:55:27.800
+Echo context create.
+
+00:55:27.800 --> 00:55:30.930
+Here we're creating
+that new echo context.
+
+00:55:34.450 --> 00:55:35.720
+I'm not going to go over this.
+
+00:55:35.750 --> 00:55:39.000
+This is all much the same,
+just allocating the memory
+
+00:55:39.000 --> 00:55:41.040
+and getting it ready for use.
+
+00:55:41.040 --> 00:55:42.860
+Here's the interesting part.
+
+00:55:42.910 --> 00:55:45.940
+Given a native socket,
+create both a read stream
+
+00:55:45.940 --> 00:55:47.830
+and a write stream.
+
+00:55:49.520 --> 00:55:53.120
+Once I've gotten those streams,
+I'm going to set a property on it.
+
+00:55:53.360 --> 00:55:57.440
+Here I'm asking that the stream go
+ahead and dispose of the native socket.
+
+00:55:57.570 --> 00:56:01.180
+Go ahead and close the
+underlying Berkeley socket when
+
+00:56:01.180 --> 00:56:03.990
+the stream itself is destroyed.
+
+00:56:06.330 --> 00:56:07.030
+And then I'm done.
+
+00:56:07.210 --> 00:56:12.800
+I just return and wait for my
+client for main.c to call open.
+
+00:56:16.370 --> 00:56:18.690
+So there's Open.
+
+00:56:18.720 --> 00:56:22.420
+Open starts the work of listening
+on the read stream and copying the
+
+00:56:22.420 --> 00:56:24.900
+bytes across to the write stream.
+
+00:56:24.900 --> 00:56:29.610
+Looks pretty similar to the
+connect call in the server.
+
+00:56:29.860 --> 00:56:33.380
+Grab the run loop.
+
+00:56:33.390 --> 00:56:34.840
+Here I'm using the current run loop.
+
+00:56:34.840 --> 00:56:35.680
+Set up my context.
+
+00:56:37.530 --> 00:56:44.690
+Set client on the streams.
+
+00:56:44.690 --> 00:56:44.690
+So I'm asking for the read events.
+
+00:56:44.690 --> 00:56:44.690
+I'll show you those in a moment.
+
+00:56:45.030 --> 00:56:48.880
+When one of those events occurs,
+call read stream callback.
+
+00:56:48.960 --> 00:56:50.360
+Here's my context.
+
+00:56:50.430 --> 00:56:52.890
+Same thing for the write stream.
+
+00:56:57.920 --> 00:57:00.810
+Now both of the streams
+have their clients set,
+
+00:57:00.870 --> 00:57:02.640
+so I'm ready to schedule.
+
+00:57:02.640 --> 00:57:06.210
+Schedule it on the current
+run loop in the common modes.
+
+00:57:06.820 --> 00:57:10.920
+Clients been set,
+streams have been scheduled,
+
+00:57:11.120 --> 00:57:12.900
+time to open the stream,
+so I do that here.
+
+00:57:14.700 --> 00:57:15.810
+Okay, so far so good.
+
+00:57:15.900 --> 00:57:18.340
+Now it's time to set up a run loop timer.
+
+00:57:18.340 --> 00:57:22.920
+This is going to be,
+this is what's going to allow
+
+00:57:22.980 --> 00:57:27.050
+me to time out those streams.
+
+00:57:29.440 --> 00:57:35.640
+So I'm asking for a timer that's going
+to fire once in k timeouts in seconds.
+
+00:57:35.660 --> 00:57:37.580
+When that happens,
+I want the timer callback to
+
+00:57:37.710 --> 00:57:41.000
+be called past the context.
+
+00:57:41.000 --> 00:57:44.780
+Once I've created that timer,
+I need to add it to the run loop.
+
+00:57:45.800 --> 00:57:50.300
+All right, so now we wait for these
+callbacks to come in.
+
+00:57:50.310 --> 00:57:52.600
+I have all three of them here
+at the bottom of the file.
+
+00:57:52.800 --> 00:57:56.150
+There's a read stream callback,
+a write stream callback,
+
+00:57:56.220 --> 00:57:57.520
+and a timer callback.
+
+00:57:57.710 --> 00:58:00.530
+I'm not going to go over
+each of them in detail.
+
+00:58:00.580 --> 00:58:03.840
+I just want to show you
+that they each dispatch,
+
+00:58:03.860 --> 00:58:09.160
+depending on what event comes in,
+they dispatch to a different function.
+
+00:58:09.160 --> 00:58:12.640
+I'm going to go over the
+two most interesting ones:
+
+00:58:12.640 --> 00:58:13.440
+has bytes available on the read stream.
+
+00:58:15.800 --> 00:58:28.700
+[Transcript missing]
+
+00:58:30.500 --> 00:58:32.940
+All I'm going to do
+is read the bytes off.
+
+00:58:32.960 --> 00:58:37.200
+Traffic happened on the socket,
+so I want to reset my timer.
+
+00:58:37.220 --> 00:58:39.070
+I do that here.
+
+00:58:39.970 --> 00:58:43.950
+Assuming I got some bytes,
+I append them to that mutable
+
+00:58:43.990 --> 00:58:45.910
+data I'm using as a buffer.
+
+00:58:46.300 --> 00:58:49.100
+And if the write stream
+is available right now,
+
+00:58:49.170 --> 00:58:50.900
+I go ahead and copy them out.
+
+00:58:50.940 --> 00:58:55.300
+And I do that by triggering exactly
+the same function as the callback,
+
+00:58:55.300 --> 00:58:58.700
+the write stream's
+callback would trigger.
+
+00:58:58.900 --> 00:59:01.010
+So let's look at that one.
+
+00:59:04.450 --> 00:59:12.390
+All it's going to do,
+get the byte pointer
+
+00:59:12.390 --> 00:59:12.390
+from inside the CFData,
+
+00:59:13.730 --> 00:59:16.740
+Again, reset the timer because
+traffic has happened.
+
+00:59:16.740 --> 00:59:20.090
+Something interesting has
+happened on the socket.
+
+00:59:20.770 --> 00:59:21.560
+and then write it out.
+
+00:59:21.610 --> 00:59:27.100
+Now, I said this was exactly the
+same as the sample on the CD.
+
+00:59:27.100 --> 00:59:28.710
+That's not quite true.
+
+00:59:28.710 --> 00:59:32.680
+The sample on the CD is designed
+for use with CFNet services,
+
+00:59:32.720 --> 00:59:37.260
+so it goes through the extra work of
+choosing an arbitrary port on the system,
+
+00:59:37.260 --> 00:59:41.940
+registering itself so that clients
+can discover the Echo server,
+
+00:59:41.940 --> 00:59:46.710
+and then the client, of course,
+uses CFNet services to discover
+
+00:59:46.800 --> 00:59:48.440
+the server and connect with it.
+
+00:59:48.530 --> 00:59:51.450
+But I do not want to go
+through all of that here,
+
+00:59:51.450 --> 00:59:54.760
+so I added a single printf to
+this program to print out the
+
+00:59:54.760 --> 00:59:56.610
+port number that was chosen.
+
+00:59:56.610 --> 00:59:58.120
+I'm going to run this now.
+
+01:00:03.100 --> 01:00:09.560
+So it's listening on the
+local host on port 1059.
+
+01:00:10.250 --> 01:00:14.290
+Just to prove that,
+I'm going to go to terminal now.
+
+01:00:14.290 --> 01:00:17.300
+And I'm just going to
+telnet to that port.
+
+01:00:18.900 --> 01:00:21.970
+Alright,
+so now I've connected to the server,
+
+01:00:21.970 --> 01:00:26.660
+and hopefully, while I type,
+it will echo.
+
+01:00:26.660 --> 01:00:31.720
+Look, it worked.
+
+01:00:31.740 --> 01:00:36.170
+Like I said, most boring demo you're
+going to see at all of WWDC.
+
+01:00:44.100 --> 01:00:46.100
+Okay, so that's it for the demo.
+
+01:00:46.100 --> 01:00:47.690
+Now I'm just going to have
+some closing comments,
+
+01:00:47.760 --> 01:00:50.740
+and then we're going to move on into Q&A.
+
+01:00:50.740 --> 01:00:52.960
+For more information,
+I do encourage you to look at
+
+01:00:52.960 --> 01:00:58.000
+the examples on the Jaguar CD in
+Developer Examples Networking.
+
+01:00:58.050 --> 01:01:00.930
+There's also a DTS-hosted list,
+MacNetworkProg.
+
+01:01:01.130 --> 01:01:02.360
+I watch that list.
+
+01:01:02.360 --> 01:01:04.890
+Doug Davidson also watches that list.
+
+01:01:04.890 --> 01:01:07.940
+You're more than welcome to
+send any questions there,
+
+01:01:07.940 --> 01:01:09.840
+and we'll answer them if we can.
+
+01:01:09.970 --> 01:01:13.250
+I also encourage you to get
+the notes from session 805,
+
+01:01:13.250 --> 01:01:15.410
+which occurred yesterday evening.
+
+01:01:15.410 --> 01:01:19.440
+We were talking about CFNetwork and
+HTTP streams in particular at that time.

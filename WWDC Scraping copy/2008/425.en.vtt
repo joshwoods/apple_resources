@@ -1,0 +1,3689 @@
+WEBVTT
+
+00:00:26.020 --> 00:00:27.060
+Good afternoon, everyone.
+
+00:00:27.060 --> 00:00:30.400
+Welcome to session 425,
+Performance in Document-Centric
+
+00:00:30.530 --> 00:00:31.920
+Cocoa Applications.
+
+00:00:31.950 --> 00:00:32.960
+My name is Mark Piccirelli.
+
+00:00:32.960 --> 00:00:35.660
+I'm an engineer in the
+Cocoa Frameworks group.
+
+00:00:35.860 --> 00:00:39.620
+Today I'm going to talk about how to make
+NS document-based applications faster.
+
+00:00:39.870 --> 00:00:42.880
+I'm going to talk about what we're
+doing to Cocoa in Snow Leopard,
+
+00:00:42.880 --> 00:00:46.270
+and I'm going to talk about what you
+can do to your applications to respond
+
+00:00:46.270 --> 00:00:48.270
+and to take advantage of what we're
+
+00:00:48.590 --> 00:00:51.490
+The four big topics I'm going to
+cover are concurrent document opening,
+
+00:00:51.500 --> 00:00:54.440
+having more than one document open
+at once using multiple threads.
+
+00:00:54.500 --> 00:00:58.800
+NSURL is the one true representation
+of file locations and the
+
+00:00:58.800 --> 00:01:00.380
+performance implications of that.
+
+00:01:00.500 --> 00:01:04.500
+NSFileWrapper improvements
+and how to use them.
+
+00:01:04.670 --> 00:01:07.050
+And I'm going to finish up
+with something that applies
+
+00:01:07.050 --> 00:01:10.440
+to every kind of application,
+but it's particularly easy to adopt
+
+00:01:10.470 --> 00:01:12.500
+in NSDocument-based applications.
+
+00:01:12.500 --> 00:01:15.280
+Sudden termination,
+so your application doesn't
+
+00:01:15.330 --> 00:01:17.040
+slow down system shutdown.
+
+00:01:17.650 --> 00:01:20.400
+First off, concurrent document opening.
+
+00:01:20.440 --> 00:01:23.560
+As you might have heard in some of the
+sessions that have already taken place,
+
+00:01:23.600 --> 00:01:26.010
+we're making a big effort to
+take advantage of multiple
+
+00:01:26.010 --> 00:01:27.020
+cores in Snow Leopard.
+
+00:01:27.020 --> 00:01:31.880
+And document opening is a pretty
+obvious candidate for this because
+
+00:01:31.940 --> 00:01:36.930
+this is something big and blocky and
+to have it happen on each document
+
+00:01:36.930 --> 00:01:40.140
+being open gets its own core basically.
+
+00:01:40.140 --> 00:01:42.750
+It's pretty easy to accomplish this.
+
+00:01:42.750 --> 00:01:43.840
+It's pretty easy to accomplish.
+
+00:01:44.780 --> 00:01:48.180
+And the results,
+the first one is responsiveness.
+
+00:01:48.180 --> 00:01:51.460
+Why block the UI if a document
+takes a long time while you're
+
+00:01:51.460 --> 00:01:52.640
+trying to do other stuff?
+
+00:01:52.700 --> 00:01:54.020
+And also the total time.
+
+00:01:54.020 --> 00:01:56.500
+When you're opening up a
+big batch of documents,
+
+00:01:56.500 --> 00:02:00.000
+if you can spread out the work,
+the user will end up waiting less.
+
+00:02:02.400 --> 00:02:05.750
+So the first bit of new API I'm
+talking about today is a new
+
+00:02:05.790 --> 00:02:10.170
+class method on NSDocument called
+Can Concurrently Read Documents of Type?
+
+00:02:10.180 --> 00:02:13.340
+And the default
+implementation returns no,
+
+00:02:13.340 --> 00:02:17.800
+but you can override it in your
+NSDocument subclasses to return yes.
+
+00:02:17.920 --> 00:02:22.060
+And we pass in the type name,
+so if you have implementation
+
+00:02:22.140 --> 00:02:26.300
+limitations that prevent you from taking
+advantage of this in some corner cases,
+
+00:02:26.300 --> 00:02:29.780
+you can still take advantage of it
+in the cases that really matter.
+
+00:02:30.230 --> 00:02:35.520
+So we let you know what the NSDocument is
+going to be asked to do if it says yes.
+
+00:02:35.600 --> 00:02:38.170
+And when you turn this on,
+your document reading
+
+00:02:38.170 --> 00:02:39.750
+code must be thread-safe.
+
+00:02:39.900 --> 00:02:42.840
+So if you have shared caches
+or something like that that are
+
+00:02:42.840 --> 00:02:46.760
+accessed by multiple NSDocuments,
+you have to make sure that's thread-safe.
+
+00:02:46.890 --> 00:02:49.280
+Though that's not that common, really.
+
+00:02:49.280 --> 00:02:53.800
+I think we're discovering that
+opening a document is mostly a pretty
+
+00:02:54.240 --> 00:02:58.250
+self-contained blob of objects that
+gets created during that process.
+
+00:03:01.200 --> 00:03:04.040
+So what happens when you
+return yes from that method?
+
+00:03:04.040 --> 00:03:07.560
+Well, NSDocumentController,
+which is what's in charge of
+
+00:03:07.560 --> 00:03:13.530
+controlling the opening of documents,
+creates multiple NSOperations and puts
+
+00:03:13.530 --> 00:03:16.520
+them in a concurrent NSOperation queue.
+
+00:03:16.530 --> 00:03:20.400
+Each one of these operations will
+execute on a non-main thread.
+
+00:03:20.670 --> 00:03:23.540
+And which thread,
+you're not supposed to care.
+
+00:03:23.540 --> 00:03:26.000
+All you know is that
+it's not the main thread.
+
+00:03:26.220 --> 00:03:31.490
+So NSOperation takes care of this
+management of threads for you.
+
+00:03:32.040 --> 00:03:34.400
+And what ends up being done
+by the concurrent operations
+
+00:03:34.400 --> 00:03:35.500
+that we're talking about?
+
+00:03:35.700 --> 00:03:40.110
+Well, it starts off with
+NSDocumentController sending itself
+
+00:03:40.210 --> 00:03:44.760
+MakeDocumentWithContentsOfUrl of type,
+and that allocates an NSDocument
+
+00:03:44.760 --> 00:03:48.180
+instance and sends it in it with
+contents of URL of type error.
+
+00:03:48.180 --> 00:03:51.030
+And typically that boils
+down to an indication of
+
+00:03:51.170 --> 00:03:52.880
+read from URL of type error.
+
+00:03:52.900 --> 00:03:56.710
+So the document is
+allocated and initialized,
+
+00:03:56.800 --> 00:04:01.290
+which implies reading in
+a concurrent NS operation.
+
+00:04:02.890 --> 00:04:05.180
+So what's still done on the
+main thread in this scenario?
+
+00:04:05.180 --> 00:04:07.740
+We don't try to do absolutely
+everything on these background threads.
+
+00:04:07.740 --> 00:04:10.040
+I'm sorry, background operations.
+
+00:04:10.040 --> 00:04:11.920
+You're not supposed to care
+about the threads so much.
+
+00:04:11.960 --> 00:04:16.900
+But what's still done on the main thread
+is after documents have been read,
+
+00:04:16.920 --> 00:04:20.150
+that's when NSDocument gets sent
+make window controllers to build up
+
+00:04:20.150 --> 00:04:22.160
+its user interface and show windows.
+
+00:04:22.240 --> 00:04:24.520
+We still do that on the main thread.
+
+00:04:24.760 --> 00:04:27.700
+And that's okay because document
+reading is the part that we
+
+00:04:27.700 --> 00:04:29.390
+really want to make concurrent.
+
+00:04:29.410 --> 00:04:30.550
+It's the unbounded part.
+
+00:04:30.630 --> 00:04:33.970
+If the document is very long,
+that can take a long time.
+
+00:04:34.030 --> 00:04:37.070
+Setting up the UI is pretty
+much a constant operation,
+
+00:04:37.080 --> 00:04:37.920
+typically.
+
+00:04:37.920 --> 00:04:41.240
+And also we're doing that way because
+window ordering has to be deterministic.
+
+00:04:41.240 --> 00:04:44.340
+We have to do some stuff to make
+sure that windows don't pop up in
+
+00:04:44.340 --> 00:04:49.240
+random order because some documents
+open up faster than others.
+
+00:04:49.240 --> 00:04:51.400
+And we're still exploring it.
+
+00:04:51.400 --> 00:04:54.260
+Maybe someday we'll do more
+in the concurrent operations
+
+00:04:54.310 --> 00:04:56.920
+to get more performance.
+
+00:04:57.020 --> 00:04:59.570
+So today, let me show you a demo.
+
+00:05:02.760 --> 00:05:07.880
+of concurrent document
+opening and text edit.
+
+00:05:07.910 --> 00:05:13.500
+So I have a version of text edit
+that we've enabled this switch on,
+
+00:05:13.500 --> 00:05:16.580
+concurrently opening documents.
+
+00:05:17.320 --> 00:05:24.530
+And we just added a simple file menu
+here to control what it's doing.
+
+00:05:25.300 --> 00:05:28.010
+I'll just pick a big blob
+of text edit documents.
+
+00:05:28.060 --> 00:05:30.800
+And this is the non-concurrent case.
+
+00:05:31.040 --> 00:05:31.900
+and we'll open them up.
+
+00:05:31.900 --> 00:05:35.900
+And it's pretty quick, but wait,
+it's not done.
+
+00:05:35.900 --> 00:05:37.900
+The spinning pizza of death.
+
+00:05:37.900 --> 00:05:39.780
+It was all blocked up for a minute there.
+
+00:05:39.950 --> 00:05:41.900
+So that's not really that good.
+
+00:05:41.900 --> 00:05:43.900
+We can do better than that.
+
+00:05:43.900 --> 00:05:46.890
+So close all those.
+
+00:05:47.100 --> 00:05:49.940
+and just turn on this little switch.
+
+00:05:50.000 --> 00:05:53.140
+And again, that just controls what our
+subclass-- our NSDocument
+
+00:05:53.150 --> 00:05:58.180
+subclasses can concurrently read
+documents of types Override does.
+
+00:05:58.220 --> 00:06:00.630
+And open up the same batch.
+
+00:06:00.800 --> 00:06:20.000
+[Transcript missing]
+
+00:06:26.540 --> 00:06:29.670
+So opening documents concurrently
+is a pretty easy performance
+
+00:06:29.670 --> 00:06:31.000
+win most of the time.
+
+00:06:31.100 --> 00:06:32.490
+So I want you to check this out.
+
+00:06:32.620 --> 00:06:34.540
+There are other ways to
+speed up document opening,
+
+00:06:34.540 --> 00:06:37.520
+by the way, including the concept
+of incremental reading,
+
+00:06:37.530 --> 00:06:41.610
+which Doug Davidson presented
+just an hour and a half ago in
+
+00:06:41.610 --> 00:06:44.480
+Polishing Your Cocoa Applications.
+
+00:06:45.590 --> 00:06:47.520
+So next thing to talk
+about is NSURLs everywhere.
+
+00:06:47.520 --> 00:06:49.660
+This is something we
+introduced in Cocoa What's New,
+
+00:06:49.660 --> 00:06:52.340
+and there was a file system
+efficiency session yesterday
+
+00:06:52.340 --> 00:06:54.240
+where this was discussed.
+
+00:06:54.360 --> 00:06:55.520
+But let's discuss it some more.
+
+00:06:55.520 --> 00:06:59.340
+Our goal is that we're trying
+to eliminate needless I.O.
+
+00:06:59.560 --> 00:07:00.810
+in Snow Leopard.
+
+00:07:00.820 --> 00:07:05.360
+And we have to admit Cocoa has some
+room for improvement in this area.
+
+00:07:05.360 --> 00:07:08.060
+So things like redundant
+lookup of file attributes,
+
+00:07:08.060 --> 00:07:11.660
+and especially the killer is
+conversion of paths to FSRefs and back.
+
+00:07:11.780 --> 00:07:15.120
+If you saw Chris Lin talking
+yesterday in his session,
+
+00:07:15.120 --> 00:07:18.560
+you know, he had some measurements of
+opening something in preview.
+
+00:07:18.560 --> 00:07:23.760
+And it was like 10 conversions of paths
+to FSRefs and four from FSRefs to paths,
+
+00:07:23.760 --> 00:07:26.240
+or maybe it was the other way around.
+
+00:07:26.240 --> 00:07:29.360
+But it was the same path and the
+same FSRef over and over again.
+
+00:07:29.360 --> 00:07:31.730
+So we want to deal with that issue.
+
+00:07:31.740 --> 00:07:35.640
+And some of you might be wondering,
+you know, if you're old Carbon hands
+
+00:07:35.940 --> 00:07:38.760
+and you know that,
+you know, things like FSRefs aren't
+
+00:07:38.760 --> 00:07:41.560
+really exposed in the Cocoa API,
+you're wondering, Cocoa uses this?
+
+00:07:41.780 --> 00:07:43.520
+And we do.
+
+00:07:43.520 --> 00:07:46.280
+You're not supposed to notice this,
+but we use it for,
+
+00:07:46.300 --> 00:07:50.000
+except the effects of it,
+we use it for NS document file tracking.
+
+00:07:50.000 --> 00:07:52.220
+So when the user moves or
+renames a document and then
+
+00:07:52.450 --> 00:07:55.520
+switches back to the application,
+we update the window title and
+
+00:07:55.650 --> 00:07:57.240
+the icon and stuff like that.
+
+00:07:57.300 --> 00:08:01.860
+And also we use it to take
+advantage of the functionality
+
+00:08:01.860 --> 00:08:06.520
+that are in frameworks below us,
+like core services.
+
+00:08:10.780 --> 00:08:15.340
+And what we're ending up doing in
+Snow Leopard is using NSURLs everywhere.
+
+00:08:15.340 --> 00:08:18.140
+So no more paths, no more FSRFs.
+
+00:08:18.140 --> 00:08:21.780
+NSURL is the one type that
+we use for locating files.
+
+00:08:21.780 --> 00:08:24.460
+And this is just a continuation
+of a direction that we've been
+
+00:08:24.460 --> 00:08:26.020
+taking for a very long time now.
+
+00:08:26.020 --> 00:08:28.290
+We've always been moving toward NSURLs.
+
+00:08:28.380 --> 00:08:31.420
+Our APIs, you know,
+the lower level stuff like attributed
+
+00:08:31.420 --> 00:08:34.000
+string and data and dictionary,
+and even higher level
+
+00:08:34.150 --> 00:08:36.970
+stuff like path control,
+have been dealing in
+
+00:08:36.970 --> 00:08:38.940
+NSURLs for a while now.
+
+00:08:38.940 --> 00:08:41.530
+Even in classes that
+only handle file URLs.
+
+00:08:41.540 --> 00:08:44.470
+Even when, you know,
+we're not taking advantage of the
+
+00:08:44.550 --> 00:08:47.860
+fact that a URL can point to stuff
+that's out on the web somewhere,
+
+00:08:47.960 --> 00:08:51.050
+it's still, you know, the good,
+simple type to use.
+
+00:08:52.230 --> 00:08:55.880
+And especially NSDocument
+and Document Controller,
+
+00:08:55.880 --> 00:08:58.320
+we started using it in Tiger when
+we published a bunch of stuff.
+
+00:08:58.340 --> 00:09:01.370
+We've used a bunch of new
+methods and deprecated a bunch
+
+00:09:01.490 --> 00:09:03.370
+of old path-taking methods.
+
+00:09:06.360 --> 00:09:10.030
+So now that we're standardizing on NSURL,
+we can do new things that
+
+00:09:10.030 --> 00:09:14.000
+solve old performance problems
+like attribute caching.
+
+00:09:14.000 --> 00:09:17.580
+Here's a little AppKit secret for you.
+
+00:09:17.640 --> 00:09:21.640
+AppKit, for a couple of releases now,
+has internally been doing a bunch
+
+00:09:21.640 --> 00:09:24.960
+of caching of attributes of files,
+things like getting their names and
+
+00:09:24.960 --> 00:09:27.440
+their icons and their modification
+dates and stuff like that.
+
+00:09:27.500 --> 00:09:31.480
+So that horror show that
+Chris Lynn showed you yesterday with just
+
+00:09:31.480 --> 00:09:33.550
+tons of FS users would open a document.
+
+00:09:33.560 --> 00:09:36.030
+That's after optimizing this stuff.
+
+00:09:36.300 --> 00:09:39.270
+And, you know,
+putting performance tricks into AppKit.
+
+00:09:39.490 --> 00:09:43.820
+So, but where this falls short
+is that it's internal.
+
+00:09:43.820 --> 00:09:46.530
+And, you know,
+we don't even use it pervasively
+
+00:09:46.550 --> 00:09:48.060
+in our own frameworks.
+
+00:09:48.140 --> 00:09:49.900
+And the worst part is
+it's not open to use.
+
+00:09:49.900 --> 00:09:53.240
+So, you know,
+when your code is pinging at a file,
+
+00:09:53.240 --> 00:09:55.700
+it can't, you know,
+get the values that are already
+
+00:09:55.700 --> 00:09:56.820
+in some cache somewhere.
+
+00:09:59.510 --> 00:10:03.040
+So what we're doing new in Snow Leopard
+is we're adding a bunch of new
+
+00:10:03.040 --> 00:10:07.230
+API to NSURL for getting and setting
+what we call resource values.
+
+00:10:07.280 --> 00:10:11.200
+URLs locate resources,
+and resource values are the values
+
+00:10:11.200 --> 00:10:13.980
+of the attributes of those resources.
+
+00:10:14.240 --> 00:10:18.680
+So a couple of the methods look
+like getResourceValueForKeyError,
+
+00:10:18.710 --> 00:10:22.860
+or a batched version of that,
+resourceValuesForKeysError.
+
+00:10:22.860 --> 00:10:26.210
+And of course, there are setters, too.
+
+00:10:27.090 --> 00:10:29.160
+There's a big list of
+keys that are supported.
+
+00:10:29.160 --> 00:10:34.380
+You can look at them in the public header
+on your WWDC seed for Snow Leopard.
+
+00:10:34.380 --> 00:10:36.620
+It's in Foundation NSURL.
+
+00:10:36.780 --> 00:10:40.560
+Some of these are pretty primitive
+things like getting the name,
+
+00:10:40.560 --> 00:10:45.630
+but some of them have more logic there,
+like getting the localized name,
+
+00:10:45.630 --> 00:10:49.750
+which takes into account file
+system localization that we do,
+
+00:10:49.850 --> 00:10:53.920
+file name localization that we do,
+and also whether or not the file name
+
+00:10:53.920 --> 00:10:56.050
+extension is hidden and stuff like that.
+
+00:10:58.000 --> 00:11:00.240
+There's even a key for
+getting the type identifier,
+
+00:11:00.240 --> 00:11:01.720
+the uniform type identifier.
+
+00:11:01.720 --> 00:11:03.980
+That's something that's computed.
+
+00:11:03.980 --> 00:11:06.840
+That's not actually
+stored in any file system.
+
+00:11:06.840 --> 00:11:08.460
+There are about 40 of these keys.
+
+00:11:08.540 --> 00:11:10.780
+I'm just showing you four
+of them here on this slide.
+
+00:11:10.780 --> 00:11:12.500
+Have a look at that.
+
+00:11:13.450 --> 00:11:16.130
+What I want you to know while you're
+writing your own code is that if
+
+00:11:16.210 --> 00:11:19.050
+you go straight to the Darwin APIs,
+you're missing out on this
+
+00:11:19.050 --> 00:11:21.090
+NSURL level caching that we're doing.
+
+00:11:21.100 --> 00:11:26.130
+We want to funnel everything through
+NSURL for getting at this kind of stuff.
+
+00:11:26.480 --> 00:11:27.450
+You should, too.
+
+00:11:27.450 --> 00:11:30.700
+We'll all be using the same cache
+and reducing the amount of I.O.
+
+00:11:30.700 --> 00:11:34.740
+and hitting the disk or hitting the
+network server or whatever that happens.
+
+00:11:37.510 --> 00:11:47.120
+So this is all discussed in very
+great detail yesterday in session 375,
+
+00:11:47.120 --> 00:11:47.120
+Using File System APIs Efficiently.
+
+00:11:48.900 --> 00:11:52.540
+So we're standardizing on NSURL,
+totally standardizing
+
+00:11:52.540 --> 00:11:55.530
+and adding features,
+and as a result,
+
+00:11:55.530 --> 00:12:00.640
+we can focus and make more
+use of NSURL now in Cocoa.
+
+00:12:00.830 --> 00:12:05.630
+So NSDocument and DocumentController
+have been using it since Tiger when we
+
+00:12:05.750 --> 00:12:08.470
+deprecated a bunch of path-based APIs.
+
+00:12:08.480 --> 00:12:11.660
+Very nice bit of foresight on our part.
+
+00:12:11.660 --> 00:12:12.800
+I'm glad we made that choice.
+
+00:12:12.800 --> 00:12:15.070
+Otherwise, we'd have a bunch of
+stuff to redo right now.
+
+00:12:16.250 --> 00:12:20.070
+But that deprecation of
+those old path-based APIs,
+
+00:12:20.210 --> 00:12:23.250
+which not only were path-based,
+but had not very good error handling,
+
+00:12:23.260 --> 00:12:25.580
+they didn't deal in the
+NSError mechanism that we added,
+
+00:12:25.580 --> 00:12:28.340
+those have been deprecated
+for a while now.
+
+00:12:28.340 --> 00:12:30.130
+So if you haven't
+updated your application,
+
+00:12:30.130 --> 00:12:32.610
+now is probably a pretty good time.
+
+00:12:32.620 --> 00:12:37.460
+And also, we're adding NSURL-based API to
+things like NSBundle and NSFileManager
+
+00:12:37.940 --> 00:12:41.740
+and NSFileWrapper that I'll
+spend some time talking about.
+
+00:12:41.990 --> 00:12:45.990
+And we have plans to do this to
+more classes by the time we ship.
+
+00:12:48.760 --> 00:12:51.900
+So what this means,
+if you've written Cocoa apps and you
+
+00:12:51.980 --> 00:12:54.940
+found yourself for some reason or
+other having to go to the lower level
+
+00:12:55.110 --> 00:12:58.500
+core services API because you had
+to do something that required FSRefs,
+
+00:12:58.500 --> 00:13:00.900
+you're not going to
+have to do that anymore.
+
+00:13:00.900 --> 00:13:03.270
+So FSRefs can go away now.
+
+00:13:03.300 --> 00:13:06.280
+And good,
+because the cost of conversion between
+
+00:13:06.280 --> 00:13:08.990
+them and paths was a performance problem.
+
+00:13:09.000 --> 00:13:11.140
+And just a conceptual problem.
+
+00:13:11.320 --> 00:13:14.420
+You know, you're doing Cocoa programming
+and you find that there's
+
+00:13:14.420 --> 00:13:18.740
+something that's supported by
+Mac OS X and it's not in Cocoa.
+
+00:13:18.740 --> 00:13:21.520
+You've got to read a whole other set
+of documentation and stuff like that.
+
+00:13:21.680 --> 00:13:24.530
+And then you have to write code that
+converts between these different types.
+
+00:13:24.600 --> 00:13:26.960
+This is the impedance
+mismatch that we talk about.
+
+00:13:27.050 --> 00:13:28.670
+So that's going to go away.
+
+00:13:30.460 --> 00:13:32.300
+Some of you might be
+wondering about aliases.
+
+00:13:32.370 --> 00:13:35.510
+If you think about FSRefs,
+you very often also think about aliases,
+
+00:13:35.640 --> 00:13:39.440
+which in a sense are the persistent
+representation of FSRefs with a
+
+00:13:39.440 --> 00:13:43.480
+lot of policy and stuff built in.
+
+00:13:43.480 --> 00:13:46.980
+Another little AppKit secret is that we
+have been going out of our way to resolve
+
+00:13:46.980 --> 00:13:49.580
+them at all the right times in AppKit.
+
+00:13:49.670 --> 00:13:52.760
+So like when you pick an
+alias file in the open panel,
+
+00:13:52.760 --> 00:13:56.810
+we resolve it before we
+return it from the public
+
+00:13:56.820 --> 00:14:01.730
+NS Open Panel API that gives you a path,
+or a URL now.
+
+00:14:01.890 --> 00:14:04.490
+But if you wanted to do more with that,
+you had specific needs,
+
+00:14:04.490 --> 00:14:07.950
+you wanted to take advantage
+of the features of aliases,
+
+00:14:07.950 --> 00:14:10.540
+which have always been very useful,
+you've had to go to core
+
+00:14:10.540 --> 00:14:12.260
+services to do more with them.
+
+00:14:12.330 --> 00:14:14.760
+And that was sort of a drag.
+
+00:14:14.980 --> 00:14:18.900
+But now NSURL has support for a
+replacement for that called bookmarks,
+
+00:14:18.960 --> 00:14:22.820
+which have a bunch of new features
+and are easier to work with.
+
+00:14:22.930 --> 00:14:27.010
+So that was also-- we've
+also discussed in yesterday's
+
+00:14:27.090 --> 00:14:30.040
+Using File System APIs Efficiently
+session.
+
+00:14:30.080 --> 00:14:33.980
+And I highly recommend your
+having gone to that session.
+
+00:14:34.000 --> 00:14:35.780
+It was pretty good.
+
+00:14:35.900 --> 00:14:40.310
+But it'll be up on iTunes
+U also for after the show.
+
+00:14:41.090 --> 00:14:45.560
+So I tell you that FSRFs are going away,
+and for old Carbon hands or people who
+
+00:14:45.560 --> 00:14:48.460
+had to dig into them just in Cocoa apps,
+you might protest,
+
+00:14:48.570 --> 00:14:51.360
+but FSRFs were good for some things,
+and they were good for some things.
+
+00:14:51.380 --> 00:14:55.250
+NSURLs as a replacement for it.
+
+00:14:55.330 --> 00:15:00.360
+NSURLs for files are just fancy paths,
+the path with file colon
+
+00:15:00.360 --> 00:15:05.180
+slash slash and local host,
+I think, at the front of it.
+
+00:15:05.180 --> 00:15:08.720
+And FSRFs did something
+big that paths can't.
+
+00:15:08.800 --> 00:15:12.370
+They can point to the same file even
+when the user moves or renames it.
+
+00:15:12.440 --> 00:15:14.700
+And that's pretty useful, like I said.
+
+00:15:14.700 --> 00:15:19.030
+And this document takes advantage of this
+to do good user interface for the user.
+
+00:15:21.740 --> 00:15:25.250
+So the answer to that is yes,
+that was a good functionality,
+
+00:15:25.250 --> 00:15:28.310
+and we are preserving that
+by putting it into NSURL.
+
+00:15:28.320 --> 00:15:30.250
+There's going to be a
+new kind of file URL.
+
+00:15:30.260 --> 00:15:32.360
+It still uses the file colon scheme.
+
+00:15:32.360 --> 00:15:37.120
+And the paths that you see in
+these URLs start with file,
+
+00:15:37.120 --> 00:15:39.440
+and the rest of it is just mumbo jumbo.
+
+00:15:39.440 --> 00:15:42.370
+Chris put it on a slide yesterday,
+and you will see these
+
+00:15:42.370 --> 00:15:45.020
+while you're debugging,
+but you're not supposed
+
+00:15:45.020 --> 00:15:48.440
+to pick these apart or,
+God forbid, try and build one by hand.
+
+00:15:48.440 --> 00:15:50.300
+We have API to do that.
+
+00:15:51.200 --> 00:15:55.700
+And we call them file reference
+URLs in contrast with the file
+
+00:15:55.700 --> 00:15:58.700
+path URLs that we've all been
+working with all this time.
+
+00:16:00.630 --> 00:16:03.960
+Both kinds work in all the same places.
+
+00:16:04.060 --> 00:16:09.560
+IsFileURL returns yes for both,
+and the path method works for both.
+
+00:16:09.560 --> 00:16:15.770
+And you can convert between them using
+the file reference URL and file path URL.
+
+00:16:15.780 --> 00:16:20.100
+These are messages that you send to
+an NSURL to get one of the right kind.
+
+00:16:20.100 --> 00:16:21.590
+But most of the time,
+you don't care which
+
+00:16:21.590 --> 00:16:22.670
+kind you're working with.
+
+00:16:22.740 --> 00:16:25.830
+Everywhere that takes an NSURL and
+an NSFileWrapper and an NSFileManager
+
+00:16:25.830 --> 00:16:28.990
+and an NSDocument and all the rest,
+they're supposed to just
+
+00:16:28.990 --> 00:16:30.450
+deal with both kinds.
+
+00:16:30.500 --> 00:16:31.980
+kinds.
+
+00:16:34.800 --> 00:16:37.500
+This new kind of URL for
+FSRF-like behavior,
+
+00:16:37.500 --> 00:16:42.500
+NSDocument is going to switch over to
+that for its document tracking behavior.
+
+00:16:42.500 --> 00:16:44.960
+And NSFileWrapper, too.
+
+00:16:44.960 --> 00:16:46.300
+I'm going to be talking
+about NSFileWrapper.
+
+00:16:46.300 --> 00:16:52.930
+One of the features we're adding in
+Snow Leopard is giving you explicit
+
+00:16:52.930 --> 00:16:58.910
+control over whether or not files and
+file packages are read in lazily or not.
+
+00:16:59.030 --> 00:17:00.950
+Because, you know,
+usually that's a good thing to do.
+
+00:17:02.180 --> 00:17:06.000
+And if you don't use,
+if you just use the default options,
+
+00:17:06.000 --> 00:17:08.000
+you don't use NSFileWrapper
+reading immediate,
+
+00:17:08.000 --> 00:17:10.220
+that's what you get,
+lazy reading of the file.
+
+00:17:10.220 --> 00:17:13.210
+So if you create a file wrapper from
+a great big directory hierarchy,
+
+00:17:13.220 --> 00:17:16.220
+it's not going to, you know,
+open thousands of files all at once.
+
+00:17:16.320 --> 00:17:18.790
+It's going to wait until you
+actually try and walk that.
+
+00:17:18.930 --> 00:17:22.910
+So, and the way we make that work,
+you know, conceptually NSFileWrapper
+
+00:17:22.950 --> 00:17:26.330
+doesn't even have a URL property
+and we're not adding one.
+
+00:17:26.340 --> 00:17:29.260
+But internally,
+it's using file reference URLs,
+
+00:17:29.360 --> 00:17:30.830
+just like NSDocument.
+
+00:17:31.640 --> 00:17:35.820
+So that it can find the file
+when it's time to read it lazily,
+
+00:17:35.830 --> 00:17:38.600
+even if it's been moved or renamed.
+
+00:17:41.360 --> 00:17:43.660
+So, fast saving with NS File Wrapper.
+
+00:17:43.660 --> 00:17:51.840
+Some documents are just large,
+and we have to deal with this performance
+
+00:17:51.840 --> 00:17:55.180
+issue that's caused by things like,
+you know, images, sounds,
+
+00:17:55.180 --> 00:17:57.920
+and movies and so on that
+are attached to documents.
+
+00:17:57.940 --> 00:17:59.520
+And, you know,
+just attachments in general,
+
+00:17:59.520 --> 00:18:03.310
+like TextEdit's rich text
+support lets you drag anything
+
+00:18:03.310 --> 00:18:07.090
+into a TextEdit document,
+and it's supposed to just hold on to it.
+
+00:18:07.260 --> 00:18:09.870
+And the way we want you to take
+care of this is the same way that
+
+00:18:09.870 --> 00:18:12.200
+we take care of it in general,
+is using file packages,
+
+00:18:12.200 --> 00:18:16.510
+which are just directories
+that the user sees as files.
+
+00:18:16.520 --> 00:18:18.970
+You know,
+things like the finder and the open
+
+00:18:18.970 --> 00:18:22.800
+and save panels are smart enough to
+sense that this is a file package,
+
+00:18:22.800 --> 00:18:25.980
+even though it's really a directory,
+and just show it to the user as a file.
+
+00:18:25.980 --> 00:18:30.500
+And NSURL, by the way,
+has a resource value key for finding
+
+00:18:30.500 --> 00:18:36.440
+whether or not a file is a package and
+should be presented as a single thing.
+
+00:18:37.720 --> 00:18:41.550
+The benefit of this big illusion
+of directories that are presented
+
+00:18:41.550 --> 00:18:44.100
+as files is that inside you
+get to use the file system,
+
+00:18:44.100 --> 00:18:48.460
+which is a pretty sophisticated
+bit of functionality.
+
+00:18:48.600 --> 00:18:53.530
+So instead of having to flatten
+everything out when you save files,
+
+00:18:53.530 --> 00:18:56.600
+you just create little individual files.
+
+00:18:56.720 --> 00:19:00.980
+So for example, Sketch,
+we're updating Sketch to use
+
+00:19:01.270 --> 00:19:03.940
+file packages as its file format.
+
+00:19:03.940 --> 00:19:08.380
+And, you know, in the finder,
+there's this, in the contextual menu,
+
+00:19:08.380 --> 00:19:10.140
+there's this thing,
+show package contents,
+
+00:19:10.140 --> 00:19:12.240
+which I hope is just for developers.
+
+00:19:12.240 --> 00:19:15.340
+I hope users never have a
+reason to poke around in here.
+
+00:19:15.340 --> 00:19:18.550
+But if you do this to
+a Sketch document now,
+
+00:19:18.550 --> 00:19:22.860
+in Snow Leopard, you'll see inside
+there's a property list,
+
+00:19:22.860 --> 00:19:25.200
+contents.plist,
+that has the properties of all
+
+00:19:25.200 --> 00:19:28.300
+the graphics in the document,
+and a page setup file that's a
+
+00:19:28.300 --> 00:19:32.060
+flattening of the NS print info
+associated with the document.
+
+00:19:32.060 --> 00:19:37.980
+And then a whole bunch of other files,
+like text.rtf, text2.rtf, text3.rtf.
+
+00:19:38.050 --> 00:19:40.650
+You know,
+each one of those is one of the text
+
+00:19:40.650 --> 00:19:43.100
+objects in this particular document.
+
+00:19:43.100 --> 00:19:45.320
+And we have some great stuff here.
+
+00:19:45.340 --> 00:19:47.840
+And what I'm thinking to do about this,
+it's easy to get carried away with this.
+
+00:19:47.910 --> 00:19:50.380
+You know, if each one of these little
+RTF things is so tiny,
+
+00:19:50.380 --> 00:19:52.510
+it's not,
+maybe not worth making a separate file if
+
+00:19:52.580 --> 00:19:54.320
+it can just be put in the property list.
+
+00:19:54.500 --> 00:19:57.250
+So there's probably a cutoff somewhere
+there that we have to figure out.
+
+00:19:57.310 --> 00:20:00.650
+But in this example,
+what's most important is that
+
+00:20:00.650 --> 00:20:03.010
+there's a great big image there.
+
+00:20:03.010 --> 00:20:05.410
+It's a TIFF file, and it's pretty big.
+
+00:20:05.410 --> 00:20:06.620
+It's a quarter of a gigabyte.
+
+00:20:06.620 --> 00:20:11.510
+So what we want to figure out is
+how we can avoid rewriting that,
+
+00:20:11.750 --> 00:20:15.320
+you know, 246 megabytes every time.
+
+00:20:15.340 --> 00:20:17.490
+we save the document.
+
+00:20:19.840 --> 00:20:22.800
+So, and you know,
+many applications use file packages.
+
+00:20:22.830 --> 00:20:27.960
+TextEdit uses it for rich text
+documents with attachments,
+
+00:20:27.960 --> 00:20:30.790
+and Xcode uses it for
+the Xcode project files.
+
+00:20:30.870 --> 00:20:33.480
+And Keynote Pages and Numbers use them.
+
+00:20:33.480 --> 00:20:35.520
+This is just their standard file format.
+
+00:20:35.610 --> 00:20:40.080
+And a bunch of other applications,
+like some of the Omni applications.
+
+00:20:41.100 --> 00:20:42.190
+So that's file packages.
+
+00:20:42.260 --> 00:20:45.670
+That's what I want to make sure
+that you know to use when you have
+
+00:20:45.780 --> 00:20:48.760
+great big documents with lots of
+attachments and stuff like that.
+
+00:20:48.820 --> 00:20:52.620
+And furthermore,
+if you're using file packages,
+
+00:20:52.620 --> 00:20:57.310
+I want you to use the
+NSFileWrapper class to get at them.
+
+00:20:57.320 --> 00:21:00.640
+It's been in AppKit since
+before Mac OS 10.0.
+
+00:21:00.640 --> 00:21:02.900
+It's kind of a well-kept secret.
+
+00:21:02.900 --> 00:21:05.640
+Sometimes when I talk to people about it,
+they're like, oh, I had no idea that you
+
+00:21:05.640 --> 00:21:06.420
+had that in the AppKit.
+
+00:21:06.680 --> 00:21:09.160
+And I have no idea why people miss it.
+
+00:21:09.160 --> 00:21:11.720
+It's not that long of a list of classes,
+and it's kind of in the middle.
+
+00:21:11.720 --> 00:21:16.280
+So, for example,
+our text system uses it in public API.
+
+00:21:16.280 --> 00:21:20.320
+So you can ask an NSTextStorage for,
+you know,
+
+00:21:20.420 --> 00:21:24.940
+the NSFileWrapper that represents,
+actually attributed string,
+
+00:21:24.940 --> 00:21:27.910
+for the file wrapper
+that represents the RTFD,
+
+00:21:28.000 --> 00:21:29.900
+the RTF with attachments.
+
+00:21:31.420 --> 00:21:34.070
+What's cool, by the way,
+one of the things about this file
+
+00:21:34.070 --> 00:21:35.790
+wrapper is that it composes well.
+
+00:21:35.990 --> 00:21:41.300
+By that I mean it's easy to have
+file wrappers that have other
+
+00:21:41.300 --> 00:21:42.600
+file wrappers inside of them.
+
+00:21:42.600 --> 00:21:44.900
+That's its natural way of operating.
+
+00:21:44.900 --> 00:21:48.100
+So when you're building up a file
+package for a document to save,
+
+00:21:48.200 --> 00:21:50.100
+it's pretty easy to ask
+different parts of code,
+
+00:21:50.100 --> 00:21:53.680
+"Give me the file wrapper for that
+stuff and the file wrapper for that
+
+00:21:53.680 --> 00:21:59.200
+stuff," and bundle them up and put
+them in the overarching file wrapper.
+
+00:21:59.550 --> 00:22:02.570
+So it also has a pretty simple API.
+
+00:22:02.960 --> 00:22:06.970
+It's good for,
+as well as accessing file packages,
+
+00:22:07.010 --> 00:22:08.340
+just flat files.
+
+00:22:08.440 --> 00:22:10.460
+So because there's always a
+hierarchy of these things,
+
+00:22:10.460 --> 00:22:13.940
+at some point there's going to be leafs,
+and they're going to be flat files.
+
+00:22:13.940 --> 00:22:18.410
+And to get the data out of one of them,
+you just invoke regular file contents.
+
+00:22:18.700 --> 00:22:23.800
+And you can also get the file
+attributes for a file out of it.
+
+00:22:23.850 --> 00:22:28.290
+And that returns a dictionary of the
+same sort that NS File Manager returns
+
+00:22:28.290 --> 00:22:31.590
+in its APIs that deal in file attributes.
+
+00:22:33.540 --> 00:22:34.700
+And you can get the icon, too.
+
+00:22:34.700 --> 00:22:38.640
+TextEdit uses this when you drag
+attachments into a document.
+
+00:22:38.650 --> 00:22:42.390
+This is where TextEdit is
+getting the icon that shows up.
+
+00:22:42.520 --> 00:22:46.570
+And then also, when there's a hierarchy,
+to get the nested directories,
+
+00:22:46.700 --> 00:22:50.160
+you invoke the file wrappers method,
+and that returns a dictionary
+
+00:22:50.230 --> 00:22:51.820
+that's keyed by a file name.
+
+00:22:53.270 --> 00:22:59.100
+is the class to use to
+access file packages.
+
+00:22:59.100 --> 00:23:01.160
+I want more people to start using it,
+so I want to make sure
+
+00:23:01.160 --> 00:23:01.990
+everybody knows about it.
+
+00:23:02.100 --> 00:23:06.420
+And NSDocument, for instance,
+already has API to take advantage of it.
+
+00:23:06.490 --> 00:23:09.300
+And we're making big improvements
+to it in Snow Leopard.
+
+00:23:09.300 --> 00:23:10.310
+I'll talk about some of them.
+
+00:23:10.740 --> 00:23:14.100
+And going forward,
+NSFileWrapper is a class where
+
+00:23:14.250 --> 00:23:18.420
+we're going to put a lot of our
+knowledge about how to do things
+
+00:23:18.420 --> 00:23:21.960
+efficiently when you're dealing with,
+you know,
+
+00:23:22.300 --> 00:23:27.240
+hierarchies of files that result
+from using this file package scheme.
+
+00:23:30.210 --> 00:23:35.260
+So actually using NSFileWrapper,
+before I talk about that and how
+
+00:23:35.260 --> 00:23:40.350
+you use it to save documents fast,
+let me first say that document
+
+00:23:40.350 --> 00:23:42.350
+writing has to be safe.
+
+00:23:42.360 --> 00:23:47.510
+So the NSDocument method that's sort
+of at the top level of this operation
+
+00:23:48.050 --> 00:23:53.930
+of writing documents is called
+WriteSafelyToURLOfTypeForSaveOperationEr
+
+00:23:54.020 --> 00:23:54.640
+ror.
+
+00:23:54.640 --> 00:23:57.480
+That's so explicit to put
+in a method name like that,
+
+00:23:57.490 --> 00:23:58.970
+so it must be important.
+
+00:23:59.740 --> 00:24:02.620
+And what we mean by safely, by the way,
+is first of all is reliability.
+
+00:24:02.620 --> 00:24:06.920
+So if the user kicks the plug out
+of their computer while something is
+
+00:24:06.960 --> 00:24:11.700
+being saved or the application crashes,
+it happens, the rule is that the user
+
+00:24:11.700 --> 00:24:15.160
+must be left with either the
+old revision of the document,
+
+00:24:15.160 --> 00:24:20.400
+their saving failed, or the new revision,
+it succeeded, no matter what happens.
+
+00:24:20.400 --> 00:24:24.100
+It's not acceptable to leave the user
+with no revision of their document,
+
+00:24:24.160 --> 00:24:27.850
+just destroyed everything,
+and it's also not acceptable to leave
+
+00:24:27.850 --> 00:24:29.480
+the user with a file package that
+has no revision of their document.
+
+00:24:29.500 --> 00:24:29.680
+So that's the rule.
+
+00:24:29.680 --> 00:24:29.680
+So the rule is that the user
+must be left with either the
+
+00:24:29.680 --> 00:24:29.680
+old revision of the document,
+their saving failed, or the new revision,
+
+00:24:29.680 --> 00:24:29.700
+it succeeded, no matter what happens.
+
+00:24:29.700 --> 00:24:32.400
+some stuff from the old document
+and some stuff from the new
+
+00:24:32.400 --> 00:24:35.380
+document all mushed together,
+and that they have to pick
+
+00:24:35.380 --> 00:24:38.420
+apart because their power went
+out while they were saving.
+
+00:24:39.010 --> 00:24:42.160
+So, and the other issue that
+has to be considered,
+
+00:24:42.160 --> 00:24:44.350
+and it's a big deal, is privacy.
+
+00:24:44.410 --> 00:24:48.980
+The document can't contain things
+that the user thinks they've deleted.
+
+00:24:48.980 --> 00:24:52.600
+So, you know,
+if the computer loses power and,
+
+00:24:52.600 --> 00:24:55.990
+you know, the user reboots,
+and they're like, oh, good,
+
+00:24:56.120 --> 00:24:58.630
+it did save my document,
+and they don't open it,
+
+00:24:58.630 --> 00:25:01.930
+and they just email it to somebody,
+and then it turns out that
+
+00:25:01.930 --> 00:25:04.980
+all this salary information
+that they thought they'd,
+
+00:25:05.010 --> 00:25:08.850
+you know, deleted before they, you know,
+emailed it, oh, it looks like it's gone.
+
+00:25:08.930 --> 00:25:10.850
+It looks like it was in
+the document after all,
+
+00:25:10.850 --> 00:25:12.150
+and somebody picks it apart.
+
+00:25:12.150 --> 00:25:13.230
+So, that's a big deal.
+
+00:25:13.230 --> 00:25:17.970
+And by the way, that's why, you know,
+there's this issue that comes up in
+
+00:25:17.970 --> 00:25:22.900
+some AppKit apps about what happens
+with revision control information that
+
+00:25:22.900 --> 00:25:27.740
+different systems like CVS and SVN,
+you know, drop in file packages.
+
+00:25:27.740 --> 00:25:30.080
+So, you know,
+we've talked about this a lot,
+
+00:25:30.080 --> 00:25:33.580
+and we talked about it a little bit
+more yesterday after this question
+
+00:25:33.580 --> 00:25:35.600
+came up in Q&A and Cocoa What's New.
+
+00:25:35.600 --> 00:25:38.770
+And we're pretty sure we've
+decided that we're going to have
+
+00:25:38.770 --> 00:25:38.880
+to do a lot of work on this.
+
+00:25:38.880 --> 00:25:41.280
+We're never going to do
+anything to preserve,
+
+00:25:41.310 --> 00:25:45.700
+you know, these turd files that get
+left in file packages.
+
+00:25:45.700 --> 00:25:47.090
+We're never going to do that by default.
+
+00:25:47.100 --> 00:25:50.830
+So, we might make it easier for
+your application to do it,
+
+00:25:50.930 --> 00:25:54.120
+but it'll definitely be a
+switch that you have to flip.
+
+00:25:54.200 --> 00:25:57.930
+So, because we do not want to
+contribute to this problem at all,
+
+00:25:57.930 --> 00:26:01.810
+and we don't want to set you up,
+you know, trick you into making what
+
+00:26:01.910 --> 00:26:04.210
+very often is a mistake of,
+you know,
+
+00:26:04.340 --> 00:26:07.920
+leading stuff like that that should
+not be preserved in the file package.
+
+00:26:12.020 --> 00:26:15.110
+So I was talking about
+saving documents safely.
+
+00:26:15.120 --> 00:26:19.690
+Going back to how do we do it fast, well,
+we take advantage of the fact
+
+00:26:19.690 --> 00:26:23.720
+that most files in a file package
+don't change between saves.
+
+00:26:23.720 --> 00:26:25.970
+And you know,
+because we're using the file system,
+
+00:26:25.970 --> 00:26:30.030
+we can just basically leave those
+files alone and save stuff around them.
+
+00:26:30.030 --> 00:26:34.740
+But that's not exactly what we
+do because of the privacy issue.
+
+00:26:35.080 --> 00:26:36.850
+So, yeah,
+big attachments shouldn't be written
+
+00:26:36.860 --> 00:26:39.490
+to disk each time the user saves,
+but there's another thing we can do.
+
+00:26:39.520 --> 00:26:41.450
+Just save the changes,
+and this is particularly
+
+00:26:41.450 --> 00:26:42.710
+important for auto-saving.
+
+00:26:42.720 --> 00:26:44.780
+If you've turned on auto-saving
+in your application,
+
+00:26:44.780 --> 00:26:49.810
+and we wish everyone would because
+it's a pretty good feature and
+
+00:26:49.810 --> 00:26:53.410
+it adds reliability to things,
+the speed of saving is particularly
+
+00:26:53.450 --> 00:26:57.800
+important because the user is just
+typing along or dragging graphics around.
+
+00:26:57.800 --> 00:27:01.190
+And when the whole application hangs,
+you know, hangs because it's in
+
+00:27:01.300 --> 00:27:03.590
+the middle of saving,
+that's a pretty bad UI.
+
+00:27:04.420 --> 00:27:06.550
+So, and, you know,
+this is particularly pronounced on
+
+00:27:06.550 --> 00:27:10.060
+things like network file systems where
+there's a lot of latency involved.
+
+00:27:10.080 --> 00:27:12.620
+So, that's where this issue
+really becomes prominent.
+
+00:27:16.570 --> 00:27:19.620
+So we want to improve the situation,
+and we're doing it by
+
+00:27:19.620 --> 00:27:21.490
+improving File Wrapper.
+
+00:27:21.550 --> 00:27:24.160
+And the first thing that we're
+doing is just modernizing
+
+00:27:24.160 --> 00:27:28.530
+NS File Wrapper in Snow Leopard,
+updating it to use NSURLs,
+
+00:27:28.550 --> 00:27:32.010
+because we want to use NSURLs everywhere,
+and also to use NSError,
+
+00:27:32.010 --> 00:27:35.540
+because we want all applications
+to do good error handling and
+
+00:27:35.540 --> 00:27:38.080
+presentation all the time.
+
+00:27:38.080 --> 00:27:42.940
+So its new initializer looks like this,
+in it with URL, options, error.
+
+00:27:43.140 --> 00:27:45.410
+And the options are kind of interesting.
+
+00:27:45.410 --> 00:27:48.020
+You can, you know,
+take control over whether
+
+00:27:48.020 --> 00:27:51.180
+or not it ever maps,
+memory maps files in,
+
+00:27:51.400 --> 00:27:55.930
+and also whether or not it
+reads stuff immediately or lazy.
+
+00:27:55.960 --> 00:27:59.910
+And if you look in the header, appkit,
+nsfilewrapper.h,
+
+00:27:59.920 --> 00:28:05.900
+there's copious comments helping you
+choose which options you want to use.
+
+00:28:07.580 --> 00:28:11.260
+There's also new functionality in
+Snow Leopard for NS File Wrapper
+
+00:28:11.260 --> 00:28:14.540
+for this fast-saving business.
+
+00:28:14.540 --> 00:28:16.810
+Instead of just a method
+that takes a URL and some
+
+00:28:16.810 --> 00:28:20.950
+options and an error to write,
+we have an additional parameter,
+
+00:28:20.950 --> 00:28:22.940
+original contents URL.
+
+00:28:22.940 --> 00:28:26.120
+That allows us to use hard
+links whenever possible.
+
+00:28:26.120 --> 00:28:31.940
+So instead of writing out entire files,
+when you're saving a document and the
+
+00:28:31.940 --> 00:28:36.250
+old revision is still there on disk
+and you're saving a new revision,
+
+00:28:36.250 --> 00:28:41.100
+just create the directory that's the
+file package and populate it with
+
+00:28:41.100 --> 00:28:45.540
+hard links to the unchanged files
+in the old revision and then save
+
+00:28:45.540 --> 00:28:48.370
+changed files around those hard links.
+
+00:28:48.390 --> 00:28:50.440
+And so that's what this
+NS File Wrapper method does if
+
+00:28:50.440 --> 00:28:55.050
+you point it to the old revision
+of a document that you're saving.
+
+00:28:55.380 --> 00:28:59.990
+This really does work on pretty much
+all the file systems that we care about.
+
+00:29:00.080 --> 00:29:04.280
+HFS+ and AFP and NFS.
+
+00:29:04.280 --> 00:29:07.510
+I tried it with the Windows server and
+I think we have some work to do there.
+
+00:29:07.940 --> 00:29:11.550
+But in general it's supposed to work.
+
+00:29:11.620 --> 00:29:15.000
+NTFS supports hard links and
+the network protocols are
+
+00:29:15.180 --> 00:29:17.050
+supposed to support them too.
+
+00:29:17.310 --> 00:29:21.050
+So the way you take advantage of
+this fast saving that NS File Wrapper
+
+00:29:21.120 --> 00:29:24.110
+offers in the context of an
+NS Document-based application is
+
+00:29:24.150 --> 00:29:26.970
+you override the NS Document methods
+that are already there.
+
+00:29:27.000 --> 00:29:28.360
+They've been there since Tiger.
+
+00:29:28.360 --> 00:29:32.640
+Read from File Wrapper of type error
+and File Wrapper of type error.
+
+00:29:32.640 --> 00:29:36.960
+And the one thing that you'll have
+to know to do is to keep the child
+
+00:29:36.960 --> 00:29:41.700
+file wrappers around and keep reusing
+them because they get updated with
+
+00:29:41.880 --> 00:29:46.530
+the information that NS File Wrapper
+needs to do this hard linking trick.
+
+00:29:48.220 --> 00:29:53.380
+So I'll show you what I mean by
+that in the context of Sketch.
+
+00:30:05.030 --> 00:30:11.980
+So in the NSDocument class,
+it has a method named
+
+00:30:11.980 --> 00:30:13.290
+file wrapper of type.
+
+00:30:13.390 --> 00:30:16.880
+This is the one I just
+recommended you override.
+
+00:30:16.900 --> 00:30:19.270
+And what it does--
+
+00:30:19.310 --> 00:30:23.220
+for this particular file format,
+we're calling it Sketch3.
+
+00:30:23.240 --> 00:30:25.280
+Hopefully,
+we'll add a bunch of other features
+
+00:30:25.370 --> 00:30:28.380
+to justify the version number bump.
+
+00:30:28.380 --> 00:30:32.140
+But what it does is this method is
+supposed to return an NSFile wrapper,
+
+00:30:32.370 --> 00:30:38.370
+and what the implementation does,
+excuse me for a minute, please.
+
+00:30:40.600 --> 00:30:49.610
+What this method does is it creates
+a file wrapper and the way it does it
+
+00:30:49.700 --> 00:30:53.600
+is by invoking a class method on an
+SKT graphic because very conveniently
+
+00:30:53.600 --> 00:30:57.820
+this file wrapper business is also
+good for using as a pasteboard format.
+
+00:30:57.820 --> 00:31:00.070
+So we're using this for two purposes.
+
+00:31:00.180 --> 00:31:04.040
+So we put in one place, the common place,
+which is the SKT graphic class itself.
+
+00:31:05.640 --> 00:31:10.900
+So NSDocument creates a file
+wrapper and also we have to save the
+
+00:31:10.900 --> 00:31:14.230
+page setup for a sketch document.
+
+00:31:14.240 --> 00:31:18.760
+So we just archive the NSPrintInfo
+associated with the document and add that
+
+00:31:18.760 --> 00:31:24.460
+to the file wrapper too using the file
+name page setup and then return that.
+
+00:31:24.460 --> 00:31:29.110
+So what it looks like when
+we build that file wrapper,
+
+00:31:30.830 --> 00:31:36.240
+We pass it the array of graphics to use.
+
+00:31:36.240 --> 00:31:38.300
+And when saving a document,
+it's all just all the
+
+00:31:38.300 --> 00:31:39.340
+graphics in the document.
+
+00:31:39.340 --> 00:31:43.800
+We create a file wrapper
+to hold the attachments.
+
+00:31:43.800 --> 00:31:50.960
+And each subclass of SKT graphic will
+add stuff to this if it has attachments.
+
+00:31:52.900 --> 00:31:54.880
+And then we create an
+array of properties,
+
+00:31:54.880 --> 00:31:58.860
+an array of property list
+dictionaries for each graphic.
+
+00:31:58.950 --> 00:32:02.410
+And as we're doing that,
+we let the graphics add stuff
+
+00:32:02.480 --> 00:32:04.980
+to this attachment file wrapper.
+
+00:32:06.300 --> 00:32:10.750
+And then when we're done,
+we serialize the property list
+
+00:32:10.750 --> 00:32:14.900
+and put this in an outer file
+wrapper right next to this
+
+00:32:14.900 --> 00:32:18.240
+attachments directory file wrapper.
+
+00:32:18.920 --> 00:32:21.860
+So that happens here,
+where we put contents.plist.
+
+00:32:21.880 --> 00:32:26.180
+and attachments in the same
+file wrapper and return it.
+
+00:32:27.700 --> 00:32:32.780
+So each SKT graphics subclass
+has an override of a method
+
+00:32:32.840 --> 00:32:35.700
+called persistent properties,
+and if I could put
+
+00:32:35.700 --> 00:32:37.280
+commas and method names,
+I would.
+
+00:32:37.340 --> 00:32:41.100
+Persistent properties, comma,
+adding to attachments.
+
+00:32:43.400 --> 00:32:47.340
+And let's just look at one of them,
+SKT Text.
+
+00:32:47.340 --> 00:32:49.760
+What it's doing is,
+if it's not already holding
+
+00:32:49.760 --> 00:32:52.690
+onto an NSFile wrapper,
+and it should hold onto them in between
+
+00:32:52.710 --> 00:32:55.840
+saves to make this hard link trick work.
+
+00:32:55.840 --> 00:33:01.410
+If it's not already, you know,
+if this IVAR is not already
+
+00:33:01.430 --> 00:33:03.550
+set to something non-nil,
+
+00:33:04.900 --> 00:33:08.500
+It'll create the file wrapper,
+and it decides what type it is.
+
+00:33:08.590 --> 00:33:12.800
+Is it RTFD or is it RTF,
+depending on whether or not this
+
+00:33:12.910 --> 00:33:14.970
+in turn has attachments within it.
+
+00:33:15.060 --> 00:33:19.470
+And then when it creates it,
+it just uses the
+
+00:33:19.470 --> 00:33:23.570
+NS Attributed String API,
+file wrapper from range,
+
+00:33:23.620 --> 00:33:24.900
+and then a bunch of other stuff.
+
+00:33:26.680 --> 00:33:28.510
+Oh, and by the way, let me call this out.
+
+00:33:28.610 --> 00:33:29.830
+This is in very poor taste.
+
+00:33:29.890 --> 00:33:34.900
+This method will return an error,
+and we don't do anything with it.
+
+00:33:34.910 --> 00:33:37.900
+So don't do anything like that.
+
+00:33:38.840 --> 00:33:40.680
+And as a matter of fact,
+if I check this into
+
+00:33:40.750 --> 00:33:43.560
+Snow Leopard sample code,
+I'll probably go back to my office
+
+00:33:43.600 --> 00:33:47.740
+and my 30-inch cinema display will be
+replaced with a 15-inch CRT that hums.
+
+00:33:49.900 --> 00:33:54.970
+We're quite serious about
+error presentations.
+
+00:33:57.770 --> 00:34:01.700
+So yes, and so it builds this, you know,
+this SKT text, for example,
+
+00:34:01.700 --> 00:34:04.380
+builds this property list and returns it.
+
+00:34:04.480 --> 00:34:09.100
+And while it's doing that,
+it adds its attachment to the attachments
+
+00:34:09.100 --> 00:34:11.460
+file wrapper that was passed in.
+
+00:34:11.480 --> 00:34:15.240
+So, and SKT image does this too.
+
+00:34:15.240 --> 00:34:17.880
+It puts the attached
+image into a file wrapper.
+
+00:34:17.880 --> 00:34:20.380
+So let me show you to you running.
+
+00:34:20.380 --> 00:34:24.290
+And first,
+let me show you what it looks like
+
+00:34:24.290 --> 00:34:27.270
+when we're not doing hard links.
+
+00:34:27.700 --> 00:34:32.690
+So let me open this document that has,
+you know, a quarter gigabyte image,
+
+00:34:32.690 --> 00:34:35.310
+not huge, but, you know,
+still pretty big.
+
+00:34:35.340 --> 00:34:39.250
+So saving it,
+there's always this big pause.
+
+00:34:39.280 --> 00:34:41.940
+And there's always this
+spinning pizza death.
+
+00:34:41.960 --> 00:34:46.010
+So, and during auto-saving,
+this is completely unacceptable.
+
+00:34:46.020 --> 00:34:47.290
+So,
+
+00:34:48.230 --> 00:34:52.500
+So how I turn this on,
+so how do I make that delay go away?
+
+00:34:52.500 --> 00:34:55.280
+Well, is by turning on this feature.
+
+00:34:55.280 --> 00:34:58.590
+And this is why you come to
+WWDC is to learn things that
+
+00:34:58.590 --> 00:35:01.460
+aren't even in the release notes.
+
+00:35:01.460 --> 00:35:05.040
+NS Document only uses these--
+right now in the seed-- only uses
+
+00:35:05.040 --> 00:35:08.620
+these new NS File Wrapper methods
+if you set this user default.
+
+00:35:08.620 --> 00:35:12.480
+So let's uncomment out
+the code that does that.
+
+00:35:12.560 --> 00:35:14.940
+And of course, when we ship,
+this is what NS Document will
+
+00:35:14.940 --> 00:35:17.280
+just do by default.
+
+00:35:21.140 --> 00:35:25.100
+So we open the same document.
+
+00:35:25.100 --> 00:35:33.100
+And every time we save,
+it's just instantaneous.
+
+00:35:33.100 --> 00:35:37.090
+Because all it's doing -- yes.
+
+00:35:37.830 --> 00:35:42.920
+Because all it's doing is every time it's
+just creating a new directory and writing
+
+00:35:42.920 --> 00:35:47.170
+some small files in it and the big files,
+it, yes,
+
+00:35:47.170 --> 00:35:49.370
+I moved this purple circle so you
+can see that it really did save.
+
+00:35:49.490 --> 00:35:53.590
+So, and it's for the big files,
+it's just making hard links.
+
+00:35:53.600 --> 00:35:58.190
+So, yep, slides.
+
+00:36:03.010 --> 00:36:05.930
+slides please.
+
+00:36:05.950 --> 00:36:06.720
+So that was that.
+
+00:36:06.830 --> 00:36:11.250
+And by the way, that code I showed you,
+fooling around with the file
+
+00:36:11.250 --> 00:36:13.500
+wrappers and stuff like that,
+that works fine on Leopard.
+
+00:36:13.500 --> 00:36:15.460
+It just gets faster on Snow Leopard.
+
+00:36:15.460 --> 00:36:18.020
+So fast saving with NSFileWrapper.
+
+00:36:18.080 --> 00:36:19.700
+File packages are often the way to go.
+
+00:36:19.700 --> 00:36:22.210
+If you have big documents,
+figure out how you can split your stuff
+
+00:36:22.210 --> 00:36:26.320
+up into multiple files so most of the
+time they just sit there on disk and
+
+00:36:26.320 --> 00:36:28.880
+they get hard linked to and they're
+not rewritten over and over again.
+
+00:36:28.880 --> 00:36:30.230
+That avoids a lot of work.
+
+00:36:31.020 --> 00:36:34.510
+So NSFileWrapper is the
+AppKit class that supports this.
+
+00:36:34.510 --> 00:36:36.740
+And I want to make sure
+everybody knows about it.
+
+00:36:36.740 --> 00:36:39.380
+Tell all your friends because
+for some reason just nobody's
+
+00:36:39.380 --> 00:36:41.060
+ever heard of this class before.
+
+00:36:41.060 --> 00:36:44.110
+Or I think maybe people see it
+and don't realize this is what
+
+00:36:44.110 --> 00:36:47.760
+it's for because the name doesn't
+exactly match NSFile package.
+
+00:36:47.760 --> 00:36:52.190
+So and to let you know about some future
+work that we're doing in this area,
+
+00:36:52.190 --> 00:36:56.210
+one thing I did not talk about is, well,
+what I showed you that little
+
+00:36:56.320 --> 00:37:00.260
+contents.plist file in the
+context of a sketch document.
+
+00:37:01.000 --> 00:37:04.220
+That file getting big would
+be hundreds of kilobytes,
+
+00:37:04.220 --> 00:37:05.900
+which is no big deal at all.
+
+00:37:05.900 --> 00:37:08.840
+But if you're working on
+a core data application,
+
+00:37:08.840 --> 00:37:11.780
+for instance,
+and your contents file is actually
+
+00:37:11.780 --> 00:37:15.420
+a SQLite file that ends up with
+millions of rows in it and gets to
+
+00:37:15.420 --> 00:37:19.580
+be a gigabyte and then there's giant
+attachments stored next to that.
+
+00:37:19.690 --> 00:37:23.050
+And you can't do the hard link
+trick because it's the SQLite
+
+00:37:23.050 --> 00:37:25.080
+file that's actually changing.
+
+00:37:25.080 --> 00:37:28.230
+That is something we're
+definitely investigating,
+
+00:37:28.230 --> 00:37:30.960
+trying to figure out how to make it work.
+
+00:37:31.070 --> 00:37:51.920
+And I think that's something that
+we're going to be working on.
+
+00:37:52.200 --> 00:40:06.300
+[Transcript missing]
+
+00:40:07.110 --> 00:40:12.530
+And what we're doing to fix this
+and let everybody contribute to the
+
+00:40:12.590 --> 00:40:16.200
+fix is in Snow Leopard we're adding
+a way for apps to say when they
+
+00:40:16.370 --> 00:40:19.090
+can and cannot be safely killed.
+
+00:40:19.400 --> 00:41:51.800
+[Transcript missing]
+
+00:41:52.110 --> 00:41:55.560
+So we want you to adopt this,
+this new mechanism.
+
+00:41:55.590 --> 00:41:59.160
+And what you're trying to
+accomplish when you adopt this is,
+
+00:41:59.170 --> 00:42:01.770
+number one, you want to turn on the
+mechanism in your application.
+
+00:42:01.780 --> 00:42:06.950
+And then you want to disable and
+re-enable it as the app runs.
+
+00:42:06.950 --> 00:42:10.410
+So first you turn on sudden termination,
+and it's on for the lifetime
+
+00:42:10.410 --> 00:42:11.360
+of your application.
+
+00:42:11.830 --> 00:42:14.800
+But you disable it during times when,
+if the application were
+
+00:42:14.880 --> 00:42:18.170
+killed at that moment,
+user data would be lost.
+
+00:42:18.220 --> 00:42:20.630
+And by user data,
+we mean pretty much anything
+
+00:42:20.630 --> 00:42:23.500
+the user would notice is gone,
+including, you know,
+
+00:42:23.500 --> 00:42:25.850
+user preferences and stuff like that.
+
+00:42:26.270 --> 00:42:28.640
+So while you're doing this,
+you don't want to disable sudden
+
+00:42:28.680 --> 00:42:32.820
+termination too much because that would
+make your application more likely to
+
+00:42:32.820 --> 00:42:35.080
+not be killable when it really counts.
+
+00:42:35.300 --> 00:42:37.530
+So there's no point in
+adopting the feature,
+
+00:42:37.530 --> 00:42:39.580
+and the first thing you do
+after launching the app is to
+
+00:42:39.580 --> 00:42:41.620
+disable sudden termination.
+
+00:42:41.800 --> 00:42:45.280
+You also don't want to disable
+sudden termination too little because
+
+00:42:45.280 --> 00:42:48.440
+that would make your application
+at risk of losing users' data.
+
+00:42:48.540 --> 00:42:49.740
+So you have to be careful.
+
+00:42:49.820 --> 00:42:53.910
+I'll show you a bunch of
+stuff about how to be careful.
+
+00:42:54.130 --> 00:42:57.740
+and how we can get these
+performance benefits without
+
+00:42:57.740 --> 00:43:00.590
+causing reliability issues.
+
+00:43:00.990 --> 00:43:02.900
+So the first thing to do is
+to just turn on the feature.
+
+00:43:02.900 --> 00:43:04.240
+And we've made it super convenient.
+
+00:43:04.240 --> 00:43:06.280
+You just add an entry to your Info.plist.
+
+00:43:06.280 --> 00:43:11.830
+NS supports sudden termination
+and true or yes or whatever.
+
+00:43:12.220 --> 00:43:15.290
+And this is interesting because
+this is one of those things
+
+00:43:15.390 --> 00:43:18.540
+in the Info.plist that nothing
+outside of your application reads.
+
+00:43:18.540 --> 00:43:21.000
+Like Launch Services doesn't
+look at this.
+
+00:43:21.000 --> 00:43:25.220
+Just NS application,
+while the application is being launched,
+
+00:43:25.220 --> 00:43:28.410
+reads it and enables sudden termination.
+
+00:43:29.700 --> 00:43:35.540
+And the way it does that is by
+sending the very first message to
+
+00:43:35.540 --> 00:43:37.660
+NSProcessInfo about this stuff.
+
+00:43:37.740 --> 00:43:39.700
+It's called enable sudden termination.
+
+00:43:39.700 --> 00:43:44.600
+And that's the only time you'll ever
+be invoking that method by itself.
+
+00:43:45.670 --> 00:43:49.970
+So because usually you'll be invoking
+disable sudden termination on the shared
+
+00:43:50.140 --> 00:43:54.700
+NSProcessInfo instance method and then
+invoking enable sudden termination.
+
+00:43:56.010 --> 00:44:00.520
+And you'll be doing these in
+pairs and invocations increment
+
+00:44:00.520 --> 00:44:02.690
+and decrement a counter.
+
+00:44:02.700 --> 00:44:05.690
+And when the counter is zero,
+the process is killable.
+
+00:44:05.700 --> 00:44:08.060
+And that means anything in
+the operating system outside
+
+00:44:08.060 --> 00:44:09.700
+of the process might kill it.
+
+00:44:10.380 --> 00:44:12.700
+In Snow Leopard,
+that means log in window at log out time,
+
+00:44:12.700 --> 00:44:14.700
+but you're really not
+supposed to make that happen.
+
+00:44:15.450 --> 00:44:18.250
+So you're really not supposed to
+make assumptions about what might
+
+00:44:18.250 --> 00:44:19.900
+be killing your application or when.
+
+00:44:19.900 --> 00:44:21.540
+You said it's clean, it's killable.
+
+00:44:21.550 --> 00:44:23.700
+And you can't complain
+if something kills it.
+
+00:44:24.700 --> 00:44:26.880
+And you typically invoke these in pairs.
+
+00:44:26.990 --> 00:44:31.320
+So it's a lot like reference counting,
+actually, disabling increment something
+
+00:44:31.320 --> 00:44:33.530
+and enabling decrement something.
+
+00:44:35.360 --> 00:44:38.420
+So, and you know, of course,
+we don't want you to have to
+
+00:44:38.420 --> 00:44:41.360
+scatter invocations in these
+methods all over your code.
+
+00:44:41.360 --> 00:44:42.100
+That would be terrible.
+
+00:44:42.100 --> 00:44:48.580
+So Cocoa disables and enables it
+automatically in several places.
+
+00:44:48.590 --> 00:44:52.340
+The first one is the biggest one,
+and this means you don't have to
+
+00:44:52.490 --> 00:44:54.660
+worry about this all over the place.
+
+00:44:54.660 --> 00:44:57.740
+NS Application disables
+sudden termination around
+
+00:44:57.740 --> 00:44:59.520
+invocations of send event.
+
+00:44:59.710 --> 00:45:05.600
+So an NS Application pulls an event
+off the UI queue to handle a mouse
+
+00:45:05.600 --> 00:45:07.330
+move or a key down or whatever.
+
+00:45:07.500 --> 00:45:11.890
+NS Application will disable send
+event around the handling of that.
+
+00:45:12.070 --> 00:45:16.110
+So that means that, you know,
+anything that happens that's
+
+00:45:16.110 --> 00:45:19.220
+not deferred until after,
+you know,
+
+00:45:19.220 --> 00:45:22.430
+the event handling is done is just safe.
+
+00:45:23.020 --> 00:45:27.930
+Most of the time, applications are not
+actually handling events,
+
+00:45:28.020 --> 00:45:28.440
+by the way.
+
+00:45:28.600 --> 00:45:32.340
+Most of the time,
+the application will be clean.
+
+00:45:34.530 --> 00:45:37.660
+We also do this in NSDocument,
+and that's what you're here
+
+00:45:37.660 --> 00:45:39.520
+to hear about is NSDocument.
+
+00:45:39.520 --> 00:45:43.370
+NSDocument disables it
+for all unsaved changes.
+
+00:45:43.490 --> 00:45:48.600
+Unsaved changes are a form of deferred
+work that have to mark the app as
+
+00:45:48.980 --> 00:45:51.610
+dirty until they're actually saved.
+
+00:45:51.670 --> 00:45:55.180
+And for your information
+about the implementation,
+
+00:45:55.180 --> 00:46:00.940
+we do this in UpdateChangeCount,
+which is interesting because if
+
+00:46:01.030 --> 00:46:04.380
+you're overriding UpdateChangeCount
+to defeat it and stuff like that,
+
+00:46:04.400 --> 00:46:09.970
+or adding strange invocations of it,
+you might run into some stuff.
+
+00:46:10.040 --> 00:46:11.940
+So this is a pretty interesting method.
+
+00:46:11.940 --> 00:46:15.740
+It's public, but whenever you're
+overriding it or invoking it,
+
+00:46:15.840 --> 00:46:19.060
+there's virtually always
+something better to do.
+
+00:46:19.060 --> 00:46:21.730
+So I'm writing this up and putting
+it in the release notes that
+
+00:46:21.730 --> 00:46:23.970
+come out with the next seed,
+whenever that is.
+
+00:46:24.050 --> 00:46:28.730
+You just don't need that,
+because mostly NSUndoManager
+
+00:46:28.920 --> 00:46:34.250
+has disable undo registration
+and enable undo registration.
+
+00:46:34.440 --> 00:46:38.060
+And I bet that fixes whatever problem
+you're using UpdateChangeCount to fix.
+
+00:46:42.020 --> 00:46:44.840
+We also disable sudden
+termination in NSUserDefaults.
+
+00:46:44.840 --> 00:46:47.160
+UserDefaults are data too.
+
+00:46:47.330 --> 00:46:52.540
+So when something in your system sends,
+in your application sends set
+
+00:46:52.540 --> 00:46:57.380
+object for key to UserDefaults,
+or you use the equivalent
+
+00:46:57.490 --> 00:47:00.820
+CFPreferences API,
+sudden termination is disabled because
+
+00:47:00.820 --> 00:47:05.210
+it would be bad if the app were killed
+before that stuff was written out.
+
+00:47:05.280 --> 00:47:08.270
+So,
+and when UserDefaults are synchronized,
+
+00:47:08.420 --> 00:47:14.360
+NSUserDefaults will re-enable
+sudden termination after that
+
+00:47:14.360 --> 00:47:16.520
+stuff is written out to disk.
+
+00:47:17.700 --> 00:47:19.180
+And here's a tricky one.
+
+00:47:19.180 --> 00:47:25.270
+So there's a method on NSObject called
+performSelectorWithObjectAfterDelay
+
+00:47:25.280 --> 00:47:29.920
+and a super popular AppKit,
+I guess I'll call it technique.
+
+00:47:29.920 --> 00:47:30.860
+That'll be most polite.
+
+00:47:30.860 --> 00:47:34.280
+When you want to make
+sure that something,
+
+00:47:34.280 --> 00:47:38.470
+some bit of work does not happen
+in the current event loop,
+
+00:47:38.520 --> 00:47:41.370
+you want it to happen
+in the next event loop,
+
+00:47:41.430 --> 00:47:46.030
+it's very popular to invoke this
+method with a delay of zero.
+
+00:47:47.040 --> 00:47:49.280
+And because that's a
+form of deferred work,
+
+00:47:49.280 --> 00:47:52.080
+you know, send event is going to return.
+
+00:47:52.080 --> 00:47:55.010
+We figured, eh, for this case,
+people are always working around
+
+00:47:55.010 --> 00:47:56.410
+something anyway when they use this.
+
+00:47:56.540 --> 00:48:00.390
+For this case, for delay of zero,
+we'll disable sudden termination.
+
+00:48:00.480 --> 00:48:03.260
+And also because the delay is so short,
+right?
+
+00:48:03.260 --> 00:48:08.960
+It's not zero, but it's, you know,
+when the event loop is next gone through.
+
+00:48:08.960 --> 00:48:11.100
+So, but we don't want to get
+carried away with this.
+
+00:48:11.270 --> 00:48:14.140
+You know, if you have, you know,
+something with a delay of 10,
+
+00:48:14.140 --> 00:48:16.380
+we don't know whether or not sudden
+termination should be a good idea.
+
+00:48:16.410 --> 00:48:20.770
+So, we just do this for a delay of zero.
+
+00:48:20.770 --> 00:48:22.540
+So, people don't have to
+update a lot of code.
+
+00:48:22.540 --> 00:48:27.420
+And by the way, not 0.1 seconds or 0.001.
+
+00:48:27.420 --> 00:48:31.730
+You know, those numbers in source code,
+you know, they mean guessing, basically.
+
+00:48:31.840 --> 00:48:33.210
+So, I don't know, a very short time.
+
+00:48:33.210 --> 00:48:35.170
+So,
+we're updating the documentation to let
+
+00:48:35.260 --> 00:48:37.120
+people know what a delay of zero means.
+
+00:48:37.120 --> 00:48:40.490
+Doesn't mean before perform
+selector with object returns.
+
+00:48:40.500 --> 00:48:44.130
+It means right after it
+returns and after you return.
+
+00:48:45.720 --> 00:48:49.380
+And in general,
+you only care about this if not
+
+00:48:49.390 --> 00:48:52.100
+doing the work would lose data.
+
+00:48:52.100 --> 00:48:54.550
+There are a bunch of things where
+you just don't have to worry if
+
+00:48:54.550 --> 00:48:57.730
+deferred work is not done because
+it's stuff like animating or whatever.
+
+00:48:57.740 --> 00:48:59.980
+If you start an animation
+and the user logs out,
+
+00:48:59.980 --> 00:49:02.610
+the animation doesn't get done, you know,
+big deal.
+
+00:49:02.610 --> 00:49:03.560
+They said log out.
+
+00:49:03.560 --> 00:49:04.300
+Do it quick.
+
+00:49:06.700 --> 00:49:09.320
+So that's where Cocoa disables
+sudden termination for you.
+
+00:49:09.320 --> 00:49:10.820
+Where else should it be disabled?
+
+00:49:10.820 --> 00:49:14.300
+The rule is any time important
+work is being deferred.
+
+00:49:14.300 --> 00:49:16.530
+If it's not being deferred,
+if it's done right away
+
+00:49:16.530 --> 00:49:19.070
+before your method,
+which is probably invoked indirectly
+
+00:49:19.070 --> 00:49:22.220
+by NSApplicationSendEvent,
+if it's done before that returns,
+
+00:49:22.220 --> 00:49:26.140
+there's no problem because we disabled
+it around invocations of SendEvent.
+
+00:49:26.140 --> 00:49:30.610
+But if you use a timer or perform
+selector after delay with a
+
+00:49:30.610 --> 00:49:34.640
+delay of longer than zero,
+or you spawn a thread or whatever,
+
+00:49:34.640 --> 00:49:38.020
+or create an operation
+and put into a queue,
+
+00:49:38.020 --> 00:49:41.600
+you will probably have to
+disable sudden termination.
+
+00:49:41.600 --> 00:49:44.160
+So you think, oh my god,
+how am I going to track down all the
+
+00:49:44.160 --> 00:49:46.090
+places in my application where I do that?
+
+00:49:46.120 --> 00:49:51.800
+And as you're upgrading to this,
+the trick is to, well,
+
+00:49:51.800 --> 00:49:56.120
+first write an application that does
+not have big bugs where it throws out,
+
+00:49:56.180 --> 00:49:57.950
+you know,
+throws away data when it's quit.
+
+00:49:58.220 --> 00:50:01.520
+And once you've done that,
+made an application that
+
+00:50:01.520 --> 00:50:05.460
+doesn't have big bugs,
+you'll find that you've scattered
+
+00:50:05.460 --> 00:50:09.810
+some code about your application
+that makes sure that things get done
+
+00:50:09.940 --> 00:50:11.910
+when the application terminates.
+
+00:50:11.920 --> 00:50:14.730
+So does your application
+terminate properly now?
+
+00:50:14.730 --> 00:50:15.160
+Yes?
+
+00:50:15.370 --> 00:50:19.270
+Okay, then we have a few easy places to
+look for termination time code.
+
+00:50:19.270 --> 00:50:21.770
+And that code points
+to the changes to make.
+
+00:50:21.780 --> 00:50:25.350
+That's not where you disable
+and enable sudden termination.
+
+00:50:26.100 --> 00:50:28.560
+For example, you know,
+application will terminate.
+
+00:50:28.600 --> 00:50:31.720
+Don't bother enabling
+sudden termination there.
+
+00:50:31.720 --> 00:50:32.700
+It's too late.
+
+00:50:32.760 --> 00:50:36.820
+So, but let me show you some of
+these places where to look.
+
+00:50:36.900 --> 00:50:39.880
+So, the app delegates,
+application should terminate,
+
+00:50:39.880 --> 00:50:42.830
+and as I just mentioned,
+application will terminate.
+
+00:50:42.890 --> 00:50:47.840
+So if you've written an app that
+works at quitting time today,
+
+00:50:47.840 --> 00:50:52.590
+you'll have code in these
+places to make that reliable.
+
+00:50:52.590 --> 00:50:56.030
+Also, overrides Venice application
+to make it reliable.
+
+00:50:56.100 --> 00:51:26.060
+So,
+let's look at the application terminate.
+
+00:51:26.060 --> 00:51:26.060
+Some people put their stuff there instead
+of the application delegate methods.
+
+00:51:26.060 --> 00:51:26.060
+And when we're doing this to Cocoa Apps,
+we found a case we had to deal with
+
+00:51:26.060 --> 00:51:26.060
+in Calculator where it's quit method,
+it's quit menu item is not actually
+
+00:51:26.060 --> 00:51:26.060
+set up to the terminate action.
+
+00:51:26.060 --> 00:51:26.060
+It's set, you know,
+that everybody else uses.
+
+00:51:26.060 --> 00:51:26.060
+It's set up to like, you know,
+some private terminate method that
+
+00:51:26.060 --> 00:51:26.060
+does a bunch of work and then calls
+in this application terminate.
+
+00:51:26.060 --> 00:51:26.060
+And that bunch of work,
+if you want that to get done,
+
+00:51:26.060 --> 00:51:26.060
+you've got to do it.
+
+00:51:26.060 --> 00:51:27.180
+And that bunch of work,
+if you want that to get done,
+
+00:51:27.180 --> 00:51:29.020
+you're going to have to disable
+sudden termination because that stuff
+
+00:51:29.060 --> 00:51:30.160
+isn't going to be calling anymore.
+
+00:51:31.550 --> 00:51:33.830
+And also, AppKit,
+I don't know if you know this,
+
+00:51:33.830 --> 00:51:36.140
+I didn't know it until
+I started working on this stuff,
+
+00:51:36.250 --> 00:51:40.900
+NSApplicationTerminate closes
+every window on the way down,
+
+00:51:40.900 --> 00:51:44.500
+which is a pretty big part of this
+performance problem I'm talking about,
+
+00:51:44.500 --> 00:51:48.160
+with a lot of deallocating of memory when
+it's all just going to go away anyway.
+
+00:51:48.160 --> 00:51:50.300
+So you should look at some of this stuff.
+
+00:51:50.380 --> 00:51:54.470
+If you override NSWindowClose
+or some of the stuff it calls,
+
+00:51:54.470 --> 00:51:57.880
+like NSViewDeallocation
+and stuff like that,
+
+00:51:57.950 --> 00:52:01.350
+if you're writing stuff to disk
+in your NSViewDeallocation method,
+
+00:52:01.500 --> 00:52:05.560
+you have some work to do
+before you can adopt this.
+
+00:52:05.620 --> 00:52:09.440
+But there are other design issues that
+perhaps you should tackle on the way.
+
+00:52:09.440 --> 00:52:12.960
+And also some of the delegate
+methods for NSWindow,
+
+00:52:12.960 --> 00:52:15.710
+those get called at termination time.
+
+00:52:17.720 --> 00:52:18.670
+And there's some other ones.
+
+00:52:18.670 --> 00:52:25.750
+So things like @exit and this crazy
+thing called the CXA @exit handler.
+
+00:52:25.860 --> 00:52:29.750
+So you can register for when
+your process is being exit,
+
+00:52:29.760 --> 00:52:31.840
+you know, one more callback.
+
+00:52:32.030 --> 00:52:37.750
+And also module finalizers,
+which are these things.
+
+00:52:37.790 --> 00:52:42.870
+You can specify on individual functions
+and also called C destructors.
+
+00:52:42.900 --> 00:52:46.920
+And if you don't know what these are,
+don't learn now because we don't
+
+00:52:46.920 --> 00:52:48.620
+want you to use them anyway.
+
+00:52:52.770 --> 00:52:55.610
+Also, C++ destructors,
+and not all C++ destructors, oh God,
+
+00:52:55.610 --> 00:52:58.350
+just ones for statically
+constructed objects,
+
+00:52:58.370 --> 00:53:01.330
+which we kind of have
+been discouraging anyway,
+
+00:53:01.330 --> 00:53:05.450
+at least the ones that happen, you know,
+cause C++ objects to be created at launch
+
+00:53:05.530 --> 00:53:09.820
+time because that's not lazy enough
+anyway for good launch time performance.
+
+00:53:11.280 --> 00:53:14.250
+And all the same in the
+frameworks you link against.
+
+00:53:14.350 --> 00:53:17.470
+So if a framework is not sudden
+termination safe and your
+
+00:53:17.670 --> 00:53:20.520
+application links against it,
+maybe you're not in such
+
+00:53:20.520 --> 00:53:21.530
+a hurry to adopt it.
+
+00:53:22.580 --> 00:53:24.890
+But in general,
+this is not that rough to make a
+
+00:53:24.890 --> 00:53:28.610
+framework sudden termination safe,
+to just follow all the same rules.
+
+00:53:28.720 --> 00:53:31.080
+And so, of course,
+we're doing that to all the
+
+00:53:31.080 --> 00:53:33.330
+frameworks that are part of Mac OS X.
+
+00:53:34.180 --> 00:53:36.880
+You know, hunting down the add
+exit handlers and go,
+
+00:53:36.880 --> 00:53:40.860
+does that really have to be done when the
+process exits or could it be done earlier
+
+00:53:40.860 --> 00:53:42.780
+or does it have to be done at all?
+
+00:53:43.640 --> 00:53:46.640
+Or if it really does have to be done,
+maybe it should disable
+
+00:53:46.640 --> 00:53:49.700
+sudden termination so that it
+does happen at quitting time,
+
+00:53:49.700 --> 00:53:51.630
+except we don't want people to do it.
+
+00:53:51.660 --> 00:53:54.200
+to do that because that'll
+just disable the feature.
+
+00:53:54.200 --> 00:53:58.660
+So we are taking care of
+this in Apple's framework.
+
+00:53:58.660 --> 00:54:00.460
+And we've been working on this for,
+you know, a few months,
+
+00:54:00.460 --> 00:54:03.140
+and so far it hasn't been that rough.
+
+00:54:03.140 --> 00:54:05.160
+So...
+
+00:54:05.510 --> 00:54:08.940
+What you're going to be doing when
+you find all these places that
+
+00:54:09.040 --> 00:54:12.760
+deal with things that happen at
+application termination time is,
+
+00:54:12.760 --> 00:54:15.170
+in general, you're going to make your
+app a little less lazy.
+
+00:54:15.180 --> 00:54:20.420
+Laziness is something that we suggest
+a lot as a performance technique.
+
+00:54:20.420 --> 00:54:24.860
+Don't do work until it has to be done,
+but it can be over-applied.
+
+00:54:24.860 --> 00:54:27.300
+It can just move the performance
+problem to just later in
+
+00:54:27.300 --> 00:54:29.940
+the application's execution,
+like termination time.
+
+00:54:29.940 --> 00:54:33.100
+Here are some examples of making
+your app a little less lazy.
+
+00:54:33.100 --> 00:54:36.230
+And this is something that
+TextEdit actually did.
+
+00:54:36.240 --> 00:54:40.640
+It didn't put values that the user
+changed in the preferences pane
+
+00:54:40.640 --> 00:54:42.910
+into user defaults right away.
+
+00:54:42.940 --> 00:54:47.650
+We are going to change it to put
+values in user defaults right away.
+
+00:54:47.660 --> 00:54:51.360
+Right now it puts them in
+IVARs in a controller class.
+
+00:54:51.400 --> 00:54:55.340
+But as things are changing user defaults,
+just put the values right into
+
+00:54:55.410 --> 00:54:57.440
+user defaults because it's cheap.
+
+00:54:57.480 --> 00:55:03.020
+And also,
+NSUserDefaults will set a timer.
+
+00:55:03.100 --> 00:55:05.660
+Right now in Snow Leopard
+it's 15 seconds.
+
+00:55:05.720 --> 00:55:08.850
+And after 15 seconds,
+it will write the values of
+
+00:55:08.850 --> 00:55:11.640
+the user's preferences to disk.
+
+00:55:11.740 --> 00:55:15.120
+And it's a nice little bit of coalescing.
+
+00:55:15.120 --> 00:55:16.500
+A whole bunch of preferences change.
+
+00:55:16.500 --> 00:55:19.560
+And then 15 seconds later
+they get written out to disk.
+
+00:55:19.670 --> 00:55:22.460
+There wasn't a whole lot of redundant
+hitting of the disk and stuff like that.
+
+00:55:22.570 --> 00:55:26.770
+It does the right thing for performance
+as the app is running and also marking
+
+00:55:26.830 --> 00:55:29.020
+it as clean and dirty at the right times.
+
+00:55:30.960 --> 00:55:33.950
+So when you're coalescing
+for performance,
+
+00:55:34.070 --> 00:55:35.880
+for example,
+there's a bunch of stuff that
+
+00:55:35.880 --> 00:55:36.940
+has to be written to disk.
+
+00:55:37.000 --> 00:55:39.940
+Each time the user makes
+a change with the UI,
+
+00:55:39.940 --> 00:55:42.360
+but of course you don't want to
+hit the disk for every keystroke,
+
+00:55:42.420 --> 00:55:44.390
+so you're saving stuff up.
+
+00:55:44.520 --> 00:55:46.700
+Go ahead and do that.
+
+00:55:46.780 --> 00:55:50.750
+Save that up, but don't save it too long.
+
+00:55:50.750 --> 00:55:52.360
+Do it on the order of seconds.
+
+00:55:52.360 --> 00:55:54.880
+That's enough to get the performance
+benefit that really counts.
+
+00:55:55.120 --> 00:55:57.790
+And by the way,
+this coalescing for performance,
+
+00:55:57.790 --> 00:56:00.240
+not hitting the disk
+for every little event,
+
+00:56:00.260 --> 00:56:03.940
+this still counts as deferred work,
+so you have to disable sudden termination
+
+00:56:03.950 --> 00:56:07.800
+when you start coalescing and re-enable
+it when stuff actually ends up on disk.
+
+00:56:07.840 --> 00:56:10.700
+And by the way,
+be as lazy as you want for things that
+
+00:56:10.700 --> 00:56:13.310
+don't need to disable sudden termination.
+
+00:56:13.340 --> 00:56:17.260
+So if you're doing something in the
+background and it's just helping
+
+00:56:17.390 --> 00:56:23.230
+decide what ends up in a window,
+go ahead and do that lazy.
+
+00:56:23.240 --> 00:56:26.220
+That doesn't affect what's going
+to be written to disk or sent off
+
+00:56:26.220 --> 00:56:27.900
+to a network server or whatever.
+
+00:56:31.490 --> 00:56:32.510
+So, sudden termination.
+
+00:56:32.510 --> 00:56:39.270
+The summary is that applications, ours,
+yours, everyone's, can avoid contributing
+
+00:56:39.270 --> 00:56:41.760
+to shutdown delays,
+which are just unacceptable.
+
+00:56:41.760 --> 00:56:44.060
+You know, the Macintosh is supposed to
+be like a simple appliance.
+
+00:56:44.060 --> 00:56:46.460
+When you hit off,
+it should just turn off.
+
+00:56:46.600 --> 00:56:52.040
+Shouldn't think about turning off,
+possibly contemplating considering the,
+
+00:56:52.040 --> 00:56:55.070
+you know, ramifications of turning off.
+
+00:56:55.080 --> 00:56:58.680
+And so, we're tackling this issue.
+
+00:56:59.180 --> 00:57:01.080
+And you do have to know your
+own code to do it properly.
+
+00:57:01.080 --> 00:57:04.320
+You have to look around for things that
+are done at application termination time.
+
+00:57:04.320 --> 00:57:06.840
+But when you've done that,
+you'll find often it's
+
+00:57:06.840 --> 00:57:09.660
+not that difficult,
+especially for NSDocument-based apps.
+
+00:57:09.660 --> 00:57:13.820
+Because the main thing that happens
+in those is that the user edits stuff,
+
+00:57:13.990 --> 00:57:16.020
+and it will get saved to disk later.
+
+00:57:16.020 --> 00:57:18.320
+And, you know,
+NSDocument takes care of disabling
+
+00:57:18.320 --> 00:57:19.960
+sudden termination during that.
+
+00:57:20.040 --> 00:57:23.020
+And we already have lots of
+experience with this at Apple.
+
+00:57:23.020 --> 00:57:26.890
+We've been working on it for a few
+months and doing it to everything.
+
+00:57:26.900 --> 00:57:28.660
+You know, the applications that
+are in the application.
+
+00:57:29.120 --> 00:57:31.410
+You know,
+some of them still need more work,
+
+00:57:31.410 --> 00:57:34.820
+but some of them were just so easy,
+and they're just killable.
+
+00:57:34.820 --> 00:57:39.120
+And we're also doing this, by the way,
+just talking about NSApplications today.
+
+00:57:39.120 --> 00:57:42.430
+But we're also doing this to
+agents and demons in the system.
+
+00:57:42.440 --> 00:57:46.220
+They use a different system,
+something lower level than NSProcessInfo,
+
+00:57:46.220 --> 00:57:49.960
+that actually NSProcessInfo
+stuff will be built on top of.
+
+00:57:50.030 --> 00:57:52.630
+But agents and demons,
+like every process,
+
+00:57:52.700 --> 00:57:54.350
+is going to be killable.
+
+00:57:54.360 --> 00:57:57.300
+So when the user shuts down, just blech,
+everything's going to disappear.
+
+00:57:57.300 --> 00:57:58.180
+So.
+
+00:57:58.180 --> 00:57:58.900
+So.
+
+00:57:59.110 --> 00:58:01.160
+So check it out in the
+Foundation Release Notes.
+
+00:58:01.350 --> 00:58:03.840
+Foundation Release Notes also,
+by the way,
+
+00:58:04.290 --> 00:58:07.670
+include some debugging tip or two.
+
+00:58:07.790 --> 00:58:10.890
+So you're like,
+how do I know I'm getting this right?
+
+00:58:11.270 --> 00:58:15.880
+There is an incantation you can
+type into GDB that will let you know
+
+00:58:15.880 --> 00:58:19.420
+whether or not the app is actually
+killable or not at that moment.
+
+00:58:19.460 --> 00:58:23.390
+And as far as testing this going forward,
+it's like, who's going to test what their
+
+00:58:23.450 --> 00:58:25.200
+application does at logout time?
+
+00:58:25.640 --> 00:58:26.720
+Nobody.
+
+00:58:27.120 --> 00:58:27.580
+So.
+
+00:58:29.060 --> 00:58:31.200
+What we've done to AppKit,
+and this is actually in
+
+00:58:31.200 --> 00:58:34.530
+the Snow Leopard seed,
+is in applications that are
+
+00:58:34.690 --> 00:58:38.850
+killable at the time that the
+user quits them by choosing the
+
+00:58:38.850 --> 00:58:42.000
+quit menu item in the file menu,
+apps just kill themselves.
+
+00:58:42.020 --> 00:58:45.110
+So you can get a good
+idea and make sure that,
+
+00:58:45.180 --> 00:58:50.780
+you know, so while you're debugging,
+you'll see stuff missing if you're not
+
+00:58:50.780 --> 00:58:54.090
+properly disabling sudden termination.
+
+00:58:54.100 --> 00:58:54.380
+So.
+
+00:58:54.380 --> 00:58:56.490
+And we have a whole bunch of
+other debugging tricks up our
+
+00:58:56.550 --> 00:58:59.040
+sleeve that we're going to put
+into this stuff to help people.
+
+00:58:59.060 --> 00:59:02.660
+you know,
+make stuff that's reliable and fast.
+
+00:59:05.430 --> 00:59:10.100
+So, there are several ways to make
+document-based applications faster.
+
+00:59:10.100 --> 00:59:12.700
+Concurrent document opening,
+which I showed you.
+
+00:59:12.700 --> 00:59:15.850
+Taking advantage of all the
+improvements to NSURL that
+
+00:59:15.850 --> 00:59:17.500
+we're doing in Snow Leopard.
+
+00:59:17.570 --> 00:59:20.900
+Taking advantage of NSFileWrapper
+improvements in Snow Leopard.
+
+00:59:21.100 --> 00:59:23.300
+And also,
+the sudden termination mechanism
+
+00:59:23.380 --> 00:59:25.100
+that we want everybody to use.
+
+00:59:25.290 --> 00:59:28.590
+So, please adopt all of these.
+
+00:59:28.950 --> 00:59:31.420
+For more information, email Derek Horn.
+
+00:59:31.420 --> 00:59:33.630
+He's our evangelist, Derek at Apple.com.
+
+00:59:34.080 --> 00:59:37.780
+Documentation,
+always read our release notes.
+
+00:59:37.820 --> 00:59:40.530
+We put so much good info
+in the release notes.
+
+00:59:40.600 --> 00:59:43.250
+So I like reading the release notes
+of other people in my own group.
+
+00:59:43.260 --> 00:59:44.110
+They're so good.
+
+00:59:46.040 --> 00:59:49.070
+And I think, and I don't know where
+you find them on the seed,
+
+00:59:49.070 --> 00:59:52.230
+but I think you do it by typing
+it into the search field in Xcode,
+
+00:59:52.230 --> 00:59:53.560
+AppKit release notes.
+
+00:59:53.560 --> 00:59:57.940
+And also our header file comments,
+especially things like NS file
+
+00:59:57.940 --> 01:00:02.290
+wrapper and NS document,
+there's a lot of information there.
+
+01:00:02.290 --> 01:00:06.040
+It all ends up in the documentation,
+but it shows up in the headers first.
+
+01:00:07.810 --> 01:00:10.000
+Related sessions have
+all already happened.
+
+01:00:10.000 --> 01:00:10.810
+They were awesome.
+
+01:00:10.810 --> 01:00:14.620
+So on Wednesday morning,
+there was What's New in Cocoa.
+
+01:00:14.620 --> 01:00:17.740
+On Wednesday afternoon, there was
+Using File System APIs Efficiently.
+
+01:00:17.850 --> 01:00:21.920
+And in this room, right before this,
+was Polishing Your Cocoa Applications.

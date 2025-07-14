@@ -1,0 +1,213 @@
+---
+Title:  What's New in Core Data
+Year:   2014
+Web:    https://nonstrict.eu/wwdcindex/wwdc2014/225/
+
+[!] This transcript has potential transcription errors.
+---
+
+Hello. Welcome to Session 225, What's New in Core Data. I am Melissa Turner. I am one of the engineers who works on Core Data, and I'm going to be here talking to you about sort of all the new stuff that we have been doing, stuff that you're likely to be interested in.
+
+So, what are we going to talk about today? Well, first on the list, first on the agenda is some new API, batch updates, and asynchronous fetching. I am going to talk about the implications of those two APIs for those of you have implemented your own incremental stores. I'm going to talk about the Core Data concurrency story. That's the theme that seems to come up every year in our presentations. I'm going to give an iCloud update, state of affairs, and I'm going to talk about what I'm sure is on all your minds, Swift.
+
+Batch updates, what are they, why do you care? Well, they're a way to mass update data in the database, bypassing the Managed Object Context and editing the store directly. It's primarily centrally intended for updating attribute values, and it's really a performance optimization because if you think about how Core Data works, up until now, if you wanted to edit, say 10,000, 20,000 lines in a field, you've gone on vacation and left your phone behind and come back to discover that your coworkers have been really, really busy, and you have a lot of SCM messages.
+
+If you wanted to mark all of those read in one fell swoop, you would have to load all of the objects into the Managed Object Context, edit them, and save them, and there was a problem here, which will kind of look like this, which is on a memory-constrained device, loading every single object into memory doesn't necessarily work that well. Jetsam may take offense.
+
+So version 2 was simply that you would do this in batches. You'd load a few objects, edit them, save them. Load a few more objects, edit them, save them. Well, there's sort of a problem with this approach as well, and it kind of looks like this. It takes time, and users are likely to encounter a progress indicator as they wait for whatever set of changes it was that you were making.
+
+So what we've done now is we've added a new method to NSManagedObjectContext. It's executeRequest:error. It takes an NSPersistentStoreRequest, some of you are probably familiar with that class name. It's the base class for NSFetchRequest and NSSaveChangesRequest. It's now the new parent class for NSBatchUpdateRequest as well, and we'll talk about that in this slide. ExecuteRequest returns a PersistentStoreResult. That's a new class. It's sort of an abstract super class intended to be the parent of anything that's returned from this method.
+
+And we've added NSBatchUpdateResult as its first child subclass to return the results of a BatchUpdateRequest. BatchUpdateRequest itself should look pretty familiar to those of you who are familiar with FetchRequests. It allows you to specify an entity; it's the entity whose instances you want changed. It allows you to specify the affected stores, one or more stores containing data that you want to change. It allows you to give a predicate specifying which specific instances you're interested in changing. It's the same kind of predicate you set on NSFetchRequest, has all the same power and flexibility. You can use subqueries if you want to.
+
+It allows you to specify the properties to update. This is a dictionary. It specifies the property as a key that will be either the property name or the NSPropertyDescription and NSExpression describing the update as a value. This can be a constant value expression, a function expression operating on keypads in the object graph, pretty much anything that's supported as part of PropertiesToFetch is supported here. Pretty much anything that's either a valid left-hand side or a right-hand side in a fetch predicate is going to valid here.
+
+It also allows you to specify a result type, and the result type is kind of interesting because you'll always get an NSBatchUpdateResult from executeRequest. That will indicate whether, you know, your operation succeeded or failed-- the existence of the instance itself. But it may also have result properties set on it. This result property can be a couple of things.
+
+If you're just interested in finding out whether or not anything changed in the database, you can set it to return Account, which will just give you the number of rows that were actually changed as a result of that batch update operation, or if you want, you can get a list of the object IDs of the rows that were changed in that operation, and that's interesting for one particular reason, which is that because this is a batch update operation, and because we're operating directly on the store itself and bypassing the Manage Object Context, none of the changes that are made in the store as a result of that operation will be reflected in the Managed Object Context until you call refresh Object on those objects.
+
+So if you're interested in updating your database en masse, setting a flag on a particular column for example, and then reflecting those changes in the UI, you're going to need to get the results or the Managed Object IDs back, so you can tell the object, tell the Managed Object Context to refresh the objects with those IDs.
+
+Another implication of the way this is set up is that, well, context doesn't know anything about the changes you're making, so the validation rules are not run. This means it is now possible for you to add bad data to your database. Please don't do that. Your customers will not appreciate it.
+
+But if you do do this, accidentally fill in a bad field, what it means is that your customers, the next time they load that object, edit the object, and try and save, are going to get a validation failure, and they may be fairly confused as to what happened, since that may not have changed that actual field.
+
+We do update the optimistic locking version in the database for all of the rows that are changed. This means now that even if you're in a single persistent store coordinator or single managed object context, single persistent store coordinator, single instance of NSPersistentStore, and all of the changes you make go through that setup, you can now create a merge conflict with yourself as you go down and edit the database, and the context doesn't know anything about those changes.
+
+So you're going to need to remember to set a merge policy on your Managed Object Context if you're using this API because, well, otherwise you may confuse the heck out of your users as they get save failures. And now I'm going to do a demo, show you that this actually does really work.
+
+OK, what I have here is a simulacrum of a mail system, since this is the case where I most frequently see this kind of batch update happening. Got a little application that displays, you know, messages coming in, my manager asking me if I got my graphics ready for the presentation. Managers are so demanding, and you say no. This is a few days old.
+
+I can come through and as I edit the, as I select these messages, you can see that the Read indicator is being marked as well, or the Unread indicator is being vanished. I'm going to come down here. I'm going to look at this other mailbox, which contains a whole bunch of random SCM messages that, well, nobody cares about, and I forgot to reset my database, but oh well.
+
+And I can come up here and batch mark these as Read, and we're going to wait, wait, wait, wait, wait, wait, because, well, this mailbox contains 200,000 messages, and Core Data is going to have to load every single one of those, edit them, and save them again, and that takes a little while.
+
+As a matter of fact, if I come down here and look at my project, I'll find out it took several seconds. Then I'm going to come down, this mailbox contains the exact same set of messages that the previous mailbox did. We can come down here and mark it as Read, New style. That took less than a second.
+
+[ Applause ]
+
+So yeah, we think your developers are going to be kind of happy with this, and just as, or your customers are going to be happy with this, and just as sort of a frame of reference, this is the effective command that I'm running in SQLite to make that update happen, and you can see that we're pretty close to just the raw SQL update times.
+
+So as I said, changes are not reflected in the database when the UI updated in that application; that was being done by KVO tracking that I had updated the root property. I refreshed the objects that were being displayed in the table because the table view was set up to do lazy fetching.
+
+All your standard Core Data make this app perform nice and responsive tricks. Validation rules, as I said, are not run. This is kind of running with scissors. Please don't hurt yourself or anybody else. We update the optimistic locking version in the database. I'm just repeating all of this to reinforce it, bring it home. You can create merge conflicts on yourself, so, you know, set a merge policy.
+
+So that's our first new API. Our second new API is asynchronous fetching. What is that? Why do you care? Well this is actually a feature that a lot of developers have been asking for, for quite some time. It allows you to execute a fetch in a Managed Object Context that will populate that Managed Object Context without actually blocking access to that context for the duration of the fetch. It's cancellable, which means if your user loses interest in whatever triggers that fetch, you can tell us to stop doing it, and it provides progress reporting along the way.
+
+Little brief refresh of how synchronous fetching works. You've got a Managed Object Context, you get a FetchRequest, execute FetchRequest on the Managed Object Context, sends the request down to the store, which takes some time, thinks about it, returns a response in the shape of an NSArray, updates the Managed Object Context, and returns the result to you.
+
+Well, asynchronous fetching is a little bit different. It returns a future, which is returned immediately from executeRequest. There's no waiting. The request specifies a callback block that will be invoked whenever the fetch finishes executing. If the fetch specifies this is an NSFetchRequest, we'll go into more detail in a couple slides, the context should be updated as a result of the fetch. That will happen.
+
+And this means that asynchronous fetching is only supported for Managed Object Context that are using either the PrivateQueueConcurrencyType or the NSMainQueueConcurrencyType because this is the only way that we have a separate queue that we know has sole access to the state in the Managed Object Context. It's not supported for the ConfinementConcurrencyType.
+
+So this is sort of how asynchronous fetching works. Again, you have Managed Object Context, only now you have an NSAsynchronousFetchRequest. Execute Request on the context, and the context immediately creates and returns an AsynchronousFetchResult. At the same time, it takes the AsynchronousFetchRequest you gave us and sends it down to the store.
+
+You can now continue editing managed objects in that Managed Object Context. You can do fetches, faults, yeah, all kind of work you're going to want to do on your managed objects. And at some point, the store will finish executing that request and send the results back, update the context as necessary, and invoke the callback on the NSFetch that is on the AsynchronousFetchRequest, and tell you, hey, you have data, maybe you should do something with it.
+
+So NSAsynchronousFetchRequest is a new subclass of NSPersistentStoreRequest. As I said, it's initialized with a fetch request, an instance of NSFetchRequest, and a completion block should be invoked when the fetch is finished. You pass it to executeRequest:error, which will return immediately the NSAsynchronousFetchResult, or nil if there's something badly, badly wrong with your fetch request. And NSAsynchronousFetchResults are also pretty simple classes. Again, it's a subclass of NSPersistentStoreResult, and this will provide results immediately on a property on a fetch result, or there'll be an error on it after completion if for some reason the fetch failed.
+
+It's returned immediately from executeRequest:error or, you know, nil if there is an issue. How do you set one up? It's pretty simple. Here, we're just setting up a fetch request that does fetch for all instances of my entity. I could, if I wanted to, add a predicate, add sort descriptors. All the usual goodness is fully supported.
+
+Create an NSAsynchronousFetchRequest with that fetch request and a completion block. Completion block here just takes an id, but it would normally take an NSAsynchronousFetchResult; that's just a little bit too long to put on a slide. Completion block checks to see if the result has a final result, and if so, it does whatever processing you want done as a result of that fetch finishing. Otherwise, you'll need to handle the error. Once you set up the AsynchronousFetchRequest, you just tell the context to performBlock, executeRequest, AsynchronousFetchRequest, and away things go.
+
+I said something about it tracking progress. How does that work? It's pretty simple. We use NSProgress, standard use of NSProgress. You create your own before you call executeRequest. Core Data will notice if you have done this and will go off and create nested child NS Progresses, which will report their progress to the parent. And this is also how we allow cancellations. If you want to cancel the request, cancel the NSProgress.
+
+How does the setup for this work? Well, again it's pretty simple. Create an instance of NSProgress, set the unit count to 1. Why do we set the unit count to 1 as opposed to the number of objects we expect to get back? Well, because database operations are streams, and it's kind of indefinite how many objects you're going to get back. You may get 100. You may get 1. We can't tell up front, so we only ever say we're finished, or we're not finished.
+
+Progress become current with pending unit count 1, and this is the same context performBlock we saw on the last slide, progress resignCurrent, and you're done. And at this point, I'm going to bring my manager, Ben, up and he's going to show you how all of this works in real life.
+
+[ Applause ]
+
+Good morning, everyone. My name is Ben Trumbull, and I'm the apparently unreasonable manager of the Core Data team. So, to give you a little demonstration about what we've been working on, we have asynchronous fetching and progress reporting. We're going to show you a little simple app here, and in order to give you something that you guys can actually witness, we're actually going to need a pretty long operation so you can observe the progress. So in this case we're going actually be working with database that has 10 million rows, and we're going to be fetching about 5 million of them into memory.
+
+And for the purposes of the demo, the app has pre-computed the total number of objects in the database. I don't actually recommend doing this. That can actually be kind of slow in and of itself, but, as Melissa had mentioned, database queries are sort of streams. You don't really know how many rows you're going to get back until you're done, and sometimes your audience must positively know exactly what's going on. So, we've already preflighted that. So, I'm going to give you a quick demonstration here, and you can see in the status bar it's counting along.
+
+And we've populated the last few objects in the array up here in the table view. I have not actually just put 5 million objects into a table view because that would be pretty cool. And as you can see sort of in the background there from the fetch request, it actually goes by pretty quickly. Core Data will actually spin up multiple cores if the fetch request is long enough, and I've been logging some of the KVO updates we see there.
+
+So then, one of the other things we can do here is cancellation. It's pretty straightforward. So we're going to do the same fetch again, and as we're going along, we can decide to cancel it. And what will end up happening is the fetch will abort, and Core Data will return an NSUserCancelled Error. And you can see the status bar update there, that we've canceled that, and that's pretty much all there is to it.
+
+We, basically most of the work here is going to be in your KVO observer for doing something on the NSProgress, so in this case, I'm dispatching back to the main thread to update the status bar and doing some throttling of the updates. So you'll get progress bar updates probably a little bit faster than you might otherwise want if you're fetching 10 million rows, and that's what we have.
+
+[ Applause ]
+
+So onward. Incremental stores. We know some of you have implemented them. We've seen them out there on the web, and that means that some of you are going to have a few questions about how these new APIs affect you, if these new APIs affect you. Well, they kind of do.
+
+If you want to just publish your store and have it used by random people, your implementation of executeRequest on your incremental store is going to now need to handle the new Core Data request types. And if you're curious, and some of you probably are, saying well, does that mean I can now implement my own subclasses of NSPersistentStoreRequest and NSPersistentStoreResponse? And the answer is yes, you can do that if you want. We'll talk a little bit about that in a couple slides.
+
+If you don't want to support any new request types, please fail gracefully. By this, I mean do what seems reasonable. Probably you're going to want to return an error and say, I don't know how to do that. This is why the PersistentStoreRequest allows you to specify which stores you actually want to target with any given PersistentStoreRequest. I mean, it doesn't make sense to send a request to a store that doesn't know what to do with it.
+
+Whatever you do, don't throw in an exception. That never ends well. New request types. You should still be using with your new request types NSManagedObjectContext executeRequest:Error. This will cause the access to your Persistent Store Coordinator to be serialized. This is kind of important if you want multiple things running around, talking to the same coordinator. You'll want to do what we've done with fetching and batch updates, create a request/response pair.
+
+The context is going to return an aggregated result, which will contain the results of all of the individual stores that knew what to do with your new subclass, and the default stores aren't actually going to recognize custom request types. So if you're using a Core Data stack that has multiple stores, some of which are defaults and some of which is your custom store types, you're going to want to target the request being executed, specifically at the stores that know what to do with them.
+
+Why might you want to add your own subclass of NSPersistentStoreRequest? One of the big things that we've heard repeatedly is that well, I want to minimize requests, minimize trips to the store. This is particularly relevant in cases where you've got a disjoint object graph, and as part of your app launch, you want to bring in instances of lots of different entities. You don't want to have call executeFetchRequest for n different parts of your subgraphs.
+
+That can get expensive if you've got 10 chunks of your graph, you're having to make 10 separate network calls, that a, takes time, and b, there may be a lot of overhead involved in those calls going across cellular networks that your users don't want to waste that bandwidth. So that's one thing you might want to consider implementing or put in a special request for is a launch time setup.
+
+You may want to do something with object refresh. Hi, database. I've got these 10 objects. Send me back data for the objects that need to be refreshed and only the objects that need to be refreshed. You may want to do status checks, that kind of thing. That's just a few of the things that people have talked about over the years. If you're going to do an AsynchronousRequest, you want to model it pretty much on what we've done with NSAsynchronousFetchRequest.
+
+Return a future immediately, message that future call back when the request completes. And if you're going to be updating context, as a result of whatever you do asynchronously, remember to use perform block to update the context because that will make sure that only your request updates are happening in the context at any one time, will make sure the [inaudible] and as an implication, yes this does mean that if you're going to be implementing your own request types, then your context must be using either the private queue concurrency type or the main queue concurrency type, which brings us to concurrency.
+
+And at this point, I'm going to take a little bit of a winding path to get to our new stuff and sort of do a retrospective of the evolving Core Data concurrency story over the years. Why am I going to do this? Well, it has changed a number of times, and well, if you go out and hit up your favorite search engine Duck Duck Go and Yosemite, for example, or iOS 8 and say, OK, tell me how to do Core Data concurrency.
+
+You're going to get a lot of different responses, and this is sort of intended to help you filter through those and figure out, you know, what really is the best current advice, and I'll talk about, you know, also the new state of affairs. So, making sense of what you see on Stack Overflow.
+
+In the beginning, NSManagedObjectContext and NSPersistentStoreCoordinator implemented the NSLocking protocol. And what this meant was that before a developer started accessing the Managed Object Context, and that included things like accessing properties on NSManagedObjects created by that managed object context, the developer had to lock the context. If they wanted to message PersistentStoreCoordinator, they needed to manually lock PersistentStoreCoordinator before they sent whatever message they wanted. And, you know, because this is a locking protocol, they are also going to need to unlock after they're done with the context or coordinator, respectively.
+
+And this kind of works like this, you've got a context. It has an object in it. You want to do something. You lock the context. You make your edits, maybe more than one. You save a revert, unlock, and things go away. But this actually has a couple of problems with it, the biggest of which is that it's easy to forget a lock or unlock.
+
+Well, forget is probably the wrong word. Occasionally something would throw, you fed Core Data a bad predicate, passed [inaudible] through, the exception went straight up, and now you're context is locked. That's kind of a bad state of affairs because anything you try and do now is going to dead lock.
+
+It's also kind of tricky doing some UI programming because a lot of the binding stuff for example doesn't really have a place you can hook in a lock or unlock as you attempt to populate your table view, so that really wasn't a satisfying answer and we moved on to Thread Confinement.
+
+This is sort of the first step of our evolution towards, you know, more interesting and robust answer to how to do concurrency in Core Data. And Thread Confinement is basically stepping back and saying, OK, why are developers trying to, you know, edit the same context and it turns out there weren't actually a lot of really great reasons for that. So we said, OK, just don't do that. A Managed Object Context should only be edited from a single thread.
+
+The developer is making sure, responsible for making sure that only one thread ever uses Managed Object Context, and at this point, a lot of us learned about things like thread local variables because that was the easiest way to associate a context with a thread and make sure that no other context ever had access to it.
+
+And in this model, the developer still had to lock the Coordinator before they used it and this kind of looked like this. You had a thread. That thread had a context. That context had objects. You could edit the context as much as you want, and no, you don't have to lock it.
+
+And sort of because people do want to do things in parallel, if you wanted to actually make changes to, you know, other objects, you would set up a separate thread that had its own context, and if you wanted to pass data back and forth between these, you'd generally do it by, well, passing managed object IDs back and forth and having the context refresh data from the store.
+
+This was kind of awkward. It's still a little bit difficult to get right. I mean, it involved, you know, making sure that you didn't accidentally message a thread or a context from another thread or fire a fault on another thread. So we wanted to make working with the context easier, and about this time another group at Apple was inventing a really cool technology or technology we at least thought was really cool, you're probably familiar with it, called GCD or [inaudible] dispatch if you're working at the [inaudible]. And we looked at this, and we said, you guys are solving this huge problem that we have. We like you.
+
+And in this case, the context encapsulates the threading model. Basically each context got its very own queue and that queue was the only thing that would ever access the internal state of that managed object context. This is called the actor [phonetic] pattern for those of who are familiar with patterns.
+
+There were a few concurrency types we set up Private Queue Concurrency Type, which says this context has its own private queue and everything should happen there. A Main Thread Concurrency Type, which was used for operating primarily from the UI because AppKit, as well know, likes to run in the main thread. This basically said that as long as whatever is happening is happening on the main thread, you can message the Managed Object Context as much as you want.
+
+And we also had the Concurrency Thread Confinement Type, well that said, well, I've got Legacy code and I want to continue using that Legacy code in the same way that I have had it working for however many releases. I don't want to have to rewrite my application. Under this model, when you wanted to do something with Managed Object Context, you would pass it a block, tell it to performBlock or performBlockAndWait, and in this model you also no longer had to lock the coordinator before use.
+
+I forgot I had that slide. That's just the concurrency types I talked about, main, private, and confinement. And this kind of inverts the previous order. We go from having a thread that has a Managed Object Context to a Managed Object Context that has a queue and any thread can create a work block and dispatch that block over the queue for processing or the context for processing. The context will do whatever it wants to, update all of its internal state, and then return to the calling thread. This actually made things a lot neater, a lot cleaner. It was much easier to talk to the context and get it doing things right.
+
+And at this point, we had a debugging mechanism. It was default. If you launched your application with com.apple.CoreData .ConcurrencyDebug 1, we would be very, very picky about how you message threads, and we would very, very vocally let you know if you had done something wrong. But this required downloading a debugged version of the framework from ADC. It was-- I think it's WWDR these days.
+
+It had one problem, which is that it often got stale because it's hard to push debug frameworks through that mechanism at the same time we push OS updates, and it wasn't available on iOS because, you know, iOS didn't allow you to install new versions of frameworks. So that brings us to today. Well, the story at the context level is exactly the same. Context is still an actor. It still has a queue. It still has concurrency types. It still has the same concurrency types. You still message it using performBlock and performBlockAndWait.
+
+We've also added the performBlock, performBlockAndWait API to NSPersistentStoreCoordinator. This is mostly relevant to those of you who are subclassing NSPersistentStoreCoordinator. You should now be using these methods, which is what our existing methods do. They all wrap call through to performBlock, performBlockandWait. PersistentStoreCoordinator, though, because it doesn't actually need to be messaged directly by AppKit always uses its own private queue. The debugging default is now available everywhere. As of Yosemite,
+
+[ Applause ]
+
+As of Yosemite and iOS 8, if you launch your app with com.apple .CoreData ConcurrencyDebug 1, we will be very, very picky about how you do concurrency, and we will let you know if you have done something wrong. And this is available on iOS as well. No special debug version of the framework necessary.
+
+Looking ahead, and this isn't a sort of predictions, not promises, because making promises is way above my pay grade. NSThreadConfinement is pretty much obsolete. That includes the confinement concurrency type. We saw earlier with the asynchronous fetching that it just can't be supported in a confinement concurrency model, so as we move forward, it's likely there will be more kinds of changes that also only work for contexts that are using either the private queue or main queue concurrency types.
+
+As a bonus API, make that go down a little bit easier because debugging is hard enough already, we've added a name property to the NSManagedObjectContext and PersistentStoreCoordinator. It only applies if your actor is using the Private Queue Concurrency Type, but if you do set a name on your context or your coordinator, this will be displayed in LLDB and Xcode when you're debugging, so you'll be able to see which queues are actually associated with which managed object context in your application.
+
+[ Applause ]
+
+On to iCloud, this is actually going to be a fairly short session because most of what you need to know is encapsulated on this slide. Internally, I'm sure you-- at the conference so far, I'm sure you've heard some buzz about, you know, changes to iCloud. We are transitioning to new infrastructure.
+
+You should see some reliability improvements and some performance improvements for those of you who are using the Core Data with iCloud stuff, but all of the changes should be completely transparent to developers. If you're using the patterns that Nick and Ben showed you last year in their presentation, nothing has changed. Your application completely, completely, everything will migrate over just transparently. Everything should work. It should just be more reliable and faster.
+
+[ Applause ]
+
+And I do want to talk about CloudKit since that sort of a new and related technology that might be of some interest to you but in order to do that, I sort of want to assess the full scope of the iCloud-related technologies at Apple and sort of give you some context to decide if it really makes sense for your application.
+
+The basic iCloud technology is the Key Value Store. This allows you to store small amounts of data on an application-by-application basis. It's great for things like preferences or, you know, view state, that kind of thing. It's asynchronously kept up to date and it has some data limit constraints, only allows you to store a small amount of data.
+
+There's iCloud documents. This is probably familiar to those of you who implement document-based applications. It's fairly simple API, basically replace all of whatever is in the cloud with whatever I have just created. Mac OS X is greedy and will automatically download everything that's in the cloud, so you've got a full offline cache of all of your documents. This is good for unstructured data and is tied to the file system. This is good if you want to replace everything on all of your devices with whatever the latest greatest state from one device is.
+
+Now we come to iCloud Core Data. This is good for when you want to merge data that is created across multiple devices, instead of replacing it. If you add a contact on machine 1, you want that to be added to your global cloud data store. You don't want it to replace your global cloud data store.
+
+It's used to keep private data, user data, structured data in sync across multiple devices and it's replicated between all of your devices, but it is single-user data, which brings us to CloudKit. CloudKit is the new API in Yosemite and iOS 8. It's a client server model, which means that it has no local store. If you're going to be using it, your users are going to need to be connected to the network at all times.
+
+It allows for predicate-based queries, not the full power that Core Data gives you, but a really substantial and pretty much everything you're reasonably going to want to do. And it's application-centered data. What does that mean? Well, the data is public and shared by all users of your application or can be.
+
+If you want to implement a, I don't know, restaurant reviewing application, where all of your users can see what everybody else thought about a given restaurant, this is probably the technology you want to look at. It's good for structured and bulk data and it allows for a large data set.
+
+The data set will scale proportionately with the number of users of your application. It uses iCloud accounts and has client-directed data transfer, and I don't know what either of those means. You should probably go watch the video of their session. Somebody gave me these slides and asked me please to talk to you guys about it.
+
+So that's the iCloud alternatives that you have on our platform. Some of you may want to actually go look at CloudKit, and, you know, do interesting things with it, which brings us to the session I'm sure all of you have wondered about since Monday's announcement, which is Swift. You have questions, and I'm here to give you answers.
+
+This is a fragment from an email that came through one of my mailboxes sometime over the last several months. It basically says-- well, the rest of the message basically said, Swift is intended as a language for Cocoa programmers. Cocoa is nice and powerful and dynamic. Core Data is a very dynamic and very powerful piece of Cocoa. Well, Swift must support Core Data, period.
+
+So it does. You get the full power of Core Data in Swift. You can create managed object subclasses in Swift. I'll show you how to do that on the next slide, and if it makes sense for your application, you can mix and match between Core Data and SWF files. It's all the same story as they've been telling you in all of the other Swift sessions and Swift labs.
+
+How do you create a managed object subclass? Well, they're pretty much like Objective-C, only instead of using @dynamic, you'll be using @NSManaged. This is a Core Data specific property that tells the Swift compiler that the Core Data runtime is going to be responsible for managing the data storage and accessors for the properties that you specified is at manage.
+
+Unfortunately, you're not going to be able to, you know, create your own dynamic mechanisms. Talk to the Swift guys about that. The one change other than this that you'll need to remember that might trip a few of you up is that you now need to add the module name in the data model when you specify the class that your entity is going to be using, and that's just done up here in the data modeling tool, where you used to specify the class, now you need to specify the fully qualified class, namespace.classname. But that's really the only change.
+
+This is what an Objective-C subclass looks like. You should mostly be familiar with this if you're in this session. Import Core Data, declare your interface, declare the properties, you're done. But you've also got a separate file and this file is actually pretty basic looking. Import your header file because, well, that's how C works.
+
+Declare your implementation, declare that Core Data is responsible for these properties, and you're done. Swift collapses both of these into a single file that looks a lot like this. Small, sleek, contains all of the same information that you saw in the previous two files in one place without, you know, duplication of lines.
+
+Some things to remember about Swift is that it uses types. It's very, very firm in the beliefs that static typing is a good and important thing. Core Data has not, does not use types, but if you want to use types, and you probably will in your Swift code, you probably want to be creating your own NSManagedObject subclasses, custom subclasses, so you can use that subclass name as a type name. Otherwise, you're going to have to use NSManagedObject because entity names are not going to suffice as type specifiers.
+
+It's going to kind of look like this, should be what you pretty much expect having had a chance to look at Swift. And now I'm going to do a demo, talk about how things work in Swift. So here we have a Swift application or a project that builds an application that looks awfully like the last thing I demoed. It's got an app delegate. It's got all of your standard code, sets up IB outlets for your controllers, adds key value observers, so you notice when things have changed, you can refresh contents of controllers.
+
+It's got batch update code to run batch updates. All the same stuff you'd expect. It's got a utilities class, and I've actually split my Core Data stack setup off into utilities and that's due to the way that Swift handles variable initialization, either initialize something to a simple type or you set up computer property. But if you set up computer property, that gets reevaluated every time somebody accesses the property, which is not what you want when you're setting up a Core Data stack.
+
+You only want to access it once. I was playing around as I built this, so you can see a lazy property, deferring binding to managed object models data until you actually try and access it. Computer property for Persistent Store Coordinator sets up my stack. Computer properties can deal with nil. @lazy is not happy with nil, so there's another minor gotcha there. Here, we've got our function that sets up and returns our managed object context. It looks pretty familiar to those of you who are familiar with Core Data, all of the [inaudible] calls are the same.
+
+Our mailbox, here we've got our message instance, which has a KVO observer setup, set it up in the init method. Whenever the observer gets triggered, we'll update our read badge. Messages controller does the same thing the previous messages controller did. I'm going to build and run. Whew. It's a Swift application using Core Data. It's actually a little bit faster than the Objective-C version.
+
+[ Applause ]
+
+So, yeah, and if I come up here, Mark as Read, whew, it's read. So I talked about batch updates. We talked about asynchronous fetching and incremental stores and what that means for you, talked about our concurrency changes and our concurrency story over the years, gave you a sense of, you know, where we were, where we wanted to be, iCloud update, and I talked about Swift. I think I've covered everything.
+
+This is where you get to see Anthony the alligator telling you to file bugs. We can't fix what we don't know about. We don't guarantee we'll fix what we do know about, but, you know, we can't fix what we don't know about. File a bug report. It helps if you give us steps to reproduce, really helps if you give us an app. If you give us an app that reproduces your problem, well, we fix those first because, you know, we know what to fix. If you want feature requests, enhancement requests, performance issues, documentation stuff, all goes through Bug Reporter.
+
+For more information, you can talk to Dave DeLong. He's our technology evangelist, delong@apple.com, or you can send whatever your feedback is to cocoa-feedback@apple.com. We have a lot of documentation online at developer website. There's a programming guide, some examples, tutorials, code fragments, that kind of thing, and there's always the Apple developer forums.
+
+Related sessions, I mentioned this. There was a CloudKit session, Introducing CloudKit, Tuesday at 3:15. If you're interested in that, you probably want to watch the video. There's also, although it is not appearing on this slide, was a What's New in Cocoa session on Tuesday. You may be interested in watching that as well, and welcome and thanks for coming.
+
+[ Applause ]

@@ -1,0 +1,309 @@
+---
+Title:  iOS Performance in Depth
+Year:   2011
+Web:    https://nonstrict.eu/wwdcindex/wwdc2011/318/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Hello, everyone. Welcome to iOS Performance in Depth. My name is Dan Crosby. I'm an engineer on the iOS performance team. This talk is going to be kind of a grab bag of different performance topics that we found that even more advanced developers often either are not aware of or sometimes have trouble with.
+
+So I'm going to be talking about Grand Central Dispatch and performance, ways you can use GCD to speed up the performance of your app, and also using memory efficiently on iOS. And then I'll be joined by my teammate, Ben Nham, who's going to be talking about view and animation performance in iOS. So let's dive right in.
+
+So Grand Central Dispatch is a set of APIs that was introduced in Mac OS 10.6 and iOS 4 to help you use multiple threads in your applications more effectively. Now, many developers hear multithreading, and they think, well, my application's not CPU-intensive, or it is CPU-intensive, but it's not easy to make concurrent. And so they think this doesn't apply to them. But in fact, GCD can help the performance of almost any application on our system. It's also relatively simple to code, and it's cheap at runtime, so you should look into it.
+
+There are a few gotchas, performance-related gotchas associated with GCD that I'm going to talk about as well. But this is not going to be a complete introduction to Grand Central Dispatch. It's a really big topic. So I encourage you to review the video of, for instance, yesterday's blocks in Grand Central Dispatch in practice, or look, of course, at the online documentation.
+
+So why would you want to consider using GCD in your application? Well, the most important reason is to keep work off of the main thread. The main thread in both iOS and Mac OS X is where most of the user interaction happens. So, anytime you're drawing to the screen or committing an animation to the render server, or responding to touch events from the user, this all has to happen on the main thread.
+
+So, if that's blocked with other work, your animations won't be smooth, and your application won't feel responsive to the user. And it's particularly important if you've got anything that might block for a long time, because there's a system on iOS called Watchdog, which will actually terminate your application if it remains unresponsive for too long. So, you definitely want to avoid that. When I say work off the main thread, I don't just mean intensive CPU work. Anything that takes a long time, like a potentially expensive file system or network operation, can also block the main thread and cause the same performance problems.
+
+So, number one is avoiding -- avoid blocking the main thread. You can also use GCD in some interesting ways to speed up the launch of your application. So, number one is avoiding -- avoid blocking the main thread. You can also use GCD in some interesting ways to speed up the launch of your application. And of course, if your application happens to be running on an iPad 2, you'll automatically take advantage of the second CPU core there.
+
+So let's look at a somewhat contrived, but I think typical example. We have an application that maybe the user is flipping pages and new pages of text are appearing on the screen. And we want to go ahead and once the user gets to this next page, prefetch the next page in case they turn the page again.
+
+So we might do it like this, the simple way. We use string with contents of file, check to make sure that we actually didn't get an error, and then take a text field and set its text to the contents of that string. Now, what's going to happen if we do it this way is that is if the animation of the page flip is still going, we need to actually complete layout and drawing of each frame of the animation in a very short amount of time. In order to have smooth 60 frames per second animation, you only have about 16 milliseconds to get all that work done.
+
+So if we do the layout and draw of one frame, and then we kick off reading the string in the background, which might be a huge string we have to read off the file system. There might be other file system I/O going on at the same time. The frame might be sinking or some other operations happening in the background.
+
+This might block for a long time. By the time we get the layout and draw for the next frame, we don't have time to finish it, and we end up dropping the frame. So what we would like to do is get that read string off of the main thread and send it down to a background thread. That allows the layout and draw to happen on the main thread and complete that second frame in time.
+
+Now, the catch to doing this using multiple threads is that you can't just do anything you want in a background. You can't just do anything you want in a background. You can't just do anything you want in a background. You can't just do anything you want in a background.
+
+You can't just do anything you want in a background. You can't just do anything you want in a background. on the background thread on iOS. Typically all UI kit work has to be done on the main thread. Other frameworks don't work that way. You can use core animation, core graphics, foundation on the background thread.
+
+But with the exception of making your own UI graphics context and drawing into it, all other UI kit work has to be done on the main thread. So I can't just take that entire code snippet, send it into the background, and then do that set text in the background thread. This is not a safe operation in iOS.
+
+So what I'm going to do is I'm going to take that original code snippet, and I'm going to get this expensive string with contents of file into the background, but still keep the UI kit work on the main thread with only two lines of code. So this first line, dispatch async, sends the work to a global queue. This is a concurrent queue that can actually execute multiple blocks simultaneously that does not block the main thread.
+
+So I do my string with contents of file there. Then once I have the string back, I dispatch async back to the main queue. So just that last line of text will operate on the main queue, and I do the set text there. So this is the way I can do the expensive work in the background without blocking the main thread, keep my animation smooth.
+
+You can also use GCD in some interesting ways to speed up launch. Suppose we have a typical scenario where you've got some work that you need to kick off at launch time. Maybe it's going to go off and fetch some resource from the network or read in some image files that I'm going to blip to the screen as soon as they're ready. So I kick this off at launch time, maybe an init on an object that's read in from a nib, but it doesn't actually have to be completed at launch time.
+
+In this case, we have launch time work with some deferrable work in the middle, but it's not until all of that is done that the main run loop can start turning. No animations are going to happen, no touch events are going to be received until that main run loop starts turning. So we would like to take that deferrable work and have it not block the rest of this launch time work.
+
+Now, if I try to do the same thing I just did a moment ago, dispatch this deferrable work to a background queue, this might help. But if this really is expensive work... We can hit CPU contention. I now have two threads that are both trying to do CPU intensive work at the same time. So while this is likely to speed up my launch a little bit, it's not going to get nearly as much of the benefit as we had expected.
+
+So, back to the drawing board. What we really want to do is not do the deferrable work concurrently with the launch time. We want to do it after the launch time work. So, and this is very counterintuitive, but from the main thread that's already operating, I'm going to dispatch to the main queue.
+
+Now, this takes advantage of the fact that the main queue in GCD is actually drained inside the main run loop. So, the deferrable work won't actually happen until the main run loop has started turning. So, I dispatch from the main thread to the main thread. It just defers the work.
+
+Now, I'm back to the same problem that I had before where I'm trying to do this deferrable work in the main run loop and my animations might not be smooth. So, after I've dispatched to the main queue, I dispatch again to a background queue. So, I just use dispatch. I dispatch twice and now my deferrable work is neither blocking the launch time nor blocking the main run loop.
+
+Now, there's a few performance-related gotchas any time you use GCD that you need to watch out for. One of the common ones is having too many threads servicing too... I'm sorry, you have too many threads blocked on too few resources. So GCD, when you use a concurrent queue, one of those global queues that I was using before, usually just sort of magically makes the right number of threads for the situation. So, for instance, if you're running on an iPad 2, we'll make more threads to service that concurrent queue than if we were running on an iPhone 3GS, for example. So usually we'll just make the right number of threads.
+
+But suppose I had that example before, where I'm dispatching a block off to the background that's going to go to the file system and read in some large amount of text. And maybe I want to just go ahead... Well, it's happening in the background anyway. I'll just go ahead and prefetch the next 10 pages.
+
+What will happen as soon as that block hits the file system, as soon as I get to the file read, the thread's going to block when it hits the file system, and so GCD is going to spawn another thread to service the next block in the queue because it's trying to keep the CPU cores busy.
+
+And pretty soon, if I've dispatched 10 or 20 of those, I'm going to have all of those threads running, and that's actually going to hurt the performance of your application because you don't want too many threads for the system to handle. So the way to avoid this, if the shared resource that you're blocking on is a network operation, you can use the NSURL connection asynchronous methods, and this will all just happen for you.
+
+You'll get callbacks when the work is done. If it's not, if it's not a network, if it's some other file system operation or syscall, you can use a serial queue to serialize those operations so that they don't try to happen concurrently, and GCD does not spawn new threads for you.
+
+Now, you want to serialize the minimum possible amount of work. So this code snippet would look like this. You'd have some global serial queue that you've created just using one of the dispatch create functions. You dispatch a sync to a global file IO queue. You do your read of the data in from the file system there.
+
+After you've finished that work that needs to be serialized, you dispatch back out to some concurrent queue. And then if, say, you're reading a bunch of files and doing some operation on them, you can do that work concurrently, but you still have the file system IO serialized. Now, if you're targeting iOS 5 only, there's actually a better solution to this in iOS 5, and that's to look into the dispatch IO functions. But this example that I have here will work back in iOS 4 as well.
+
+Now, the next couple of GCD gotchas I want to talk about have to do with memory use in GCD. And this first one, retain cycles, is a particularly subtle problem that can be very difficult to figure out what's going on. So using blocks, especially if they reference objects, can cause retain cycles.
+
+So in this example, we have an object that holds on to a copy of a block. Maybe it's planning to dispatch this block repeatedly, so it just wants to copy it to the heap one time. Or maybe it's going to be sending it off to a timer or something like that.
+
+So when it's an init function, it creates the block, and in this case, the block's going to do something simple and contrived, just set my var to six, and then copy it to the heap. If you don't copy it to the heap, the block will go away after init returns.
+
+Well, in this case, we actually have a retain cycle created, because my block owns a copy, I'm sorry, the object owns a copy of my block because of the copy. But my block is referencing my var, which is a member variable, so it is actually referencing the object itself.
+
+So it is implicitly has to retain self when it gets copied to the heap. So we have a classic retain cycle. The object owns a copy of the block, and the block owns a copy of the object. This example probably seems very contrived, but it's very common to happen if you're using, for instance, the NS timer or NS notification center functions that take blocks, and you reference self from in there.
+
+So what we need to do is cut the reference of the block back to the object. And there's a couple of ways to do this. If you're using the new automatic reference counting, you can use a block to do this. So I'm going to use an underscore underscore weak variable to replace self.
+
+If you're using iOS 4, you can use an underscore underscore block reference. So in this case, I make an underscore underscore block id weak self, which is simply a non-retaining version of self. Then in my block, when I reference the property of weak self, I'm not going to retain it because it's a block variable, and I've cut the link back to the object.
+
+Another memory-related gotcha with GCD has to do with auto-release pools. You need to take a lot of care when you're dispatching away, especially a loop that's going to use an auto-released object, because blocks don't have implicit auto-release pools. GCD queues do have auto-release pools, so there's no danger of your objects actually being leaked.
+
+But they don't necessarily drain after every block. So if you're dispatching away a bunch of blocks, and each of those blocks runs some loop in which it uses a lot of auto-released objects, there's not really any way for you at compile time to know when that auto-release pool is going to be drained.
+
+So this advice for dealing with this is pretty much the same advice you would have for using auto-released objects anywhere in Cocoa or Cocoa Touch. You can make your own auto-release pools inside the block to make sure that it gets drained when you want it to. And if you do that, I strongly encourage you to use the new at-auto-release syntax instead of the old NS auto-release pool syntax. It's a lot faster. And of course, don't loop with auto-released objects. You have the possibility of having this explosion of auto-released objects that stick around too long.
+
+One way to get rid of your auto-released object loop is to use the dispatch apply function, which actually takes the loop and unrolls it into a series of blocks, each dispatched separately to a serial queue or concurrent queue. This doesn't get rid of the problem entirely, but at least increases the chance that the auto-release pool will be drained often enough that you won't have an explosion of auto-released objects.
+
+So with that, I'm going to move on to my second major topic, which is using memory efficiently in iOS. Now, as we all know, in iOS 4, the memory system in the whole platform changed dramatically when we got multitasking. So it used to be that when your app was running, you were pretty much the only game in town. It might be that mail or music or something like that was playing. But for the most part, you had access to most of the memory that was available to user space.
+
+In iOS 4, that changed because we started keeping suspended apps around in order that the user could resume them very quickly. We've got a better story for this in iOS 5, and we think we've clearly identified what our goals are in using memory in the system. So there are three primary goals that we're trying to achieve in this order. First of all, we need to protect the system. You always need to remember that you're not running your program on a console where you are the only game in town. Your phone is, among other things, a phone.
+
+It needs to still have enough memory to receive phone calls. The kernel needs enough memory that it doesn't panic, things like that. So our primary objective is to give the system enough memory to protect itself. The second goal, and this really is the next most important thing, is to always give the foreground application enough memory for great performance. We want to make sure that multitasking never interferes with the performance of the foreground app.
+
+And the third goal, still very important, is to keep around as many suspended apps as possible. It's really a great user experience when the user can just double-tap the app. Switch over to another app and it's instantly there. It doesn't have to relaunch. So we want to keep as many of those around as we can without sacrificing the system or the performance of the foreground app.
+
+So how can we work together to make sure that we have this great experience keeping these three goals in mind? Basically, you want your app to be a good citizen both when it's in the foreground, running as the foreground app, and when it's in the background. So first of all, being a good citizen in the foreground means don't use more memory than you really need to.
+
+So if you use too much memory, the first thing that will happen is that suspended apps will be terminated. Now that's okay if you really need -- if your application really needs that memory. We'd like to keep as many of them around as we can. The second thing that can happen is that purgeable memory in the system will actually be evicted, and that includes code pages. So if your application is using more memory than it really needs to, this can lead to your code pages being evicted from memory. And then the next time you get back to running that code again, it has to be reloaded from disk.
+
+This will actually hurt the performance of your app. And finally, if you use too much, the Jetson app will actually be evicted from memory. The Jetson system will actually terminate your application even when it's running in the foreground. So the main way to avoid this happening, if you're getting into really critical situations, is to watch for memory warnings. Oh, I forgot my neat graphic here. Your app will push the other apps out of the system and then eventually be terminated itself.
+
+So we've done a lot of work to make memory warnings in iOS more effective in iOS 5. So many developers felt that in iOS 4, they got memory warnings at times they didn't really understand. They seemed sort of spurious, and if they ignored them, there weren't always necessarily bad consequences.
+
+So we've modified the under-the-hood system for memory warnings in iOS 5 so that you should receive a lot fewer memory warnings than you used to. But when you do receive memory warnings in iOS 5, it really does mean they are critical. At the time you receive a memory warning, the system has already terminated a lot of the suspended apps that are in the system. So the system has already done a lot of work for you to get the foreground app all the memory that it needs, but now the situation is still looking bad, and it's your turn to free up any memory that you can. Amen.
+
+Now, the API for memory warnings has not changed. All the work has been--all the changes have been under the hood. So the way you respond to a memory warning is by implementing the application didReceiveMemoryWarning method in your app delegate, by overriding the didReceiveMemoryWarning in your UIViewController subclass, or subscribing to the UI application didReceiveMemoryWarning notification.
+
+So exactly the same API will work in iOS 4 or iOS 5 to respond to memory warnings. So what should you do when you get one? Let's start with what you should not do when you receive a memory warning. You should not ask the user to fix the memory warning for you.
+
+They can't, okay? If you receive a memory warning, remember, we have already terminated most of the suspended apps, and we will continue, if necessary, to terminate the rest of the suspended apps. If you're asking the user to quit applications, they don't even know which apps are actually suspended because the app switcher is showing a most recently used list of apps, not a list of running apps. So please, please, please do not ask the user to respond to the memory warning for you. This is your job.
+
+Next, do not try to figure out if the warning is critical. I understand why many developers do this, because memory warnings in the past seem to be spurious. Now, if we're sending you a memory warning, it is critical. You need to respond to it. And linked to that, don't wait to receive a more serious warning.
+
+There won't be one. If you don't free enough memory when you get your first memory warning, that's your last chance. You're not going to receive another one, and the next step is that your Apple will be terminated. So you need to do anything you can at that first warning.
+
+So what you should do is, of course, free up any memory that you reasonably can. That means any regenerable caches that you have, any views or images that are not in use, release them. Now, I mean it when I say any memory you reasonably can, because as I said before, it's more important to us that your app have enough memory for reasonable performance. So don't free up something you're going to have to immediately read back off disk, you're going to have to regenerate, you know, don't just panic and evict everything you possibly can.
+
+But anything that you're not going to need immediately, go ahead and free it up, give it back to the system, and then we will keep doing our part to help you even more. Now, if you need to serialize out any state, if, for instance, there's some state that would be lost if you free everything, you want to save it out to disk, go ahead and do that, but be quick. At the time you receive a memory warning, again, it's critical. If you have another thread that's continuing to allocate memory, you may actually get terminated before you have time. So be as quick as you can in responding to these memory warnings.
+
+So that's being a good citizen in the foreground. Being a good citizen in the background, you don't have the option of responding to memory warnings because when you're suspended, you're never going to get them. Suspended apps don't receive memory warnings, so you need to free anything you can when you get that application did into background method called. And you would respond to it pretty much the same way you would respond to a memory warning.
+
+Anything that you can regenerate later when your application resumes, go ahead and free it now. Now, the catch to this is that you also want to return from application did into background as quickly as possible. There's a number of things that the system does to your app after it completes application did into background.
+
+One example is that the little snapshot that you see of your app when you resume it, we can't take that snapshot by API contract until after you've returned from application did into your background. So if you need to do any expensive work, for instance, to serialize things out to disk and then free it, you want to do that in a background task.
+
+And this is actually pretty simple to do. You call application begin background task with expiration handler. And this code snippet, by the way, is the thread safe way to do a background task. In your expiration handler, this is what's going to fire when, if your time runs out, if you've used too much time trying to run your background task, you simply set a flag in your expiration handler saying time is up.
+
+And then you dispatch the actual work away to a background queue. You do the work in some kind of loop where you're periodically checking to see if you've been canceled or not. And then at the time, either when you've completed all the work that you wanted to do or when you receive that expiration handler, then you go ahead and end the background task and then the system will suspend your app.
+
+So why is it so important to free up memory when you're going into the background? The reason for that is that the lower your memory footprint, the more likely you are to stay suspended and give the user that nice resume experience instead of having to relaunch from scratch. The critical threshold here is 16 megabytes. If your application can get down to 16 megabytes or less, we can actually hibernate your application, which means we save the contents of its memory to flash, and then we can evict it from memory.
+
+So you're no longer taking up any memory from the system, and we're much less likely to have to terminate you. Now, that doesn't mean that 16 megabytes is the only thing to watch out for. If you can get even further below 16 megabytes once you're already there, well, then you have less that we have to read back from flash in order to resume you.
+
+Your resume times are going to be better. If you can't quite get back to 16 megabytes for whatever reason, still get as small as you can, because that'll get less memory pressure total on the system and the less chance that we're going to have to terminate someone, which, of course, could be you.
+
+Now, there's one exception to this free everything you can when you go into the background. And that is that if resuming your application would become so expensive that you might as well relaunch, well, then there's not much point. Remember that the whole point of resume is to be faster than launch.
+
+So there's some cases, for instance, for very expensive 3D games where they have so many assets to read in off of Flash that if they had to evict all that from memory, well, then the resume time becomes terrible. In those cases, we would recommend, well, don't even bother freeing all this up.
+
+Because in those cases, you can hope the user just switched over to send an iMessage or something like that, and it's going to come right back to your app. But don't assume that this applies to your application. You'll find that most apps can resume much, much faster than they can launch, even after they've freed up all these, all this regenerable contents.
+
+So that's talking about how to respond to particular events when you receive a memory warning or when you go into the background. Let's talk about some strategies for reducing your application's memory footprint in total. One issue that many developers have is with excessive caching. You really need to be careful to only cache contents in memory if you really need to. Often you might think, well, I loaded this image in from disk, that's a potentially expensive operation. I'm going to go ahead and hold on to that in memory. You need to test the performance of regenerating this stuff before you decide to cache it in memory.
+
+If you're caching something in memory because you had to go to the network to get some asset and you want to hold on to it, consider saving it to the file system instead. Don't cache it in memory. And then if you do decide there's a performance advantage to caching something, use the NSCache API, which I'm going to talk more about in just a moment.
+
+The worst thing that you can do as far as your memory footprint is to cache images in memory. When an image is drawn into a bitmap context or displayed to the screen, we actually have to decode that image into a bitmap. That bitmap is four bytes per pixel, no matter how big the original image was. And as soon as we've decoded it once, that bitmap is attached to the image object and will then persist for the lifetime of the object.
+
+So if you're putting images into a cache and they ever get displayed, you're now holding on to that entire bitmap until you release it. So never put UI images or CG images into a cache unless you have a very clear and hopefully very short-term reason for doing so.
+
+Now, if you do decide you need to use a cache for something, you should look at the NSCache API, which is an API that was introduced in iOS 5 and in Mac OS 10.6. We've done a lot of work in every iOS release since to make its memory performance even better. So it works basically like an NSMutable dictionary. It has a very similar API, a key value API. It's thread safe, which is a nice benefit for ease of coding.
+
+Because of that, it's a little bit slower and returns auto-released results. So all in all, it seems like it might not be a good choice compared to NSDictionary. But it gives you some great characteristics with respect to memory. First of all, the NSCache automatically evicts its contents when you get a memory warning. You don't have to do it.
+
+We'll do it for you. It can automatically grow and shrink based on other system memory conditions. So things that, as an app developer, you don't even have access to. The NSCache will adjust its total size based on the system memory conditions. And when it goes into the background, it automatically evicts its contents.
+
+So again, this isn't something you have to worry about when you go into the background. And it uses least recently used eviction, which can be very difficult to code on your own. It will automatically do it. So we'll keep track of which objects you've used more recently and won't evict those as quickly as the older ones. Now, of course, that means that the contents someday will get evicted from memory. And so you have to check them. When you do the lookup into the NSCache, you have to check to make sure that you actually got an object back.
+
+Now, alongside NSCache, you can use another API called NSPurgableData and get some even more good behavior. NSPurgableData is an NSData subclass that contains data that is actually marked purgable in the system, and the system can discard automatically if it needs the data. So imagine a case where you've read in some file or done some expensive computation where you'd like to keep that stuff around in memory, but you could regenerate it if you needed to, and it fits into an NSData object.
+
+So if the system needs that memory, it will just take it away. And NSPurgableData provides APIs where you can lock down the memory when you're actually using it, and then let the system know when you're finished with it, and it's free to evict it if it needs to.
+
+If you put in this purgeable data objects into an NSCache, you get some really great extra behavior. NSCache will not evict purgeable data objects as aggressively because, for example, when an NSCache sees that we're going into the background, its default is to just purge everything because there won't be another chance. But if it's purgeable data objects, the cache can say, "Well, if the system really needs this memory, it will come and take it, so I don't have to evict this object from memory myself." And then hopefully, when the application resumes, it might still be around.
+
+NSCache will also automatically evict the purgeable data objects when their backing stores are released. So you don't have to check to see the purgeable data, see that its backing store is still around. If NSCache gives it back to you, that means that it hasn't been purged. You can get this behavior from NSCache with your own classes by adopting the NSDiscardableContent protocol, which gives the same begin content access and end content access that NSPurgeableData has.
+
+And the last thing is how to figure out what the footprint of your application is and how to bring it down at debug time. And the first way to do that, of course, is the allocations instrument in Instruments, which is probably everyone's favorite memory tracking tool. It's got some great debugging information. It can give you call stacks for where that memory was allocated. It can give you retain counts so you can see why objects, you know, Cocoa objects are sticking around longer than you expected them to.
+
+What it does not do, and I'm going to talk more about this in a moment, is show you memory that your app is indirectly responsible for. So it shows objects that you created directly or were created directly by those objects, but not, for example, the bitmap stores for the decoded images. So here's what it looks like.
+
+And you can see, hopefully, there we go, the total usage of your application, the total directly allocated memory in your application is given by the live bytes here. And then, of course, it's divided up into the different types of memory that were allocated. So in this case, I have an application whose live bytes are only 2.28 megabytes, which should be pretty safe.
+
+Be sure also to check out the Flip View on the Info Panel. There it is. There's some great options for getting more data out of this, in particular, the Record Reference Counts checkbox. This is what you need to check in order--before you take a trace in order to see the retains and releases on your objects, which can--excuse me, can be a great tool in tracking why your memory is not going away.
+
+But in addition to the allocations object tool, don't forget about the VM tracker instrument, which shows the total application memory footprint. So this shows not only what your application is directly responsible for, but also other memory that was indirectly allocated on your behalf, like those bitmaps. And what you want to look for in the VM tracker is the dirty memory usage of your app.
+
+This is what's actually going to cause your app to get terminated if it grows too high. Unfortunately, it doesn't have call stacks and other useful debugging info. But it's still a great tool for figuring out why your application's memory usage is higher than you had thought it was. So in this case, this is a trace I took on exactly the same application, which only had 2.28 megabytes of live bytes. But in this case, I have 118 megabytes of dirty memory.
+
+Now, where's that coming from? Well, it's in this memory tag 70. And here's the big secret. Memory tag 70 means image IO memory. This is usually images that have been decoded and we're holding onto these bitmaps. So any time you see memory tag 70 appearing with a lot of dirty memory, check to see if you've got images that you're sticking around that you weren't expecting to have. So with that, I'm going to turn it over to the second half. Ben, there he is.
+
+I'm an engineer on the iOS Performance team, and I'm going to talk about view and animation performance today. First, we're going to start with some fundamentals. If your view overrides UIViewDrawRect, it draws. And we're going to talk about how those views draw and when they draw. If you're using UIImage views, they display images. And we're going to talk about when these images get deserialized into memory.
+
+Next, we're going to talk about some useful effects for your images. You can crop, stretch, and tile images efficiently if you know how to do them using a CA layer effects. And finally, we'll talk about some performance guidelines for smooth animations. So first let's talk about the view drawing cycle.
+
+In this example, we're going to create a UI label. UI label actually overrides DrawRect to actually draw the text in the label. And in this example, we're going to set the background color to white, and we're going to set the text to hello. And notice that nothing expensive has happened yet.
+
+All we've done is created the UI view and its backing CA layer. We haven't done any drawing yet, but because the view implements DrawRect, we will mark the view as dirty using set needs display automatically at view creation time. But again, nothing expensive has happened yet. We've just created a view and its backing layer. No drawing yet.
+
+Eventually, we'll probably add this label to the view hierarchy. And you may not know this, but every single core animation property change happens in the context of a CA transaction. You can create your own transaction and commit them. Most of you probably don't. So we actually create a transaction at the beginning of the run loop implicitly, and at the end of the run loop, we'll implicitly commit those transactions. So let's take a look at what happens at the end of the run loop when the transaction commits.
+
+We're going to notice that there's a dirty flag on this UI label when the transaction commits. And we're going to first create a backing store for that CA layer. And a backing store is just a CG context. It's a place for you to draw into. So that's what you get back when you call UIGraphics getCurrentContext in your drawRect.
+
+Next, we'll fill the backing store with the background color you set for your view, in this case, white. Then we'll actually call the view's drawRect, in this case, UILabelDrawRect, which will draw the text into the view. And finally, we'll clear the dirty flag on the label, and we can use that contents, that backing store, to composite the label onto the view hierarchy.
+
+On subsequent draws, the process is pretty similar. Let's say we set the text to hello--oh, sorry, to buy, and we call sizeToFit to resize our view. When we call setText, we'll immediately change the text property to buy. That's going to implicitly call setNeedsDisplay, which will mark the view as dirty, so that it will redraw.
+
+Notice that we can call setNeedsDisplay as many times as we want, but it has no effect. It just sets the dirty flag if it's not already dirty. In this case, it's already dirty, so it has no effect. So setNeedsDisplay doesn't cause an eager draw. Again, at the end of the run loop, when the transaction commits, because we called size to fit, the size of the backing store has to change. The size of our view has changed, so the size of the backing store changes.
+
+We're going to create a new backing store at the correct size. We're going to fill it again with the correct background color, in this case white. And then we're going to call UILabelDrawRec to actually render the text into that backing store. And then we'll clear the dirty flag on the view.
+
+So why are we telling you this? Well, the first reason is so that you understand what you see in Time Profiler. Time Profiler is probably the best tool we have for solving a large class of performance problems. And it really helps to know what you're looking at in Time Profiler.
+
+So in this case, you'll see at the root of the call stack, in this case I've un-inverted the call stack, which is not the default view in Time Profiler, by the way. So at the root of the call stack, you'll see this CF run loop observer, which calls a CA transaction commit. And this is the implicit CA transaction commit that I was talking about earlier. That's how we actually implement that. So all your drawing work is going to happen under this call stack, under this CA transaction commit call stack. That's why it's there.
+
+Next, you'll actually see some drawing work. And that's all under CA layer display. You'll actually see this UI rect fill call. That's us filling the view with the background color of the view. And then you'll also see, in this case, we spent 96 milliseconds in UI label draw rect.
+
+So if you see a lot of time spent in your draw rect, you're going to see it here in Time Profile. And finally, you'll see that we call CA render new bitmap to actually create the backing store. So if you see a lot of time spent creating new bitmap, in this context, it probably means you're going through a lot of resize and redraw cycles. And so really examine your code.
+
+Are you changing the size of your views too often? Are you redrawing calling set needs display too often? That's what to look for if you see a lot of time spent there. The other reason why we're telling you about these backing stores is they have this sort of mysterious tag in VM tracker called core animation. That core animation tag is actually view backing store. So in this case, in this example, I've unchecked the core animation tag. I've checked the coalesce regions option in VM tracker, and there is 1,000 core animation regions. So what does that mean?
+
+That means I have 1,000 CA layers live in my app that have been added to a view hierarchy at some point and have drawn. So 1,000 CA layers or 1,000 UI views that have drawn at some point. That's probably not what you want in your app. 1,000 views at a time is a lot.
+
+So if you see an accumulation in the core animation region in VM tracker, those are view backing stores, and you probably have leaked or abandoned views. And these backing stores can be really large. For example, a full screen backing store on an iPhone 4, that's 2.4 megabytes. So it can pile up really quickly if you abandon your views. Let's talk about some view drawing guidelines. The first is to mark your views opaque.
+
+Opaque views take a lot less work for the compositor to composite. By default, UI views are opaque, but you can override that behavior by, for example, in this case, I've set a background color with the alpha of 0.5. So we're going to assume that you actually want your view to be non-opaque when you set a background color with a non-1 alpha, and we'll override the opaque flag and set it to no behind your back.
+
+So, you know, just be aware that just because the view starts as opaque doesn't mean that it's going to end as opaque, even if you don't call setOpake no. And also note that UIView set opaque on an image view has no effect. The opaqueness of an image is determined by whether the image itself has an alpha channel. And I'll be going over that again and again several times.
+
+The next guideline is to flatten view hierarchies. You've probably heard this many, many times. And you might wonder yourself why. And the reason why is because all these backing stores, there's a per backing store cost for allocating them, deallocating them, synchronizing them, compositing them. And so a lot of times you can get better scrolling performance, for example, if you flatten your view hierarchies. You have to balance this against the cost of when you flatten your view hierarchy, you're probably making one larger coalesced view. So you have to balance those costs. And you have to profile what you're doing.
+
+One example that can be kind of useful here that not everyone knows about, in this example, I've got this UI table view cell content view. And I've got three labels, a from label, subject label, and message label. But they're not actually in my view hierarchy. I'm just using them as sort of model objects to encapsulate the drawing state.
+
+And draw text and racked on UI label lets you just use the label to draw into another view. So this can be a really useful tool. And then the last one is the view hierarchy. So this is a really useful way of using labels without adding the labels to your view hierarchy if you want to flatten your view hierarchy. And since those labels have never been added to view hierarchy, they won't have a backing store associated with them, as we've talked about earlier.
+
+Just one caution, don't call drawRect yourself. Notice that I'm calling drawText in Rect. This is a method that we expose on UILabel. And other model objects have similar methods, such as UIImageDraw in Rect. Another view drawing guideline is to understand the difference between view layout and view display. Every once in a while we go to the labs and we see something like this.
+
+You call setNeedsDisplay in your layout subviews, and this is probably not going to do what you'd expect it to do. Because layout is about positioning and sizing subviews, and display on your own view is about redrawing yourself. And in general, your view doesn't need to redraw just because it moved around a few subviews. So this is probably not the right coding style. If you actually want your view to redraw when its size changes, we actually have a flag for that. That's UIViewContentModeRedraw. So use that if you want your view to implicitly redraw if its size changes.
+
+And finally, the last guideline is to simply draw less. We have a set needs display in Rect. This will mark a sub-rectangle of your view, dirty, and that will be passed as the first parameter to draw Rect. And the idea is then to try to draw only into that dirty Rect so you can reuse what you've drawn in the past.
+
+Now, of course, this only helps if your view draws multiple times. Another thing that you can do is use the CA Layer properties to crop, stretch, and tile images, which can replace a lot of simple draw Rect implementations. And we're going to go over that in just a few minutes.
+
+Next, let's talk about the image display cycle if you use UI image views. This is going to look really similar to the view drawing cycle I just went over. In this example, we're going to create a UI image. A UI image is an immutable object that is backed by a CG image.
+
+We're going to set that UI image as the image on an image view. And behind your back, what that does is sets the contents of the backing CA Layer to the CG image in the UI image. So notice a couple things. First, creating the UI image and the CG image is fast.
+
+All we do when you create a UI image or a CG image is we read out some header metadata to figure out how big the image is. We don't do actually--we don't actually do any decompression at this point. And also notice that creating the UI image view and the CA Layer is fast.
+
+So we haven't really done anything expensive yet. In particular, if you just go ahead and create a ton of UI images upfront in your app, you're not really saving yourself any work because all you're doing is reading a bunch of headers of several files. Again, eventually, we'll add this image view to a view hierarchy.
+
+And we're going to notice that a new view was added to view hierarchy at the end of the transaction, generally at the end of the run loop. At the end of the run loop, because this image view is new, we're going to notice that its contents points to a CG image that has not been deserialized, hasn't been decompressed.
+
+So, for example, say the CG image is actually a JPEG, at some point, we actually have to decompress that JPEG into a bitmap. And that bitmap can be really big. It's generally the width of the bitmap--it's generally the width of the image times the height of the image times four bytes because we use 32-bit RGBA as our general image format. So the key thing to notice here is that that bitmap is hanging off the CG image instance.
+
+So if you hold on to your UI image or CG image instance for a very long time, you may very well be holding on to multi-megabyte bitmaps in memory. And this is a really, really quick way to get your app to be able to do that. So, if you want to get your app killed for low memory reasons.
+
+Note that UIImageImageNamed actually holds on to the UIImage instance behind your back, but we do try to manage this cache efficiently. So it will automatically free the cache if the system is low on memory, also if your app goes into the background. But in general, you should be really wary about holding on to CG image or UIImage instance past when you actually need them.
+
+Again, why are we telling you about this? Well, first, we want you to understand what you're seeing in TimeProfiler. The call that you'll see for the deserialization of the image where we actually call the JPEG decompression or the ping decompression algorithm is going to be CG image provider copy image block set with options or something along those lines, something with an image block set.
+
+And if you expand that call stack, you'll see actually time spent in ping decompression or JPEG decompression. So you see a lot of time spent here. Really make sure that your images are the correct size. For example, if you're displaying an image into a view that's 600 by 400, you should not be putting a 12 megapixel image into deserializing 12 megapixel image because that takes a really long time. The other reason why you want to make sure your images are properly sized is, again, they take a lot of memory.
+
+So to take that previous example of a 12 megapixel JPEG, it might be only 4 megabytes on disk. But at 4 bytes per pixel, 12 million pixels, that's 48 million bytes, about 48 megabytes. And that's--this, again, shows up as memory tag 70 in VM tracker as Dan pointed out.
+
+So if you see a lot of--if you see a lot of--if you see a lot of--if you see a lot of memory tag 70 memory in VM tracker, that probably means you're holding on to CG image or UI image instances past when you should be or you just have some really large images. And we've seen some really big, really popular apps do this where they'll just deserialize a huge bitmap, deserialize a huge JPEG like 15 megapixels, 20 megapixels and put them into a tiny view.
+
+And this takes a lot of time and takes--uses up a lot of memory and it's likely to get your app killed because of low memory. So really, really important to really, really watch out for this. A related topic is the animated images API. We have a couple APIs for this. UI image view set animation images, for example, has been available since 2.0.
+
+The good thing about them is they use CA keyframe animation behind your back to animate the layer contents. So this guarantees smooth frame rate. The bad thing is to guarantee the smooth frame rate, we have to go deserialize all the images at once. So this is really only appropriate for small animations like spinners.
+
+What happens if you use it for, say, a slideshow, a full-screen image slideshow? In this case, we've got 10 full-screen images. Each of them takes 2.4 megabytes of memory. So we end up with about 24 megabytes of bitmap memory all at once allocated. That's probably not what you were going for when you made the slideshow.
+
+As an alternative, you can use a CA DisplayLink as a timer to set the image on the image view on a callback. And the good thing about this is now you're de-serializing the images one at a time rather than all at once. The bad part about that, of course, is because you're de-serializing them one at a time, your frame rate is no longer guaranteed.
+
+Notice in this example that we're using image with contents of file or image with data rather than image named. Because, as I said before, image named does cache the image instance behind your back and tries to manage that global cache of image named calls and free them on low memory. But in this case, we really just want to use the image and get rid of it as fast as possible. So in those cases, use image with contents of file or image with data so that you don't get this implicit caching behavior.
+
+Let's go over a few image display guidelines. Again, remove alpha channels from your images. If you have a ping that looks opaque, really open it up in Photoshop or preview. Use that get info and make sure it has no alpha channel because that is what determines whether the image view is opaque or not.
+
+Size the images appropriately. As we were talking about with the example earlier, if you have a 12 megapixel image going to 600 by 400, that's a huge no-no. It should be a 600 by 400 image going to a 600 by 400 view or even a smaller image than that. And maybe for whatever reason, maybe you're pulling these images down from a server. You just have no control over it. What do you do in that case? Well, we do have APIs that down sample images efficiently in memory.
+
+That's the CG image source create thumbnail index API. This is in the image IO framework and it's really easy to use. As you can see here, you just specify, in this case, a max pixel size limit of 1024 and it will create a thumbnail that's a maximum of 1024 in width or height from the source image.
+
+Finally, as I've been talking about, all the image deserialization is lazy. And this is usually what you want. We want to be lazy if we can get away with it. But sometimes if you profile your app and you actually really, really just want to force the image to deserialize right now, you have to create your own image context to create a CG context and draw the image into the image. And you can do that by using the image as a reference.
+
+So, you can create your own image into that CG context as in this example. And really use this with care because this is a real easy way to blow up your memory footprint. But if you know what you're doing, you've profiled it in time profile, and you've determined that the only way you can get good performance is by eagerly deserializing your image, this is available for you. Next, let's talk about cropping, stretching, and tiling images.
+
+Not too many people know about this contents-rect property on CLayer because there is no equivalent UI view property that shadows this contents-rect property, but it's really useful for panorama effects. What it does is it lets you crop an image. So in this case, we're going to set the contents-rect first to that small rectangle and then to this full rectangle. And the result of this animation is this Ken Burns effect that looks like this. And it's really fluid on all devices that support iOS 5.
+
+We're just going to deserialize the image once and then per frame we'll update these four floating point texture coordinates over and over. So it's really fast. If you're going to use this on devices that don't support iOS 5, you're going to have to try this out because it may not be as efficient on the older devices that don't support iOS 5. We have a similar property, content center on CLayer and content stretch on UI view that lets you pick a region of an image to stretch. So in this case, we've got this small chat bubble and we're going to pick this little rectangle to stretch.
+
+And this lets you animate or just change the size of an image to be much bigger than the actual image size. So it's really useful, not just for animations, but just for minimizing the size of your assets. And this can replace a lot of basic draw-rect implementations. Again, this is efficient on all iOS devices that support iOS 5.
+
+If you're going to use this on older devices that don't support iOS 5, you're going to want to try to profile and change the size of the image. So this is really useful. And this is going to be a great way to try this out on your own.
+
+So you can just go ahead and try this out on your own. And you can also use this on your own. You can also use this on your own. You can also use this on your own. You can also use this on your own and just try this out on your own.
+
+And this is really useful. And this is really useful for your own iOS 5. Next, let's talk about tiling images. Tiled images are all over iOS 5. For example, the linens in springboard and the pattern background, the pinstripe pattern background on group table view cells. The way you create these tiled images is UI color, color with pattern image. And then you can use that color to fill into a CG context or you can just set the color as the background color for a view.
+
+Now, we've made a lot of improvements to tiled images in iOS 5. But to take advantage of those improvements, you need to make sure the width and the height of your tiled images are a power of two. So for example, 512 by 1, good tiled image size. 256 by 256 is a good image size. Just make sure the width and height are a power of two to get the optimal performance out of your tiled images.
+
+We've sort of combined these tiled and stretched images into a single API in iOS 5. And this is the UI image. So the UI image is a sizeable image with cap insets API. And you can just use this naively and you can get pretty good performance. But I just want to go over some guidelines on getting the maximum performance out of this API.
+
+So the first thing to notice is we have a 31 by 31 pixel image here. And if I set the interior region to be just 1 by 1 pixels, I'm guaranteed that that 1 by 1 pixel region will be stretched. And that's the maximum performance you'll get out of this API.
+
+So if you're using resizable image with cap insets, try to make sure that you're not going to get the maximum performance out of this API. Make sure that one--that if you can stretch the interior region, make sure it's one point by one point. Now, if you don't specify one point by one point interior region, what we'll actually do is tile the interior region. And tiling is a little less efficient than stretching. So it'll work. It might be about 20 percent slower and it takes--uses up a little more memory. So resizable images can also be used for tiling.
+
+Again, the guidelines for tiling resizable images are the same as with pattern images. If you can specify the edge insets to be zero and the size--the width and height to be powers of two, that's going to be the maximum speed that you'll get out of a tiled resizable image.
+
+Otherwise, you're going to go down a generalized path that may be about 20 percent slower and use a little more memory. So to summarize, if you're using resizable image with cap insets, try to make sure the interior region is one point by one point if you just want stretching.
+
+That always is fast. I didn't go over this, but if you just want to set the interior region to say one by N and your image view is N points high, that also is efficient. And if you want the most efficient tiling, make sure your edge insets are zero and the width and height are power of two. Finally, let's go over some performance guidelines for smooth animation performance.
+
+And the first guideline which you've probably heard over the years is to reduce blending. And the reason why this is important is the GPU can only perform so many pixel operations per frame at 60 frames per second. And a non-opaque pixel means that we have to blend that pixel against all the pixels below it, which increases the number of pixel operations. So you really want to make sure every--as much of your view hierarchy is green as possible and when you use this color blended layers option. So green means opaque, red means non-opaque, the redder it is means more and more layers of non-opaque.
+
+So in this case, we've got about one layer of opaque views and about three quarters of a layer of non-opaque views. So we've got about three quarters of a screen's worth of overdraw in this case. And you really want to be minimizing overdraw to be, say, less than one and a half screens at most for good performance. So you want to be minimizing overdraw to be less than one and a half screens at most for good performance on all iOS devices.
+
+How do you make your views opaque? Well, if you override draw rect, then make sure that your UI view is marked opaque. It is by default, but as I went over earlier, if you change certain properties like setting a background color with non-one alpha, we're going to flip that opaque property for you behind your back.
+
+[Transcript missing]

@@ -1,0 +1,207 @@
+---
+Title:  Managing User Privileges and Operations with Authorization Services
+Year:   2009
+Web:    https://nonstrict.eu/wwdcindex/wwdc2009/505/
+
+[!] This transcript has potential transcription errors.
+---
+
+ I'm Disco Vince Giffin, and today we're talking about managing user privileges and operations with authorization services. While developing for Mac OS X, your application may have to do something special. You may have to change the system time, you may have to load or unload a kernel extension, you may have to modify a restricted part of the file system. These operations require more privilege than your application normally has.
+
+So we call these privileged operations. Today we're talking about how we can perform privileged operations securely. But first let's look at why this is so important. So let's imagine this blue pie here is your application, and let's say this application may be a GUI tool for... editing Unix configuration files.
+
+If you're not familiar with Unix, a lot of the configuration files or in /etc/, and of course these files are only writeable by root; they're only writeable by the system, because you don't want users modifying configuration files for the whole system. So if our GUI tool is going to be able to modify these files and save them, some part of it has to be privileged; maybe this little part over here.
+
+And that's the part that will actually save the files and write to /etc/. Well in order for our application to actually work then, we're going to need to run it as root, so that our privileged part will work also and we'll be able to save these files that we've edited. But what if there's a bug in our application? Maybe in some plist parts or code... maybe over here somewhere.
+
+Well our application is running as root, so we have the privileges we need to modify these configuration files. So if an attacker's able to exploit this bug, turn it into a vulnerability, we have a root access vulnerability on the system. This is obviously very undesirable for your application, but of course it's undesirable for every system that your application is installed on.
+
+And this is something we would like to avoid. But what if it's a really small application? And what if you are a really careful programmer? So this time you'll just write an application that doesn't have any bugs in it. Well let's imagine... the blue portion here represents the code you've written, both the privileged part for writing to /etc/ and the rest of your application.
+
+And the green part represents the code that is in the various libraries and frameworks that you're using for you application. Now this of course is code you didn't write, and its code you may not be terribly familiar with. It's code that may have bugs of its own, and of course we have to run this application as root so it has the privileges we need, so we can save into the /etc/.
+
+Well these bugs that are in code that you didn't even write could be root access vulnerabilities in your application. There's gotta be a better way to do this, and in fact there is and we have some wise words to guide us. This is the principle of this privilege, it's a very important design principle that we have in software security.
+
+It states that every program and every user of the system should operate using the least set of privileges necessary to complete the job. So from that, it sounds like we want something a little more like this. Now of course we can't have the privilege code and the regular non privilege code running in the same memory space, so we really want something a little more like this.
+
+And that's what we're going to be talking about today. We're going to be covering managing user privileges in four parts. In the first parts, we're going to look at how we can use a privileged helper to keep all of the functionality we want in our application, but without making huge security compromises. That will look at how we can use authorization services to restrict the use of our privileged helper.
+
+We'll look at code identity, and we'll see how we can use code identity to restrict the functionality of our privileged helper, and in doing so restrict the danger that it presents to the system. And then we'll use authorization plug-ins, a feature of authorization services, to customize the authorization experience for our user. So to explain all of this, starting with privilege helpers, we're going to have a little example.
+
+And we'll call our example application Spackle. And Spackle has a feature that a lot of applications have, it has a self-updating feature. The self-updating feature is pretty straightforward, when a new version's available it wants to be able to update itself. And of course it does this by checking for a new version to see if one's available, will download the new version if it is available, will alert the user of course to say, hey user - the new version's out, don't you want it? Click the button. And of course we'll replace the existing version with the new version we just downloaded, and it will relaunch the application, suddenly the user has a new version.
+
+It's going to be great. Well of course there's a hitch, and that is that this is a privileged operation. And the reason this is a privileged operation is pretty straightforward. When you have an application running on the system the code is executing as the user who's using the application.
+
+You know - the user who double-clicks the icon. But a properly installed application on the system is only writable by the system, because if an application is writable by a user, and this application is used by all the users of the system, then that user can change it out from under users.
+
+So we only want the application to be writable by the system. Well of course then the code is executing as a user that can't overwrite itself. So how are we going to handle this "replace the existing version", overwriting the application? There are a lot of bad ways to do this. One way is we could popup a dialogue and say, hey user open terminal, it's in utilities, type in sudo-whatever, whatever. Of course there's obviously security implications. If the user were to typo, this could be catastrophic.
+
+And it's a terrible user experience, so we're not going to do that. Another option might be to set user ID application. Set user ID is a feature of the Unix security model that allows you to set a binary or an executable, to execute as a set user regardless of which user's using it.
+
+Now in our case we'd have to do this, this is root so we have all the privilege we need. But unfortunately this comes with a whole host of problems stemming from the fact that the execution is actually done in the user's environment. So that means that file descriptors, the argument vector, environmental variables, these could all possibly be manipulated by an attacker. And that makes set user ID very dangerous. Additionally we cannot have set user ID GUI applications on Snow Leopard. New in Snow Leopard, you can't have a set user ID application present user interface.
+
+So not even an option for us. Another option might be to use authorization execute with privilege. This is actually a feature of authorization services, and was originally added to this system so that an application could install its own privileged helper, which is great, but it is unfortunately a very general purpose facility and because of that it has all the problems of set user ID and more.
+
+So we really don't want to do this for our privileged operations. Finally we could have a privileged helper tool. This is our prescribed method; this is what we're talking about. So if you remember, our goal, like we saw with the principal of least privilege, is to isolate our privilege operations; to run them separately.
+
+And the way we'll do this, is we'll have a separate helper executable. We'll take our code that actually has to perform the privileged operation, and we'll put that code in a separate binary, separate executable. So we'll use interprocess communication to communicate between our application proper, and our privileged helper.
+
+This could be a CF message port or Unix domain socket. And now only our helper has to actually operate with any level of privilege, because the rest of the application does what it always did, and the privileged operations are performed by our privileged helper. And our privileged helper will only do one designated task. At first it may see like well, if I'm going to have to make these privileged helpers, I'll just make one that takes a string and runs it as root.
+
+But unfortunately that has a lot of really terrible security implications. And in order to really try to get to this least privilege we're talking about, we want this to only do one specific thing. So for our Spackle application, our Spackle application will have its privileged helper, and of course that privilege helper, keeping with least privilege, has one task and one task only.
+
+And that's overwriting the existing version. Now if we're looking at our project and we're looking at this feature that does the self-updating, it might make sense to us as a developer, to take out the entire self-update feature and put that in a separate binary, and that will be our privileged helper.
+
+And that might be a great place to divide the code, but it is a violation of least privilege because now we have the code that checks for the new version, downloads the new version, and links to get all those things, to use that functionality, that will also be running with privilege. So we really only want the part that does the actual overwriting of the application to be in this separate helper. And our protocol over our Unix domain socket maybe, will be very simple.
+
+We'll have a source path, a destination path, and you get back some result; probably 0 if there's no error. So it'll look something like this: we have the current version of the Spackle application in /applications. And we have a newly downloaded version with a great new icon, it's got a red handle on it, that's a huge feature.
+
+And that's in the downloads folder where we've just downloaded it to. So Spackle called this cocoa API, move item at path, to copy over the new version. And of course that is denied, because Spackle is not privileged, cannot overwrite anything in /applications. So Spackle's got a little helper tool. We call out to our little helper tool, and we say hey, can you please copy what I've downloaded into my /applications? And the helper tool then calls that same API, and of course it succeeds because this is running with privilege.
+
+So now we've got a new version of Spackle. We've glossed over a very important detail here, and I'd like to call it out explicitly. We're using launchd to get our helper the privileges that it needs. If you're not familiar with launchd, there's a whole another presentation on Friday, you should definitely check it out, familiar yourself with launchd. It's a really great feature of Mac OS X.
+
+And we're using launchd for our privileged helper by registering as a launchd job at install time. Our application installer that installs the Spackle application, and installs our privileged helper, is also going to install a launchd.plist. And this launchd.plist will specify that we want our helper tool launched as root in its own execution environment when we ask for it.
+
+And this is all triggered off of our IPC mechanism. So when we use our Unix domain socket, launchd will magically make our helper available as root for us. It's really great, you should definitely familiarize yourself with launchd. Now let's look at how we can use authorization services to restrict the use of our privileged helper tool.
+
+And so let's imagine we have our privileged helper sitting where it sits, and elsewhere on our system we have a Trojan version of mail. Now of course mail lives in /applications, and we all use mail, everybody uses mail. And let's say we're sharing this system with a malicious user, maybe our little sister. And maybe our little sister is a computer hacker evil genius.
+
+So she's written this Grout application that lives in her home folder, and the Grout application is going to message the helper. And the Grout application's going to say - hey helper, how about you take this Trojan mail that I have and you write over mail with it? Now the helper's not malicious. The helper's part of our Spackle app, but the helper is naive. So the helper helps, and says sure no problem sis. And now we got a Trojan version of mail on the system, unbeknownst to me. And my little sister's reading my mail, tattling to Mom, headaches.
+
+I'd like to avoid this. So we can use authorization services. Authorization services acts as a gatekeeper. It's important to note that authorization services isn't going to give us any additional privilege. We still want to launch our privileged helper using launchd to get the actual privileges necessary to complete the job, but authorization services will act as a gatekeeper so that we can restrict use of our privileged helper.
+
+And one great feature of authorization services is that policy is separate from the code. So an application using authorization services only has to say, hey system can I do operation X? And the policy for who can do X when is elsewhere, and it's configurable. So if at a certain site they say well, we only want this to be done after an admin authentication, or this operation can only be done after noon in the day.
+
+That's configurable by the admin at that site, and the code doesn't have to be changed for those policies to be set by an admin. In our policy we'll say we want some user interaction, and then in general it's not really nice to the user to perform any privileged operation without at least letting them know what's going on. So the way this works is pretty simple. The application that wants to perform the privileged operation requests an authorization right from the authorization subsystem.
+
+The authorization subsystem that evaluates the policy for that specific right, and returns a result. If successful it returns the authorization right that has been requested. That authorization right is then handed over to the privileged helper tool, and the privileged helper tool validated independently to make sure that the authorization right was properly obtained.
+
+So we have the Spackle application.... and there's a lot of code here we're cover in a little detail in a minute, but I want to point the API we call is AuthorizationCopyrights. Authorization copyrights requests a specific right from the authorization subsystem. The authorization subsystem will prompt the user. Now our little sister is not an administrator, we are.
+
+So we can go ahead and authorize this action. But before doing so, like any good administrator, we always click the disclosure triangle. The disclosure triangle will tell us, oh it's the spackle application trying to request the com.example.spackle.update right. And that seems perfectly reasonable because Spackle's trying to update.
+
+Cool. We'll go ahead and put in a password... dismiss the dialogue, and the right is sent back to the Spackle application. Excellent. Now when we message our helper, you could see we've augmented our protocol slightly. Not only do we provide a source and destination for the helper to do it's copy operation, but we're also providing an authorization right.
+
+So the helper gets the right, the helper makes a AuthorizationCopyrights call of its own to validate the right, to make sure it's legit. Everything checks out, so it calls its API ... and we get a new Spackle. But now what happens when little sis comes along again and tries to copy the Trojan mail over mail? Grout messages the helper, but Grout doesn't provide an authorization right because Grout doesn't have an authorization right, because Grout hasn't been authorized by the user.
+
+The helper's not willing to help Grout anymore. Now let's look at code identity. We'll see how we can use code identity to further restrict the functionality of our privileged helper. We know that we call AuthorizationCopyrights to request a right from authorization subsystem, and the authorization subsystem only gives the right back if an admin authenticates. And this makes sense because our helper app actually just overwrites A with B.
+
+Right? Essentially our helper app takes a source at a destination, and arbitrarily copies whatever is passed over whatever it's supposed to copy to, and it does this as root, so it could do this in one other system. It's in fact a very, very dangerous facility. So we like to narrow down the privilege, get a little closer to least privilege, and make it so it can really only update because that's the goal here. We only want a helper that updates Spackle, not one that arbitrarily copies as root. In order to get there, we're going to have to narrow our privileges a little further.
+
+So the way we'll do this is we'll assign an identity. So we'll use it here by assigning an identity to our Spackle application. We do this in Xcode when we build the application. And now our privileged helper can validate the identity, because it won't just arbitrarily copy A to B, it'll only copy A to B if A is in fact a newer version of the same application from the same vendor. And that's the only time it'll actually do this copying for us, which for us using it for Spackle is great.
+
+And it also narrows down what a malicious user could do with it. So now that there's no arbitrarily overwriting, it's probably OK to relax our policy a little bit. Previously our policy said only an admin can use this, requires admin authentication. But now it's not as dangerous as it once was, it's probably OK to not require admin authentication. So one less authentication dialogue on the system, and of course this is great for the user because users hate dialogues. Now let's look at authorization plug-ins and see if we can customize the authorization experience.
+
+We mentioned we're going to relax the policy to no longer require admin authentication, which is great, people hate dialogues. But we should require some user interaction, and ideally this will be a helpful message. We'll provide a helpful dialogue to the user instead of just a generic authenticate now. This dialogue would say hey, you currently have this version, this is the new version, but here are the features, whatever we want.
+
+And authorization plug-ins is going to help us do this. So the plug-in will be installed at install time, the same install that installs our application and our helper and launchd.plist can also install our plug-in for us. And we set the policy for the com.example.spackle.updateright that will be requested.
+
+We'll specify in that policy that we want to use our plug-in. So the plug-in will be invoked when the Spackle application requests the right for updating Spackle from authorization subsystem. Looks a little bit like this. We call AuthorizationCopyrights to request the com.example.spackle.updateright. And instead of getting a generic authenticate now you admin, we get this dialogue that tells us there's a new version, and it tells us some details about the new version. It's kind of nice.
+
+So let's review what we've seen so far. We're using launchd to launch our helper tool with privileges in it's own execution environment on demand. We're using authorization services to control access to our privileged helper tool. We're using code identity to greatly restrict the functionality of our privileged helper, though it runs with privilege it does a whole lot less now. And we're using authorization plug-ins to customize the experience for the user.
+
+Now let's give a quick demo.
+
+[ Silence ]
+
+I'd like to start by looking at the actual Spackle project here, launch Xcode. Now you can see that in the project we have an application, and of course we have our privileged helper code, and we have our plug-in that presents our UI.
+
+If we look at some of the target settings for our application, we can see in this code signing section here that we've assigned a code signing identity. And that is the identity that the helper tool is going to use to verify that a new version we're trying to copy over is in fact a new version of the same application. It knows this because it has the same code signing identity.
+
+[ Silence ]
+
+We'll look at our helper tool. Of course I mentioned our helper tool is going to be launched by launchd. And that's defined by this launchd.plist that we will install. We could see here essentially what this plist says to launchd, is please launch our helper which lives at this path, that's where we install it, when we use this Unix domain socket. So when we send a message over our IPC mechanism, launchd will automatically launch our helper for us.
+
+It's pretty great. And finally I want to take a look at our plug-in here. Our plug-in has a name of course to present our UI. I just want to point out that this is very generic, there isn't a whole lot of information field out here, and that's because our plug-in is going to be used for all the various update versions that come along of Spackle. So the Spackle application actually populates this information by putting in what's called a security context. And then the plug-in can take the information that was provided from the application, and display to the user.
+
+So now let's take a second to see how our Spackle application works. We can see that we have the Spackle 1.0 version, because this handsome UI tells us that. And we have a button here that says "check for updates". Now of course normally when you have a self-updating feature in your application, you don't have a button, it just does it when it launches or a minute after launch, whatever. But for demonstration purposes we put a button here.
+
+So we'll pretend it's just launching. We'll accept for updates, and this is before we've installed our custom plug-in. So this is the typical experience if you don't have any custom UI, it says oh, Spackle wants to change things. I look, it is in fact Spackle, it does in fact want to update, so I'll go ahead and I'll authenticate.
+
+And now we have the new version. It downloads very fast because of our super fast internet here. Now let's reset that real quick. And just for contrast we'll see what happens when we have the code signing implemented, so we don't require admin authentication, and we also want to use our custom plug-in to provide a little more information to the user. Now we check for updates and we get this plug-in that says a new version is available, it says the new version's 2, you currently have 1, it's compatible, there's features... it's great.
+
+It's a helpful dialogue, so we install the update. So we've seen this a couple of times now, where Spackle gets the right and passes the right, and helper validates the right, and we update Spackle. But I want to take a look at a couple of parts of this in a little more detail. And we'll start with this authorization exchange, the exchange between the Spackle application authorization subsystem, and of course the helper in authorization subsystem.
+
+And this starts with a Spackle application calling authorization to create, to create an authorization reference. And this reference is a handle to a set of 0 or more rights, and upon creation there's no rights there, but then we'll call AuthorizationCopyrights to populate our reference with the right that we're requesting. We'll have to call AuthorizationMakeExternalForm to externalize our authorization reference into a form that we can pass over our IPC to our helper.
+
+So of course the first thing is well I've got to define exactly what right we're requesting, and we're requesting com.example.spackle.update. We call AuthorizationCreate to create an authorization reference for us. We set some flags here, and specifically we're specifying authorization flag, interaction allowed. And what that means to the authorization subsystem is it's OK to interact with the user, I'm trying to acquire a new right. I don't already have one, so do what you have to do to acquire me this new right. Then we call AuthorizationCopyrights, and we get back the right we've requested.
+
+We call AuthorizationMakeExternalForm, and that transforms our right into an external form we can send over IPC. So we send it over to the helper. Now the helper calls AuthorizationCreateFromExternalForm, to internalize the auth ref. It then calls AuthorizationCopyrights to validate it by saying, hey authorization subsystem I have this right in my auth ref, is it valid?
+
+So we see CreateFromExternalForm to internalize the auth ref we've been passed, and we call AuthorizationCopyrights this time. We don't have an interaction flag because we don't want to interact the user, we're not trying to acquire a new right, we're just trying to make sure that the right we're checking on is here and is valid. The reply back from authorization subsystem says it's great.
+
+Now I want to talk a little bit about our policy database. We know we call AuthorizationCopyrights to request a right from the authorization subsystem. But of course the authorization subsystem doesn't just flip a coin, it doesn't say like oh, now's a good time to get a right out. It checks on the specific policy in the authorization subsystem's policy database. And it checks the policy for that specific right. There are many different privilege operations; each of them has a different right defined with a different policy.
+
+So we're getting the policy for that specific right. And then of course authorization subsystem evaluates that policy. So the policy database is composed of these rights and rules, and the rights are of course what we request, and the rules are used to make up the policy for each right. And the developers who add a privileged operation to the system add a right. When we add our Spackle application to the system, we add the com.example.spackle.updateright. That's a new privilege operation using our privileged helper, and so we add a right to the system.
+
+Of course we define a default policy, and that may say "require admin authentication". Or in our case it may say, you don't need admin authentication, but you do you need to use our plug-in that presents a UI to the user. But the administrator at the site can configure this policy. There may be a site where they say, well any application that installs or updates or any of that business, has to do admin authentication. That's perfectly reasonable, that's very simple.
+
+They just modify the policy for the Spackle update right to require admin authentication. The policy database is currently an XML plist, it lives in /etc/authorization. If you're curious, I definitely encourage you to take a look at it, there's some rights, there's some rules. But it is format... the format of this is subject to change, that you not modify it manually. We'll show you some API for that. It's a plist, it's pretty straightforward.
+
+Got some rights, got some rules, we'll talk about both of them. So when our installer installs our application, and installs our privileged helper, and installs our launchd.plist, and installs our plug-in, we also need to call AuthorizationRightSet. So we have an installer helper tool that will call AuthorizationRightSet to add the right to the policy database with our default policy, and that way it can be requested by our Spackle application when it needs to update.
+
+The installer helper tool calls AuthorizationRightSet, and then the authorization subsystem takes the default policy and adds the right to the policy database. The rights are defined in the policy database. There are many rights that are on the system by default for all the various privilege operations that the system does, and of course there are many rights that are added by applications that perform privileged operations. Ideally we'll have a different right for each operation.
+
+If your application performs multiple different privileged operations, even if your default policy is the same, you should add a different right for each different privileged operation because they may be configured differently at certain sites. A right is simply the right name, and then a set of rules that make up the policy for that right. These are the rules that must succeed for the right to be granted. It's pretty straightforward.
+
+There's a name, it's a dictionary of rules. There is a naming convention, looks a little like this - com.mycompany.myapplication.whatthisrightdoes. In our example it was com.example.spackle.update. There are wild cards in the naming. If you look at the [inaudible] authorization, the policy database, you'll probably see some rights that end in a period. And anything that ends in a dot or a period implies a set of identical rights, meaning it implies a set of rights that all have the same policy, because they have the same set of rules in there. There are some reserved names.
+
+You may see a system. or config. rights in there. Those are like for the system by the system. Any rights you add to the system you definitely want to use a com.whatever, reverse DNS naming. And let's look at these authorization rules. So Spackle calls AuthorizationCopyrights to request the right, and the authorization subsystem consults the policy database for that specific right. And what it expects back from the policy database is the set of rules that must be satisfied; that is the policy.
+
+So it gets back a set of rules. Of course the rules are defined in the policy database, and each right is composed of rules. A right is a policy, a right has a policy that is made up of these various rules, all which must succeed. Rules have both properties and classes, which we'll explain now. The three properties we want to look at - authenticate-user, timeout, and shared.
+
+So this is our example right. You can see the authenticate-user property. Authenticate-user is a bullion, true is a default, you could set it to false. And what this says is this tells the authorization subsystem while trying to satisfy this policy, so you can grant this right, it's OK to present the user with some UI and allow them to authenticate.
+
+Of course the default is true and that's often the case, but there may be times when it's not appropriate to present UI. And if that is the case, you definitely want to explicitly set this to false. There's a timeout, the timeout is an integer specified in seconds, and that tells authorization services how long it should cache the result of this evaluation.
+
+If you have an application that performs a privileged operation, and maybe in your GUI it's when the user clicks whatever, a little button or something. That may happen many times successively, and if the policy requires authentication you don't want that popping up every time so you might put a timeout of a couple of minutes in there, so successive attempts will just get back the previous evaluation.
+
+And shared says whether this evaluation, the result of this evaluation, can be shared with other rights. You may have many rights to have the same policy, the same set of rules. And if you share the result of one, any equivalent right, meaning having the same set of rules, can share the evaluation result for within that timeout. Rules have classes. There are six here. The first two are lame, because they just allow and deny, so we'll skip those.
+
+But let's look at these other four in some detail. The user class comes in two forms - user and group, and session owner. Let's look at this in context. This is an actual right on the system. I don't know if you use activity monitor, it's in /utilities, /application/utilities.
+
+But this is the right that is used when you want to kill something that's running. And this uses the user class to specify that the user trying to perform this operation has to be in the admin group, they have to be an admin on the system. That makes sense, and this is of course used in a lot of places. So another actual right on the system, and this one specifies that the user trying to obtain this authorization right has to be currently logged in.
+
+They have to be a session owner. The evaluate mechanisms class. In our example we used a plug-in to present some custom user interface, but plug-ins can have multiple mechanisms. A plug-in has one or more mechanisms, and these mechanisms can acquire, operate, on authorization data. We'll cover plug-ins in a little more detail in just a minute, but I also want to specify that they can be specified to run as root, or to run as a special security agent rule account.
+
+So we'll look at an actual example on the system, and this right is used when you try to restart or shut down the system, when there's another user who's logged in but like fast user switched away... presents this UI that says hey, somebody else logged in, you're really sure you want to screw them over?
+
+So it requires admin authentication ... and this right uses the evaluate mechanisms. You can see here that there's four mechanisms to be evaluated. The first part specifies the plug-in, built in isn't an actual plug-in, it's a set of mechanisms that are built into the authorization subsystem, but the restart authorization is an actual plug-in. It's a .bundle that was on the system, and it provides two mechanisms we're using here on the second and fourth lines.
+
+The part after the colon specifies the specific mechanism you want to use. And all of these mechanisms are evaluated in order, and each has to succeed for the next to be invoked. And finally on the end, there's an optional [inaudible], which specifies whether this mechanism has to be run as root. Now this is not true for our restart authorization plug-in because there's no need to run that with any special privilege, but of course on the third line you can see the built in authenticate is privileged, and that makes sense, that's a privileged operation.
+
+Otherwise we could have users on the system just checking passwords all day. There is a rule class for rules. We sometimes call that delegation because it's a mouthful. And that allows us to compose a rule of other rules. It uses logical ending, meaning all the rules have to succeed, but you can also specify as subsets.
+
+You could say I have this set of rules, and if any three of these five succeed, then that's sufficient. This is an actual right on the system, and it's using the k-of-nsubset with an integer 1; meaning if any one of these three rules succeed, that it's OK to grant this right.
+
+So that's ORing right? Because if any 1 of a subset, so we set up logical ORing there with a k-of-n1. And finally the default rule. The default rule is used if no other rule is specified for a right, requires the user to be an admin, of course they can authenticate as an admin if need be. There is a 5 minute timeout because it's used in a few places, it's shared.
+
+It's a default so it's used all over. This is a right on the system that actually calls out the default rule explicitly, but of course if no rule is specified the default rule is implied. And this is the actual definition for our default rule. You can see we're using the user class to specify the user has to be in the admin group, it's shared of course. We've a 300 second or 5 minute timeout on the default rule.
+
+And finally I'd like to look at authorization plug-ins.
+
+[ Silence ]
+
+We call AuthorizationCopyrights to obtain the right from the authorization subsystem, and the policy comes from the policy database. And this policy may require admin authentication, or may require some other UI, like in our example we're using a plug-in. So the authorization subsystem calls on SecurityAgent for this.
+
+SecurityAgent is actually what on the system provides us with this dialogue. Now of course as in our example we're using a plug-in, Security Agent also presents the UI for that, dynamically loading the plug-in, and presenting the UI from that plug-in instead. So let's take a look at the anatomy of these plug-ins here. We mentioned that each plug-in has one or more mechanisms. And the mechanisms extend authorization functionality by having some kind of UI that acquires authorization information from the user... or operating on data that has been obtained from the system, or from the UI you presented.
+
+So you can imagine an authorization plug-in that does authentication based on retina scanning. You could have a single plug-in with two mechanisms. The first mechanism presents a UI that says please place your retina on the track pad.
+
+[ Laughter ]
+
+And you could have another mechanism in the same plug-in that analyzes the multi-touch data of your retina to verify it's in fact you, with your retina on a track pad. Three more points we want to cover on plug-ins.
+
+The first is the location. Any plug-ins you add to the system should definitely go in /library/security/SecurityAgentPlugins /pluginName.bundle where of course the plug-in name is the name of your plug-in. You may see plug-ins elsewhere on the system if you look around, those are for the system by the system. Any plug-ins you add should definitely be in /library/security/SecurityAgentPlugins. And Security Agent does not look into the library, so don't put any plug-ins in there. They have to be in /library/security/SecurityAgentPlugins.
+
+The life cycle of a plug-in, I just want to call this out to be clear about this part here. We call plug-in instantiation when a plug-in is used in the evaluation for a right, we call plug-in clean up at the end. And we iterate through four mechanism steps for each mechanism we're using.
+
+So for our retina scan, we call plug-in instantiation and then iterate through the mechanisms twice - once for each step of the retina scan - and then for each mechanism of the retina scan, and then we call plug-in clean up at the end. If you are making your own plug-ins that do present UI for the user, you should definitely take a look at SFAuthorizationPluginView.
+
+It's an objective C class, it's provided by the Security Interface Framework, and it's just a base for adding a view to the standard off dialogues that we put up. So if you need to acquire some information, you need to say please put your retina on the track pad, or put your thumb on the eyesight, whatever you're doing... you definitely should take a look at SFAuthorizationPluginView.
+
+So let's review what we've seen. We have our Spackle application in /applications, properly installed application. We have a new version that Spackle's just downloaded for us in the downloads folder. Spackle's going to call AuthorizationCopyrights to obtain the rights to update itself from the system. Authorization subsystem's going to consult with the policy database on that specific right. The policy requires that we present the user with some user interface, specifically our plug-in. So the authorization subsystem uses Security Agent which dynamically loads our plug-in to present the user interface.
+
+The right is returned to the Spackle application. We're using launchd to launch our helper on demand. We send the right over to the helper. The helper does an AuthorizationCopyrights call of its2a own to validate the right. And we have a new version of Spackle. For more information, you can contact Craig Keithley, he would love to hear from you. We have some sample code, both for Authorization Services proper and plug-ins. If you're going to create plug-ins there's a couple of great examples for that. There's header files of course for authorization proper and plug-ins.
+
+We have some documentation here for authorization and for getting you started with launchd. In summary, we encourage you to take any privileged operations your application needs to perform, and put them in a separate executable. Use launchd to launch this executable, with the privilege level it needs. You should use Authorization Services to gate the access and use of your privileged helper. You can implement code identity, in our case to eliminate redundant authorization authentication dialogue. And you can customize the user experience, and extend authorization in general with authorization plug-ins.

@@ -1,0 +1,155 @@
+---
+Title:  CFNetwork in Depth
+Year:   2003
+Web:    https://nonstrict.eu/wwdcindex/wwdc2003/112/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Thank you all for coming out here for this last session. You were only an hour and a half from the margaritas. I'm here today to talk to you about CFNetwork. And this is roughly what we're going to cover today. We're going to start out with an overview that shows how CFNetwork fits into the system as a whole. And then we're going to go through the basics of how you use a CFNetwork object. All of the objects are used in essentially the same manner, and we're just going to walk through that basic paradigm.
+
+After that, we're going to start looking at the actual objects provided by CFNetwork. Those can be broken down into two categories. First, we have some basic abstractions, and that's CFHost and CFSocketStream. And then we have some protocol implementations, FTP, HTTP, and Rendezvous. So with that, let's get started with the overview.
+
+So those are the questions we're going to try to answer today. What is CFNetwork? How does it fit into the stack? And when should you use it? I know with the introduction of Safari that we've been talking about a lot of different internet technologies here. And CFNetwork's one of those. So how do you choose between them? How do you decide to use CFNetwork instead of one of the other libraries?
+
+First and foremost, CFNetwork is a library that abstracts several basic network protocols. And I've listed those protocols here. DNS host resolution, that's new in Panther. FTP, also new in Panther. HTTP, rendezvous, and sockets, basic sockets. The APIs are designed in the same style as core foundation. In fact, all of our objects are exported as CF types, so you're going to retain and release them the same way you would retain and release any CF object. And further, those APIs all support asynchrony. This is the other main purpose of CFNetwork. It's to take your networking inputs and provide the network events to you using the run loop, using the same asynchrony model through which your user events are coming in.
+
+So what are the goals for CFNetwork? First and foremost, this is a power API. We are trying to expose the full power of the underlying protocols to you. We're trying to also get strong integration between the CFNetwork library and the other libraries on the system, particularly, like I said, with the run loop, so that you can get your network events in the same manner as all the other events happening in your program.
+
+Part of being a Power API is providing high performance. So one of the other goals we have is to make sure that our objects perform with very nearly the same performance you would get if you chose to write directly to the socket layer. But one of the consequences of choosing to be this power API is that we're not going to protect you from any of the details. This is not a convenience API the way some of the other APIs you've heard about this week are. So you need to know how to use the run loop. You need to know the basics of the protocol that you're taking advantage of.
+
+So where does CFNetwork fit into the overall architecture of Mac OS X? You've seen this diagram probably a few zillion times by now. Darwin, the Core OS at the bottom, applications all the way at the top, a couple levels of libraries in the middle. And if we look at the networking concepts and the networking APIs, this is sort of how it breaks down. BSD Sockets is what comes from the low-level CoreOS.
+
+CFNetwork is the first level of abstraction above raw sockets. And then all of the other stronger, higher-level APIs are built on top of CFNetwork. So that includes NSURL and the WebKit, for instance. And then the applications sit above that. And I've listed here just five of the clients that I know of that take advantage of this networking stack: iCal and iSync, Safari, of course, Mail, and iChat.
+
+So when should you choose to use CFNetwork instead of one of those higher libraries, instead of going to the NSURL APIs or the WebKit APIs? Well, use CFNetwork if you particularly need an API that is that low level and high performing. So you would go there when you need extra control, like needing control of exactly when the bytes are going to come off the socket, or exactly when the bytes are written to the socket.
+
+Use CFNetwork also if you need detailed control of the protocol stack. The higher level APIs often expose protocol details so that you can tweak and change things, but that can become cumbersome if you're ending up constructing, for instance, an HTTP request in its entirety. Sometimes it's much easier to drop to CFNetwork and just construct it all yourself.
+
+And also, use CFNetwork if you want to avoid higher linkage. You don't want to bring in the app kit. You don't want to bring in, in fact, anything above that core services layer. Well, then CFNetwork can help you out. But by all means, use the higher APIs if that fits your application. The higher APIs do more things for you. They're more convenient. They're easier to use. They provide a lot of advanced features that we do not at this layer.
+
+So that's sort of when you would go down to the level of using CFNetwork. But suppose you're a Unix programmer and you've been working with raw sockets. How do you decide to climb to the CFNetwork layer? Well, the first and largest reason is because you want that run-loop integration.
+
+You don't want to deal with handling the select loop yourself. You'd rather be able to integrate with your main event loop, let CFNetwork do the work of finding out when the socket has data available, and inform you in a way that fits seamlessly into a regular application context.
+
+Another reason we see why people come up to using CFNetwork is because although sockets work perfectly fine for them, they discover that suddenly they want to secure the socket and add SSL encryption over the top. Well, unless you want to implement an SSL stack or get to know an SSL library, CFNetwork might help you out there. It's a simple single option to turn on SSL on any given socket.
+
+Finally, if you want an object abstraction, we can provide that for you. That's what we get from Core Foundation. That's just a simple reference counting CF-type abstraction. Finally, use CFNetwork if you know the protocol. You know HTTP, you know how to use it, but you just don't want to write the parse engine. You don't want to write the code that does all the details of talking the protocol itself.
+
+So when should you not use CFNetwork? Well, use NSURL connection. That's the new URL loading API that was introduced with the Safari SDK. If you need one of these other functions, or one of these other features, first of all, if you want a more convenient fire and forget just get me the data API, NSURL connection is better suited to your needs.
+
+You'll also have to use NSURL connection if you're looking to handle any arbitrary URL. The NSURL connection API is protocol agnostic. You don't have to know what kind of URL you're working with. CFNetwork is not. You must know in advance that you're doing HTTP or FTP. If you need to add your own protocol implementation, if you've got to have a way to implement Gopher and plug it into the existing stack, that also happens at the NSURL connection layer.
+
+Finally, I've just listed a couple of major features of the URL connection layer: caching and authentication. We have the raw hooks inside CFNetwork to add authentication. We're going to look at that today. But NSURL connection goes way beyond that, to being able to manage your credential store and cleanly inform you when authentication failures occur and let you intervene in the whole authentication process. It also adds sophisticated caching so that as URLs are accessed, you can store those on disk or in memory automatically.
+
+So now I'm going to go on to talk a little bit about the basic usage of CFNetwork objects. They all follow the same basic model, and not too surprisingly, they all start with creating the CFNetwork object you intend to use. Once you've created the object, you set yourself up as a client.
+
+All of these APIs are asynchronous. That means they're going to go out and monitor something, and when something interesting happens, they're going to turn around and inform you. Well, they inform you by sending your client a callback, and when you set yourself up as the client, you're saying, "Hey, talk to me."
+
+Once that's done, the CFNetwork object needs to know what thread it should talk to you on. We do that by, you give the CFNetwork object that information by scheduling the object on a particular run loop. Remember, with CF run loops, one thread, one run loop. It's a one-to-one correspondence. So, when you schedule on a run loop, effectively what you're saying is, "This is the thread I want my callback on."
+
+Once that's done, you start the CFNetwork object. You just tell it, go and do the thing that I created you to do. And then you just sit back and wait. You need to keep the run loop running. If the run loop's not running, then the CFNetwork object has no way to get time from the CPU, and it also has no way to call you back.
+
+Most of the time, you don't have to do that yourself, because both AppKit and HLTB keep the run loop running for you. But if you're on a secondary thread, or if you're not linking one of the GUI frameworks, you're going to need to call CFRunLoop run, or one of its variants, to get the run loop going. And eventually your callback will be called. At that point, you find out what happened and you field the results. Finally, when you're done with the CFNetwork object, you need to clean it up and dispose of it.
+
+All the different CFNetwork objects available follow this model. In fact, several of the other objects inside core foundation and system configuration also follow this basic model. So I think it'll pay off to become familiar with it and understand how it works. And now I'm going to take you through an example of that model.
+
+We're going to talk about CFHost here, since it's one of the new objects in Panther. CFHost allows you to do an asynchronous DNS lookup. And here what we're going to do is look up the IP address for www.apple.com. We start out by creating the object, CFHost create with name, and we tell it what host name we intend to look up.
+
+Then we set up the client. Now, all of the CFNetwork clients are set up in these context structures. And it can be a little confusing and daunting. The main thing to know is that your info pointer is always the second argument. And if you want us to treat that info pointer as just a blind void star, all the other arguments can be null. If, on the other hand, that info pointer is a CF type, then the other argument should be CFRetain, CFRelease, CFCopyDescription. And you can see examples of that in the documentation in the example source.
+
+So you set up the context, and then you call CFHostSetClient. You're going to pass the CFNetwork object you're registering with. So here, my host. You're going to pass the callback you want called. And then you're going to pass this context ref, which is how you get information passed back to you about what you're requesting. you're requesting.
+
+Once that's done, you're ready to schedule on the run loop. Here, I'm calling CFRunLoop.getCurrent to get the current run loop. So this essentially says, I want my callback on this very thread, the one that I'm executing on now. Now that all of that context is set up, we're ready to start the CFNetwork object off. And so here we call CFHost setInfoResolution and tell it that the info we want resolved is the host's IP addresses. And now we sit and wait. And we do that by running the run loop.
+
+So then at some point in the future, hopefully, you're going to get a callback. And the callback's going to look something like this. The first argument is always going to be the CFNetwork object that's reporting the result. Then there are going to be several arguments that tell you what result you have received.
+
+So here we have a type info field to tell you what kind of information is coming back, an error field in case an error has occurred, and then the last argument is always your info pointer, out from that context structure. And basically what you're going to do in each of these callbacks is first check to see if an error is being reported. If it is, you have to field the error.
+
+If no error has been reported, you look and see what information is being reported, and you do whatever you need to do there. So here, if the type info is host addresses, we're being told that the addresses are available. We turn around and call CFHost getAddressing, and this returns an array of all of the IP addresses that we found, and you can do whatever processing you need on that.
+
+Finally, cleaning up. With a callback-based API like this, it's not as simple as simply calling CFRelease when you're done with the CFNetwork object. The reason for that is that with a reference counting API, you can never know for absolute sure that your reference was the last one, and so when you call release, that object's going to be destroyed. Well, since you can't know that the object is going to be destroyed, you probably want a way to make sure that your callback will never be called again, because the object may hang around, but you're not planning to.
+
+So the way you do that is by first calling setClient null. That tells the object, forget you ever heard of me. Don't come back, don't call, don't write. Once that's done, you unschedule from the run loop. This is not strictly necessary, but it's a performance boost, because as long as you're scheduled on the run loop, that object is going to keep using the run loop to do work.
+
+After you've unscheduled, if the object is still doing work, if you haven't told the object, okay, stop, you're done, this is the time when you want to call cancel or close or whatever the call is that tells the object, you know, stop doing anything. I'm no longer interested in the work. Finally, only after all of that is done should you call CFRelease and forget your reference to the object.
+
+So that's the basic usage model for all of the different CFNetwork types. However, it's not the only usage model we support. We consider that model asynchronous event driven. The basic idea is you tell the object to go, and at some point the object's going to call you back and say, these interesting things have happened.
+
+However, we do support other common models, polling and blocking. We don't recommend that you use them. They will not perform as well as the event driven model will. But if you're adapting old code that uses one of these models, or you're working inside an architecture that requires it, you can use them.
+
+And now I'm going to move on to start talking about the actual objects inside available from CFNetwork. And like I said, we're going to start out with the basic abstractions. There are two I want to talk about, CFHost and CFSocketStream. CFHost, like I said, is new in Panther and allows you to asynchronously do a DNS host lookup or a reverse DNS host lookup. You can create a CFHost either from a host name or from an IP address, and you see the two different CFHost create calls there.
+
+And when you're ready to start the asynchronous resolution, you'll call CFHost start info resolution. The arguments, as we saw in the code example, determine what it is that's going to be resolved. You have three choices. You can resolve IP addresses. That's probably going to be the most common. It's just a basic asynchronous DNS lookup.
+
+You can look up DNS names. So if you started from an IP address, you can do a reverse lookup. And finally, you can check reachability to that host. And a word of warning there, that reachability is defined the same way system configurations reachability is defined. In other words, we're not actually going out and pinging the remote host to see if we can get a packet all the way there and back. We're just checking to make sure there's a path configured off the machine that is likely to get you to where you want to go.
+
+So with CFHost, once your callback is triggered, that means that the information you need is now available. And you can now turn around and retrieve that information out of CFHost by calling one of these three functions. CFHost get_addressing returns the IP addresses, CFHost get_names returns the DNS names, and CFHost get_reachability tells you whether or not the host is reachable at this time.
+
+Moving on to CFSocketStream. CFSocketStream is simply a stream wrapper around a socket. So, sockets, you can read and write to them both, so we return a pair. There's a CFReadStream and a CFWriteStream to go with the socket. You can create such a pair of streams to any of these different things, a CFHost, a CFNetService that you might have gotten reported back via rendezvous, a host name and port pair, an arbitrary socket signature if you're comfortable working with sock adders.
+
+Or you can actually take a preexisting raw socket and wrap the streams around them. And the one catch to remember is that there is only one socket underneath. And any configuration you do on one stream is going to affect the other, precisely because there is just that one file descriptor underlying the streams.
+
+So the basic support for CFSocketStream actually resides inside core foundation, and you can find the most basic creation routines in CFStream.h inside the core foundation headers. But CFNetwork adds several interesting configuration options on top of that. I already touched on one of them, SSL or TLS encryption and authentication. That's configurable from inside CFNetwork. We also added SOCKS proxy support. And you can find the details about how you would use those inside CFNetwork, CFSocketStream.h.
+
+So, on the topic of proxies, this is a common question we have. Okay, I've got this great stream, but I don't know how to set it up so that it will navigate the proxies configured on the computer. Well, several of the CFNetwork APIs are set up to accept proxy configuration dictionaries. Here I listed three of them, CFSocketStream, HTTPStream, and FTPStream. Because of the layering of this API, because this is that low level API where we're giving you full control over all the configuration, we will never apply a proxy automatically.
+
+However, we tried to make it as easy as possible for you to apply the default proxies. And the way to do that is to call scdynamic_store_copy_proxies. That's the function that will return the dictionary of proxies configured on the system. And then just pass that straight through to us. If you do that, we will automatically go through, figure out what the right proxy to use is, and apply it.
+
+The reason why we do it this way is so that if you're in a situation where you know you don't want to use the default proxy, there's no reason to go through the HTTP firewall, for instance, if you know you're hitting a local server, you have a way to do that.
+
+So with that, I'm going to move on to talking about the network protocols. We have three to discuss. We're going to start with FTP, because that's new in Panther. We're going to then talk a little bit about HTTP. And then finally, we're going to talk about the rendezvous support inside CFNetwork. And I've listed here the types, the CF types associated with each of those different protocols. CFFTP stream backs FTP.
+
+CFHTTP message and HTTP stream back HTTP. And rendezvous is, you access rendezvous via CFNet service and CFNet service browser. So, FTP stream is new in Panther, and you can use it to download an FTP URL, or to download a directory listing for an FTP URL. We don't have upload support on the CD that you got, but we're promising it to you by Panther.
+
+And I'm going to just walk you through a code example of how you would download an FTP URL. It's pretty straightforward. You create the URL to the FTP location you're interested in. You call CFReadStream, create with FTP URL. You're getting a read stream back. And now you just use the stream the way you would use any stream. You open it, you read from it. I do not show the event-driven model here, but normally you would schedule yourself and wait for the stream to inform you that there are bytes waiting for your attention.
+
+Downloading a directory listing is very similar. You start out by creating the URL, but here the URL is a directory URL instead of a file URL. You can tell that because it ends in the slash, and that's actually what we queue off of to figure out whether we're looking at a directory or looking at a raw file. So, you need to do this extra step of parsing out the resource listing. So, I represented that by calling this parse resource listing function. And this is what that function's going to look like.
+
+So you got back this buffer from the stream. You have a length and a number of bytes. And what you're going to do is call this other function, CFFTPCreateParsedResourceListing, giving back the buffer. And each time you do that, we'll scan the buffer and try to find a directory listing. If we find it, we'll tell you, OK, I just consumed the first 80 bytes.
+
+And then we'll take those 80 bytes and parse out a full directory listing and return that to you as a CFDictionary. So the dictionary has a bunch of keys. I'm not going to go into all of them here. They're all documented in the headers. But I show here, CFDictionary, get value, listing, and then the resource, KCFFTPResourceName. And that'll return the actual name from the FTP listing.
+
+And then, of course, because we told you we just consumed the first 80 bytes, you need to update your internal buffers to say, OK, next time I call this function, I'm going to start 80 bytes further downstream. And that function, the parsed resource listing function is going to return zero if there aren't enough bytes available for us to get a full listing, or negative one if we can't understand the bytes we got.
+
+Moving on to HTTP. CFHttpMessage is a CF type. It's just a pure data type, doesn't have any asynchrony built into it or anything like that. It simply represents an HTTP request or an HTTP response. Once you have an HTTP message, you use CFHTTP stream to actually perform the HTTP transaction, to take the request, serialize it, ship it over a socket, and get the response back. So your normal usage is going to be to create an HTTP message for the request, create an HTTP stream from the request, and then open and read from the stream.
+
+And that looks like this. Start out by creating the HTTP URL, construct a request from that URL. Do any extra configuration. So here I'm setting the user agent to myapp1.0, just to show you what that would look like. Once the message has been configured the way you want it to be, call CFReadStream create for HTTP request. You're going to get a read stream back, and again, you're going to use the read stream the same way you would use any read stream. Set yourself as a client, open it, wait to be told bytes are available.
+
+Now that's the basic usage for the HTTP stack, but there are a couple others that are interesting to note. Sometimes you don't want us to build the socket connection for you, or sometimes the bytes aren't even going to be coming from a socket. They're coming from a file sitting on disk or from some piece of memory you got from somewhere else.
+
+You can still use CFHTTPMessage to perform the HTTP parsing for you, and you do that by calling CFHTTPMessage create empty, and then calling append bytes repeatedly. As the bytes are appended, HTTP message will parse out the interesting structure. And then you can ask it for interesting values, like you can query the header fields, you can find out what the status code is, all of that kind of thing.
+
+Now, sometimes when you're performing an HTTP transaction, there's a lot of payload data. You're performing a post of some large amount of data, or you're pushing a file back to the server, and you don't want to load all of that into memory, which is the normal way of handling requests.
+
+You could accommodate that by calling CFReadStreamCreateForStreamedHTTPRequest instead of the normal creation function. One of the arguments to that function is a read stream, and we will automatically pull from that read stream to send the body onwards. And that's just, again, to help you avoid having to hold these large resources in memory.
+
+Finally, CFHttpMessage can be used to add authentication information. There's a function, add authentication, you pass it. The request you're about to send, the username and password that you want to apply. There are a couple other arguments as well. And basically, we will look at the information you gave us and put together the correct header fields and apply them to the request. So you don't have to understand the details of digest authentication, for instance.
+
+Moving on to Rendezvous. Rendezvous was introduced in Jaguar, and the idea was to allow clients out there on the network to advertise services that they had provided. Then other clients can go out and look for those services and discover them without the user needing to go through any configuration work.
+
+CFNetwork takes these services and integrates it with the run loop. So again, you can receive information about services available or advertise your own service in a way that's well integrated with the normal event structure on the system. There are two types, the CFNetService and CFNetServiceBrowser. CFNetService represents a network service. It's a single provider somewhere out there on the network. It is a printer, it is a web server.
+
+A net service has a number of attributes, and I've listed them here. The domain is where that service could be found. So most often it's .local for the local network. You can also always pass the empty string anywhere you're asked for a domain to mean the local network.
+
+The type is what kind of service is being provided, a printer or a web server. The name is a name you have chosen to title your service, so Becky's web server as opposed to Apache's as opposed to Apple's. And then the address and the port is the IP address and the port that should be used to contact your service.
+
+So you would use a news, excuse me, you would use a net service for two basic reasons. Either you have a service yourself that you wish to advertise, so you want to announce your presence on the network so that other clients can find you. Or because you've found a net service that someone else has provided and you now want to go and connect to it. Network service browser is how you would go out to find those services. And each service browser represents a search. You can search either for individual services or for service domains to find out, in a sense, where are the different places you could look for services.
+
+So to advertise your service, what you're going to do is create a net service using CFNetServiceCreate. You're then going to register that service by calling CFNetServiceRegister. Now this is a little -- this one case is a little different from the other CFNetwork cases because the only event that could possibly be reported to you is that an error or a naming conflict has occurred. So usually you're hoping that your callback isn't going to be called. If it is called, it means that there's a name conflict and you should prompt the user for a new name or you should choose a new name yourself. Somehow handle that conflict.
+
+The other way you use a NetService is to resolve someone else's service. Usually that means you got the NetService from a NetService browser. The first thing to note is that if all you want to do is connect to it, you're done. Just take the NetService and pass it into CFStream, create pair, and you'll get back a read and write stream that's directly connected to the service you're interested in.
+
+However, you might also want to know more information about the service. You might want to know what the name is to display it to the user. You might want to pick and choose between the IP addresses that that service is advertised on. To do that, call CFNetService resolve. That'll start an asynchronous resolution of all of the information about the NetService. When you get your callback, you go back to the NetService and say, okay, tell me about yourself, and you can get all the information then.
+
+Okay, using a Net Service Browser. Create the browser using Net Service Browser Create. And then you decide what you're going to search for, either domains where services are being advertised, or services within a given domain. And your callback will be called as domains are found out on the network.
+
+Your callback is also going to be called as those services disappear. So if you leave a browser running for a long time, it'll call you back and say, okay, Becky's printer is gone now. These other printers have become available. So you can track over a long period of time that way.
+
+Wow, we're just sipping through this. We're going to move on to the wrap-up. All these sessions have already happened. However, if you're looking back on the conference later and going through your DVDs, here are some sessions that might be of interest to you. 403 Safari overview talked about all the different technology pieces that go into Safari. 105 Rendezvous spent a long time talking about Rendezvous itself.
+
+110 networking overview talked about all the different networking APIs available on Mac OS X. There's a lot of time spent there also talking about the basic capabilities of the Core OS networking pieces. Advanced Foundation URL APIs talked about those new URL loading APIs that are available now with the Safari SDK. Xavier Lagros, who I'm going to invite up to the stage now, is our evangelist, and you can contact him with any questions or comments about the CFNetwork APIs.
+
+Just to flash through the documentation quickly, there's a ton of documentation about all different aspects of the networking APIs on our system. Just go to ADC home documentation networking and browse. You'll be amazed at how much you find. But in particular, I wanted to highlight the CFNetwork section. And there's a very good programming topic on using CFRunLoop. And finally, Rendezvous also has its own section.
+
+Sample code and developer examples networking. I'm not going to go through this in detail, but there is a good example of using HTTP there. There's also a good example of writing a server and a client and getting them to connect using rendezvous. MacNetwork Prague is a fabulous mailing list. I'm on that list. Most everybody I work with at Apple is on that list. It's for discussing all aspects of network programming, and just go to lists.apple.com, and you can sign up there.

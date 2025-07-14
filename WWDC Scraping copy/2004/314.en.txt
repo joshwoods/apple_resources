@@ -1,0 +1,235 @@
+---
+Title:  Compile and Link Strategies on Mac OS X
+Year:   2004
+Web:    https://nonstrict.eu/wwdcindex/wwdc2004/314/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Good afternoon, and welcome to the 5:00 session here on Friday afternoon, the last session of WWDC. My name is Matthew Formica. I am, as many of you I'm sure already know, am the Cocoa and Development Tools evangelist here at Apple Computer. And this is the one session of the week where I actually get to present some technical content, as opposed to just hosting Q&A. So with that said, let's get started.
+
+So one of the things in developer relations that we've noticed as we work with all of you on various applications is that the low levels of the operating system have a big impact on application performance. In fact, a lot of times, the launch time of an application or how it performs has a lot to do with the dynamic linker, DYLD, and how the application is linked together statically as well. And these pieces of the operating system are often less well understood than some of the other API sets in the OS.
+
+and David Koehn. On top of this, Apple is making significant technology advances in these areas for Tiger. And so we thought this session would be a good opportunity, almost as a trail guide for all of you, to help you understand some of the things that we're doing in this space.
+
+So what we're going to talk about today is prebinding, which up until recently has been the way to get applications to launch quickly on Mac OS X. Some of the changes we made in 10.3.4 and higher, what we're planning to do for Tiger for DYLD How to use dead code stripping. And then we'll dive down into wchar_t for the compiler. So a little bit of a recipe cookbook type approach here today. We're going to cover a lot of ground.
+
+So we're going to talk first about how prebinding works, and this is to show you where we've come from. It also will hopefully give you a little insight into the workings of how an application launches, and it still has some applicability today as well, especially if you are still trying to maintain compatibility for older OS versions. What is prebinding?
+
+Prebinding makes Mach-O applications launch faster. Mach-O is the native binary format for Mac OS X. What prebinding does is it rebases a binary to a virtual memory address ahead of launch time. So your application needs to be somewhere in the 4-gigabyte address space, and prebinding says where that goes. Prebinding can take a lot of work to get right.
+
+If we start with the Mach-O binary format, in addition to all of the application data and other symbolic information that goes in there, the Mach-O binary can contain links off to other libraries and frameworks that it links against, as well as symbolic information concerning addresses of where the symbols it needs should be located. So that when an application is loaded into a fresh address space, DYLD checks the binary to see where it should get loaded. And by default, applications get loaded to address 0.
+
+When DYLD loads a library or other framework that the application is linked against, if you don't prebind, the library will also have the address of zero, and thus the library and the application will collide. DYLD then has to go through the work of sliding the library to an available slot. This takes time. This has the potential to be slow, especially if you have a lot of libraries or frameworks. Finally, the application is ready to actually start running with your code.
+
+So to set up prebinding, there's a couple things that we have traditionally done. Xcode, by default, passes the -prebind flag down to the linker, which turns on prebinding when you build. This is actually why when you, by default, are linking or building an application and linking it against a framework that you've built, if you don't set things up properly, the prebinding will be there, and you'll get conflicting addresses, and you'll see messages that say the framework or library overlaps the text section of the application. That's because you're trying to leave them both at address zero.
+
+To remove that conflict, you would want to set the SEG1 address flag for the library or framework to actually specify where in the 4-gigabyte address space the library or framework should be loaded to. You're binding it to that address so that at launch time, that's where it'll get loaded.
+
+There's a couple things I commonly use when I'm helping developers debug prebinding. VM Map is a command line tool that will basically give you a complete dump of the address space. You can see what system libraries and frameworks, as well as your own application and libraries and frameworks, are loaded at various addresses in the address space.
+
+If you're launching from the command line, you can use dyld_prebind_debug, an environment variable, that will then have the system spit out some information for you to indicate whether what you're launching is prebound. This sounds complicated. It is. It takes a lot of work of fiddling to get right. The benefits are that your application does launch a lot faster.
+
+For a prebound binary, the application is once again loaded to address 0. But when a library is loaded in, it's already been set up by you to have a different address that doesn't collide. So DYLD can just load it up without having to slide anything. All the addresses are already correct, so the application just runs, and this can be a lot faster.
+
+The advantages of prebinding are that it works on 10.2 and up. So if you need your application to launch quickly on 10.2, you'd want to still pay attention to prebinding. When it works, it works well. It does give you a large win in application launch time. The problem is, as I've discovered, helping many of you, is that it's hard to get right.
+
+It's very easy for you to pick an address that you think works for your frameworks or libraries that don't actually work. There's still some overlap. Or perhaps you pick an address that works today, but then your application, through adding code, grows in size, and then you bump into an overlap down the road. It's hard to keep everything in sync manually.
+
+And so it's very fragile as well. As we change things in the system, perhaps we end up taking up an address space that you were using before, and then your application would not be able to be prebound. So, we thought hard about this, and we came up with a new approach. We've got a better approach now. And to talk about what we're doing now, I'd like to invite up Jeff Glasson.
+
+Thanks, Matt. Thanks, Matt. One of the things I wanted to add before I get into what we did in 10.3.4 is that Matt mentioned the fragility of prebinding, and one of the things that makes it fragile is Matt talked about things growing and shrinking and your base addresses and your preferred addresses getting out of sync. That's not even all in your control.
+
+For example, Apple could ship a software update that grows one of the system frameworks. That would collide with yours, and then you would have to generate new preferred addresses. And so that actually is the source of a lot of the fragility and a lot of the pain of very complex third-party applications that provide a lot of frameworks that they get linked in. So let's go and do a little bit more history. So we had this problem where apps launched slow. We came up with a solution.
+
+It was prebinding. Very early on, when we decided that we wanted prebinding was something that we needed to do, we did realize that the time that Matt described of sliding and relocating and dynamically loading the library is in fact a bottleneck of app launch. And prebinding was what we did as a shortcut to try and precompute some of that work that the dynamic linker does when you load things into memory, as Matt showed in the animations.
+
+So here's some numbers, actually, just to illustrate the fact of what prebinding actually does for you on 10.2 and 10.3.3 and earlier. This is a very large C++ application with a large number of private frameworks. And if you don't prebind that app, it actually takes 48 seconds to launch.
+
+That's a long time. This happens to be a cross-platform application. And on Linux, the same application launches in about 15 seconds. And these are comparable hardware. One's Intel, obviously. The other's a G4. But if you take that 48 seconds and you actually prebind the application, that drops down to 12 seconds.
+
+And that's actually an acceptable launch time for an application as complex as the one here. That's actually the time to splash. So there's a lot of work going on. So this may be time that we're spent doing work in the dynamic loader or time that the application is initializing itself. But to go from 48 seconds to 12 seconds actually is something that affects end users. And that is something that a developer would be encouraged to do work. So what did we do?
+
+Matt described some of these already. Prebinding, if you don't prebind on older versions of Mac OS, you have slow launch times, most likely. And the more complicated your application is with the more dependent frameworks, the slower that launch time gets. And that also is coincidentally, makes it harder for you to keep all those addresses straight, and not have overlaps, and have the prebinding be determined to be invalid, and have to be reprebound dynamically at launch time. There's a couple other things about prebinding that a few of you may care about.
+
+Because we dynamically modify the application executable at the system, you may have seen this daemon called fixed prebinding that gets started up now and then. If the dynamic linker detects that your prebinding is out of date, it will throw off this daemon to try and actually fix up the prebinding, so the next time you launch that application, it will launch it. And it will launch faster. But what that means is, you can't sign your code, because the file is actually being modified by the system without your control.
+
+And a lot of you, I think, care about that. The other thing that's really interesting about this is, I'm sure you guys have seen during installation, at the end of installation, you get this barber pole bar with an optimizing system. It takes a long time. How many of you guys have gotten bit by minutes of that?
+
+Okay, so what is going on there is that is the installer throws off a process that fixes up the system prebinding. If you install a new framework, it's got to go to all the dependent executables of that framework and re-prebind that with the new addresses that are in the new framework you installed.
+
+So here's an example of, actually these are kind of extreme examples. Keynote is a fairly complex application with a lot of dependent frameworks that it installs, lots of files. It actually takes 50 seconds to install on this machine. And after that, it takes 90 seconds to re-prebind everything.
+
+That's not too bad. But something like a security update, which contains maybe just the system framework, takes five seconds for the installer to actually write the files onto the disk. And then you're sitting for more than five minutes while the system fixes up everything because everything is dependent on that system framework. So we'd actually like to try and reduce that.
+
+Yes. So we basically just, you know, solved launch time problems by creating install time problems for the user. And that, you know, may not be that bad because, you know, you install once. But, you know, it's still a painful experience if you're on an older machine like an iMac or a PowerBook with a slow disk drive.
+
+And again, it's complex. So what are we going to do? Or what have we done? So what I'm going to do is I'm going to talk about some of the improvements we made into 10.3.4. And then later we'll talk about even more improvements that we're making into Tiger.
+
+So for 10.3.4, what we did is we actually wanted to take a step back and actually try and understand the real problem and not the symptoms of the problem. And the symptoms being slow launch time, and the real problem being let's find the hotspots in our dynamic linker and optimize them.
+
+An interesting point is we're not the only operating system that does prebinding. It goes by various names, but Linux has a prebinding-like thing, Windows, Solaris. They all have something that's very similar to prebinding. And what's interesting about the other operating systems is they don't see the orders of magnitude improvement in launch times, like I showed for that large application earlier. They only get about 10 to 20% better improvement when you prebind.
+
+And it's no easier to prebind on those other operating systems, but because it only buys 10 to 20% performance improvement, most developers choose not to go that extra, put that extra amount of work into the system. So again, So what we did is DYLD was originally designed before large C++ applications were the norm. And C++ introduces a number of complexities into the object file.
+
+There's a greater number of symbols that are exported. Templates have interesting properties that the linker needs to fix up at runtime. And so what has happened over the years since we designed DYLD and then did prebinding is that the the number of symbols that have to be fixed up at launch time has grown significantly.
+
+So, it was time to tune our dynamic linker for large C++ programs. So, we took advantage of some tools. We used Shark. It's a great tool. I don't know how many of you saw the talk right before this at 3:30 on talk on Shark, but it's a great tool.
+
+I encourage you to use it as much as you can to find your hotspots. And we actually used Shark and found the hotspots and optimized. And here's some results. This is the same application. I believe it's different hardware. That's why the numbers are different. And what this chart shows is actually split out the time that we're spending in the system in DYLD versus the time the application itself is doing work.
+
+So, back on 10.3.3 with an unprebound application, the launch time was 80 seconds. And of that 80 seconds, 72 of those seconds were DYLD fixing up the relocations. So, basically, re-prebinding and sliding. If you prebound that application, that dropped to 18 seconds, and only 10 of those seconds was DYLD actually loading all the libraries. So, on 10.3.4 with the new DYLD that we shipped, we only spent two seconds for a non-prebound application.
+
+Now, if you look at the size of that green bar versus the total time, now that's where Shark comes in. And now, since we've sped up our time so much in the launch of your applications, you guys really need to dig down and try and improve the other, now 80% in this example.
+
+We went from taking 90% to not a very large percentage, so time to dig out, Shark. So basically the take-home message here is if you only care about deploying your application on 10.3.4 and later, you don't need to prebind at all because you get very little benefit. And the real important thing here is now we have fully dynamic launches are faster than they used to be prebound.
+
+So even if your non-prebound case is going to be 10 or 20% slower, which it's not the same anymore, you still will get some performance benefits of prebinding. But we are faster than we used to be with a fully prebound application. So with that, I'd actually like to bring up Robert Nielsen to talk about the DYLD that's in Tiger.
+
+In anticipation of DRYMOUTH, I'll get this started here. So I don't know how many of you have had a chance to install Tiger and a lot of PowerBooks around, so I see a lot of people installing things. We have a brand-new DYLD in Tiger. Now this is kind of a big undertaking in that probably next to the kernel, DYLD is one of the most fundamental parts of the system. So as you would expect, we were very cautious with this. But given the history of everything that we've been through and what you've seen, we felt it was a really important step to take.
+
+So what do you get with the new Tiger DYLD? Well, so it's a new implementation. I don't think I need to tell anybody out there in the audience that when you have solved a problem and it's taken you 15 years to get to where you are, being able to reimplement that from scratch, you always get it better the second time.
+
+Faster. We were actually able to address many algorithmic issues and also assumptions that were made 15 years ago when the old DYLD was started that are no longer true now. More standards compliant, and we'll drill down on this a little bit later, instrumented. I want this to be a message that you take home.
+
+If you miss everything else in this talk, I want you to take this home. We instrumented the new DYLD on many axis so that you can actually measure how long DYLD is taking, what it's doing, how much of its time is rebasing, how much is rebinding. How much is initialization. We've instrumented it so you can actually see all the various libraries that are loaded, what causes them to be loaded.
+
+You can now actually look at what part of the launch process is actually DYLD's fault and what part is actually things that you can actually go address. This is really important. The old DYLD never had a chance -- never had a mechanism, excuse me, to actually point these things out.
+
+So as a result, whenever things were slow, it was always DYLD's fault. and we are consistent between prebound and non-prebound. The old DYLD prebinding again came later in the process, and so there were times when applications behaved differently, slightly different code paths when things were prebound or not prebound. That can be problematic, as you can imagine.
+
+Okay, new implementation, better basis for innovation. What we did was take the old DYLD, its APIs, and all of the semantics that were expected out of it, and we reimplemented that. We reimplemented that. We have a much smaller application. We have a much faster application, but we have a compatible environment. And what's really key about that is it's now a new code base, smaller, cleaner, and we will now be able to actually begin innovating.
+
+One of the things we had to do, and as Geoff mentioned in his talk, there's been a lot of language progress since the UILD had started 15 years ago. And many of those changes have to do with C++. Again, Geoff mentioned templates, you have template coalescing, etc. Static initializers, this is an important one, we'll drill down on this a little later. Exceptions and exception coalescing, etc. So we have been, we are improved in many regards, but we really just are now the basis for where we'll begin to innovate.
+
+So the code paths for dilibs and bundles, aka plugins, are unified, and they are in fact the same paths in almost all cases. Yeah. And we've always -- we have actually struggled with this because people would sometimes make things bundles or dilibs based on what their performance requirements were. And now you can actually choose the right tool for the job.
+
+So if you need -- and the only difference, by the way, for those of you that haven't gone down this path, the only difference between dilibs and bundles is that bundles do not have external symbols to which you can link. So -- and the idea there is that if you don't have a linked dependency on something, you can then unload a bundle. Currently, we don't have support for unloading dilibs. But now you can choose the right tool for the job.
+
+More compliant. I tried to stay away from referring to standards, but we end up using the word here anyways, because standards, there are industry standards, there are de facto standards, and there are ANSI, C++, ANSI/C standards. So the former DYLD did what's called lazy initialization in pursuit of speed. Again, this was along the lines of what we were trying to do to make launch times faster.
+
+So I'm going to back up a little bit and just talk a little bit about what's called lazy binding. We have a concept in DYLD called lazy pointers. Lazy pointers are pointers that you actually have to call through. They're actually function calls, etc. They're not accesses to data. They're not the address of a function. These are called lazy pointers.
+
+And what we do is we resolve those lazily. So if you have 10,000 references to external symbols in your application, we don't resolve all of those at launch time. We actually wait until you call through the first time. You actually pay one time to have that resolved, and then every time any place in your code calls for that same symbol, that gets resolved.
+
+The idea was, hey, this is a good idea. Lazy binding saves launch time. So why don't we take that idea and apply it to initialization, do lazy initialization? The theory was that what we will do is we will detect when you're calling a function in a module. Or in a library. And we'll say, oh, hey, we need to actually go now run the initializer before we actually resolve your pointer.
+
+That was the theory. What we discovered was that wasn't standards compliant. And there are two standards we're talking about here. There is the de facto standard in C, how all the other environments do it, how GCC does it on other platforms, how Microsoft does it, how Code Warrior does it. There is an industry standard on how that was done. And that was all initializers get run all the time. And we didn't do that. We were trying to be clever and we were trying not to run initializers when, in fact, we should have.
+
+And it turns out it wasn't enough of a speed win. It turns out that people have over the years learned that they don't do really heavyweight things in their initialization routines. And, in fact, trying to add some of the intelligence to DYLD to deal with the fact that you are trying to decide when you can and cannot do things. Turns out that that logic alone costs you almost as much as the speed win was.
+
+So the new DYLD is fully compliant with both the industry, i.e., de facto standards, and the C++ standards. If you take a look at the kind of history of the language specification, ANSI C has a standard that says very little about linking and nothing about linking of shared libraries and dynamic libraries.
+
+C++ didn't follow that reign, and in fact got quite involved in talking about how symbols should be linked and things, and made reference to static libraries as well as made reference to dynamic and shared libraries. And what the standard says is you will call all initializers and you will call all finalizers.
+
+Now, it doesn't say when, so you could theoretically, just before you exit, call all of your initializers, and then call all of your finalizers and your standards compliant. So you figure if you have to do that, you might as well do the initializers up front and the finalizers at the end and be standards compliant. So, whatever, I guess that's what we should do.
+
+So the new DYLD is compliant in both the sort of de facto standard, and that really is in C world, and in the C++ standard. This will improve performance in some places, and one of the big wins is it won't require you to do the bind at launch mechanism, which I'm afraid many of you had to do to get all C++ initializers to run in the old DYLD. You'd set the bind at launch flag, and the poor thing would have to go resolve all symbols so that it would actually resolve to the initializers, and that behavior is no longer required. That's a huge win for people at launch time.
+
+So there's also some speed improvements when linking with single module. So, you know, the old DYLD days, there was a difference between multi-module and single module, and there's some history that I won't go into, but one of the benefits was that you could have initializers on different modules, and so it would only initialize just the module, which is one part of a library, and try to do that lazily.
+
+And since now we actually call all initializers per the standards, the notion of having multiple modules is really not an advantage that you need anymore, and in fact, if you go with single module, in many cases, you'll actually see an improvement in performance because the dynamic linker doesn't have to deal with as much. So single module is faster than multi-module, and if you're using Xcode, it does the right thing.
+
+Here we go. This is one of the big ones. Instrumented. DYLD is often the least understood tool in our tool chain. And I've been thinking about this, and it really feels like, to the developer, it's the absolute end of the chain, and to the user, it's the beginning of the chain.
+
+It's actually kind of neither fish nor fowl, and it's that boundary condition in the middle. And developers don't really kind of, in large part, realize that this is, in fact, part of their environment. It's just doing the very last bit of work. So, you know, so as it's sitting on that boundary, it doesn't get a lot of attention.
+
+And quite frankly, the former DYLD didn't have the instrumentation and didn't give you any feedback as to what it was doing. So, to address this, we've instrumented DYLD, and we're just getting started. So what I really want you to take away is I want you to actually get back to us and say, hey, this is great, but wouldn't it be better if you did thus and so? We're just getting started here. But here are some environment variables that we have.
+
+For instance, DYLD ignore pre-binding allows you to take an app which is fully pre-bound and actually run it un-pre-bound and pre-bound next to each other, side by side. You set the environment variable. Its right-hand side of this environment variable is either all app or split. I forget the exact syntax. Please look at the man page on this. So, in other words, you can actually see if your app is not pre-bound, but everything else is, or if nothing's pre-bound.
+
+Actually, you can do side-by-side comparisons to see if pre-binding is actually worth it. I bet you'll find out it's not. DYLD print APIs actually prints every time you call through a published DYLD API, it actually echoes out the API and the arguments that you've passed in. DYLD print initializers.
+
+This is a big one. You actually want to call print initializers, so you actually want to see this, so you can actually make sure not only your initializers are being called, they're being called only once, that they're being called in the right order. Initialization order could be a talk in and of itself.
+
+But print initializers will help you sort out some of these hairy problems. Initializers are called pre-main. Pre-main means many people, when they get inside GDB, they say break at main. How do you break anything before main? And when these things, when initializers happen pre-main, it's often hard to debug these things.
+
+DYLD print libraries shows you as things are coming in, what things are being loaded, what libraries cause what libraries to be loaded in. So, if you're trying to figure out under what circumstances a library gets loaded, or if you're trying to figure out what's going on, you can do that. You can determine if, for instance, you're actually loading the debug or profile version of a library, this is a way to do it. DYLD print libraries.
+
+DYLD print statistics, this is one of our favorite and probably the first one we added. This actually allows us to, we actually do time measurements of how much time you spent rebasing, rebinding, how much time you spent initialization. There's a sum total that says how much time was spent in DYLD.
+
+And what we have found on applications, big applications, is that, you know, if you're doing a lot of work, you're going to get a lot of data. You're going to get a lot of data. So, big applications, big applications, you know, big applications that might take four seconds to launch, actually 400 milliseconds is actually spent in DYLD. So, the problem is no longer DYLD.
+
+Please man DYLD to get this information, and please give us feedback on this. One of the goals on the instrumentation, we actually want to unify the output grammar to be very consistent, so those of you who are script writers, and I'm one of them, you can write a pretty simple script to parse the output of these things and do what you will with them. So let's talk a little bit about initialization/finalization. You're going to hear us pop back and forth between initialization/finalization, construction/destruction. They have different meanings, but in this context, they have very similar meanings. So I'll see if I can iron that out for you.
+
+So the history of this is approaches on C. Initially, and many of you who've done any Unix programming at all have ever had to deal with this, in the early days, there was a magic function called score_init, or another one, score_finI, using the clever mechanisms that C programmers have of trying to keep everything to the lowest possible number of characters. So that is actually init for initialization and finI for finalization. So this is initialization, finalization.
+
+You were allowed to have one of these, basically one of these per executable. You can play some tricks with the linker and have one per library. But quite frankly, it was very difficult. It had to be an external symbol. So you were able to do this. But if you didn't do it exactly right, you sometimes found that you turned off initialization for libc. That isn't good. You really need libc to get initialized.
+
+Then in a huge leap of technological advancement, somebody said, hey, let's put it on the command line and call dash init. Then you could pass in the name of the function. Woo hoo, big improvement there. By the way, you actually always want to do this in code. You don't ever want to do this on the command line.
+
+[Transcript missing]
+
+and also across modules and across libraries, so you can have many of these. It is a recommendation that you actually have one of these per translation unit, and that you actually have other functions that you call from here. The standard does say you can have multiple of these, and the standard does say that they will be called in file order. And in the case of C, that's a pretty straightforward thing.
+
+However, when you get to C++, and you start looking at what it means in C++ to do these kinds of things, things can get very confusing very quickly. So in C++, there was no need to add a language extension, because C++ already has mechanism for static initialization. If at file scope you say static int, you know, equals foo, open print, close print, that, semicolon, that is in fact static initialization. That will happen before, that will happen at that point in the file as there's translation unit is being handed off. That will happen early. Also, you can create objects, create them at file scope or, again, namespace scope, which is a modified file scope.
+
+And these, your constructors and destructors will, in fact, be called. So they can be tricky in getting all that stuff right with C++ and trying to depend on the order within a file beyond the talk, beyond the scope of this talk. So please pick up Scott Meyers' book, Effective C++, item 47. The fact that it has its own item number here should tell you something. So, in summary, what are the take-home points? Tiger-DYLD is faster. It's so fast that prebinding is not required. And it's only going to get better.
+
+Conforming C++ static initialization. We've had a lot. This was one of the driving forces behind us going and revisiting DYLD and actually doing a new one from scratch. and his team are instrumental in helping you figure out what it's doing and what you can do to help make your launch times faster. Thank you very much, Jeff Glasson.
+
+Thanks, Robert. So, I think I wanted to shift gears a little bit, and I think what I want to talk about now is on Monday, Ted Goldstein, in his keynote, introduced the feature that we now are providing dead code stripping support to our tool chain, and that's both in Xcode 1.5 and in Xcode 2.0. We didn't explain much about what it is and how to use it, and that's what I'm here for.
+
+So what is dead code stripping? So dead code stripping is really something that the static linker does. It does an analysis of your entire program and determines symbols and code segments and data items that are not referenced at all, and it just removes them. It removes them from the final linked image. And that saves space.
+
+Certain classes of applications have more dead code than other. Macintosh platforms, the Macintosh tools historically from other vendors like MetroWorks have always had dead code stripping, and the style of programming has been, let's put, you know, 100 utility functions in one C file, and if I don't use them, they'll get thrown away. The tools that we've been shipping up to now have come from a Unix background where the Unix style of programming is, let's just put everything in lots of .o files, and then you've got static archives, and then dynamic libraries have appeared.
+
+So the dead code stripping hasn't been as important in the past for Unix-type applications. Other things that are interesting when it comes to dead code stripping are C++ template instantiations where the compiler can actually sometimes generate code that is never referenced that will reference things that are not defined in your program, and that actually causes a link error if you don't strip that code out. So we do that now. So how do you do it? So there are two command line options to the static linker now: -deadstrip, which enables the feature overall, and the other one that's actually kind of important is don't strip your initializers and finalizers.
+
+What's interesting is initializers and finalizers are almost never statically referenced in your application, and if you don't pass this, the linker will say, "Hey, they're not referenced. I'll throw them away." So please, if you have initializers that are static-- or that are not static, that are exported, and you do use this flagger, they will be thrown away if you turn on dead code stripping.
+
+You don't actually need to remember those. I'll go into how to do this in Xcode in a second, but dead code stripping doesn't come for free. One limitation with what we have today is you actually need to rebuild your program and use -g full if you want debug information. -g used is an optimization that the compiler and Xcode uses by default to try and minimize the amount of debug output.
+
+However, if you don't have full debug symbols for the static linker to deal with when it tries to strip, you may end up with symbols, debug symbols in your final image that have no code backing it or vice versa. You can actually end up with code that doesn't have debug symbols. So -g full is important.
+
+-g is not good enough because -g defaults to g used. And again, I'll show you how to do this in Xcode so you don't have to type stuff on the command line or type custom options. It's important to remember that any symbol that's exported from a dynamic library is a dynamic library. It's considered used by default. This is a good thing. If you have a global symbol and it's in a library, you expect someone to be able to link to it. Therefore, it is considered used.
+
+Unused symbols that aren't referenced statically, you can actually use another GCC attribute called attribute used that tells the compiler, "This is used. Please don't throw it away." So, for example, if you're trying to use either the DL compat APIs of DL_SIM or DYLD APIs to reference that symbol only dynamically, you need to flag your source code to tell the compiler, "Yes, I want this symbol in my final image."
+
+One other thing you could do is there's a couple linker flags that let you deal with symbols in a bulk manner. There's a feature in, I think, the Microsoft compiler called DeclSpec. How many of you guys are familiar with that, of specifying whether or not to import or whether or not to export a symbol?
+
+We don't quite have that yet, but you can actually specify a file that you can either say, "Here's my library. Here's the list of the only symbols that I want exported," and then you pass that with the -exported symbols list, and then anything else not in that file will not be exported as a public symbol. Or you can go the other way and say, "Here, export everything except these things because they're really secret and private." So you have a choice of how to control that.
+
+You do need to use a new compiler. There's a new version of GCC 3.3 that comes in Xcode 1.5 that's added support for tagging these object files so they can be stripped by the linker. If you don't recompile your project with the new compiler and the linker gets some old object files, the linker needs to be conservative and treat those old object files as a single block, basically the old Unix semantics. So if you have 100 functions in this old object file and it's not recompiled and you use one of them, all 100 of those will end up in your final image. If you do recompile, the other ones that aren't used will be thrown away.
+
+So it's really, really easy to do this in Xcode. You may have seen this already in the preview if you've installed Xcode 1.5 or Tiger. There's a couple check boxes in the target inspector, and they correspond directly to the linker options. There's help underneath that you can look to make sure you're doing the right thing, but check one or both of them depending on what you want.
+
+And the debug, also this is in the project inspector. You need to make sure you set GFUL, and that's a level of debug symbol. You can actually do search in the bottom for GFUL, and it will do the right thing because we searched the help text also. So that's all I have to say about that for now. And now I wanted to bring up Jeff Keating to talk about WHRT, which kind of is a little different topic.
+
+Okay, so moving away from linkers and loaders and such, In the Panther timeframe, we introduced wide character support to GCC and to all of the system libraries. So wide characters are a standard part of ISOC and ISOC++. They were introduced last century. And in Panther timeframe, we finally got around to implementing them completely in both the compiler and all the way through the system libraries.
+
+So those of you who are familiar with it will probably know all this already, but you basically-- instead of using the character type char, you use wchar_t. And instead of strings and character constants, you just place an L in front of them to indicate that you want a wide string or a wide character constant.
+
+and David Unlike regular strings or regular character constants, you're no longer restricted to just the standard ISOC character sets, so basically the low half of ASCII. So you can actually use characters from other languages, Japanese, all the accented characters from all the European languages, Chinese, they all work in strings. You can use all of the standard C and C++ library functionality.
+
+You can print them out using printf. So here's an example of a single wide character that we're printing out using printf. There's an additional kind of stream called a wide stream in both C and in C++ that now works on wide characters, just as regular streams work on regular characters. So you can use all of the C++ functionality to print out wide strings, to print out wide characters, and so on.
+
+The key feature of wide characters that makes them different from what you could kind of do before, which is just put UTF-8 into a regular string, is that in a wide string, each character is just one unit. So here, for example, the last bullet item is we have a string that contains exactly two characters. You can index that string, and the first item in the string is a complete character by itself. It's not the first byte of some longer sequence.
+
+So, I should feel obliged to point out, we have the standard C and C++ functionality. This doesn't include anything that, for instance, draws 20 lines of wide characters to a screen, formats it nicely, puts in line breaks, justifies it on both sides, remembers which direction to write it in.
+
+We don't have that. For that, you want to use the Carbon and Cocoa functionality for doing this. You know, you want to put it... And in particular, you should consider using CFStrings. CFStrings don't work like this. They have an encoding that's specialized for each individual function, for each individual language and so on. As a result of that, the CFStrings will often be more efficient than using wide strings, so long as you don't need to do heavy-duty text processing or any kind of language-based processing of strings. Thanks.
+
+So, like most Unix-like systems, on Darwin we choose to make wide characters four bytes. They contain a UCS4 code point from Unicode. This lets Darwin support all of the characters in Unicode, while still maintaining that property that every character is one thing in the string. Some other operating systems decided to use two bytes for wide characters, because we'd never have more than 60,000 characters in the world, and it turned out that wasn't such a great choice. With the new extended CJK characters, we actually need more than 65,000 characters, so we need the full four bytes.
+
+and the rest of the team. So, that was wide characters. So, I mentioned that you could kind of do this with regular strings, with strings made out of char. The key thing to understand is that the interpretation of char varies at runtime, depending on what locale you use. There's the whole functionality involving LC char set, involving set locale, described in the C and C++ standards.
+
+As a result of this, if you try to use anything outside that basic ASCII character set in a char string, it may work. You need to be very careful about testing. It may work on your system, but when someone from a different country tries to run your software, they may discover that what you thought were perfectly fine Japanese characters turns into strange, accented characters that make no sense.
+
+The GCC 3.3 compiler, as shipped in Panther, kind of expects its input to be in UTF-8, so you should just go into Xcode and check the appropriate drop-down menu item that says, "My source files are in UTF-8," because that's really what it's expecting, and that's what it'll try to convert to on the output. We hope to improve on this in GCC 3.5, but it's not quite there yet.
+
+If you have been using systems with a 2-byte wchar_t, and you want to come to GCC and Xcode and use that, you might consider using unichar as a substitute for the actual type, wchar_t. To read these from and to disk, you might want to use the iconv library, if you say man3 iconv, which contains functionality for reading the UCS2 form that a 2-byte wchar_t really means. It will do the full decoding of that form.
+
+It also knows how to decode virtually every other character set that you might ever want, so you should look at that. Or, if you've decided to use CFStrings instead, the right place for that is to use CFStringCreate from external representation, which has basically all the same functionality. It lets you basically say, "I have this sequence of bytes, and it's in UCS2. Please turn it into a CF string." the CFString and it'll just do it.
+
+So now, availability. I said we got it into Panther, and it is. The library support is available in Panther and later. That means it's not available in Jaguar or Aurelia. So a consequence of this is that, first of all, if you want to use it in your programs, you probably really want to be just targeting Panther or later.
+
+And even if you don't care about wide characters or other languages, you should still know that the C++ standard library requires this support. So if you try to take a C++ program, you build it on Panther, and it uses the C++ standard library, and you then go try to run it on Jaguar, if you've managed to invoke some of the parts of the C++ library that expect the support, it won't work.
+
+So what you should do is if you wish to build an application for Jaguar or earlier, and you wish to do it on a current operating system, Panther or later, you should use the SDK functionality. This only applies to C++ and Objective-C++. It doesn't apply to C. Okay, so I should now hand over to Matthew Formica.
+
+Thank you, Geoff. So what you've seen today is a bunch of different things that we've been working on in the low levels of the system, dynamic and static linkers and in the compiler. Launch time improvements are here today, and they're better than prebinding, and they're getting even better in Tiger. DYLD is all new in Tiger. It adds a whole new level of standards conformance that I'm sure will help many of you with your applications on Mac OS X.
+
+You want to make sure you know your tool set. If you have bumped into the concept of dead code stripping up till now, we now have it in Xcode, you'll get different mileage on different applications depending on whether your app actually uses or requires dead code stripping. And then if you are moving an application to Mac OS X and it's been relying on wchar_t on another platform or another compiler, you will want to consider alternatives on Mac OS X, including unichar and CFString.
+
+There's a variety of documentation we have available. Our tools documentation includes information on dead code stripping and the support included in that. I am the tools contact in Developer Relations. You can feel free to drop me an email on tools issues that you have, or you can send feedback to xcode-feedback@group.apple.com.

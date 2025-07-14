@@ -1,0 +1,3262 @@
+WEBVTT
+
+00:00:12.200 --> 00:00:15.500
+Good afternoon,
+and welcome to the 5:00 session
+
+00:00:15.500 --> 00:00:20.310
+here on Friday afternoon,
+the last session of WWDC.
+
+00:00:20.400 --> 00:00:21.950
+My name is Matthew Formica.
+
+00:00:22.100 --> 00:00:26.160
+I am,
+as many of you I'm sure already know,
+
+00:00:26.260 --> 00:00:29.260
+am the Cocoa and
+Development Tools evangelist
+
+00:00:29.460 --> 00:00:30.980
+here at Apple Computer.
+
+00:00:31.200 --> 00:00:33.910
+And this is the one session of
+the week where I actually get to
+
+00:00:33.910 --> 00:00:37.840
+present some technical content,
+as opposed to just hosting Q&A.
+
+00:00:37.840 --> 00:00:40.890
+So with that said, let's get started.
+
+00:00:43.290 --> 00:00:46.760
+So one of the things in developer
+relations that we've noticed as
+
+00:00:46.930 --> 00:00:51.980
+we work with all of you on various
+applications is that the low levels
+
+00:00:51.980 --> 00:00:55.960
+of the operating system have a big
+impact on application performance.
+
+00:00:56.040 --> 00:01:00.260
+In fact, a lot of times,
+the launch time of an application
+
+00:01:00.670 --> 00:01:04.930
+or how it performs has a lot
+to do with the dynamic linker,
+
+00:01:05.090 --> 00:01:10.910
+DYLD, and how the application is linked
+together statically as well.
+
+00:01:11.000 --> 00:01:15.870
+And these pieces of the operating system
+are often less well understood than
+
+00:01:15.870 --> 00:01:19.540
+some of the other API sets in the OS.
+
+00:01:19.790 --> 00:01:21.690
+and David Koehn.
+
+00:01:21.690 --> 00:01:27.560
+On top of this,
+Apple is making significant technology
+
+00:01:27.560 --> 00:01:31.450
+advances in these areas for Tiger.
+
+00:01:31.450 --> 00:01:37.710
+And so we thought this session
+would be a good opportunity,
+
+00:01:37.710 --> 00:01:37.810
+almost as a trail guide for all of you,
+to help you understand some of the
+
+00:01:37.810 --> 00:01:37.810
+things that we're doing in this space.
+
+00:01:38.070 --> 00:01:42.900
+So what we're going to talk
+about today is prebinding,
+
+00:01:42.900 --> 00:01:47.600
+which up until recently has
+been the way to get applications
+
+00:01:47.600 --> 00:01:50.360
+to launch quickly on Mac OS X.
+
+00:01:50.360 --> 00:01:54.060
+Some of the changes we
+made in 10.3.4 and higher,
+
+00:01:54.120 --> 00:01:57.390
+what we're planning to
+do for Tiger for DYLD
+
+00:01:57.630 --> 00:01:59.910
+How to use dead code stripping.
+
+00:01:59.910 --> 00:02:02.900
+And then we'll dive down into
+wchar_t for the compiler.
+
+00:02:02.900 --> 00:02:06.410
+So a little bit of a recipe
+cookbook type approach here today.
+
+00:02:06.560 --> 00:02:08.790
+We're going to cover a lot of ground.
+
+00:02:09.860 --> 00:02:13.930
+So we're going to talk first
+about how prebinding works,
+
+00:02:13.930 --> 00:02:17.000
+and this is to show you
+where we've come from.
+
+00:02:17.000 --> 00:02:20.590
+It also will hopefully give you a
+little insight into the workings
+
+00:02:20.600 --> 00:02:24.110
+of how an application launches,
+and it still has some
+
+00:02:24.110 --> 00:02:27.230
+applicability today as well,
+especially if you are still
+
+00:02:27.250 --> 00:02:31.460
+trying to maintain compatibility
+for older OS versions.
+
+00:02:31.500 --> 00:02:33.350
+What is prebinding?
+
+00:02:33.600 --> 00:02:36.660
+Prebinding makes
+Mach-O applications launch faster.
+
+00:02:36.760 --> 00:02:40.410
+Mach-O is the native
+binary format for Mac OS X.
+
+00:02:41.050 --> 00:02:46.480
+What prebinding does is it rebases
+a binary to a virtual memory
+
+00:02:46.480 --> 00:02:48.640
+address ahead of launch time.
+
+00:02:48.770 --> 00:02:54.650
+So your application needs to be somewhere
+in the 4-gigabyte address space,
+
+00:02:54.650 --> 00:02:58.050
+and prebinding says where that goes.
+
+00:02:58.230 --> 00:03:01.220
+Prebinding can take a
+lot of work to get right.
+
+00:03:03.490 --> 00:03:06.690
+If we start with the
+Mach-O binary format,
+
+00:03:06.790 --> 00:03:10.570
+in addition to all of the
+application data and other symbolic
+
+00:03:10.570 --> 00:03:15.350
+information that goes in there,
+the Mach-O binary can contain
+
+00:03:15.570 --> 00:03:19.890
+links off to other libraries and
+frameworks that it links against,
+
+00:03:20.000 --> 00:03:27.390
+as well as symbolic information
+concerning addresses of where the
+
+00:03:27.390 --> 00:03:27.390
+symbols it needs should be located.
+
+00:03:28.500 --> 00:03:34.310
+So that when an application is
+loaded into a fresh address space,
+
+00:03:34.310 --> 00:03:38.080
+DYLD checks the binary to see
+where it should get loaded.
+
+00:03:38.170 --> 00:03:41.710
+And by default,
+applications get loaded to address 0.
+
+00:03:46.060 --> 00:03:49.660
+When DYLD loads a library
+or other framework that the
+
+00:03:49.660 --> 00:03:54.000
+application is linked against,
+if you don't prebind,
+
+00:03:54.050 --> 00:03:56.880
+the library will also
+have the address of zero,
+
+00:03:56.910 --> 00:04:00.390
+and thus the library and the
+application will collide.
+
+00:04:01.000 --> 00:04:07.290
+DYLD then has to go through the work of
+sliding the library to an available slot.
+
+00:04:10.510 --> 00:04:11.430
+This takes time.
+
+00:04:11.540 --> 00:04:15.550
+This has the potential to be slow,
+especially if you have a lot
+
+00:04:15.590 --> 00:04:17.900
+of libraries or frameworks.
+
+00:04:18.040 --> 00:04:20.360
+Finally,
+the application is ready to actually
+
+00:04:20.360 --> 00:04:23.000
+start running with your code.
+
+00:04:26.850 --> 00:04:30.020
+So to set up prebinding,
+there's a couple things that
+
+00:04:30.020 --> 00:04:31.430
+we have traditionally done.
+
+00:04:31.510 --> 00:04:36.490
+Xcode, by default, passes the -prebind
+flag down to the linker,
+
+00:04:36.610 --> 00:04:39.400
+which turns on prebinding when you build.
+
+00:04:40.420 --> 00:04:45.830
+This is actually why when you,
+by default, are linking or building an
+
+00:04:45.830 --> 00:04:49.720
+application and linking it against
+a framework that you've built,
+
+00:04:49.790 --> 00:04:54.060
+if you don't set things up properly,
+the prebinding will be there,
+
+00:04:54.060 --> 00:04:57.360
+and you'll get conflicting addresses,
+and you'll see messages that say
+
+00:04:57.360 --> 00:05:02.790
+the framework or library overlaps
+the text section of the application.
+
+00:05:03.000 --> 00:05:06.700
+That's because you're trying to
+leave them both at address zero.
+
+00:05:06.770 --> 00:05:11.920
+To remove that conflict,
+you would want to set the SEG1 address
+
+00:05:12.290 --> 00:05:19.070
+flag for the library or framework
+to actually specify where in the
+
+00:05:19.170 --> 00:05:24.130
+4-gigabyte address space the library
+or framework should be loaded to.
+
+00:05:24.200 --> 00:05:27.640
+You're binding it to that
+address so that at launch time,
+
+00:05:27.640 --> 00:05:29.830
+that's where it'll get loaded.
+
+00:05:30.470 --> 00:05:32.960
+There's a couple things
+I commonly use when I'm helping
+
+00:05:32.960 --> 00:05:35.050
+developers debug prebinding.
+
+00:05:35.180 --> 00:05:39.140
+VM Map is a command line tool
+that will basically give you a
+
+00:05:39.140 --> 00:05:41.440
+complete dump of the address space.
+
+00:05:41.440 --> 00:05:45.110
+You can see what system
+libraries and frameworks,
+
+00:05:45.110 --> 00:05:48.260
+as well as your own application
+and libraries and frameworks,
+
+00:05:48.260 --> 00:05:53.590
+are loaded at various
+addresses in the address space.
+
+00:05:54.180 --> 00:05:55.600
+If you're launching
+from the command line,
+
+00:05:55.600 --> 00:05:59.360
+you can use dyld_prebind_debug,
+an environment variable,
+
+00:05:59.410 --> 00:06:03.270
+that will then have the system
+spit out some information for
+
+00:06:03.270 --> 00:06:06.510
+you to indicate whether what
+you're launching is prebound.
+
+00:06:07.760 --> 00:06:08.920
+This sounds complicated.
+
+00:06:09.190 --> 00:06:09.600
+It is.
+
+00:06:09.600 --> 00:06:12.300
+It takes a lot of work
+of fiddling to get right.
+
+00:06:12.540 --> 00:06:16.490
+The benefits are that your
+application does launch a lot faster.
+
+00:06:18.890 --> 00:06:21.720
+For a prebound binary,
+the application is once
+
+00:06:21.720 --> 00:06:24.230
+again loaded to address 0.
+
+00:06:25.810 --> 00:06:29.860
+But when a library is loaded in,
+it's already been set up by you to have
+
+00:06:29.860 --> 00:06:32.600
+a different address that doesn't collide.
+
+00:06:32.720 --> 00:06:36.890
+So DYLD can just load it up
+without having to slide anything.
+
+00:06:37.970 --> 00:06:42.550
+All the addresses are already correct,
+so the application just runs,
+
+00:06:42.550 --> 00:06:44.870
+and this can be a lot faster.
+
+00:06:47.140 --> 00:06:51.010
+The advantages of prebinding are
+that it works on 10.2 and up.
+
+00:06:51.310 --> 00:06:54.840
+So if you need your application
+to launch quickly on 10.2,
+
+00:06:54.970 --> 00:06:58.010
+you'd want to still pay
+attention to prebinding.
+
+00:06:58.270 --> 00:06:59.630
+When it works, it works well.
+
+00:06:59.660 --> 00:07:04.230
+It does give you a large win
+in application launch time.
+
+00:07:04.340 --> 00:07:07.820
+The problem is, as I've discovered,
+helping many of you,
+
+00:07:07.940 --> 00:07:09.840
+is that it's hard to get right.
+
+00:07:09.950 --> 00:07:14.930
+It's very easy for you to pick an address
+that you think works for your frameworks
+
+00:07:14.930 --> 00:07:17.520
+or libraries that don't actually work.
+
+00:07:17.660 --> 00:07:19.630
+There's still some overlap.
+
+00:07:19.750 --> 00:07:22.400
+Or perhaps you pick an
+address that works today,
+
+00:07:22.460 --> 00:07:26.640
+but then your application,
+through adding code, grows in size,
+
+00:07:26.700 --> 00:07:29.140
+and then you bump into
+an overlap down the road.
+
+00:07:29.200 --> 00:07:32.310
+It's hard to keep
+everything in sync manually.
+
+00:07:32.760 --> 00:07:35.700
+And so it's very fragile as well.
+
+00:07:35.760 --> 00:07:39.980
+As we change things in the system,
+perhaps we end up taking up an address
+
+00:07:39.980 --> 00:07:43.510
+space that you were using before,
+and then your application would
+
+00:07:43.510 --> 00:07:45.560
+not be able to be prebound.
+
+00:07:45.880 --> 00:07:49.730
+So, we thought hard about this,
+and we came up with a new approach.
+
+00:07:49.850 --> 00:07:51.440
+We've got a better approach now.
+
+00:07:51.560 --> 00:07:56.740
+And to talk about what we're doing now,
+I'd like to invite up Jeff Glasson.
+
+00:07:59.870 --> 00:08:00.800
+Thanks, Matt.
+
+00:08:00.800 --> 00:08:02.680
+Thanks, Matt.
+
+00:08:03.000 --> 00:08:06.140
+One of the things I wanted to
+add before I get into what we did
+
+00:08:06.140 --> 00:08:10.540
+in 10.3.4 is that Matt mentioned
+the fragility of prebinding,
+
+00:08:10.590 --> 00:08:15.510
+and one of the things that makes it
+fragile is Matt talked about things
+
+00:08:15.510 --> 00:08:19.440
+growing and shrinking and your
+base addresses and your preferred
+
+00:08:19.440 --> 00:08:20.790
+addresses getting out of sync.
+
+00:08:20.910 --> 00:08:22.510
+That's not even all in your control.
+
+00:08:22.630 --> 00:08:24.670
+For example,
+Apple could ship a software update that
+
+00:08:24.670 --> 00:08:26.190
+grows one of the system frameworks.
+
+00:08:26.190 --> 00:08:29.190
+That would collide with yours,
+and then you would have to
+
+00:08:29.520 --> 00:08:31.460
+generate new preferred addresses.
+
+00:08:31.460 --> 00:08:35.220
+And so that actually is the source of
+a lot of the fragility and a lot of
+
+00:08:35.220 --> 00:08:39.920
+the pain of very complex third-party
+applications that provide a lot of
+
+00:08:39.920 --> 00:08:42.840
+frameworks that they get linked in.
+
+00:08:42.880 --> 00:08:47.520
+So let's go and do a
+little bit more history.
+
+00:08:47.520 --> 00:08:50.730
+So we had this problem
+where apps launched slow.
+
+00:08:50.740 --> 00:08:52.960
+We came up with a solution.
+
+00:08:53.040 --> 00:08:55.000
+It was prebinding.
+
+00:08:55.000 --> 00:08:57.700
+Very early on,
+when we decided that we wanted prebinding
+
+00:08:57.700 --> 00:09:01.450
+was something that we needed to do,
+we did realize that the time that
+
+00:09:01.450 --> 00:09:06.450
+Matt described of sliding and relocating
+and dynamically loading the library
+
+00:09:06.450 --> 00:09:09.640
+is in fact a bottleneck of app launch.
+
+00:09:09.640 --> 00:09:15.400
+And prebinding was what we did as a
+shortcut to try and precompute some
+
+00:09:15.400 --> 00:09:18.660
+of that work that the dynamic linker
+does when you load things into memory,
+
+00:09:18.710 --> 00:09:21.520
+as Matt showed in the animations.
+
+00:09:22.240 --> 00:09:27.450
+So here's some numbers, actually,
+just to illustrate the fact of what
+
+00:09:27.450 --> 00:09:34.380
+prebinding actually does for you
+on 10.2 and 10.3.3 and earlier.
+
+00:09:34.600 --> 00:09:40.870
+This is a very large C++ application with
+a large number of private frameworks.
+
+00:09:41.000 --> 00:09:45.410
+And if you don't prebind that app,
+it actually takes 48 seconds to launch.
+
+00:09:45.610 --> 00:09:47.210
+That's a long time.
+
+00:09:47.380 --> 00:09:49.590
+This happens to be a
+cross-platform application.
+
+00:09:49.850 --> 00:09:54.580
+And on Linux, the same application
+launches in about 15 seconds.
+
+00:09:54.690 --> 00:09:57.440
+And these are comparable hardware.
+
+00:09:57.540 --> 00:09:58.500
+One's Intel, obviously.
+
+00:09:58.500 --> 00:10:01.120
+The other's a G4.
+
+00:10:01.580 --> 00:10:05.340
+But if you take that 48 seconds and
+you actually prebind the application,
+
+00:10:05.400 --> 00:10:07.010
+that drops down to 12 seconds.
+
+00:10:07.220 --> 00:10:10.660
+And that's actually an acceptable
+launch time for an application
+
+00:10:10.660 --> 00:10:14.440
+as complex as the one here.
+
+00:10:14.440 --> 00:10:15.800
+That's actually the time to splash.
+
+00:10:15.950 --> 00:10:17.320
+So there's a lot of work going on.
+
+00:10:17.320 --> 00:10:20.130
+So this may be time that
+we're spent doing work in the
+
+00:10:20.130 --> 00:10:23.830
+dynamic loader or time that the
+application is initializing itself.
+
+00:10:24.060 --> 00:10:28.590
+But to go from 48 seconds
+to 12 seconds actually is
+
+00:10:28.590 --> 00:10:30.610
+something that affects end users.
+
+00:10:30.700 --> 00:10:36.260
+And that is something that a developer
+would be encouraged to do work.
+
+00:10:36.450 --> 00:10:39.530
+So what did we do?
+
+00:10:39.960 --> 00:10:42.650
+Matt described some of these already.
+
+00:10:42.820 --> 00:10:46.690
+Prebinding, if you don't prebind on
+older versions of Mac OS,
+
+00:10:47.190 --> 00:10:49.900
+you have slow launch times, most likely.
+
+00:10:49.920 --> 00:10:54.900
+And the more complicated your application
+is with the more dependent frameworks,
+
+00:10:54.900 --> 00:10:56.800
+the slower that launch time gets.
+
+00:10:56.980 --> 00:11:00.250
+And that also is coincidentally,
+makes it harder for you to keep
+
+00:11:00.250 --> 00:11:02.980
+all those addresses straight,
+and not have overlaps,
+
+00:11:02.990 --> 00:11:05.900
+and have the prebinding be
+determined to be invalid,
+
+00:11:05.900 --> 00:11:12.900
+and have to be reprebound
+dynamically at launch time.
+
+00:11:12.900 --> 00:11:15.300
+There's a couple other
+things about prebinding that
+
+00:11:15.450 --> 00:11:16.840
+a few of you may care about.
+
+00:11:17.190 --> 00:11:21.860
+Because we dynamically modify the
+application executable at the system,
+
+00:11:22.050 --> 00:11:25.060
+you may have seen this daemon
+called fixed prebinding that
+
+00:11:25.220 --> 00:11:26.900
+gets started up now and then.
+
+00:11:26.930 --> 00:11:29.890
+If the dynamic linker detects that
+your prebinding is out of date,
+
+00:11:29.890 --> 00:11:32.900
+it will throw off this daemon to try
+and actually fix up the prebinding,
+
+00:11:32.900 --> 00:11:34.890
+so the next time you
+launch that application,
+
+00:11:34.890 --> 00:11:35.840
+it will launch it.
+
+00:11:35.980 --> 00:11:36.900
+And it will launch faster.
+
+00:11:36.900 --> 00:11:38.900
+But what that means is,
+you can't sign your code,
+
+00:11:39.150 --> 00:11:41.890
+because the file is actually
+being modified by the
+
+00:11:41.890 --> 00:11:43.900
+system without your control.
+
+00:11:43.950 --> 00:11:46.810
+And a lot of you, I think,
+care about that.
+
+00:11:47.080 --> 00:11:50.720
+The other thing that's really
+interesting about this is,
+
+00:11:50.850 --> 00:11:53.850
+I'm sure you guys have
+seen during installation,
+
+00:11:53.920 --> 00:11:56.800
+at the end of installation,
+you get this barber pole bar
+
+00:11:56.800 --> 00:11:58.850
+with an optimizing system.
+
+00:11:58.970 --> 00:11:59.900
+It takes a long time.
+
+00:11:59.900 --> 00:12:03.990
+How many of you guys have
+gotten bit by minutes of that?
+
+00:12:04.260 --> 00:12:08.570
+Okay,
+so what is going on there is that is
+
+00:12:08.670 --> 00:12:13.690
+the installer throws off a process
+that fixes up the system prebinding.
+
+00:12:13.760 --> 00:12:17.520
+If you install a new framework,
+it's got to go to all the dependent
+
+00:12:17.520 --> 00:12:20.800
+executables of that framework
+and re-prebind that with the
+
+00:12:20.800 --> 00:12:23.200
+new addresses that are in the
+new framework you installed.
+
+00:12:23.200 --> 00:12:26.500
+So here's an example of,
+actually these are kind
+
+00:12:26.500 --> 00:12:28.160
+of extreme examples.
+
+00:12:28.200 --> 00:12:31.950
+Keynote is a fairly complex
+application with a lot of dependent
+
+00:12:32.480 --> 00:12:34.780
+frameworks that it installs,
+lots of files.
+
+00:12:34.850 --> 00:12:37.200
+It actually takes 50 seconds
+to install on this machine.
+
+00:12:37.200 --> 00:12:40.910
+And after that, it takes 90 seconds to
+re-prebind everything.
+
+00:12:41.250 --> 00:12:42.200
+That's not too bad.
+
+00:12:42.210 --> 00:12:46.690
+But something like a security update,
+which contains maybe just
+
+00:12:46.740 --> 00:12:50.310
+the system framework,
+takes five seconds for the installer to
+
+00:12:50.310 --> 00:12:52.200
+actually write the files onto the disk.
+
+00:12:52.200 --> 00:12:55.540
+And then you're sitting for more than
+five minutes while the system fixes
+
+00:12:55.550 --> 00:12:59.200
+up everything because everything is
+dependent on that system framework.
+
+00:12:59.390 --> 00:13:03.070
+So we'd actually like
+to try and reduce that.
+
+00:13:06.440 --> 00:13:06.680
+Yes.
+
+00:13:06.680 --> 00:13:12.660
+So we basically just, you know,
+solved launch time problems by creating
+
+00:13:12.660 --> 00:13:14.660
+install time problems for the user.
+
+00:13:14.660 --> 00:13:17.440
+And that, you know,
+may not be that bad because, you know,
+
+00:13:17.440 --> 00:13:18.460
+you install once.
+
+00:13:18.460 --> 00:13:21.130
+But, you know,
+it's still a painful experience if
+
+00:13:21.130 --> 00:13:25.250
+you're on an older machine like an iMac
+or a PowerBook with a slow disk drive.
+
+00:13:25.300 --> 00:13:27.280
+And again, it's complex.
+
+00:13:27.280 --> 00:13:29.290
+So what are we going to do?
+
+00:13:29.310 --> 00:13:31.120
+Or what have we done?
+
+00:13:31.420 --> 00:13:33.340
+So what I'm going to do is I'm
+going to talk about some of the
+
+00:13:33.340 --> 00:13:34.960
+improvements we made into 10.3.4.
+
+00:13:34.960 --> 00:13:37.530
+And then later we'll talk
+about even more improvements
+
+00:13:37.530 --> 00:13:39.140
+that we're making into Tiger.
+
+00:13:41.190 --> 00:13:46.480
+So for 10.3.4,
+what we did is we actually wanted
+
+00:13:46.480 --> 00:13:51.280
+to take a step back and actually
+try and understand the real problem
+
+00:13:51.600 --> 00:13:53.940
+and not the symptoms of the problem.
+
+00:13:53.950 --> 00:13:58.470
+And the symptoms being slow launch time,
+and the real problem being
+
+00:13:58.560 --> 00:14:02.700
+let's find the hotspots in our
+dynamic linker and optimize them.
+
+00:14:02.740 --> 00:14:04.840
+An interesting point is
+we're not the only operating
+
+00:14:04.940 --> 00:14:06.300
+system that does prebinding.
+
+00:14:06.300 --> 00:14:09.590
+It goes by various names,
+but Linux has a prebinding-like thing,
+
+00:14:09.600 --> 00:14:11.100
+Windows, Solaris.
+
+00:14:11.120 --> 00:14:14.420
+They all have something that's
+very similar to prebinding.
+
+00:14:14.440 --> 00:14:17.600
+And what's interesting about the
+other operating systems is they
+
+00:14:17.600 --> 00:14:21.020
+don't see the orders of magnitude
+improvement in launch times,
+
+00:14:21.020 --> 00:14:23.840
+like I showed for that
+large application earlier.
+
+00:14:23.880 --> 00:14:28.040
+They only get about 10 to 20%
+better improvement when you prebind.
+
+00:14:28.060 --> 00:14:32.640
+And it's no easier to prebind on
+those other operating systems,
+
+00:14:32.670 --> 00:14:35.860
+but because it only buys 10 to
+20% performance improvement,
+
+00:14:35.950 --> 00:14:39.160
+most developers choose
+not to go that extra,
+
+00:14:39.170 --> 00:14:41.100
+put that extra amount
+of work into the system.
+
+00:14:41.100 --> 00:14:46.630
+So again,
+
+00:14:47.450 --> 00:14:53.460
+So what we did is DYLD was
+originally designed before large
+
+00:14:53.460 --> 00:14:57.370
+C++ applications were the norm.
+
+00:14:57.370 --> 00:15:02.890
+And C++ introduces a number of
+complexities into the object file.
+
+00:15:02.890 --> 00:15:05.910
+There's a greater number of
+symbols that are exported.
+
+00:15:06.050 --> 00:15:08.920
+Templates have interesting
+properties that the linker
+
+00:15:08.920 --> 00:15:10.640
+needs to fix up at runtime.
+
+00:15:10.750 --> 00:15:16.000
+And so what has happened over the years
+since we designed DYLD and then did
+
+00:15:16.000 --> 00:15:19.140
+prebinding is that the the number of
+symbols that have to be fixed up at
+
+00:15:19.140 --> 00:15:21.850
+launch time has grown significantly.
+
+00:15:23.030 --> 00:15:28.720
+So, it was time to tune our dynamic
+linker for large C++ programs.
+
+00:15:28.740 --> 00:15:30.660
+So, we took advantage of some tools.
+
+00:15:30.660 --> 00:15:31.900
+We used Shark.
+
+00:15:31.900 --> 00:15:32.900
+It's a great tool.
+
+00:15:32.900 --> 00:15:35.200
+I don't know how many of you
+saw the talk right before
+
+00:15:35.350 --> 00:15:39.740
+this at 3:30 on talk on Shark,
+but it's a great tool.
+
+00:15:39.910 --> 00:15:45.440
+I encourage you to use it as much
+as you can to find your hotspots.
+
+00:15:45.440 --> 00:15:48.830
+And we actually used Shark and
+found the hotspots and optimized.
+
+00:15:48.890 --> 00:15:52.460
+And here's some results.
+
+00:15:52.460 --> 00:15:53.460
+This is the same application.
+
+00:15:53.490 --> 00:15:54.900
+I believe it's different hardware.
+
+00:15:54.900 --> 00:15:58.340
+That's why the numbers are different.
+
+00:15:58.340 --> 00:16:03.180
+And what this chart shows is actually
+split out the time that we're spending
+
+00:16:03.180 --> 00:16:08.580
+in the system in DYLD versus the time
+the application itself is doing work.
+
+00:16:08.580 --> 00:16:13.400
+So, back on 10.3.3 with an
+unprebound application,
+
+00:16:13.400 --> 00:16:16.200
+the launch time was 80 seconds.
+
+00:16:16.200 --> 00:16:19.510
+And of that 80 seconds,
+72 of those seconds were
+
+00:16:19.650 --> 00:16:22.020
+DYLD fixing up the relocations.
+
+00:16:22.020 --> 00:16:25.380
+So, basically, re-prebinding and sliding.
+
+00:16:25.380 --> 00:16:29.090
+If you prebound that application,
+that dropped to 18 seconds,
+
+00:16:29.090 --> 00:16:33.700
+and only 10 of those seconds was
+DYLD actually loading all the libraries.
+
+00:16:33.770 --> 00:16:37.220
+So, on 10.3.4 with the new
+DYLD that we shipped,
+
+00:16:37.220 --> 00:16:41.550
+we only spent two seconds for
+a non-prebound application.
+
+00:16:45.870 --> 00:16:50.560
+Now, if you look at the size of that
+green bar versus the total time,
+
+00:16:50.650 --> 00:16:53.000
+now that's where Shark comes in.
+
+00:16:53.030 --> 00:16:55.990
+And now,
+since we've sped up our time so much
+
+00:16:56.170 --> 00:17:04.570
+in the launch of your applications,
+you guys really need to dig down
+
+00:17:04.880 --> 00:17:06.210
+and try and improve the other,
+now 80% in this example.
+
+00:17:06.900 --> 00:17:10.420
+We went from taking 90% to
+not a very large percentage,
+
+00:17:10.580 --> 00:17:14.990
+so time to dig out, Shark.
+
+00:17:15.140 --> 00:17:19.420
+So basically the take-home message here
+is if you only care about deploying
+
+00:17:19.420 --> 00:17:24.220
+your application on 10.3.4 and later,
+you don't need to prebind at all
+
+00:17:24.220 --> 00:17:26.890
+because you get very little benefit.
+
+00:17:27.530 --> 00:17:33.360
+And the real important thing here is
+now we have fully dynamic launches are
+
+00:17:33.460 --> 00:17:36.000
+faster than they used to be prebound.
+
+00:17:36.270 --> 00:17:41.050
+So even if your non-prebound case
+is going to be 10 or 20% slower,
+
+00:17:41.050 --> 00:17:44.220
+which it's not the same anymore,
+you still will get some
+
+00:17:44.280 --> 00:17:46.460
+performance benefits of prebinding.
+
+00:17:46.490 --> 00:17:51.370
+But we are faster than we used to be
+with a fully prebound application.
+
+00:17:51.670 --> 00:17:53.500
+So with that,
+I'd actually like to bring up
+
+00:17:53.520 --> 00:17:57.990
+Robert Nielsen to talk about
+the DYLD that's in Tiger.
+
+00:18:12.140 --> 00:18:19.760
+In anticipation of DRYMOUTH,
+I'll get this started here.
+
+00:18:19.760 --> 00:18:22.750
+So I don't know how many of you
+have had a chance to install
+
+00:18:22.960 --> 00:18:26.760
+Tiger and a lot of PowerBooks around,
+so I see a lot of people
+
+00:18:26.820 --> 00:18:28.400
+installing things.
+
+00:18:28.400 --> 00:18:31.960
+We have a brand-new DYLD in Tiger.
+
+00:18:31.960 --> 00:18:37.580
+Now this is kind of a big undertaking
+in that probably next to the kernel,
+
+00:18:37.610 --> 00:18:41.960
+DYLD is one of the most
+fundamental parts of the system.
+
+00:18:41.960 --> 00:18:45.970
+So as you would expect,
+we were very cautious with this.
+
+00:18:46.060 --> 00:18:49.230
+But given the history of everything that
+we've been through and what you've seen,
+
+00:18:49.270 --> 00:18:52.730
+we felt it was a really
+important step to take.
+
+00:18:57.770 --> 00:19:00.700
+So what do you get with
+the new Tiger DYLD?
+
+00:19:00.700 --> 00:19:03.140
+Well, so it's a new implementation.
+
+00:19:03.140 --> 00:19:06.640
+I don't think I need to tell anybody
+out there in the audience that when you
+
+00:19:06.680 --> 00:19:11.200
+have solved a problem and it's taken
+you 15 years to get to where you are,
+
+00:19:11.230 --> 00:19:13.540
+being able to reimplement
+that from scratch,
+
+00:19:13.540 --> 00:19:16.840
+you always get it better the second time.
+
+00:19:16.870 --> 00:19:17.840
+Faster.
+
+00:19:17.840 --> 00:19:21.890
+We were actually able to address
+many algorithmic issues and also
+
+00:19:22.100 --> 00:19:27.170
+assumptions that were made 15
+years ago when the old DYLD was
+
+00:19:27.170 --> 00:19:30.620
+started that are no longer true now.
+
+00:19:30.620 --> 00:19:33.370
+More standards compliant,
+and we'll drill down on
+
+00:19:33.370 --> 00:19:35.980
+this a little bit later,
+instrumented.
+
+00:19:35.990 --> 00:19:38.090
+I want this to be a
+message that you take home.
+
+00:19:38.200 --> 00:19:42.180
+If you miss everything else in this talk,
+I want you to take this home.
+
+00:19:42.180 --> 00:19:46.210
+We instrumented the new DYLD on
+many axis so that you can actually
+
+00:19:46.210 --> 00:19:49.930
+measure how long DYLD is taking,
+what it's doing,
+
+00:19:49.930 --> 00:19:53.080
+how much of its time is rebasing,
+how much is rebinding.
+
+00:19:53.080 --> 00:19:54.920
+How much is initialization.
+
+00:19:54.920 --> 00:19:57.280
+We've instrumented it so you
+can actually see all the various
+
+00:19:57.280 --> 00:20:01.020
+libraries that are loaded,
+what causes them to be loaded.
+
+00:20:01.020 --> 00:20:05.860
+You can now actually look at what
+part of the launch process is actually
+
+00:20:06.170 --> 00:20:11.340
+DYLD's fault and what part is actually
+things that you can actually go address.
+
+00:20:11.440 --> 00:20:12.420
+This is really important.
+
+00:20:12.420 --> 00:20:15.420
+The old DYLD never had a chance
+-- never had a mechanism,
+
+00:20:15.420 --> 00:20:18.010
+excuse me,
+to actually point these things out.
+
+00:20:18.300 --> 00:20:20.780
+So as a result,
+whenever things were slow,
+
+00:20:20.780 --> 00:20:22.620
+it was always DYLD's fault.
+
+00:20:22.870 --> 00:20:27.740
+and we are consistent between
+prebound and non-prebound.
+
+00:20:27.950 --> 00:20:31.800
+The old DYLD prebinding again
+came later in the process,
+
+00:20:31.800 --> 00:20:36.160
+and so there were times when
+applications behaved differently,
+
+00:20:36.220 --> 00:20:39.800
+slightly different code paths when
+things were prebound or not prebound.
+
+00:20:39.950 --> 00:20:43.270
+That can be problematic,
+as you can imagine.
+
+00:20:44.310 --> 00:20:47.640
+Okay, new implementation,
+better basis for innovation.
+
+00:20:47.670 --> 00:20:53.140
+What we did was take the old DYLD,
+its APIs, and all of the semantics
+
+00:20:53.140 --> 00:20:56.100
+that were expected out of it,
+and we reimplemented that.
+
+00:20:56.150 --> 00:20:56.830
+We reimplemented that.
+
+00:20:56.840 --> 00:20:58.700
+We have a much smaller application.
+
+00:20:58.700 --> 00:21:03.200
+We have a much faster application,
+but we have a compatible environment.
+
+00:21:03.200 --> 00:21:07.930
+And what's really key about that
+is it's now a new code base,
+
+00:21:07.930 --> 00:21:11.010
+smaller, cleaner,
+and we will now be able to
+
+00:21:11.010 --> 00:21:11.010
+actually begin innovating.
+
+00:21:13.320 --> 00:21:16.360
+One of the things we had to do,
+and as Geoff mentioned in his talk,
+
+00:21:16.650 --> 00:21:21.740
+there's been a lot of language progress
+since the UILD had started 15 years ago.
+
+00:21:22.200 --> 00:21:24.980
+And many of those changes
+have to do with C++.
+
+00:21:25.340 --> 00:21:29.750
+Again, Geoff mentioned templates,
+you have template coalescing, etc.
+
+00:21:30.050 --> 00:21:32.190
+Static initializers,
+this is an important one,
+
+00:21:32.190 --> 00:21:33.900
+we'll drill down on this a little later.
+
+00:21:34.070 --> 00:21:47.430
+Exceptions and exception coalescing, etc.
+
+00:21:47.430 --> 00:21:47.430
+So we have been,
+we are improved in many regards,
+
+00:21:47.430 --> 00:21:47.430
+but we really just are now the basis
+for where we'll begin to innovate.
+
+00:21:48.450 --> 00:21:56.060
+So the code paths for dilibs and bundles,
+aka plugins, are unified,
+
+00:21:56.090 --> 00:22:01.130
+and they are in fact the same
+paths in almost all cases.
+
+00:22:01.800 --> 00:22:02.040
+Yeah.
+
+00:22:02.040 --> 00:22:07.830
+And we've always -- we have actually
+struggled with this because people
+
+00:22:07.970 --> 00:22:11.550
+would sometimes make things bundles
+or dilibs based on what their
+
+00:22:11.670 --> 00:22:13.450
+performance requirements were.
+
+00:22:13.500 --> 00:22:17.280
+And now you can actually choose
+the right tool for the job.
+
+00:22:17.280 --> 00:22:19.060
+So if you need -- and
+the only difference,
+
+00:22:19.060 --> 00:22:20.980
+by the way, for those of you that
+haven't gone down this path,
+
+00:22:20.980 --> 00:22:24.780
+the only difference between dilibs and
+bundles is that bundles do not have
+
+00:22:24.780 --> 00:22:27.500
+external symbols to which you can link.
+
+00:22:27.610 --> 00:22:30.200
+So -- and the idea there
+is that if you don't have a
+
+00:22:30.200 --> 00:22:34.150
+linked dependency on something,
+you can then unload a bundle.
+
+00:22:34.440 --> 00:22:37.040
+Currently, we don't have support
+for unloading dilibs.
+
+00:22:37.040 --> 00:22:40.770
+But now you can choose the
+right tool for the job.
+
+00:22:41.600 --> 00:22:43.190
+More compliant.
+
+00:22:43.260 --> 00:22:46.300
+I tried to stay away from
+referring to standards,
+
+00:22:46.300 --> 00:22:48.600
+but we end up using
+the word here anyways,
+
+00:22:48.600 --> 00:22:52.000
+because standards,
+there are industry standards,
+
+00:22:52.000 --> 00:22:55.290
+there are de facto standards,
+and there are ANSI, C++,
+
+00:22:55.290 --> 00:22:57.000
+ANSI/C standards.
+
+00:22:57.000 --> 00:23:01.500
+So the former DYLD did what's called
+lazy initialization in pursuit of speed.
+
+00:23:01.500 --> 00:23:04.760
+Again,
+this was along the lines of what we were
+
+00:23:04.910 --> 00:23:07.750
+trying to do to make launch times faster.
+
+00:23:08.000 --> 00:23:10.900
+So I'm going to back up a little
+bit and just talk a little bit
+
+00:23:10.990 --> 00:23:12.810
+about what's called lazy binding.
+
+00:23:12.810 --> 00:23:16.800
+We have a concept in
+DYLD called lazy pointers.
+
+00:23:16.800 --> 00:23:20.500
+Lazy pointers are pointers that
+you actually have to call through.
+
+00:23:20.500 --> 00:23:22.480
+They're actually function calls, etc.
+
+00:23:22.510 --> 00:23:23.990
+They're not accesses to data.
+
+00:23:23.990 --> 00:23:26.000
+They're not the address of a function.
+
+00:23:26.000 --> 00:23:27.990
+These are called lazy pointers.
+
+00:23:27.990 --> 00:23:30.500
+And what we do is we
+resolve those lazily.
+
+00:23:30.500 --> 00:23:34.640
+So if you have 10,000 references to
+external symbols in your application,
+
+00:23:34.690 --> 00:23:36.990
+we don't resolve all of
+those at launch time.
+
+00:23:37.000 --> 00:23:40.000
+We actually wait until you
+call through the first time.
+
+00:23:40.000 --> 00:23:44.000
+You actually pay one time
+to have that resolved,
+
+00:23:44.000 --> 00:23:47.000
+and then every time any place in
+your code calls for that same symbol,
+
+00:23:47.000 --> 00:23:48.400
+that gets resolved.
+
+00:23:48.500 --> 00:23:51.150
+The idea was, hey, this is a good idea.
+
+00:23:51.250 --> 00:23:53.500
+Lazy binding saves launch time.
+
+00:23:53.500 --> 00:23:57.620
+So why don't we take that idea
+and apply it to initialization,
+
+00:23:57.620 --> 00:23:59.500
+do lazy initialization?
+
+00:23:59.700 --> 00:24:04.330
+The theory was that what we will
+do is we will detect when you're
+
+00:24:04.440 --> 00:24:06.000
+calling a function in a module.
+
+00:24:06.140 --> 00:24:08.000
+Or in a library.
+
+00:24:08.000 --> 00:24:10.590
+And we'll say, oh, hey,
+we need to actually go now
+
+00:24:10.590 --> 00:24:13.790
+run the initializer before we
+actually resolve your pointer.
+
+00:24:14.180 --> 00:24:16.000
+That was the theory.
+
+00:24:16.000 --> 00:24:20.000
+What we discovered was that
+wasn't standards compliant.
+
+00:24:20.000 --> 00:24:23.000
+And there are two standards
+we're talking about here.
+
+00:24:23.000 --> 00:24:27.980
+There is the de facto standard in C,
+how all the other environments do it,
+
+00:24:28.010 --> 00:24:30.850
+how GCC does it on other platforms,
+how Microsoft does it,
+
+00:24:31.000 --> 00:24:31.980
+how Code Warrior does it.
+
+00:24:32.010 --> 00:24:34.970
+There is an industry standard
+on how that was done.
+
+00:24:35.040 --> 00:24:38.830
+And that was all initializers
+get run all the time.
+
+00:24:39.000 --> 00:24:41.000
+And we didn't do that.
+
+00:24:41.000 --> 00:24:43.350
+We were trying to be clever and we were
+trying not to run initializers when,
+
+00:24:43.410 --> 00:24:45.000
+in fact, we should have.
+
+00:24:45.000 --> 00:24:48.000
+And it turns out it wasn't
+enough of a speed win.
+
+00:24:48.000 --> 00:24:52.550
+It turns out that people have over
+the years learned that they don't
+
+00:24:52.550 --> 00:24:55.000
+do really heavyweight things in
+their initialization routines.
+
+00:24:55.040 --> 00:24:58.360
+And, in fact,
+trying to add some of the intelligence
+
+00:24:58.360 --> 00:25:01.870
+to DYLD to deal with the fact
+that you are trying to decide
+
+00:25:01.870 --> 00:25:04.000
+when you can and cannot do things.
+
+00:25:04.440 --> 00:25:10.000
+Turns out that that logic alone costs
+you almost as much as the speed win was.
+
+00:25:11.520 --> 00:25:15.150
+So the new DYLD is fully
+compliant with both the industry,
+
+00:25:15.240 --> 00:25:19.900
+i.e., de facto standards,
+and the C++ standards.
+
+00:25:19.900 --> 00:25:23.800
+If you take a look at the kind of
+history of the language specification,
+
+00:25:23.850 --> 00:25:29.300
+ANSI C has a standard that says
+very little about linking and
+
+00:25:29.400 --> 00:25:32.700
+nothing about linking of shared
+libraries and dynamic libraries.
+
+00:25:32.770 --> 00:25:36.490
+C++ didn't follow that reign,
+and in fact got quite involved
+
+00:25:36.500 --> 00:25:39.900
+in talking about how symbols
+should be linked and things,
+
+00:25:39.950 --> 00:25:44.410
+and made reference to static
+libraries as well as made reference
+
+00:25:44.410 --> 00:25:46.200
+to dynamic and shared libraries.
+
+00:25:46.250 --> 00:25:50.180
+And what the standard says is
+you will call all initializers
+
+00:25:50.650 --> 00:25:53.200
+and you will call all finalizers.
+
+00:25:53.300 --> 00:25:55.900
+Now, it doesn't say when,
+so you could theoretically,
+
+00:25:55.900 --> 00:25:59.500
+just before you exit,
+call all of your initializers,
+
+00:25:59.590 --> 00:26:02.870
+and then call all of your finalizers
+and your standards compliant.
+
+00:26:02.950 --> 00:26:05.440
+So you figure if you have to do that,
+you might as well do the initializers
+
+00:26:05.440 --> 00:26:08.340
+up front and the finalizers at the
+end and be standards compliant.
+
+00:26:08.400 --> 00:26:12.190
+So, whatever,
+I guess that's what we should do.
+
+00:26:12.550 --> 00:26:17.220
+So the new DYLD is compliant in
+both the sort of de facto standard,
+
+00:26:17.230 --> 00:26:21.620
+and that really is in C world,
+and in the C++ standard.
+
+00:26:21.740 --> 00:26:24.160
+This will improve
+performance in some places,
+
+00:26:24.190 --> 00:26:27.000
+and one of the big wins is
+it won't require you to do
+
+00:26:27.000 --> 00:26:30.480
+the bind at launch mechanism,
+which I'm afraid many of you had
+
+00:26:30.820 --> 00:26:34.450
+to do to get all C++ initializers
+to run in the old DYLD.
+
+00:26:34.740 --> 00:26:38.320
+You'd set the bind at launch flag,
+and the poor thing would have to go
+
+00:26:38.320 --> 00:26:43.000
+resolve all symbols so that it would
+actually resolve to the initializers,
+
+00:26:43.040 --> 00:26:44.740
+and that behavior is no longer required.
+
+00:26:44.930 --> 00:26:48.430
+That's a huge win for
+people at launch time.
+
+00:26:49.860 --> 00:26:53.200
+So there's also some speed improvements
+when linking with single module.
+
+00:26:53.250 --> 00:26:57.640
+So, you know, the old DYLD days,
+there was a difference between
+
+00:26:57.640 --> 00:27:00.350
+multi-module and single module,
+and there's some history
+
+00:27:00.350 --> 00:27:02.280
+that I won't go into,
+but one of the benefits
+
+00:27:02.340 --> 00:27:05.290
+was that you could have
+initializers on different modules,
+
+00:27:05.300 --> 00:27:08.250
+and so it would only
+initialize just the module,
+
+00:27:08.340 --> 00:27:12.770
+which is one part of a library,
+and try to do that lazily.
+
+00:27:12.810 --> 00:27:16.800
+And since now we actually call all
+initializers per the standards,
+
+00:27:16.800 --> 00:27:19.890
+the notion of having multiple
+modules is really not an
+
+00:27:19.890 --> 00:27:22.800
+advantage that you need anymore,
+and in fact,
+
+00:27:22.800 --> 00:27:25.800
+if you go with single module,
+in many cases,
+
+00:27:25.820 --> 00:27:29.400
+you'll actually see an improvement in
+performance because the dynamic linker
+
+00:27:29.400 --> 00:27:31.800
+doesn't have to deal with as much.
+
+00:27:31.800 --> 00:27:34.770
+So single module is
+faster than multi-module,
+
+00:27:34.770 --> 00:27:38.180
+and if you're using Xcode,
+it does the right thing.
+
+00:27:39.720 --> 00:27:40.600
+Here we go.
+
+00:27:40.600 --> 00:27:41.800
+This is one of the big ones.
+
+00:27:41.800 --> 00:27:42.740
+Instrumented.
+
+00:27:42.860 --> 00:27:49.600
+DYLD is often the least
+understood tool in our tool chain.
+
+00:27:49.600 --> 00:27:52.660
+And I've been thinking about this,
+and it really feels like,
+
+00:27:52.660 --> 00:27:54.900
+to the developer,
+it's the absolute end of the chain,
+
+00:27:54.900 --> 00:27:57.940
+and to the user,
+it's the beginning of the chain.
+
+00:27:57.940 --> 00:28:00.300
+It's actually kind of
+neither fish nor fowl,
+
+00:28:00.300 --> 00:28:03.120
+and it's that boundary
+condition in the middle.
+
+00:28:03.120 --> 00:28:06.140
+And developers don't really kind of,
+in large part, realize that this is,
+
+00:28:06.190 --> 00:28:07.950
+in fact, part of their environment.
+
+00:28:07.950 --> 00:28:09.580
+It's just doing the
+very last bit of work.
+
+00:28:09.600 --> 00:28:13.100
+So, you know,
+so as it's sitting on that boundary,
+
+00:28:13.100 --> 00:28:14.540
+it doesn't get a lot of attention.
+
+00:28:14.570 --> 00:28:17.210
+And quite frankly,
+the former DYLD didn't have the
+
+00:28:17.590 --> 00:28:21.650
+instrumentation and didn't give you
+any feedback as to what it was doing.
+
+00:28:21.660 --> 00:28:24.860
+So, to address this,
+we've instrumented DYLD,
+
+00:28:24.860 --> 00:28:27.160
+and we're just getting started.
+
+00:28:27.160 --> 00:28:30.320
+So what I really want you to
+take away is I want you to
+
+00:28:30.320 --> 00:28:33.490
+actually get back to us and say,
+hey, this is great,
+
+00:28:33.490 --> 00:28:35.830
+but wouldn't it be better
+if you did thus and so?
+
+00:28:35.830 --> 00:28:37.280
+We're just getting started here.
+
+00:28:37.280 --> 00:28:40.100
+But here are some environment
+variables that we have.
+
+00:28:40.160 --> 00:28:43.160
+For instance,
+DYLD ignore pre-binding allows you to
+
+00:28:43.160 --> 00:28:46.820
+take an app which is fully pre-bound
+and actually run it un-pre-bound
+
+00:28:47.140 --> 00:28:50.100
+and pre-bound next to each other,
+side by side.
+
+00:28:50.120 --> 00:28:52.410
+You set the environment variable.
+
+00:28:52.410 --> 00:28:57.230
+Its right-hand side of this environment
+variable is either all app or split.
+
+00:28:57.350 --> 00:28:59.040
+I forget the exact syntax.
+
+00:28:59.140 --> 00:29:01.540
+Please look at the man page on this.
+
+00:29:01.650 --> 00:29:03.470
+So, in other words,
+you can actually see if
+
+00:29:03.470 --> 00:29:05.720
+your app is not pre-bound,
+but everything else is,
+
+00:29:05.720 --> 00:29:07.200
+or if nothing's pre-bound.
+
+00:29:07.610 --> 00:29:09.430
+Actually,
+you can do side-by-side comparisons to
+
+00:29:09.430 --> 00:29:11.210
+see if pre-binding is actually worth it.
+
+00:29:11.310 --> 00:29:12.810
+I bet you'll find out it's not.
+
+00:29:12.880 --> 00:29:15.750
+DYLD print APIs actually
+prints every time you call
+
+00:29:15.770 --> 00:29:19.310
+through a published DYLD API,
+it actually echoes out the API and
+
+00:29:19.400 --> 00:29:21.680
+the arguments that you've passed in.
+
+00:29:21.680 --> 00:29:23.390
+DYLD print initializers.
+
+00:29:23.390 --> 00:29:24.580
+This is a big one.
+
+00:29:24.580 --> 00:29:26.490
+You actually want to
+call print initializers,
+
+00:29:26.490 --> 00:29:29.280
+so you actually want to see this,
+so you can actually make sure not only
+
+00:29:29.280 --> 00:29:32.130
+your initializers are being called,
+they're being called only once,
+
+00:29:32.140 --> 00:29:34.460
+that they're being called
+in the right order.
+
+00:29:34.460 --> 00:29:37.260
+Initialization order could
+be a talk in and of itself.
+
+00:29:37.280 --> 00:29:40.280
+But print initializers will help you
+sort out some of these hairy problems.
+
+00:29:40.280 --> 00:29:43.270
+Initializers are called pre-main.
+
+00:29:43.280 --> 00:29:47.280
+Pre-main means many people,
+when they get inside GDB,
+
+00:29:47.280 --> 00:29:48.670
+they say break at main.
+
+00:29:48.670 --> 00:29:51.280
+How do you break anything before main?
+
+00:29:51.280 --> 00:29:53.620
+And when these things,
+when initializers happen pre-main,
+
+00:29:53.620 --> 00:29:55.170
+it's often hard to debug these things.
+
+00:29:55.280 --> 00:29:58.280
+DYLD print libraries shows
+you as things are coming in,
+
+00:29:58.280 --> 00:30:01.220
+what things are being loaded,
+what libraries cause what
+
+00:30:01.220 --> 00:30:02.280
+libraries to be loaded in.
+
+00:30:02.280 --> 00:30:06.270
+So, if you're trying to figure out under
+what circumstances a library gets loaded,
+
+00:30:06.280 --> 00:30:06.280
+or if you're trying to
+figure out what's going on,
+
+00:30:06.280 --> 00:30:06.280
+you can do that.
+
+00:30:07.370 --> 00:30:10.610
+You can determine if, for instance,
+you're actually loading the debug
+
+00:30:10.620 --> 00:30:13.280
+or profile version of a library,
+this is a way to do it.
+
+00:30:13.280 --> 00:30:15.280
+DYLD print libraries.
+
+00:30:15.280 --> 00:30:18.300
+DYLD print statistics,
+this is one of our favorite and
+
+00:30:18.300 --> 00:30:20.280
+probably the first one we added.
+
+00:30:20.360 --> 00:30:24.210
+This actually allows us to,
+we actually do time measurements of
+
+00:30:24.210 --> 00:30:26.990
+how much time you spent rebasing,
+rebinding,
+
+00:30:27.340 --> 00:30:29.280
+how much time you spent initialization.
+
+00:30:29.350 --> 00:30:34.240
+There's a sum total that says
+how much time was spent in DYLD.
+
+00:30:34.280 --> 00:30:35.280
+And what we have found on applications,
+big applications, is that, you know,
+
+00:30:35.280 --> 00:30:35.280
+if you're doing a lot of work,
+you're going to get a lot of data.
+
+00:30:35.280 --> 00:30:36.270
+You're going to get a lot of data.
+
+00:30:36.290 --> 00:30:39.740
+So, big applications, big applications,
+you know, big applications that might
+
+00:30:39.880 --> 00:30:43.490
+take four seconds to launch,
+actually 400 milliseconds
+
+00:30:43.490 --> 00:30:45.220
+is actually spent in DYLD.
+
+00:30:45.280 --> 00:30:48.280
+So, the problem is no longer DYLD.
+
+00:30:52.720 --> 00:30:56.840
+Please man DYLD to get this information,
+and please give us feedback on this.
+
+00:30:57.010 --> 00:31:01.940
+One of the goals on the instrumentation,
+we actually want to unify the output
+
+00:31:01.940 --> 00:31:08.150
+grammar to be very consistent,
+so those of you who are script writers,
+
+00:31:08.150 --> 00:31:12.430
+and I'm one of them,
+you can write a pretty simple script
+
+00:31:12.430 --> 00:31:12.430
+to parse the output of these things
+and do what you will with them.
+
+00:31:13.110 --> 00:31:15.950
+So let's talk a little bit about
+initialization/finalization.
+
+00:31:16.130 --> 00:31:18.940
+You're going to hear us
+pop back and forth between
+
+00:31:18.940 --> 00:31:23.250
+initialization/finalization,
+construction/destruction.
+
+00:31:23.470 --> 00:31:26.140
+They have different meanings,
+but in this context,
+
+00:31:26.140 --> 00:31:27.220
+they have very similar meanings.
+
+00:31:27.370 --> 00:31:30.210
+So I'll see if I can
+iron that out for you.
+
+00:31:30.930 --> 00:31:33.240
+So the history of this
+is approaches on C.
+
+00:31:33.320 --> 00:31:35.340
+Initially,
+and many of you who've done any
+
+00:31:35.340 --> 00:31:38.510
+Unix programming at all have
+ever had to deal with this,
+
+00:31:38.590 --> 00:31:41.230
+in the early days,
+there was a magic function
+
+00:31:41.230 --> 00:31:45.710
+called score_init,
+or another one, score_finI,
+
+00:31:45.840 --> 00:31:49.380
+using the clever mechanisms that
+C programmers have of trying to
+
+00:31:49.470 --> 00:31:52.460
+keep everything to the lowest
+possible number of characters.
+
+00:31:52.590 --> 00:31:57.110
+So that is actually init for
+initialization and finI for finalization.
+
+00:31:57.210 --> 00:31:59.160
+So this is initialization, finalization.
+
+00:31:59.320 --> 00:32:02.880
+You were allowed to have one of these,
+basically one of these per executable.
+
+00:32:02.880 --> 00:32:07.540
+You can play some tricks with the
+linker and have one per library.
+
+00:32:07.540 --> 00:32:09.500
+But quite frankly, it was very difficult.
+
+00:32:09.510 --> 00:32:11.290
+It had to be an external symbol.
+
+00:32:11.400 --> 00:32:12.950
+So you were able to do this.
+
+00:32:13.090 --> 00:32:16.260
+But if you didn't do it exactly right,
+you sometimes found that you
+
+00:32:16.260 --> 00:32:18.540
+turned off initialization for libc.
+
+00:32:18.640 --> 00:32:19.510
+That isn't good.
+
+00:32:19.610 --> 00:32:22.140
+You really need libc to get initialized.
+
+00:32:22.200 --> 00:32:25.490
+Then in a huge leap of
+technological advancement,
+
+00:32:25.520 --> 00:32:27.920
+somebody said, hey,
+let's put it on the command
+
+00:32:27.920 --> 00:32:29.240
+line and call dash init.
+
+00:32:29.240 --> 00:32:30.980
+Then you could pass in
+the name of the function.
+
+00:32:31.080 --> 00:32:35.490
+Woo hoo, big improvement there.
+
+00:32:35.530 --> 00:32:37.620
+By the way, you actually always
+want to do this in code.
+
+00:32:37.620 --> 00:32:40.810
+You don't ever want to do
+this on the command line.
+
+00:32:41.100 --> 00:34:32.100
+[Transcript missing]
+
+00:34:32.240 --> 00:34:36.270
+and also across modules
+and across libraries,
+
+00:34:36.290 --> 00:34:37.700
+so you can have many of these.
+
+00:34:37.740 --> 00:34:42.500
+It is a recommendation that you actually
+have one of these per translation unit,
+
+00:34:42.540 --> 00:34:46.300
+and that you actually have other
+functions that you call from here.
+
+00:34:46.500 --> 00:34:48.500
+The standard does say you
+can have multiple of these,
+
+00:34:48.510 --> 00:34:52.140
+and the standard does say that
+they will be called in file order.
+
+00:34:52.450 --> 00:34:56.200
+And in the case of C,
+that's a pretty straightforward thing.
+
+00:34:56.220 --> 00:34:59.590
+However, when you get to C++,
+
+00:34:59.800 --> 00:35:02.940
+and you start looking at what it means
+in C++ to do these kinds of things,
+
+00:35:02.940 --> 00:35:04.940
+things can get very
+confusing very quickly.
+
+00:35:05.040 --> 00:35:09.460
+So in C++, there was no need to add
+a language extension,
+
+00:35:09.460 --> 00:35:13.200
+because C++ already has mechanism
+for static initialization.
+
+00:35:13.270 --> 00:35:18.200
+If at file scope you say static int,
+you know, equals foo, open print,
+
+00:35:18.200 --> 00:35:23.840
+close print, that, semicolon,
+that is in fact static initialization.
+
+00:35:23.840 --> 00:35:27.550
+That will happen before,
+that will happen at that point in
+
+00:35:27.550 --> 00:35:30.620
+the file as there's translation
+unit is being handed off.
+
+00:35:30.810 --> 00:35:32.400
+That will happen early.
+
+00:35:32.400 --> 00:35:36.340
+Also, you can create objects,
+create them at file scope or, again,
+
+00:35:36.340 --> 00:35:39.140
+namespace scope,
+which is a modified file scope.
+
+00:35:39.190 --> 00:35:41.540
+And these,
+your constructors and destructors will,
+
+00:35:41.540 --> 00:35:42.680
+in fact, be called.
+
+00:35:42.950 --> 00:35:45.980
+So they can be tricky in getting
+all that stuff right with C++
+
+00:35:45.980 --> 00:35:49.280
+and trying to depend on the order
+within a file beyond the talk,
+
+00:35:49.360 --> 00:35:50.330
+beyond the scope of this talk.
+
+00:35:50.490 --> 00:35:55.780
+So please pick up Scott Meyers' book,
+Effective C++, item 47.
+
+00:35:55.800 --> 00:35:59.410
+The fact that it has its own item
+number here should tell you something.
+
+00:36:01.750 --> 00:36:06.100
+So, in summary,
+what are the take-home points?
+
+00:36:06.150 --> 00:36:08.100
+Tiger-DYLD is faster.
+
+00:36:08.150 --> 00:36:11.940
+It's so fast that
+prebinding is not required.
+
+00:36:11.940 --> 00:36:14.170
+And it's only going to get better.
+
+00:36:17.500 --> 00:36:19.890
+Conforming C++ static initialization.
+
+00:36:19.890 --> 00:36:20.800
+We've had a lot.
+
+00:36:20.800 --> 00:36:25.160
+This was one of the driving forces
+behind us going and revisiting DYLD and
+
+00:36:25.160 --> 00:36:28.150
+actually doing a new one from scratch.
+
+00:36:30.270 --> 00:36:34.900
+and his team are instrumental in
+helping you figure out what it's
+
+00:36:34.900 --> 00:36:37.950
+doing and what you can do to help
+make your launch times faster.
+
+00:36:37.960 --> 00:36:42.030
+Thank you very much, Jeff Glasson.
+
+00:36:49.520 --> 00:36:50.630
+Thanks, Robert.
+
+00:36:50.770 --> 00:36:54.600
+So, I think I wanted to
+shift gears a little bit,
+
+00:36:54.840 --> 00:37:00.180
+and I think what I want to
+talk about now is on Monday,
+
+00:37:00.250 --> 00:37:04.530
+Ted Goldstein, in his keynote,
+introduced the feature that we now
+
+00:37:04.530 --> 00:37:07.400
+are providing dead code stripping
+support to our tool chain,
+
+00:37:07.570 --> 00:37:11.450
+and that's both in Xcode
+1.5 and in Xcode 2.0.
+
+00:37:11.600 --> 00:37:16.530
+We didn't explain much about
+what it is and how to use it,
+
+00:37:16.530 --> 00:37:18.510
+and that's what I'm here for.
+
+00:37:19.280 --> 00:37:20.400
+So what is dead code stripping?
+
+00:37:20.400 --> 00:37:23.590
+So dead code stripping is really
+something that the static linker does.
+
+00:37:23.670 --> 00:37:27.190
+It does an analysis of your entire
+program and determines symbols
+
+00:37:27.350 --> 00:37:30.900
+and code segments and data items
+that are not referenced at all,
+
+00:37:30.910 --> 00:37:32.000
+and it just removes them.
+
+00:37:32.060 --> 00:37:34.800
+It removes them from
+the final linked image.
+
+00:37:34.830 --> 00:37:36.200
+And that saves space.
+
+00:37:36.340 --> 00:37:41.110
+Certain classes of applications
+have more dead code than other.
+
+00:37:41.200 --> 00:37:45.160
+Macintosh platforms,
+the Macintosh tools historically
+
+00:37:45.200 --> 00:37:48.200
+from other vendors like MetroWorks
+have always had dead code stripping,
+
+00:37:48.220 --> 00:37:51.200
+and the style of programming has been,
+let's put, you know,
+
+00:37:51.200 --> 00:37:55.200
+100 utility functions in one C file,
+and if I don't use them,
+
+00:37:55.200 --> 00:37:56.200
+they'll get thrown away.
+
+00:37:56.200 --> 00:38:03.200
+The tools that we've been shipping up
+to now have come from a Unix background
+
+00:38:03.200 --> 00:38:06.200
+where the Unix style of programming is,
+let's just put everything
+
+00:38:06.200 --> 00:38:09.000
+in lots of .o files,
+and then you've got static archives,
+
+00:38:09.000 --> 00:38:11.130
+and then dynamic libraries have appeared.
+
+00:38:11.200 --> 00:38:14.670
+So the dead code stripping
+hasn't been as important in the
+
+00:38:14.670 --> 00:38:17.180
+past for Unix-type applications.
+
+00:38:17.200 --> 00:38:20.550
+Other things that are interesting
+when it comes to dead code stripping
+
+00:38:20.550 --> 00:38:24.160
+are C++ template instantiations
+where the compiler can actually
+
+00:38:24.230 --> 00:38:30.630
+sometimes generate code that is never
+referenced that will reference things
+
+00:38:30.680 --> 00:38:33.640
+that are not defined in your program,
+and that actually causes a link error
+
+00:38:33.720 --> 00:38:35.200
+if you don't strip that code out.
+
+00:38:35.200 --> 00:38:37.170
+So we do that now.
+
+00:38:37.200 --> 00:38:39.200
+So how do you do it?
+
+00:38:39.200 --> 00:38:43.200
+So there are two command line
+options to the static linker now:
+
+00:38:43.200 --> 00:38:46.200
+-deadstrip,
+which enables the feature overall,
+
+00:38:46.200 --> 00:38:50.470
+and the other one that's actually
+kind of important is don't strip
+
+00:38:50.570 --> 00:38:53.200
+your initializers and finalizers.
+
+00:38:55.760 --> 00:39:00.890
+What's interesting is initializers and
+finalizers are almost never statically
+
+00:39:00.890 --> 00:39:04.300
+referenced in your application,
+and if you don't pass this,
+
+00:39:04.340 --> 00:39:06.080
+the linker will say, "Hey,
+they're not referenced.
+
+00:39:06.140 --> 00:39:10.370
+I'll throw them away." So please,
+if you have initializers that are
+
+00:39:10.450 --> 00:39:14.380
+static-- or that are not static,
+that are exported,
+
+00:39:14.380 --> 00:39:17.270
+and you do use this flagger,
+they will be thrown away if you
+
+00:39:17.270 --> 00:39:19.050
+turn on dead code stripping.
+
+00:39:19.540 --> 00:39:22.340
+You don't actually
+need to remember those.
+
+00:39:22.340 --> 00:39:24.740
+I'll go into how to do
+this in Xcode in a second,
+
+00:39:25.020 --> 00:39:28.640
+but dead code stripping
+doesn't come for free.
+
+00:39:28.640 --> 00:39:31.490
+One limitation with what we have
+today is you actually need to
+
+00:39:31.490 --> 00:39:35.360
+rebuild your program and use -g
+full if you want debug information.
+
+00:39:35.360 --> 00:39:40.240
+-g used is an optimization that the
+compiler and Xcode uses by default to try
+
+00:39:40.240 --> 00:39:42.680
+and minimize the amount of debug output.
+
+00:39:42.840 --> 00:39:46.710
+However, if you don't have full debug
+symbols for the static linker to
+
+00:39:46.710 --> 00:39:49.950
+deal with when it tries to strip,
+you may end up with symbols,
+
+00:39:50.260 --> 00:39:54.540
+debug symbols in your final image that
+have no code backing it or vice versa.
+
+00:39:54.540 --> 00:39:58.060
+You can actually end up with code
+that doesn't have debug symbols.
+
+00:39:58.060 --> 00:40:00.150
+So -g full is important.
+
+00:40:00.220 --> 00:40:04.560
+-g is not good enough because
+-g defaults to g used.
+
+00:40:04.560 --> 00:40:06.310
+And again,
+I'll show you how to do this in Xcode
+
+00:40:06.310 --> 00:40:12.660
+so you don't have to type stuff on the
+command line or type custom options.
+
+00:40:12.690 --> 00:40:16.890
+It's important to remember that
+any symbol that's exported from a
+
+00:40:16.890 --> 00:40:18.320
+dynamic library is a dynamic library.
+
+00:40:18.320 --> 00:40:19.990
+It's considered used by default.
+
+00:40:20.080 --> 00:40:21.300
+This is a good thing.
+
+00:40:21.390 --> 00:40:23.810
+If you have a global symbol
+and it's in a library,
+
+00:40:23.810 --> 00:40:25.630
+you expect someone to
+be able to link to it.
+
+00:40:25.630 --> 00:40:28.550
+Therefore, it is considered used.
+
+00:40:30.830 --> 00:40:34.080
+Unused symbols that aren't
+referenced statically,
+
+00:40:34.270 --> 00:40:37.960
+you can actually use another
+GCC attribute called attribute
+
+00:40:38.020 --> 00:40:40.480
+used that tells the compiler,
+"This is used.
+
+00:40:40.720 --> 00:40:43.120
+Please don't throw it away." So,
+for example,
+
+00:40:43.170 --> 00:40:47.900
+if you're trying to use either the
+DL compat APIs of DL_SIM or DYLD APIs to
+
+00:40:47.900 --> 00:40:51.220
+reference that symbol only dynamically,
+you need to flag your source
+
+00:40:51.370 --> 00:40:52.940
+code to tell the compiler,
+"Yes,
+
+00:40:52.940 --> 00:40:55.910
+I want this symbol in my final image."
+
+00:40:56.450 --> 00:41:02.360
+One other thing you could do is there's
+a couple linker flags that let you
+
+00:41:02.920 --> 00:41:05.340
+deal with symbols in a bulk manner.
+
+00:41:05.430 --> 00:41:10.120
+There's a feature in, I think,
+the Microsoft compiler called DeclSpec.
+
+00:41:10.230 --> 00:41:12.000
+How many of you guys
+are familiar with that,
+
+00:41:12.000 --> 00:41:17.220
+of specifying whether or not to import
+or whether or not to export a symbol?
+
+00:41:17.450 --> 00:41:21.770
+We don't quite have that yet,
+but you can actually specify a
+
+00:41:21.770 --> 00:41:25.400
+file that you can either say,
+"Here's my library.
+
+00:41:25.400 --> 00:41:29.080
+Here's the list of the only symbols
+that I want exported," and then you pass
+
+00:41:29.190 --> 00:41:33.400
+that with the -exported symbols list,
+and then anything else not in that file
+
+00:41:33.400 --> 00:41:35.400
+will not be exported as a public symbol.
+
+00:41:35.400 --> 00:41:38.740
+Or you can go the other way and say,
+"Here, export everything except these
+
+00:41:38.780 --> 00:41:42.160
+things because they're really
+secret and private." So you have
+
+00:41:42.210 --> 00:41:44.650
+a choice of how to control that.
+
+00:41:45.970 --> 00:41:49.240
+You do need to use a new compiler.
+
+00:41:49.240 --> 00:41:52.750
+There's a new version of GCC 3.3
+that comes in Xcode 1.5 that's added
+
+00:41:52.840 --> 00:41:57.900
+support for tagging these object files
+so they can be stripped by the linker.
+
+00:41:57.900 --> 00:42:02.120
+If you don't recompile your project
+with the new compiler and the
+
+00:42:02.380 --> 00:42:06.070
+linker gets some old object files,
+the linker needs to be
+
+00:42:06.120 --> 00:42:09.900
+conservative and treat those old
+object files as a single block,
+
+00:42:09.900 --> 00:42:12.720
+basically the old Unix semantics.
+
+00:42:12.950 --> 00:42:17.460
+So if you have 100 functions in
+this old object file and it's not
+
+00:42:17.530 --> 00:42:20.950
+recompiled and you use one of them,
+all 100 of those will end
+
+00:42:21.040 --> 00:42:21.900
+up in your final image.
+
+00:42:21.900 --> 00:42:24.380
+If you do recompile,
+the other ones that aren't
+
+00:42:24.460 --> 00:42:25.900
+used will be thrown away.
+
+00:42:26.780 --> 00:42:30.300
+So it's really,
+really easy to do this in Xcode.
+
+00:42:30.310 --> 00:42:33.510
+You may have seen this already
+in the preview if you've
+
+00:42:33.510 --> 00:42:36.160
+installed Xcode 1.5 or Tiger.
+
+00:42:36.160 --> 00:42:39.630
+There's a couple check boxes
+in the target inspector,
+
+00:42:39.670 --> 00:42:42.820
+and they correspond directly
+to the linker options.
+
+00:42:42.820 --> 00:42:45.720
+There's help underneath that
+you can look to make sure
+
+00:42:45.720 --> 00:42:48.120
+you're doing the right thing,
+but check one or both of them
+
+00:42:48.120 --> 00:42:50.360
+depending on what you want.
+
+00:42:50.370 --> 00:42:54.940
+And the debug,
+also this is in the project inspector.
+
+00:42:54.950 --> 00:42:59.260
+You need to make sure you set GFUL,
+and that's a level of debug symbol.
+
+00:42:59.260 --> 00:43:01.840
+You can actually do search
+in the bottom for GFUL,
+
+00:43:01.840 --> 00:43:06.830
+and it will do the right thing because
+we searched the help text also.
+
+00:43:06.940 --> 00:43:10.180
+So that's all I have to
+say about that for now.
+
+00:43:10.280 --> 00:43:14.010
+And now I wanted to bring up
+Jeff Keating to talk about WHRT,
+
+00:43:14.190 --> 00:43:18.150
+which kind of is a
+little different topic.
+
+00:43:25.750 --> 00:43:31.390
+Okay, so moving away from linkers
+and loaders and such,
+
+00:43:31.570 --> 00:43:36.820
+In the Panther timeframe,
+we introduced wide character support to
+
+00:43:37.030 --> 00:43:41.160
+GCC and to all of the system libraries.
+
+00:43:41.260 --> 00:43:47.650
+So wide characters are a
+standard part of ISOC and ISOC++.
+
+00:43:47.800 --> 00:43:51.500
+They were introduced last century.
+
+00:43:51.500 --> 00:43:57.050
+And in Panther timeframe,
+we finally got around to implementing
+
+00:43:57.050 --> 00:44:01.970
+them completely in both the compiler and
+all the way through the system libraries.
+
+00:44:02.250 --> 00:44:07.350
+So those of you who are familiar with
+it will probably know all this already,
+
+00:44:07.420 --> 00:44:11.980
+but you basically-- instead of
+using the character type char,
+
+00:44:11.980 --> 00:44:14.260
+you use wchar_t.
+
+00:44:14.260 --> 00:44:17.520
+And instead of strings
+and character constants,
+
+00:44:17.520 --> 00:44:20.450
+you just place an L in front of them
+to indicate that you want a wide
+
+00:44:20.450 --> 00:44:23.530
+string or a wide character constant.
+
+00:44:23.730 --> 00:44:29.100
+and David Unlike regular strings
+or regular character constants,
+
+00:44:29.140 --> 00:44:33.570
+you're no longer restricted to just
+the standard ISOC character sets,
+
+00:44:33.570 --> 00:44:36.480
+so basically the low half of ASCII.
+
+00:44:36.480 --> 00:44:39.940
+So you can actually use
+characters from other languages,
+
+00:44:39.940 --> 00:44:45.240
+Japanese, all the accented characters
+from all the European languages,
+
+00:44:45.510 --> 00:44:49.020
+Chinese, they all work in strings.
+
+00:44:49.020 --> 00:44:52.860
+You can use all of the standard
+C and C++ library functionality.
+
+00:44:52.910 --> 00:44:55.260
+You can print them out using printf.
+
+00:44:55.260 --> 00:44:58.520
+So here's an example of a
+single wide character that
+
+00:44:58.520 --> 00:45:01.220
+we're printing out using printf.
+
+00:45:01.220 --> 00:45:05.220
+There's an additional kind of stream
+called a wide stream in both C and in
+
+00:45:05.220 --> 00:45:09.650
+C++ that now works on wide characters,
+just as regular streams
+
+00:45:09.650 --> 00:45:11.880
+work on regular characters.
+
+00:45:11.880 --> 00:45:16.260
+So you can use all of the C++
+functionality to print out wide strings,
+
+00:45:16.260 --> 00:45:19.000
+to print out wide characters, and so on.
+
+00:45:22.010 --> 00:45:26.180
+The key feature of wide characters
+that makes them different from
+
+00:45:26.640 --> 00:45:30.310
+what you could kind of do before,
+which is just put UTF-8
+
+00:45:30.310 --> 00:45:33.540
+into a regular string,
+is that in a wide string,
+
+00:45:33.570 --> 00:45:36.000
+each character is just one unit.
+
+00:45:36.090 --> 00:45:39.640
+So here, for example,
+the last bullet item is we have a string
+
+00:45:39.640 --> 00:45:42.160
+that contains exactly two characters.
+
+00:45:42.180 --> 00:45:46.080
+You can index that string,
+and the first item in the string
+
+00:45:46.080 --> 00:45:48.560
+is a complete character by itself.
+
+00:45:48.580 --> 00:45:51.750
+It's not the first byte
+of some longer sequence.
+
+00:45:54.740 --> 00:45:59.700
+So, I should feel obliged to point out,
+we have the standard
+
+00:45:59.700 --> 00:46:01.640
+C and C++ functionality.
+
+00:46:01.640 --> 00:46:06.190
+This doesn't include anything that,
+for instance, draws 20 lines of wide
+
+00:46:06.190 --> 00:46:11.150
+characters to a screen,
+formats it nicely, puts in line breaks,
+
+00:46:11.360 --> 00:46:15.460
+justifies it on both sides,
+remembers which direction to write it in.
+
+00:46:15.600 --> 00:46:17.700
+We don't have that.
+
+00:46:17.710 --> 00:46:21.300
+For that, you want to use the Carbon and
+Cocoa functionality for doing this.
+
+00:46:21.300 --> 00:46:23.880
+You know,
+you want to put it... And in particular,
+
+00:46:23.940 --> 00:46:26.140
+you should consider using CFStrings.
+
+00:46:26.150 --> 00:46:27.750
+CFStrings don't work like this.
+
+00:46:27.760 --> 00:46:32.680
+They have an encoding that's specialized
+for each individual function,
+
+00:46:32.680 --> 00:46:35.260
+for each individual language and so on.
+
+00:46:35.270 --> 00:46:38.720
+As a result of that,
+the CFStrings will often be more
+
+00:46:38.880 --> 00:46:41.830
+efficient than using wide strings,
+so long as you don't need to do
+
+00:46:41.910 --> 00:46:47.650
+heavy-duty text processing or any kind
+of language-based processing of strings.
+
+00:46:47.660 --> 00:46:48.660
+Thanks.
+
+00:46:51.060 --> 00:46:56.040
+So, like most Unix-like systems,
+on Darwin we choose to make
+
+00:46:56.040 --> 00:46:58.400
+wide characters four bytes.
+
+00:46:58.400 --> 00:47:02.160
+They contain a UCS4
+code point from Unicode.
+
+00:47:02.160 --> 00:47:05.080
+This lets Darwin support all
+of the characters in Unicode,
+
+00:47:05.400 --> 00:47:09.450
+while still maintaining that
+property that every character
+
+00:47:09.640 --> 00:47:11.800
+is one thing in the string.
+
+00:47:11.800 --> 00:47:16.480
+Some other operating systems decided
+to use two bytes for wide characters,
+
+00:47:16.480 --> 00:47:20.310
+because we'd never have more than
+60,000 characters in the world,
+
+00:47:20.310 --> 00:47:23.900
+and it turned out that
+wasn't such a great choice.
+
+00:47:23.900 --> 00:47:28.270
+With the new extended CJK characters,
+we actually need more
+
+00:47:28.270 --> 00:47:32.320
+than 65,000 characters,
+so we need the full four bytes.
+
+00:47:34.990 --> 00:47:37.360
+and the rest of the team.
+
+00:47:37.360 --> 00:47:39.440
+So, that was wide characters.
+
+00:47:39.730 --> 00:47:43.860
+So, I mentioned that you could kind
+of do this with regular strings,
+
+00:47:43.900 --> 00:47:45.920
+with strings made out of char.
+
+00:47:45.940 --> 00:47:51.340
+The key thing to understand is that the
+interpretation of char varies at runtime,
+
+00:47:51.380 --> 00:47:53.800
+depending on what locale you use.
+
+00:47:53.830 --> 00:47:58.350
+There's the whole functionality
+involving LC char set,
+
+00:47:58.350 --> 00:48:03.480
+involving set locale,
+described in the C and C++ standards.
+
+00:48:03.510 --> 00:48:05.610
+As a result of this,
+if you try to use anything
+
+00:48:05.680 --> 00:48:10.350
+outside that basic ASCII character
+set in a char string,
+
+00:48:10.350 --> 00:48:10.900
+it may work.
+
+00:48:11.090 --> 00:48:12.820
+You need to be very
+careful about testing.
+
+00:48:12.820 --> 00:48:16.270
+It may work on your system,
+but when someone from a different
+
+00:48:16.270 --> 00:48:19.520
+country tries to run your software,
+they may discover that what
+
+00:48:19.640 --> 00:48:23.380
+you thought were perfectly fine
+Japanese characters turns into strange,
+
+00:48:23.380 --> 00:48:26.410
+accented characters that make no sense.
+
+00:48:26.750 --> 00:48:31.420
+The GCC 3.3 compiler,
+as shipped in Panther,
+
+00:48:31.480 --> 00:48:34.950
+kind of expects its input to be in UTF-8,
+so you should just go into
+
+00:48:35.070 --> 00:48:41.540
+Xcode and check the appropriate
+drop-down menu item that says,
+
+00:48:41.780 --> 00:48:47.390
+"My source files are in UTF-8," because
+that's really what it's expecting,
+
+00:48:47.410 --> 00:48:51.210
+and that's what it'll try
+to convert to on the output.
+
+00:48:51.210 --> 00:48:55.300
+We hope to improve on this in GCC 3.5,
+but it's not quite there yet.
+
+00:48:56.530 --> 00:49:01.460
+If you have been using
+systems with a 2-byte wchar_t,
+
+00:49:01.460 --> 00:49:06.250
+and you want to come to
+GCC and Xcode and use that,
+
+00:49:06.380 --> 00:49:11.020
+you might consider using unichar as
+a substitute for the actual type,
+
+00:49:11.130 --> 00:49:12.390
+wchar_t.
+
+00:49:12.400 --> 00:49:16.600
+To read these from and to disk,
+you might want to use the iconv library,
+
+00:49:16.600 --> 00:49:19.360
+if you say man3 iconv,
+which contains functionality
+
+00:49:19.430 --> 00:49:25.400
+for reading the UCS2 form that
+a 2-byte wchar_t really means.
+
+00:49:25.400 --> 00:49:30.950
+It will do the full
+decoding of that form.
+
+00:49:31.270 --> 00:49:34.680
+It also knows how to decode
+virtually every other character
+
+00:49:34.680 --> 00:49:38.400
+set that you might ever want,
+so you should look at that.
+
+00:49:38.520 --> 00:49:41.010
+Or, if you've decided to
+use CFStrings instead,
+
+00:49:41.010 --> 00:49:43.830
+the right place for that is
+to use CFStringCreate from
+
+00:49:43.830 --> 00:49:47.320
+external representation,
+which has basically all
+
+00:49:47.320 --> 00:49:49.400
+the same functionality.
+
+00:49:49.400 --> 00:49:52.240
+It lets you basically say,
+"I have this sequence of bytes,
+
+00:49:52.270 --> 00:49:53.120
+and it's in UCS2.
+
+00:49:53.410 --> 00:49:56.750
+Please turn it into a CF string."
+the CFString and it'll just do it.
+
+00:49:57.890 --> 00:49:59.140
+So now, availability.
+
+00:49:59.140 --> 00:50:01.690
+I said we got it into Panther, and it is.
+
+00:50:01.820 --> 00:50:04.710
+The library support is
+available in Panther and later.
+
+00:50:04.800 --> 00:50:09.100
+That means it's not available
+in Jaguar or Aurelia.
+
+00:50:09.160 --> 00:50:12.980
+So a consequence of this is that,
+first of all,
+
+00:50:12.980 --> 00:50:16.890
+if you want to use it in your programs,
+you probably really want to be
+
+00:50:16.900 --> 00:50:18.770
+just targeting Panther or later.
+
+00:50:18.990 --> 00:50:22.990
+And even if you don't care about
+wide characters or other languages,
+
+00:50:23.080 --> 00:50:27.740
+you should still know that the C++
+standard library requires this support.
+
+00:50:27.850 --> 00:50:32.780
+So if you try to take a C++ program,
+you build it on Panther,
+
+00:50:32.870 --> 00:50:38.640
+and it uses the C++ standard library,
+and you then go try to run it on Jaguar,
+
+00:50:38.740 --> 00:50:41.020
+if you've managed to invoke
+some of the parts of the C++
+
+00:50:41.060 --> 00:50:43.490
+library that expect the support,
+it won't work.
+
+00:50:43.600 --> 00:50:47.170
+So what you should do is if you
+wish to build an application
+
+00:50:47.170 --> 00:50:49.610
+for Jaguar or earlier,
+and you wish to do it on a
+
+00:50:49.630 --> 00:50:52.000
+current operating system,
+Panther or later,
+
+00:50:52.110 --> 00:50:54.730
+you should use the SDK functionality.
+
+00:50:54.830 --> 00:50:57.680
+This only applies to
+C++ and Objective-C++.
+
+00:50:57.780 --> 00:51:01.570
+It doesn't apply to C.
+
+00:51:01.650 --> 00:51:05.100
+Okay, so I should now hand
+over to Matthew Formica.
+
+00:51:09.900 --> 00:51:14.140
+Thank you, Geoff.
+
+00:51:14.150 --> 00:51:17.490
+So what you've seen today is a bunch of
+different things that we've been working
+
+00:51:17.490 --> 00:51:20.950
+on in the low levels of the system,
+dynamic and static linkers
+
+00:51:20.950 --> 00:51:22.300
+and in the compiler.
+
+00:51:22.330 --> 00:51:26.580
+Launch time improvements are here today,
+and they're better than prebinding,
+
+00:51:26.580 --> 00:51:28.940
+and they're getting even better in Tiger.
+
+00:51:28.940 --> 00:51:30.940
+DYLD is all new in Tiger.
+
+00:51:30.950 --> 00:51:34.840
+It adds a whole new level of
+standards conformance that I'm
+
+00:51:34.840 --> 00:51:39.460
+sure will help many of you with
+your applications on Mac OS X.
+
+00:51:39.460 --> 00:51:42.380
+You want to make sure
+you know your tool set.
+
+00:51:42.450 --> 00:51:47.210
+If you have bumped into the concept
+of dead code stripping up till now,
+
+00:51:47.210 --> 00:51:51.060
+we now have it in Xcode,
+you'll get different mileage on
+
+00:51:51.060 --> 00:51:55.160
+different applications depending
+on whether your app actually uses
+
+00:51:55.160 --> 00:51:57.430
+or requires dead code stripping.
+
+00:51:57.670 --> 00:52:01.920
+And then if you are moving an
+application to Mac OS X and it's
+
+00:52:01.920 --> 00:52:07.400
+been relying on wchar_t on another
+platform or another compiler,
+
+00:52:07.400 --> 00:52:10.900
+you will want to consider
+alternatives on Mac OS X,
+
+00:52:11.120 --> 00:52:14.580
+including unichar and CFString.
+
+00:52:16.370 --> 00:52:19.800
+There's a variety of
+documentation we have available.
+
+00:52:19.800 --> 00:52:24.560
+Our tools documentation includes
+information on dead code stripping
+
+00:52:24.640 --> 00:52:28.330
+and the support included in that.
+
+00:52:29.940 --> 00:52:32.700
+I am the tools contact
+in Developer Relations.
+
+00:52:32.700 --> 00:52:37.590
+You can feel free to drop me an
+email on tools issues that you have,
+
+00:52:37.590 --> 00:52:41.900
+or you can send feedback to
+xcode-feedback@group.apple.com.

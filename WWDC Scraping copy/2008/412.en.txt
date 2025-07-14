@@ -1,0 +1,335 @@
+---
+Title:  Cocoa Performance Techniques
+Year:   2008
+Web:    https://nonstrict.eu/wwdcindex/wwdc2008/412/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Welcome to Cocoa Performance Techniques. My name is Ali Ozer. I'm the manager of the Cocoa Frameworks team. What are we going to discuss today? About half the talk is going to be about concurrency. As you heard during Bertrand's talk and during other talks, concurrency, multi-core, is an important aspect of Snow Leopard, and I do want to cover it in some detail during the first half of this talk.
+
+Beyond concurrency, we're also going to talk about computational complexity, memory, and drawing, and also point out a number of other topics. Now, we were not going to cover all of the performance techniques and topics that we usually cover, but I am going to point at some documentation and make sure I sort of outline them at the end to make sure everybody's on the same page.
+
+Okay, so the first topic is multi-threading. Multi-threading is use of multiple threads of execution in one process. And this is in one address space, which of course has benefits but also has some downsides. We're going to see some of these. And these days, of course, thanks to multiple cores, multiple threads are really executed concurrently. Two threads are executing at the same exact instant, touching the same exact memory locations. Now, multi-threading can have many surprises, and I'm going to show a demo for this.
+
+In the demo, we have a model object with an integer property, and we have various activity objects which are running threads, and these threads are updating this integer as fast as possible. So they're just setting it with incrementing values. And we can run one thread or multiple threads, and we're going to see how this behaves. So can we switch to the demo machine, please?
+
+I'm not going to show you the source code very much, just this piece here. This is basically the one step of our little thread loop. It's basically incrementing a value and setting it on the model. That's all it's doing. So let's go ahead and run this. So, first -- Oh, let me just show you this.
+
+In the number of tests we run today, number of demos we run today, you're going to see this pattern where we have a button up here that lets us switch between various tests we're doing. And then we can specify the number of seconds to run the test, in this case, three, and number of threads.
+
+So, let's go ahead and set a single property from one thread for three seconds. And as you can see, we're getting about 300 million updates. Okay. That's fine. We're running on a pretty nice, fast machine here. So, one question is, what happens if we go up to two threads?
+
+Now, the optimists among you might be thinking we're going to get 2X, and some of the realists among you are thinking we're not going to get 2X. We're going to get slightly less than 2X. So, let's go ahead and run and see what happens. Now, remember, we got 300 million with one thread. And with two threads, we get 108 million. Now, consider, we're running on a machine with eight cores. We have two threads. Presumably each one is running on their own core.
+
+And we're getting a third of the throughput that we're getting. That we're getting with just one thread. So, that's already pretty surprising. Now, you might be thinking, you know, you didn't show us the whole program. There's something shifty going on. Maybe the OBJC runtime is slowing you down. Let's go look at that program a bit. I'm going to show another sample.
+
+I'm just going to show a sample where instead of setting a value, all we're going to be doing is reading the value back. We're not going to bother setting the value. But, again, we're doing a message send. I'm using the exact same infrastructure for the application. Let's go ahead and run this.
+
+So, reading a message send. And we're going to be reading the value back. And we're going to be reading We do get twice the throughput. So the problem here is clearly in the setting of that value, and it has nothing to do with the rest of the program. So if we can switch back to the slides, please.
+
+Okay, so multiple threads aren't always better. Even with N threads running on N processors, and without any sort of locking or anything, we're not, you know, we weren't doing any locking in there. There's nothing to stall us. We're seeing a slowdown. So the problem in this case is what's called contention.
+
+Multiple threads are writing into the same memory location, and the hardware is trying very hard to make sure that memory location, and it turns out other memory locations on the same cache line, are visible to all processors. And that update ends up stalling all these cores. And that's part of the problem here. And it's not really obvious, you know, when you look at the program, what's going on.
+
+Now, what are possible solutions in this case? Well, one is to not use the same shared state. For instance, you might decide to do the work locally, increment your value all locally, and only once in a while update shared state. In some cases, though, you might have to deal with conflicts. And we're going to talk about some of these topics in a few seconds.
+
+One other thing to note, in our example, we didn't care about correctness at all. Our threads were just blasting that value in there, and we didn't care what happened to the value, whether it survived or whether it made sense and so on. And we're going to talk about that right now.
+
+So, atomic properties. When I say atomic properties here, I'm referring to OBJC 2.0 properties. And you may know, or you may not, but by default, they're atomic. And you can make them non-atomic by putting this non-atomic keyword in there. Now, what atomic guarantees is that in the presence of multiple threads, some are setting, some are getting, the value you're trying to set or get is set or retrieved fully. So, it doesn't come back to you as garbage. So, you either get the previous value or the after value, but you never get some intermediate state. Let's see what this means. Can we switch to the demo machine? Okay.
+
+In this example, what I'm going to do is I have a bunch of model objects and I have a bounds property here. In one case, it's declared atomic. In another case, it's declared non-atomic. We're going to see the effects of atomic versus non-atomic. If you run this test case, first let's do the atomic struct as we saw in NSRect.
+
+So you can see that with one thread, we're getting some updates. Rather than number of updates, this failure rate is what we're looking at right now because we're tracking correctness. With two threads, Again, no failures. That's great. And our rate has slowed down a bit, again, because of the contention problem. Now let's go ahead and use a non-atomic struct property with two threads.
+
+In this case, we are seeing a failure rate. The way we're detecting a failure rate is we're setting a rectangle where the X, Y with height are all the same. When we read it back, we see if they're all the same. Once in a while, they are not. Clearly, we read back an intermediate state.
+
+Let's see what happens when we do the same thing with NSStrings, which is, of course, an object. With an atomic NSString, no failure rate. Again, atomic is good. Let's see what happens with non-atomic NSStrings. Okay, crash. And don't panic, that was all expected. In fact, that's the purpose of the demo here. With non-atomic, in some cases, you may crash. Okay, so let's go back to the slides. Slides, please.
+
+Let's look at the struct value case first. By default, multi-word structs are not copied atomically. Here's what our -- I'm using size here instead of rect, just because it's simpler, but as you know, a size and then a size has a width and a height. Now, when you see size equals new size, that looks atomic enough for you, but it's really assigning two values. So if we were to look at what happens here, let's say we have two threads. One is doing a set size. One is doing size.
+
+Thread one sets the new width on the size. At the same time, thread two is trying to read the size. It happens to fetch the width. It happens to fetch the height. And thread one happens to set the height. You know, these can happen non-deterministically. And as a result, what you got back is the new width and the old height, and that's the failure case we're seeing.
+
+And of course, not good. Fail. Let's look at the object value case. Now, you might be thinking, aren't objects atomic? They're pointers. They must be atomic. Well, here's what set name and name methods look like, the non-atomic variants. We copied the assigned name and we released the first one.
+
+So again, looking at the two threads, Thread 1 fetches the name into old name in the first line, and at the same time, before or after this, it doesn't really matter, thread 2 fetches name with the intent of returning Thread 1, in the meantime, ends up making a copy of the new name and releases the old name.
+
+And notice that what it's releasing is what Thread 2 is about to return. So in Thread 2, the name is returned, the client tries to use it, and they got the crash we just saw. So that was -- you know, that doesn't always crash. Sometimes it doesn't. You know, if you're lucky, if you're a bug like this, it'll crash for you during development and not when your users use it. So it's good. Anyway, so this is the reason why object values properties also, when they're non-atomic, they're dangerous.
+
+So atomic properties, the whole notion of atomicity is not really overall thread safety. Just by slapping atomic or not making non-atomic, you're not saying you're thread safe. But it does provide a low level of thread safety for a single property. So it does not provide consistency between properties, and we're going to talk about this in the next section.
+
+It's often a good idea to leave properties atomic. As we introduce properties in Cocoa, our intention is to make them atomic. When would you consider not making properties atomic? Well, performance-critical usages. It does have overhead. If you ever see OBJC get property or OBJC set property in your samples or your shark analysis, it's time to see whether atomicity is the reason. Now, of course, if you're calling properties millions of times, you are going to see these. Just see if the atomic makes a difference. And if it does, it's critical. you can consider eliminating it.
+
+Another case where it might be reasonable to eliminate atomicity, especially if it's performance critical, is in cases where you have some higher level of synchronization. For instance, collections, NSArray, NSDictionary, etc. do not do atomic behaviors. That's because we expect you to have some other external locking if you're adding items to an array and extracting items to an array. It's a mutable collection.
+
+And as long as you're mutating it and reading it, you really should have some external synchronization. Another example is NS managed object context out of core data. It, of course, conforms to NS locking. And if you want to use it for multiple threads, it's a good idea to lock and unlock the whole object graph when mutating it. And that will provide that synchronization.
+
+Speaking of synchronization, earlier I talked about consistency between properties. The problem is to provide consistent view between multiple related properties. Examples are first name, last name. Even if we made two properties, first name and last name atomic, if one thread set first name and set last name and then some other thread read first name and last name, they might get an inconsistent view. They might get somebody else's last name with somebody else's first name. Same with day, month, and year.
+
+One solution to this is to use properties that combine related state. You may have a person object that combines first and last name. You would set your first and last name there and assign the person object. Instead of day, month, year, use an NSState. Earlier we used NSRect. That combines four properties, X, Y, width, height. By using an NSRect and making the whole rect atomic, we avoid the problem. You can use RGB.
+
+Instead of individual RGB, you can use NSColor. Using these abstractions is better anyway because you're getting a higher level of abstraction. By using NSColor, you're not only using RGB, you can now use CMYK, pattern colors, et cetera. But this is just a solution that sometimes applies. Sometimes you do need locking or some other form of synchronization.
+
+Okay, let's go into a case study. We're going to look at a linked list. And in case you skipped out on your college classes or you just don't remember, a linked list is a simple data structure like this. There's next and previous pointers. Don't dwell too much on this.
+
+Here's what the API looks like. So let's say the scenario is your boss wants you to create a linked list class and you work really hard and write the linked list and here's the API you create. As you can see, it's simple and efficient. By efficient, I mean the whole API here, first node, node after node, insert node, remove node, these are all off-one behaviors. They're constant time. No matter how big the linked list, these operations will execute very fast. And of course, you have a node object which just has a value. It carries the value that's inserted at a certain location. Pretty straightforward.
+
+Okay. So, let's say you write this, give it to your boss and your boss says great, but I also want indexed access. I would love to have a node at index method. Now, of course, you realize this is an O of N method meaning it will -- its execution time depends on the length of the linked list.
+
+Here's what the implementation looks like. You start from the first node and you iterate with that while loop until you get to the node you want. So, you know, your heart sinks. It's like this is a crappy method. The rest of the API was so good. What can you do? And let's go take a look at this behavior here.
+
+A demo machine, Okay, so what we're doing here is we're basically, our analysis in this case is to run through the linked list starting at some location and through incrementing locations. So our threads are going to be running through the linked list just querying for values. And at every location we put in an S number with the same value so we can also detect failures if there happen to be any.
+
+So let's go ahead and run this. We have our linked list test with 1,000 objects. If we run it, you can see that we're going to get about a million, 1.1 million updates. But if we go up to 100,000 objects, you see that the number of updates we can do goes down drastically because it is all end behavior. So we're only getting 33,000 updates and that's really bad.
+
+You may get fired for this. So if we can switch back to the slides, please. So you get an optimization idea. What if you saved away the most recent access and reuse it if possible? This is a common usage pattern. Often, you know, things are accessed sequentially or in clumps.
+
+So this might actually help. So what do I mean here? Here's what node-index looks like. You sort of make some room, and then you go ahead and insert some code. You have this get cached index method, which I'll show you in a second. It gets you the last node in node-index. And then if the node is nil or the index is not applicable, you go ahead and fall back to the slow way of doing things, meaning looking from the beginning.
+
+Otherwise, you can look from this interim location, which is closer to your goal. And then you run through the while loop again. If the optimization matches, the while loop will be much faster. And then if you did find a result, before you return it, you'll go ahead and set cached index, meaning you set that as the new result for the next time around.
+
+Here's what set cache index and get cache index look like. You add two new instance variables, cache index and cache node, and these methods set and retrieve those values. We'll see why we just added one method here instead of two distinct properties like we traditionally do. Let's see the behavior with this new optimization.
+
+So running the linked list with cache, and I'm just going to run the 100,000 element case. Remember, we're getting 33,000. There you go. Now we're getting 30 million. We speed it up by, what, 1,000x right there. So that's great. And of course, you're thinking, if I run it two threads, it'll be even better. It is running pretty fast, but notice the failure rate. There is a failure rate here. And again, given the topic we've been talking about, it's due to lack of synchronization on those two properties we're setting. So if we go back to the slides.
+
+So there's a lack of synchronization. While one thread is setting, now by the way, I didn't describe the scenario here. But we mutate the linked list up front. And we don't even mutate it anymore. We're just fetching values out of it. So just the act of fetching the values is of course setting the cache index.
+
+And as one thread is setting the cache index and node, and another thread is reading it, they're getting inconsistent results. They happen to catch it halfway. So we need synchronization. Note that having the combined API set in get prepares us for adding that synchronization fairly easily. Let's see how that works.
+
+First we're going to just do the traditional locking solutions. One is to use addSynchronized, which is an Objective-C synchronization mechanism. It's fairly simple. You go into your set, you go into your get, and you add this addSynchronized around the critical section. So by doing this, you've guaranteed that the index and node will be set or retrieved together. No other initialization is needed. This is all you need to do. The other solution, another solution is to use an NSLock.
+
+And again, the code looks very similar. You lock and unlock around your critical section. In this case, you have to declare cacheLock as an instance variable. You also have to initialize the lock and you have to release the lock when you're done with it, when your object is going away. There's a little more initialization here. The third solution is to use a spin lock. We have spin locks at the POSIX layer. It's called OS spin lock.
+
+Again, the code looks very similar. Lock and unlock around your critical region. In the case of spin lock, you still have to declare it as an instance variable and you have to initialize it, but it's not an object so it actually does not need to be allocated or released. So, there's still initialization, but a little less. So, if we were to go back to our demo. Let's see what performance we get. First, running with @synchronized.
+
+So we're getting about six million of these a second. With NSLock, 10 million a second.
+
+[Transcript missing]
+
+So just to recap those three, at synchronized is a recursive and exception safe mutual exclusion. It's very convenient as we saw. NSLock is your basic Cocoa mutual exclusion lock. It's fairly efficient.
+
+What I mean by that is when the lock is locked, the thread that's locked is put into a sleeping state. On the other hand, with Spinlock, it is also very efficient and fast, but when it's in a locked state, it's actually looping, and hence why it's called Spinlock.
+
+So although it's the fastest, it's also got sort of the most caveat as well. If I were to do an analogy, Imagine a traffic intersection and there's red lights and a green light. And the cars at the red light with OS spin lock, with NS lock, the cars at the red light are just standing there with their engines idling. But the cars with spin lock are actually sitting there with their engines revving as high as possible. And you can imagine that all these cars are just stopped there with their engines running. It's really not good for your CPU, not good for your computer.
+
+So you might be wondering, okay, wise guy, what's the AdSynchronize like in this world of cars? Well, the AdSynchronize is not a car you own. It's basically like a taxi or a limo you hire once in a while. It's very convenient, but you pay a lot for it. So there you go. Hopefully you'll notice. So the lesson here is AdSynchronize is convenient, and if you must use spin lock, make sure you only use the small bits of code where there's very small likelihood of contention.
+
+I'm going to look at two lockless techniques. The locking ones most people have heard about. There are also some lockless techniques we can apply. The two techniques I'm going to talk about are just a truly lockless technique and one which is a caller managed cache. The lockless one is one where we access and update the cache locklessly, but we detect and react to inconsistencies. This is a tough one, so I'm going to use some graphics. You might want to take a sip from your coffee or lemonade or whatever you have. Let's see what happens. You have two variables, your node and your index that you want to update atomically.
+
+So we put four additional values. Let's put these in the stack. It doesn't matter. These are not IVARs. These are just on the stack. And then we take the high word of your node and we put it into the high word of that first word we created. Then we take the low word of your node and we put it into the high word of the second.
+
+And then we do the same with your index. We put it into the high words of the remaining two words. Now we have another element, which is a generation count. And this is really a half word size. This generation count is the only thing that's incremented atomically in this scenario. Whenever a thread wants to use it, it does OS atomic increment 32 and it gets back a unique value. So each thread gets back a unique value for this. And then the gen count is placed into the low word of all the words.
+
+So now we have these words. We copy these into the cache. And by cache here, I mean the instance variable. These four words are now in your instance variables. So these four words are shared by all the threads. So note that when we copied those four words into here, we didn't worry about synchronization, locking, anything. We just copied them in there, which means some other thread might have been copying at the same time, and these values might be all messed up.
+
+However, when time comes to read these values, we copy them all to local storage. And then the thing we do is we check to see if the gen counts are the same. If the gen counts are all the same, that means that this value, this cache values, were not corrupted as a result of all that copying and such.
+
+So if the values are the same, the cache is good, we can reassemble Node.NET Index and profit. That's great. And note that if the gen counts don't match, we just dump the cache. We don't use it. We go back and do the slow way. So the way out here is actually pretty easy. simple.
+
+The other lockless approach we're going to do is call or manage the cache. This is one, actually this is fairly simple. The cache is owned and provided by the caller. In this case, instead of know that index as our API, we're going to go ahead and use an API like know that index using cache. And note that the using cache is an argument which is a struct pointer and the caller is expected to provide a cache where they provide us with the results from the previous call.
+
+So this is, this means that we're just letting the caller manage the cache. Okay. In this case, no locks or synchronization are needed. So if we can switch to the demo machine, please, and let's see what these last two techniques do. Okay. So remember with the spin lock we're getting about 20 million. Our lockless solution Okay, that's getting us 25 million. We're doing a little better. And let's go ahead and look at the caller supplied cache.
+
+This one is actually the big winner. This one is getting us 93 million because it totally avoids all locks and synchronization. There's one more advantage. Now note that all the other solutions are writing into the same memory locations. This one has much less of that. This one has none of that because all the caches are per caller. So with this solution, if I were to switch to eight cores, instead of 93 million, we're actually going to probably see close to 400 million. So we are actually getting a good increment.
+
+So again, eliminating contention, working as locally as possible are the good lessons out of this. So if we can switch back to the slides, there are some caveats, of course. The lockless solutions are hard. That first solution I showed was hard to explain. We needed a lot of graphics. We needed coffee. And the example we used was simple. We didn't even care about consistency because if it's inconsistent, we just didn't touch it.
+
+But if you really cared about those values being consistent, you have to do a lot more work. And most lockless approaches require use of what are called memory barriers. We didn't even show that. Typically when you use locks, you have these things called barriers that guarantee a certain ordering to the reads and writes that the processor is doing. When you don't use locks, you don't have your barriers and you might have to use these barriers explicitly. So most lockless approaches use that.
+
+If you want to experiment or implement a lockless approach, please be sure to read about memory barriers. There's a function called OS memory barrier on OS 10 that does this. The caller managed cache issue is that it's inconvenient for the caller. We're putting the burden on the caller. And on mutation, all caches need to be invalidated. In the first approach, if there's a mutation, we can just invalidate the cache. But in the second approach, all these callers have their own caches which somehow have to be invalidated and that could be tough.
+
+But The cache is also not shared between callers, which could be a good thing and a bad thing. It's actually maybe a good thing, like in our example, because if each caller has their own access pattern, they will benefit from their cache being just their own state. So the last one in this case turns out to be the best, really.
+
+Let's talk about multi-threading alternatives. So far we've just been using NS threads explicitly, but there are some alternatives. One set of alternatives are just not to use multi-threading at all, like use background processing. For instance, you can use NS notification center with postman idle, which means in the main event loop, whenever there are no events, you'll get notifications. You can use run loop observers, you can use timers, perform select with object after delay is also a favorite. These all allow you to do background processing on the main thread.
+
+Of course, these are not true concurrency. Your machine might have 64 cores in it and 63 of them will be sitting idle, so it's not very good. But it is useful nonetheless, and it does give you responsiveness. For instance, the Cocoa text system uses background processing to lay out text. So when you open a large document, although the document is still being laid out, the user is still able to type and scroll and so on. And it can do this without using any sort of locking because it knows everything is happening on the main thread.
+
+Now, for true concurrency, without using threads, another solution is operation and operation queue. We talked about these last year and previous year because we introduced these in Leopard. These allow you to achieve concurrency without explicit use of threads. And the system basically decides how many threads to throw at the problem. And if the system is very busy, you might get less threads, so on.
+
+NSOperation is an object that encapsulates work units. You can specify priorities, dependencies, etc. And Operation Queue manages operations. And you can enable specifying the amount of desired concurrency. By default, you would not do this. And NSOperation Queue will use as many threads to execute as many simultaneous operations as it decides is appropriate. But if you do specify desired concurrency, like don't run more than four at once, then it will use that as a limit. Now, let's look at a special case of this.
+
+Which is using operation queues for synchronization. And by this, I mean serial queues. And what's a serial queue? That's a queue which has a max concurrent operation count of one. Meaning it will only run one operation at any given time. And at first glance, such a thing does not look very useful.
+
+What you might use this for is something like this, where you have a model. It's either a model object or it's an object graph. And then you slap on it an operation queue. And then basically all accesses to this model go through this operation queue. So all the changes you want to do are basically operations in this model. And if this operation queue has a max concurrent operation count of one, this means that the model does not need any locking or synchronization, because it's only getting one request at any given time.
+
+For instance, one of these operations might say, set the first name and last name. And that will happen automatically, and the model doesn't have to lock itself at all. Now, this looks interesting, but you're thinking, you know, but we've eliminated concurrency here. We're not using multiple cores. Well, one thing that happens here is that all the operations will be performed one after another. They may still be performed on different threads. So that's important.
+
+That by itself is not a big win. But if you have many such models in your application, then they all have their own queues. Suddenly, you introduce concurrency in your application by having every model be processed on a separate thread. So this is actually a pretty powerful paradigm. It's not one we use in Cocoa very much yet. If you go to session 419, which is Doug Davidson's talk at 3 o'clock in Russian Hill, he will actually show using this technique to optimize a program that he will be demonstrating. stream.
+
+Okay, now we're going to switch gears a bit and talk about computational complexity. And here, what I'm referring to is the computational complexity of some foundation objects. It's good to know performance characteristics of your APIs. For instance, the linked list class from earlier, the original API was all of one. Everything was very fast, and then you were forced to go add the slow method, which is OFN, but then adding that cache provided all of one behavior for some usage scenarios. Namely, the usage scenario of incrementing through the items, perhaps, or accessing items in bulk.
+
+So before we talk about computational complexity of foundation objects, let's talk about primitive APIs. What we refer to as primitive APIs are the funnel points. These are usually the minimal APIs to implement a new subclass. And this is not something we do for all Cocoa objects, but the most widely used ones, such as the collection, string data, et cetera, all applies to those objects. So these primitive APIs, the interesting thing about them is they indicate to you the overall computational complexity of that object and what the expected behaviors are.
+
+These are often listed in the base class. So if you were to open NSDictionary.h and look at it carefully, you'll see that there is an interface declaration for NSDictionary which only has three methods. So this looks like NSDictionary is a class with just three methods. However, if you scroll down further, you'll see the rest of the methods declared in categories.
+
+The interesting thing here is that the first three methods are the ones you'd have to override in a subclass if you want to create your own subclass on a dictionary. And all these other methods are implemented in terms of these first three. And that's how it will just work.
+
+And these first three also give you a hint of what the performance characteristics is. So count and object for key and key numerator. Now, if you look at mutable dictionary, you'll see that there are only two primitive methods, remove object for key and set object for key, pretty straightforward. And if you scroll further down, you'll see many other methods that are extension methods, meaning implemented in terms of the first two.
+
+So talking about the performance characteristics of NSDictionary, those methods we saw, object for key, set object for key, remove object for key, these are all constant time and fast. And by constant time here, I'm not saying O of 1 because big O purists will get mad at this, but what I'm saying is it's fast. NSDictionary is a hashing collection, and when the hash function is good, it's really a very fast collection, of course. If you have an NSDictionary with a bad hash value, the objects have bad hash values, the performance really takes center. The axis becomes OFN.
+
+and edits are often squared. And what are bad hash functions? Well, a constant value No matter how interesting of a value, a constant value is a bad idea. A random value is also a bad idea because your NSDictionary will take the object, put it somewhere, and when you ask for it, it won't be there anymore. So a random value is actually it'll be there, but the dictionary will look somewhere else. So that's not a good idea either.
+
+And here's one that looks better, but it's also bad because we're taking a self-name, presumably the object has some name, which is perhaps an NSString, where somehow, for some reason, extracting just one character out of it, and then we're multiplying by 10,000 for some reason. And again, we could have used the whole name as the hash key or something based on that, but instead we decide to just go use one character out of it and sort of multiply it by 10,000, which gives us a limited set of values.
+
+That's not good either. So if you do implement your own hash values, be sure to return dispersed hash values, use as much of your state as possible. One other thing to remember is that if two objects are isEqual, their hash must also be equal. So a piece of advice here is if you ever implement isEqual on any object, go ahead and implement hash as well.
+
+NSRA is computational complexity. It's like a C array. Access is O of 1, appending and removing at end are O of 1, replacing an object, taking an object out and putting another one in its place is O of 1, but inserting or deleting in the middle where some objects move out of there and the rest have to slide is O of N. That's just like a C array.
+
+However, At very large sizes, NSArray switches to a tree implementation. And the reason for this is we find that very, very large, big, monolithic arrays are quite unwieldy when you start having to reallocate tens and hundreds of megabytes. So we switch to a tree implementation. And this is really truly for very large sizes. At that point, all operations become O log N, which is what a balanced tree will give you. However, using the trick we learned from linked list, we have a last access cache. And so for iterative, sequential access and edits, operations are still constant time on an NSArray.
+
+NSString is much like an NSArray. Access is O , appending and removing are O , but edits in the middle are O . Again, very similar. However, The string you get back from the Cocoa text system, as you might know, the Cocoa text system uses an NSString as its backing store.
+
+It does use a tree implementation, again, for the same reasons we do an array, but in this case it uses it all the time. And again, there is a last access cached. And this actually fits very well with the way a text system is used. Typically, users tend to click somewhere, they type, type, type, type, then they click somewhere else, they type, type, type. So the first click might be off log in, but the rest of the accesses are fast. because they're all very localized and take advantage of that cache.
+
+Let's talk about bulk operations. One way to speed up access to these objects is to use bulk operations. Note that this doesn't fundamentally change the performance behavior. If it's O of N, it's still O of N. But bulk operations reduce the cost of access. It's like going to Costco and getting a huge bag of rice rather than getting teeny little bags of rice at your grocery.
+
+So one way to do this is to call the highest level API. For instance, in NSString, do not call character at index repeatedly to do something. Call method like getCharactersRange, which allows you to return a number of characters with one call. Or you can do the higher level things. These are even better.
+
+hasPrefix or rangeOfString to see if a string occurs anywhere in the other string, or the freshly added enumerates lines using block. With one line, you're doing this high-level call. You don't have to worry about characters, line endings, et cetera. And with array, instead of object at index, go ahead and call these high-level methods, arrayByAddingObjects, objectsAtIndexes, so on. And in Leopard, of course, we added the new for in fast enumeration, which is very fast, very efficient, and it's a great way to enumerate through arrays and some other collections.
+
+While we're on the topic of collections, we're going to talk about concurrency. You've heard in other talks that we've introduced block-based APIs for enumeration, searching, and sorting. One thing these APIs allow you to do is specify a concurrent flag. When you do that, the operation can be done concurrently, meaning it can be done on multiple processors. However, the overall call is still synchronous. So I call sort.
+
+The sort happens, and by the time it returns, the sort is done. But while it's happening, an SRA might choose to use more than one core to do the job. Of course, what this requires is that the block you're providing, like the compare function or whatever you're doing, is thread safe. And that's really the only requirement.
+
+Here is a sorting API, just to take one example. Sorted array with options using comparator. One of the options you can pass is that highlighted sort concurrent flag. This is how you use Let me show you what gains we're seeing here. One warning, our implementation is pretty preliminary, it's very fresh, and the measurements are also just very quick measurements. I just want to give you an idea of what sort of wins we see. In the bottom you see the number of cores, and along the side we're seeing speed up.
+
+With 4,000 objects, an array that has 4,000 objects, you'll note that with two cores, we're actually seeing 2x this performance. So that's pretty good. But with eight cores, we're seeing only 2.4x the performance. And that's because with eight cores, the overhead of divvying up the thing into eight cores sort of overwhelms the wins we see.
+
+With 128,000 objects, you see that the curve is a little better. At 4 processors, we're seeing 3x. With 8 processors, we're seeing 4.x speedup. With 4 million objects, the curve is slightly lower. However, we are still seeing a 3.5x win for 8 processors. Again, very preliminary numbers. We're going to be fine-tuning these. And NSRA will actually not do the job concurrently if it thinks it's not going to be a win. However, this is a great way to sort of get up to 4, 5, maybe even more speedup pretty easily, assuming your sort function is concurrent.
+
+Okay, switching gears again, we're now going to talk about memory. You can have whole WWDC sessions about memory. In fact, in the past, we have given whole sessions about memory. Often, the thing we say, the conventional wisdom, and that's still very applicable, is don't use too much memory. Memory is really the number one performance problem in most applications. That is true. However, we have this new thing called caching, which you've heard about in other sessions.
+
+So the thing is if the user has a lot of memory, why not use it? Just give it back quickly if the system needs it. So that's sort of another approach to using memory. And most apps already do this. One observation is that if you run an app for a long time, and then you go look at the usage, memory usage of the application, you might see that maybe the app is using, say, 10 megabytes memory.
+
+You can quit the app, restart it, get it back to the same state, and if you look at the amount of memory the machine is using, you might often see that it's only using, say, two, three megabytes of memory. So clearly, the machine -- the app can be in the same state.
+
+However, in one case, it had accumulated a lot of stuff throughout the runtime. And if you restart it, it somehow gives that back up. So many apps already do this caching as a way to speed up their operations. But one thing they don't know is when to give up these caches.
+
+So caching is good because clearly if the user is using your application and, you know, the machine has four, eight gigabytes of memory, and the user is not doing anything else, your app should be able to use a little extra memory as a way to get some speed gain. However, the trick is to give it back to the system if the user switches to another app and starts doing other things. So to that end, we've added this new class, NSCache.
+
+It's key value-based access to objects, sort of like a NEST dictionary. It has a strong reference to the objects. And what happens is if there's memory pressure or some other settings match up, the cache will evict the objects, which means it will release them, and they are then evicted from the cache. And let me just show you the API now.
+
+There's an object for key, so the objects are fetched using keys. You can set an object for a key, of course, just like a dictionary. And you can set an object for a key using a cost. And this is the cost of existence. So, higher the cost, higher the object will be evicted from the cache. If you use the first method, the cost is assumed to be zero. And this cost is, you know, you choose your units, whatever they might be.
+
+And there's, of course, ways to remove it. And we have two other sets of methods, two other properties, cost limit and count limit. By setting these, you're setting approximate limits that you'd like the cache to follow. Now, these are very approximate. Just because you set a cost limit of 50, it doesn't mean the cache will wait until 50 before it starts evicting things. Another thing it will mean -- another thing it doesn't mean is the cache will not always maintain a cost of 50.
+
+You know, for instance, there might be 50 objects in there and you go back, you go away, come back, it might turn out the objects have been evicted in the meantime. So, this is not setting a limit, an exact limit. This is just setting a boundary and it's pretty rough. So, let's just see a quick demo of this. We can switch back to demo machine.
+
+I have a simple application here which shows images and it fetches the images from a folder, a file stem location. This method here is the one, let's just take a look at it. This method returns the image associated with every file. This image is fetched from a cache, an NS cache image path. If it is found, it's returned, great. If not, we'll go ahead and create the NS image and we insert it into the cache.
+
+The fact that we are going into our cache to fetch it every time, of course, informs the cache that there was interest in this image and it allows the cache to update its most recently used statistics and so on. So anyway, that gives the idea of the cache which images are more popular than the others. So let's go ahead and run this application.
+
+So one thing you'll notice here is the background is turning red. Not very good UI, but it's good for a demo here. The idea is that as these images are fetched, if they're not in the cache, we highlight the background to show that there was a cache miss.
+
+So if I scroll, every time a new image is revealed, the background flashes red. So you can see that it's also a bit pokey here because it's loading these images. But if I were to scroll up, you can see it's much faster until we get to the top because those images at the top have been evicted from the cache.
+
+Again, you go all the way to the bottom, we're seeing a lot of red, and then red, red, red. But if we were to go back to the region we're in, again, it turns out these were evicted, but those aren't, and so on. So it's all automatically being handled. I think in this demo, we're setting a cache count limit of 40, and if you don't set the limit, then the system will decide it.
+
+And also note that even if all these images might be cached, and as I said, you go away and come back an hour later, they might all be evicted in the meantime since the system was using memory in other ways. Okay, if we can switch back to slides.
+
+Another memory topic is this new protocol called NSDiscardableContent. This is a new protocol, and it allows arbitrary objects to automatically free their memory when not at use. When an object responses protocol, to access its contents, whatever it may be, it'll be different things for different objects, you call this method beginContentAccess. And beginContentAccess pins the contents down and it's sort of like a count. You're using it.
+
+If this returns no, that means the contents had gone away and it could not be pinned down. So the return value is important. And when you're done using that memory, you just call end content access. And these are used in a paired fashion, and there might, of course, be multiple of these in existence, sort of like retain release. There might be multiple people interested in the contents of a given object.
+
+If an object's contents are not being accessed, it's free to go ahead and free it at any time. We added a new class called NSPurgableData, and this is a subclass, a concrete subclass of mutable data, and it implements the discardable content protocol. The interesting thing about NS Purgeable data is that it manages this thing called purgeable memory.
+
+Purgeable memory is a special variant of malloc memory which the kernel can simply take back if it's not in use. The kernel is very sneaky about it. It'll just take it back. It won't even tell you. You won't hear about it. So it's like a good pickpocket trick, very stealthy. You wake up in the morning, oh, where are my keys? They're gone. Well, the kernel took it.
+
+And this is, of course, very nice because the last thing you need when your system is running low on memory is for all the process to be woken up to be told, free all your memory. And all those processes will be stepping all over each other trying to free their memory.
+
+You just want to take the memory away from them without even telling them and hope that when they wake up, they notice the memory is gone. That's their problem. But anyway, so that's what purgeable data does. It's basically to access the contents, you would use the protocol I showed you. In fact, let me just show you a usage pattern.
+
+Now, one interesting thing about purgeable data is that it starts off with the content access enabled. So when you first create it, it's like as if you've called begin content access. So here's a common usage or maybe not common, but we'll see. But anyway, one usage pattern. You have your data. It starts off nil.
+
+Let's say you haven't allocated it, my data is nil, or else you have allocated it previously, but you want to access its contents, so you call beginContentAccess, and it returns no, meaning it's been purged, the contents have been discarded. In this case, I go ahead and free the data, if I had it, and I go ahead and recreate it. And let's say we created it from a file with contents of URL.
+
+Now, if it happens to fail, something really went wrong, the data is no longer around on the file system, so you return no or whatever you do. But if this succeeds, then that means you now have the data and its contents are accessed. Now, in the case of NSData, of course, the contents is the bytes. You go ahead and use the bytes to your heart's content, whatever you want to do, and when you're done, you call endContentAccess.
+
+Now, next time you come back in this loop, you already have My Data, so you call beginContentAccess, and if it returns yes, you're in good shape. You just go use it. If it returns no, again, you discard the data and you create it from scratch. NS Purgeable Data serves your primitive Cocoa-level object for implementing the discardable content protocol, if you wish.
+
+Of course, you can do it any way you want. So let's talk about the connection between cache and this discarding stuff. NSCache is aware of this protocol and its discardable content. If you enable this property, EvictsObjectsWithDiscardedContent, if NSCache notices that an object inside it has discarded content, it will evict it from the cache and return nil to you when you ask for the object.
+
+So what this gives you is, typically when you're using discardable content protocol, the object's contents go away, but the object is still alive. By putting such objects in the cache, you're allowing the objects to go away when their contents go away. So it sort of automates the process even a little further.
+
+Our last major topic is drawing. We have talked about drawing before. It's a fascinating topic. It's another major reason why programs tend to be slow. We did say we were going to talk about a lot of new stuff, but I just can't help talk about old stuff. This is from 2001. It's a demo we showed back in 2001 at WWDC. How many of you were here? Oh, that's about 10%. Great. Well, it's good to see you back.
+
+And all the new people, welcome. Okay, so let's go ahead and run Worm. So this is, yeah, this is a fairly old app and has some good lessons about drawing and we're going to show a few more lessons about drawing in conjunction. So let me go run this.
+
+And by the way, we ship this as an example on your systems. We've been shipping it for seven years. It hasn't really changed very much. The worm game is, you know, this game where you're a worm. You go around trying to eat this dot, and every time you eat it, you get bigger, and the bigger you are, the harder it is for you to move around. You might have seen this in movies such as Tron or the Snake app on Unix. Anyway, it's pretty lame, really.
+
+One thing, though, we do use this for is to show animation speeds. And worm has a bunch of modes here to show you different animation techniques. And it's really showing drawing, not animation, because really for true, fast animation these days, we have, you know, core animation and so on.
+
+But let's go ahead and run the slowest mode. And when you run it, you'll notice that it's going ahead at a zippy 60 frames a second. And back in the day, it was running, I think, 12, 15 frames a second. So we're already seeing a big win here, this app.
+
+So let's go see what good does. It's also going along at 60 frames a second. Better. That's also going along at 60 frames a second. And it begins to dawn on you there's something fishy here. And many of you will know that this is because of what we call beam synchronization.
+
+And beam synchronization is the system's attempt to make sure people don't draw faster than what's needed. And so that apps do not hog the display, the screen, basically, which is, after all, a shared resource. Now, we can disable beam synchronization. This is a good thing to do just for testing debugging purposes.
+
+And when we do that, and if we go switch okay and run it, we see that worm is actually capable of running at 490 frames a second. So, yeah, try playing that. I'm just going to enable the good mode. And in the good mode, we're seeing 500 frames a second.
+
+The better mode, we're seeing 12, 1,000, 14. It's up there. And let's look at the best mode. And the best mode is giving us 13, 11, et cetera. It's actually very similar to the better mode. Now, I won't show you the new mode right now, but let's talk about what we just saw. Go back to the slides, please.
+
+So what are the drawing tips from Wurm? What do those settings do? Well, the first setting is our classic. We say it once at every WWDC. Override is opaque to return yes. If your view draws everything in its bounds, overriding is opaque assures that views behind it are not drawn. So this is a big win.
+
+This is a good thing to do. The better mode basically gets us to redraw as little as possible. And we'll see this in action soon. But instead of using set needs display, which dirties your whole rec, just compute the smaller rec that needs to be displayed and dirty that. So you call set needs display in rect. And then in your draw rect, pay attention to the rect argument you've been given. This is again a classic and it again helps.
+
+As you saw, this is what gets us more than 1,000 frames a second. The best mode is not really applicable these days. It used to be that instead of using string drawing, methods such as draw string at point. If you use the text system, the Cocoa text system directly and cache the way the components, you could get huge wins. These days string drawing has been speeded up so greatly that you often do not have to do this.
+
+So you use a text system when you need a text system, but otherwise just use string drawing and it will do the job most of the time. So it's not something you have to go the extra mile for these days. But again, if your string drawing seems a bit slow, this is something to consider. Now, one other tip that we saw is that the system limits you to 60 frames a second.
+
+You should not ask to be drawn at higher than 60 frames a second. In fact, if you do, your program might actually stall waiting for the display to become available. So it might actually even have an adverse effect on your program's execution. Now, let's switch back to the demo.
+
+And I want to show you the last mode. And the last mode is running on this machine. It's again running 13, consistently giving us 13. It's slightly faster than some of the previous modes. It's actually consistently faster. The other one was jumping around 1,000, 1,200, so on. So, okay, let me explain what this one is. Let me actually show you what the okay mode does.
+
+This app, Quartz Debug, with which we turned off Beam Sync, also has flash screen updates, which shows every part of the screen that's been updated by drawing operations. So in the okay mode, you'll see that Worm is drawing the whole view. That yellow is a flash every time we update that view. In the better mode, you see that we actually take time to compute one rectangle. And in this new mode we added, we actually update just the rectangles that are updating.
+
+So, you know, if I start playing here, you can see that it's really doing a very nice job. Anyway, so you can see that it's doing a very nice job of computing the update area. Okay. If you switch back to the slides. So to minimize drawing even further, in drawRect, instead of using the single union rect you were given, call these methods. GetRectsBeingDrawn, count.
+
+It returns to the currently list of rects that are dirty. Or if you have a rect of yourself, your own rect, you can call needsToDrawRect and see if it's in the dirty region. And this gives you this nice behavior of instead of that, it gives you that little region. So in this case, it helps. In other cases, it might help even more.
+
+Now, more drawing tips that are good to know. Flashing screen updates. You just saw that. That's a very good way to see if you're overdrawing. You can optimize live resize speeds. If your drawing speed seems fine, but when the window is resized, it's a bit slow, you can check in live resize and do some rougher, quicker drawing as a way to make live resize faster.
+
+Ali Ozer You should eliminate usages of NSCachedImageRep. This is now a mostly deprecated class. One thing we're doing is we're eliminating window backing stores in NSImages, and that is something that's happening automatically. But if you use NSCachedImageRep for compatibility, we usually have no choice but to use window backing stores. So it's a good idea to just get off this and get off window backing stores, which gives NSImage huge performance boost in many cases.
+
+[Transcript missing]
+
+There are other facilities available for drawing. Quartz is what Cocoa uses as the graphic substrate. It's used heavily by Cocoa objects, but you can use it yourself directly if you need to. Core animation is also indirectly used in NSView's animator, but you can use standalone CA layer trees, assign them to views. Inside a view, you can have many, many CA layers if you wish and manipulate them directly. Core image gives you fast image processing, filtering, so on.
+
+Quartz Composer is great for creating animations. QtKit, of course, is Cocoa-level access to QuickTime, media files, etc. And OpenGL, of course, gives you a very fast 3D engine. Note that most of these also do their job in separate threads, so they introduce behind-the-scenes concurrency into your app in various cases. So that's, again, interesting.
+
+Another benefit of using some of these. Of course, don't go ahead and use them as your first thing, but when the situation is right, when you need that extra boost or when you need that subsystem, these are very, very appropriate. One other thing we added in Snow Leopard is this concurrency in drawing. You heard about this perhaps earlier or perhaps yesterday. We now allow views to be drawn concurrently just by setting this property, can draw concurrently.
+
+Now, this doesn't mean the view will be drawn concurrently all the time. It gives AppKit permission to do so. And if the situation is right, the AppKit will draw the view concurrently along with its siblings. What happens is the display mechanism kicks in, and as your window is being redrawn, if NSView notices that a certain number of children have this flag, those children can be drawn in separate cores.
+
+However, by the time the display method returns, all drawing has been done. This is not equivalent to views being drawn randomly here and there in separate threads, totally concurrent with your app. This is still being done in a very controlled fashion. Let's see a quick demo of this.
+
+Let's go back to normal state here. Again, we just called SetCanDrawConcurrentlyYes as a part of this demo. Let me run it. This is a simple little demo which has three table views with a bunch of data. As you can see, it's already fast enough, nothing to worry about. We're going to give it a big kick by slowing it down. Basically, every fetch of data source is going to introduce a 0.01 second delay. This is going to give us slightly pokier behavior here.
+
+Let's go ahead and bring up this frame meter that Quartz debug has. Let's put it over here. And then let's go ahead and resize our window in an automated fashion. So as you can see, the window is resizing. It's not great. It's getting 20, 22, 24 frames a second. But if we enable concurrent drawing, you can see that it's a bit smoother and we're going up to about 40, 42 frames a second. Let's go ahead and do that again.
+
+So again, concurrent drawing really helps in this case. We've enabled concurrent drawing for this view, this view, this view, basically those three views, and they're all table views. And concurrent drawing is really good for these cases where we have big sibling views. You know, mail is this way, Xcode is this way, iCal is this way. And many applications tend to have these big views that are sibling, so they can benefit from this behavior.
+
+And one thing to note here is that Since these views aren't being drawn haphazardly in background threads, the threading requirements of your model remain pretty much the same. It's just that instead of your model being called from the main thread, it is going to be called from a background thread. But it's not going to be called while, for instance, the user is doing some action, because it's only being called in this limited window of a draw, the whole display machinery kicking in. So this might be fairly straightforward to turn on in most situations.
+
+So you should go ahead and experiment to see if it's a win. And of course, you can even turn it on in your Leopard or Tiger-based app just by checking to see if this method exists and calling it, because it's a dynamic runtime. You can do these things dynamically.
+
+Okay, so I just want to now enumerate a bunch of other topics because this is a Cocoa Performance talk. I do want to make sure, this is the first Cocoa Performance talk you've come to, I want to make sure you realize some of the topics that you should really be aware of. Responsiveness. This includes topics like app launch, how fast the app resizes, scrolls, responds to user events.
+
+This is there are many things you can do here. There are many techniques for speeding up app launch and reacting quickly. Be sure to pay attention to these. Fast shutdown is a part of this. Mark Petrelli will talk about this in session 425 this afternoon at 5:00 in Russian Hill.
+
+This is basically how to get your app to quit as fast as possible so the logout or shutdown experience can be quick. Memory usage is a huge topic. Auto release and how much memory do objects use, et cetera. There's a lot written about this. Especially when you're using a lot of memory, you're not going to be able to get a lot of memory. So, I'm going to talk about memory usage and how to use it.
+
+Memory usage is a huge topic. Auto release and how much memory do objects use, et cetera. There's a lot written about this, especially when you're using a lot of memory. Especially with garbage collection versus explicit memory management, things to be aware of. 64-bit, you've seen good CPU benefits to 64-bit.
+
+Turns out, of course, 64-bit does have a memory impact. Pointers are bigger. The integers that we use in Cocoa are bigger. So, you need to be aware of trade-offs. Avoiding impedance mismatches. Impedance mismatch is a term we use whenever you're calling through APIs and you have to convert one data type to another. Let's say you have an NSString that you use for a file reference. You have to convert it to a Fesref and so on.
+
+Every time you do this, of course, it's sort of wasted energy. If you're doing this a lot, it does show up in program samples. It's good to avoid impedance mismatches by keeping data in your program that's of consistent types. Don't convert from char stars to NSStrings or RGBs to NS colors back and forth all the time. Try to stick to high-level abstractions whenever possible.
+
+And finally, of course, I didn't show you many of them except Quartz Debug. We have a wonderful suite of performance tools. There are other sessions about them. Instruments, Shark, Malloc Debug, Quartz Debug, and a bunch of others. Be sure to use these and check for hot spots in your applications.
+
+Our documentation, there's a whole subsection dedicated to performance. You should go ahead and look at that. And also last year's session, session 141, Boosting Responsiveness and Performance in Cocoa Application, talks about a good number of the responsiveness issues. You would find this in, I believe, iTunes, ADC, iTunes. There's a number of other sessions you can get to from last year's talk. And you should go try to grab those before they might go away. I don't know if they will, but, you know, sometimes they do.
+
+So, in a summary, it's multi-core world. Multi-threading is hard to get right, to get fast. But if you do the right things, avoid contention, you know, there are a lot of benefits. You might want to consider using NSOperation, Operation Queue, and, of course, the GCD stuff, which has been added in Snow Leopard, is also very powerful. We are looking at integrating that under Operation Queue and under Operation as well. But using these facilities instead of threads gives you more of an abstraction, more leverage. Know the performance characteristics of APIs.
+
+And, again, you know, use memory if it's going to help you, but know when to let go. And as far as drawing goes, if there's one thing we can say, that's to minimize it, you know, just minimize drawing and be aware of what you're drawing. We have two sessions left in the Cocoa, by the Cocoa today for Cocoa. And both of these sessions have performance topics. They're both in Russian Hill, 419 and 425. They're definitely worth seeing.

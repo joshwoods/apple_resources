@@ -1,0 +1,213 @@
+---
+Title:  High Performance Auto Layout
+Year:   2018
+Web:    https://nonstrict.eu/wwdcindex/wwdc2018/220/
+
+[!] This transcript has potential transcription errors.
+---
+
+Good afternoon. Welcome. My name is Ken Ferry. Today Kasia Wawer and I are going to talk to you about performance in Auto Layout. Last time I was up here talking about Auto Layout was in 2011 when we first introduced it. So it's really great to be back up here chatting with you all today.
+
+OK, so Auto Layout. This is how we position content on iOS on the Mac. The main object involved as we know are views and constraints, constraints giving the relationships between views. When it comes to performance, I think the challenge here is that if all you've said is the distance between these two buttons should be 20, it can be hard to understand the step-by-step process that the machine goes through to do that and that means it can be hard to understand the expectations around performance and understand what's fast and what's not and generally how things are working.
+
+So that's our goal for this talk. It's to really understand that, to have a good feel for how things are going to work. So we're going to start things off by first showing some of the work that we've been doing in this release for iOS 12 around performance. We've been doing a lot of work, that's we get to give this talk.
+
+When that's done we're going to move on to trying to build that step-by-step understanding that I was talking about. So we have good intuition and good expectations around performance. To do that we're going to do something very unusual for us, which is to go into internals. So enjoy that please.
+
+Last, if you only ever rely on our intuition for performance, it's not going to work out very well. So we will then look -- Kasia will take over and we'll analyze code and we'll sort of show how to merge your intuition with, you know, practice. But let's get to it. So first as is traditional for an Apple presentation, we're going to look at a bunch of numbers and brag.
+
+[ Laughter ]
+
+Here we have, what we're looking at here is a benchmark. So the way we approached this work is we went out and looked a bunch of third party apps as well as our own apps and we tried to isolate what we saw happening into test cases that we could then benchmark. So this one here, what we're looking at, is UICollectionView with self-sizing cells and on the whichever side looks bad is iOS 11, which hopefully looked janky and bad. And on iOS 12 it's perfect. It's hitting full frame rate.
+
+So that's just one of the cases we looked at. Here are some more, just another sampling. We have a lot. These ones are all time. So what you're looking at is that the gray bars are iOS 11. How much time it took on iOS 11 and the blue are iOS12.
+
+So what you take from this is that we found a lot of places where we could make things really a lot better. And that will only improve your apps. That will make things quite a bit better for you I hope. This is going all the way up and down the stack.
+
+So some of it is in the real guts that affect just absolutely everything. Some of it's moving into UI kits. Some of it's up in the client layer so for in how people use Auto Layout. So if you look at for example that UICollectionView benchmark that we were looking at that's all of those.
+
+It does include stuff that's in the real guts but it also includes a lot of really important changes in just how UICollectionView uses Auto Layout and is more performance due to it. Which is a good segue to the rest of the talk, which is how you can do that too. So how to use it properly.
+
+When we were going through these I think a lot of the time the reason why we were able to make all these improvements is that we have a good mental model for how things are put together and how it performs, how it works. We want to help you develop that model as well. So to frame this we're going to go through an example case, some client code, that is not -- that has some issues and we're going to discuss why.
+
+So your code may or may not have this particular issue, but we did choose what we thought was the most common thing that we saw when we went through all these client apps. But even if you don't have this particular issue, the work we do to go through what's happening should be meaningful to everybody and probably new to almost everybody. So let's do it.
+
+This is the case we're going to go through so we're going to produce this layout, obviously very simple. Oftentimes I think you would build this in interface builder. That's a great idea. It is such a good idea that it would completely prevent the performance issues that we'd like to go through. So let's say we didn't do that. Let's say that we built it like this.
+
+First let's just walk through -- before we try to analyze it, let's walk through what this code is doing. First, we are overriding the UIView method updateConstraints, whatever that does. So we'll talk about it. Next, we have an Ivar called myConstraints. And we are taking everything in that variable and we are deactivating all those constraints.
+
+We are then creating constraints, which implement the layout that we were just looking at. That's fairly straightforward. It's using visual format language here. We're then activating those constraints, installing them, and last we're calling super.updateConstraints was an important thing to do because the UIView level implementation that this method does do work. OK, that's the basic structure of what it's doing and it does work, it's functions. But let's talk about what it's doing more concretely now so that we can understand the performance. So the first thing to understand is what exactly is updateConstraints, this method we're overriding.
+
+Well, it's one component of the Render Loop. The Render Loop is the process that runs potentially at 120 times every second. That makes sure that all the content is ready to go for each frame. OK, so it consists of three phases -- Update Constraints, Layout, and Display. First every view that needs it will receive updateConstraints.
+
+And that runs from the leaf most views up to the view hierarchy towards the window. Next, every view receives layout sub views. This runs the opposite direction starting from the window going down towards the leaves. Last, every view gets draw if it needs it, that kind of thing.
+
+OK, what are these for? Why do they exist? Well, they all have the exact same purpose and they have exact parallel sets of methods. And that purpose is to avoid wasted work, which I can explain by example. So a label, a UI label needs to have constraints that describe the size of its text, OK? But there are many properties that contribute to that size. There's the text property itself, there's the font, and the text size, etcetera.
+
+One way to do this would be that every time one of those properties changes go re-measure your text. However, that would often be pretty inefficient because you usually change a bunch of these right in a row. When you're first setting up a label, you're probably going to call a bunch of these property setters and if you're re-measuring text on each one, all the intermediate ones are wasted, you really just want to measure at the end. And that's what the Render Loop gives you. Because what you can do instead is that inside a set font you can just call setNeedsUpdateConstraints and then you're guaranteed to get update constraints at the end before the frame goes to the screen. And that's what it's for.
+
+So the couple things to understand from this before we move on is number one it runs a lot, 120 frames a second. Number two they're parallel. So you can use that for intuition as well. If you feel like you understand the layout pass or have some feel for that, same deal when you're thinking about UpdateConstraints or you're thinking about display. And then the last thing being that the whole reason it's there is to avoid wasted work, to defer work and possibly skip it entirely.
+
+All right, so having looked at that we are now in position to analyze the rest of this method. See how we are -- every time it's called we're deactivating constraints and then activating them again new ones. We are saying this is analogous to layoutSubviews. So if we wrote the exact same code in layout Subviews that is the analog, that would be as if you -- every time layoutSubviews was called you destroyed all your Subviews, created them from scratch and then added them again. And I think a lot of people have the completely accurate intuition that that's not going to perform very well.
+
+So the thing to really get is that it's the same. Whatever intuition you take from that apply it to updateConstraints as well. When you are ripping down constraints like that you're doing a lot of extra work. So how do you fix it? Well, you need to use -- as we were saying, you need to make sure that you're not doing it more than once. It's for deferring work.
+
+So it should be something like this, we say did we already do this work? If we did then just don't do anything at all. If we haven't done it yet, then sure set up those constraints once. And that will perform well, OK? So this is again, this is actually the most common error that we see in client code, which is we call it churning the constraints. Unnecessarily ripping them down and putting them back up. OK, great. We are going to do more but stepping back for a second now to think about the Render Loop for a little bit.
+
+The Render Loop is great if you actually need it. The purpose again, it's really useful for avoiding that redundant work. But it's also dangerous because it runs to often. It's very sensitive code. So in a case like this usually what you want to do about sensitive code is not -- like, you should take care if you're writing it but you should also try to minimize how often you write sensitive code because, you know, you're probably going to screw it up.
+
+We all do. So in this case, in fact you might be, you should really think again like could I just do it once and not put it in updateConstraints? And a good way to do that is use Interface Builder. If you can use Interface Builder you should. It's great for all sorts of reasons. It puts you on a good path.
+
+OK, so that's great. We've now talked about that. I think we have a better understanding for why that's problematic, at least somewhat by analogy sub use. But for the purposes of this talk we want to do better than that. We don't just want to say this is bad. We want to really understand it and understand the process.
+
+So to do that we're now going to peel back the covers and start to really see what really happens. So when we activate these constraints, when we add the constraints, what is the process that occurs? Let's diagram it out at a high level. So if this is the view that we're adding the constraints to, this view is in a window. Hanging off the window is an internal object called the engine. And the engine is the computational core of Auto Layout.
+
+When the constraint is added what will happen is that we make an equation, which corresponds to the constraints, and we add that equation to the engine. The last object to understand in the diagram is that the equation is in terms of variables where a variable is like, you know, if I hand you an equation and I say solve for X, X is a variable. The things that we need to solve for in this case is the frame data of a view. So there will be four variables for every view, which is the min X, the min Y, the width, and the height.
+
+OK, so let's go into this process. So this was the layout we were going to do. We're going to focus just on the horizontal constraints for simplicity, but we're going to follow through the process. So the first thing that happens, as we said, is we make these equations, which look like this. These are pretty straight forward. The most interesting one is I think the space between the two text fields, which looks like we're saying it looks very, very similar to what you say with the constraint but it's somewhat lower level because it's in terms of these variables.
+
+OK, then each of those equations needs to get added to the engine. And we're actually going to follow along that process again with the goal being to have a good feel for the performance characteristics. What is happening when we do this? So the engine is trying to solve for these variables, which is something you may have done in algebra and it actually looks exactly the same. So let's follow it.
+
+So first equation comes in, says the first fields minX is 8. Cool. Its width is 100, fine. OK, when this one comes in we say the second field's minX is equal to the first minX plus the width plus 20. What would you do in algebra if somebody asked you to solve for these variables?
+
+You would substitute out for the ones that you already had in there. And that's exactly what's going to happen. If you are profiling, you'll see there is a genuine method in the engine that contains the word substitute as well as another 140 characters because we are Cocoa Code Programmers. But and that's what it will do.
+
+And then, you know, and the last equation comes in and this looks done. it looks like that was all the work that had to happen at least in this case to solve for those variables and that's true. That's what I want to understand at this point is that the work that happens is both not very complicated. It corresponds very, very, very closely to what you would do if you were doing it by hand. And it's also not very expensive. It's just sort of substituting out like this. That's the work it does.
+
+OK, so now we have sort of solved for these variables in the engine but that's not layout. So let's finish the process. What happens for the rest of the process is that whenever the engine sort of assigns a value to one of these variables, it's going to inform the view that the variable came from and say, this thing changed.
+
+What will the view do in response to that? Well, if you think about it for a minute it will call it Superview and say hey, setNeedsLayout because it needs to move. OK, that was all happening as part of the update constraints phase. We now just receive setNeedsLayout, so at some point it will move on to the layout phase.
+
+Then, OK, so the last piece of the puzzle is that we'll receive, UIView will receive layout Subviews will do is it will copy that data from the engine into the frame. So it will just say engine, what are the values for those variables? Engine will tell it and it will just call set Superview of that view we'll call setBounds at setCenter on that Subview. And that is the entire process.
+
+So just step back and think for a second. Like, that is the step-by-step process of Layout. If you can try to internalize that and get a feel for it, you're going to have a much, much, much better feel for performance expectations around this stuff. In fact, let's see how that's going right now, because now when we look at this and we look at this method that we were looking at that where we're deactivating constraints and we're reactivating constraints, think about what we just did and think about what the engine is going to be doing. It's going to look like this.
+
+Which we call churning [laughs]. So each operation it's doing is not super expensive, but it's doing a lot of them and it's just completely unnecessary. This work is wasted. So if you can feel this in your heart, if you can really feel that this is what is happening when you do this, then you're going to be in good shape. Then that's -- you're going to be in the same position we are to go through and really get a good feel for this.
+
+OK, so I hope that's great. There's one other big topic that we want to cover though. If we want to really have a good performance model is this idea that you only pay for what you use with Auto Layout. And having looked at this, I think we're in a good position to understand what that means, OK? To do this, let's say we double the situation we had before.
+
+So we have four text fields in two sort of independent hierarchies. Now something you can do is you can make a constraint that crosses the hierarchy like this. That goes -- that you can say, well text field one should be aligned with text field three even though they don't have the same Superview.
+
+I think sometimes people have the impression that because this possible, it means that things are going to be generally quite slow because anything could affect anything at any time and so it's just sort of a giant ball of mud and performance probably sucks. OK, but having looked at what we've looked at, let's see what happens in the common case where you don't have this because most of the time you don't.
+
+Most of the time views are only constrained to their parent and to their siblings. What you'll see there is that since we have these two independent blocks, that will give, if you look inside the engine it will be two independent blocks of equations that completely don't interact with each other, that don't have any overlapping variables.
+
+What that will do, is that because they completely don' t overlap, they just don't interact. And if we have one of these it will take some amount of time to deal with. If we have two of them it will just take twice the time because they have nothing to do with each other.
+
+Three of them, three times, etcetera, the point is you're going to see a line. You're going to see linear performance, which is the best you can get. That's perfect marks for this kind of thing. So I want to stress this again, the reason why it's linear is because there aren't any dependencies between these pieces. If you do have a dependency, then it will tie those blocks of equations together and that will be somewhat more, you know, more computation to deal with but that's only if you use it.
+
+And of course if you do have something like that, you know, if you're doing it by hand of course it's going to be a little bit more expensive that's what you expect. You're doing something more complicated. So it's kind of this usual thing that we often aim for in Cocoa, which is that the simple things are simple and the complex things are possible. In this case it's more like they cost a little more.
+
+But you're not paying for it if you're not using it, which is actually the right way to think of the whole engine in terms of intuition again, you can think of it as a cache for layout and as a dependency tracker. It's very, very targeted. It understands which constraints affect which views, and when you change things it just updates exactly the things that are needed.
+
+And this has implications on how you write code too. Sometimes we see -- one issue we sometimes see is people taking great pains to avoid making constraints because they have the impression it's going to be expensive. But actually, it's very, very targeted. As long as the constraints that you're making correspond closely to the problem that's being solved, it's pretty unlikely that whatever you do, if you tried to dodge it, it's going to be more performance. Oftentimes we'll see people doing very complicated measurement and adding things up and sort of trying to pull information out and then push it back in and that's almost always more expensive than just directly expressing as a constraint what you're after.
+
+Now the converse side of that is that sometimes we see hierarchies that look like something like this where we see lots and lots of constraints and lots of priority and it's really not clear what's happening and this is a -- usually this is a telltale sign of this being the situation that there's actually just two completely separate layouts that someone has in mind and we're trying to sort of pack them together into one set of constraints and do it all in one. And that's also not a real good idea. So that will -- that creates a lot of false dependencies, places where it seems like things interact that they really don't. It's also nearly impossible to Debug, if you haven't noticed.
+
+So the overall advice is try to model the problem as directly as possible. Kasia is going to walk through this kind of case where you're switching between different layouts and show that a little more explicitly. But that's the general advice. Just use it in a natural way. It's better for both performance and for understandability.
+
+OK, so that most of what we have to say. But since we're trying to build an overall mental model of the performance characteristics of Layout, I want to at least make sure we touch on all of the major features. So there are some other things you can do.
+
+And let's discuss. So you can say that some particular view should be at least 100 points wide. You can use inequalities. What does that cost? Very, very, very little. Compared to just saying it's equal to hundred points wide. Since we went internals a little bit, it's going to coast exactly one more variable. That's it.
+
+You can also call set constant. The example use case for this is something like I have a gesture recognizer and I'm kind of trying to drag a view around and what I'm going to do is every time I receive a call from the gesture recognizer I'm going to take its translation and I'm going to pump it into a constraint by calling set constant on that constraint with that translation value.
+
+OK, what that's going to do is we talked about how the engine is a dependency tracker. This exploits that to the maximal degree. So that's sort of a very, very, very fast one step update of just exactly what has to change due to this one constraint changing. So that's a performance optimization. That's why we even have this method set constant. Last to talk about it priority.
+
+So here you can say, you know, you can say this view should ideally be 100 points wide, but if something else prevents that just please be as close as possible. This does incur some more work, some amount of work. So let's talk about that a little bit more. Another way to think about that is to say that the width of that field is going to be equal to 100 plus some error and please minimize the error. That's what you're asking for.
+
+So there is an error minimization phase I didn't discuss before. So when the view asks the engine as part of layout subviews and says, hey what's the value for these variables? The engine needs to make sure that all of those error terms have been minimized first. And this is actually, this is -- I'm not going to go into how this works but I am going to talk a little bit about performance characteristics and I'm also going to say that's super neat.
+
+So you might want to look this up. This is the simple X algorithm. This is what we're really doing. It's super old. It was developed during World War II. What you might note is before computers. In fact, the people who used to be called computers, before there were machines that were called computers, this is kind of what they're doing. They're doing it by hand, which does give you some feel for the performance characteristics. It must be pretty fast if you do it by hand. And it is.
+
+It's pretty much the same stuff we've been doing. It's more substitutions. That's how you should think of it. Anyway, but it does -- you know, when you use priority it does cost at this level so that's just something to be aware of. OK, and other than that it's just same as before.
+
+So that's what I wanted to talk about. So that is our attempt to build this intuitive understanding of the performance characteristics around Auto Layout. So quick review of what we talked about. Try not to churn your constraints. That's when you're doing all this work that just doesn't matter. So don't do it. When you do work with constraints it's basic algebra and that algebra is happening when you add constraints, when you remove constraints, when you call set constant, that's the primary times. And then also, you know, when we have this error minimization phase.
+
+The way to think about what Auto Layout does is that it's a cash for your layout, we saw the engine sort of contains all those solved values and it's a dependency tracker so that when things change we can update those values in a super, super targeted way. Which leads to our last point, which is that you only pay for the features that you're using.
+
+That's what we talked about. You know, that's your intuition. And for the rest of the talk I'm going to turn it over to Kasia because if you, again, if you only rely on intuition, things are not going to go well. So she's now going to go into some analysis, avoid we talked about and putting that intuition into practice. So please enjoy.
+
+[ Applause ]
+
+Ok let me get to my slide here. Thank you, Ken. Hi everybody. My name is Kasia Wawer. I am a member of the iOS Keyboards Team and we use Auto Layout and we love it. So I get to talk to all of you about building efficient layouts.
+
+All right, let's go back to Constraint Churn real quick here. Constraint churn as we heard happens when you change your constraints but the actual views don't need to move so you're sending extra work to the engine and enough of that can affect your performance. So you tend to want to avoid it.
+
+So let's talk about how you might run into this problem and how you might get out of it. So we're going to work with a spec here. This is for a social media type app. There's an avatar view that shows you who is sharing. There's a title, a date, and a log entry view and for that you're going to need some spacing, you're going to need some sizing and you're probably going to need some alignment too.
+
+But this is actually not a pure social media app. It is a semi social media app, where you can choose whether you want to share things. So there's also optionally a view that says that you've shared and who you've shared with. And no social media app would be complete without the ability to share cat pictures. So that's another layout that you might have to put in. And maybe you don't even want to share that cat picture because it's just too good, you want to keep it to yourself.
+
+So we have four very similar layouts. They're not the same and there's going to need to be some adjustment when these table view cells come on to the screen. If I didn't mention it these are in table view cells. And let's say that you are working on performance in this app and you ran it for the first time and this is the scrolling performance you got.
+
+And there are a lot of hiccups there, especially on the scroll back to top. So you're like, OK, how do I improve this app? What's going on? So I get to introduce something new today, a sneak peek into something we're working on. This is not actually available in the beta but stay tuned because we're going to be introducing an instrument for layout. And, OK.
+
+[ Applause ]
+
+I'm glad you are excited. That's good motivation. Anyway, let's take a look at what's here. The top track is your standard how much CPU is being used. And this is sort of your canary in the coalmine view. If there are a lot of peaks here you have an indication that you might have something you need to look at in your layout.
+
+And if it's pretty flat, probably your performance problems are originating somewhere else. Below that we will be specifically tracking constraint churn. The height of the bars in this instance correspond to the number of views that are experiencing constraint churn. So when you see a big piece there you know a lot of views are affected.
+
+We're also going to show you how to remove and change constraint instances and finally sizing for UILabel and other text views. This one says UILabel because that's what's in this app. It's also going to track other types of text views as well. So this was taken with that app scrolling, so what do we look at here? There are several peaks in the CPU view but let's zoom in on this one because right below it I see a big jump in constraint churn and that's a little concerning.
+
+So if you highlight this view and go down to the detailed view in instruments, what you'll see is a list of the views that are affected by churn by view description. And we are grouping them by Superview so that in an instance of say Table View Cells, it's easier to see that it's happening over and over in a specific context and not different ones.
+
+So in this instance we see that the avatar view and three labels are experiencing churn. And since I am the one who ran this through the instrument, I know that these labels correspond to the Title Label, Date Label, and our Log Entry Label. That's almost all of our views in this cell. That's a little concerning. Let's see what happened.
+
+All right, back to our spec here. So look into the code and find that UpdateConstraints is being overridden. And in that method when anything changes or when UpdateConstraints runs at all, we're removing all of the constraints and then adding back the ones that we think we still need.
+
+Well, everything landed back in the same place where it started. So that removal just is contributing to performance issues. So in the instance of the social label here, social avatar thing, being added and removed, we don't actually need to pull it all the way out. When you look at the constraints around this view, you'll see that they don't actually interact with anything else, just that particular view.
+
+So here you can use, you know, this neat little feature called setHidden, maybe you've heard of it. And because it's not affecting any of the views around it, it's just going to disappear, it's constraints stay in place and this is a very, very, very cheap way to hide and show views, rather than removing them from the hierarchy.
+
+So that's fine. But this is a really simple example. What about the image view? All right, so for the image view, again we might we might want to try removing all constraints and then adding back the ones we already had plus the image view ones. And again, everything is landing in the same place so we're experiencing churn. Well, in a situation like this how I want you to think about it is to look at groups of constraints. So let's start with this group that I'm highlighting here in green.
+
+These constraints stay the same in every one of our layouts. Once we're doing the hide and show on the sharing view that doesn't need to change, the avatar view never moves, and the labels never move other than the log entry label being able to get longer. So those green constraints should be added when you create the views and then left in place. Don't touch them. They want to stay where they are.
+
+But now we have the four constraints that are controlling the image view. So what do we do with those? Well, let's stick them in an array and let's also take the constraints that are going to be there when there's no image. And I very creatively named these imageConstraints and noImageConstraints so you can keep them apart. And let's, when we're getting to the point where we're going to be putting in this image view or taking it away, let's see what layout we're currently in. Deactivate the noImageConstraints if we need to and activate the ones for the image.
+
+If we don't have an image coming in, you know, all of our other constraints are already activated, we just have the one that we're adding. Now I put these both in arrays despite the fact that this is a single constraint because it simplifies things in my code. I don't need to check and see whether I'm dealing with an array or a single constraint, I'm always dealing with an array of constraints. Your mileage may vary though.
+
+So the nice thing about this is that if you are tracking your constraints properly like this and you know that you want to add this image view live in front of the user, you can deactivate these noImageConstraints, activate the ImageConstraints and call Layout in needed inside a View Animation block and it's going to animate nicely into your view. If you tried to do this with deactivating all of your constraints and putting them back in, it would look very interesting. Let's say it that way.
+
+All right, so now that we've debugged this and we're working with groups of constraints instead of throwing everything at it, let's look at what it will look like. This is what it looked like originally just to remind you. Let's scroll to the top. It's very bad. And this is what it looks like after we've debugged it. And that is much smoother. Thank you.
+
+[ Applause ]
+
+But wait there's more! I actually took this video on iOS 11. This is not taking advantage of any of our performance improvements in iOS 12. This is just the client code doing things more efficiently. In iOS12 it also looks great. And of course fabulous [laughing].
+
+[ Applause ]
+
+Yes, it's great. So how do we avoid constraint churn? Well, avoid removing all of your constraints. That's usually going to put you into a situation where you have to put a bunch of them back and that's going to land you in a position where you're relaying out frames that don't need to -- or relaying out views that don't need to be laid out again.
+
+If you have a set of constraints that going to be common to all of the potential layouts in your app, add them one and then leave them alone. This is a good use for Interface Builder and the initial layout of your app. Changes to the constraints that need changing but don't change the ones that don't need changing.
+
+Kind of tautological but it seems good. And then you have a neat trick now for hiding views instead of removing them when that makes sense. All right, so that was constraint churn in the instrument. We also have that view at the bottom that said UILabel sizing. UILabel sizing is tracking the amount of time it takes for the label to calculate its size. So let's talk about intrinsic content size.
+
+I'm going to take a walk over here. OK, not all views actually need intrinsic content size. Some views do. Views with non-view content like to return a size for their intrinsic content size based on that non-view content. Two examples of this are UIImageView, which uses the size of its image to calculate its intrinsic content size and UILabel, which measures its text and uses that to return its intrinsic content size.
+
+There's nothing really magical about intrinsic content size, it's used to create constraints by UIView. It makes sizing constraints for you and that's it. You can define all of your sizing in constraints yourself and skip this whole thing. There are a few circumstances where it needs to be overridden, that's what it's there, as we saw there are these couple of things plus some other examples in UIView subclasses. But a lot of the times it gets overridden because the assumption that it's either faster or more exact and it is neither of those things. However, there is a circumstance where overriding it might help your performance.
+
+Text measurement can be expensive. In our app here the UILabel sizing did not take very long. It was very short durations. So messing around with that is not going to improve the performance of that that much. But if you have a text intensive app and you're seeing a lot of time happening in the UILabel text measurement or you have text view text measurement or whatever else you're using, you might be able to help it along if you have some additional information.
+
+If you know the size that the text needs to be without doing all that text measurement, you can return that size and intrinsic content size, or if when you're going to be putting this view on the screen the constraints are going to be fully defining the size regardless of the size of the text inside of it.
+
+For instance, the constraints are always going to make it larger than the amount of text you have. Then you can go ahead and return no intrinsic metric for the width and height in intrinsic content size. And what this will do is tell the parent, hey I already have my size, don't bother to do the text measurement.
+
+So obviously this only works if you're not trying to detect measurement yourself, but it can help some apps improve their performance. So I wanted you to know that this little trick exists. And we can't talk about intrinsic content size without talking about system layout size fitting size because people often conflate the two even though they're kind of opposites, so that's kind of unfortunate. Intrinsic content size is a way that you communicate size information to be put into the engine.
+
+System Layout Size Fitting Size is a way that you get sizing information back out of the engine. They're actually kind of opposites. So this is used in sort of mixed layouts where there's some reason that you need frame information from a view that manages its subviews using Auto Layout. Not very frequent usage but is there and can be used. I want to tell you how this method works because it might be a little more expensive than you think.
+
+When you call System Layout Size Fitting Size an engine is created. Constraints are added to this engine, the layout is solved, and then the size of the top views frame is returned, and then the engine gets discarded. So each time you call this method an engine is being created and discarded.
+
+While this is fine for small uses, if you're doing it a lot you can see how it might start to build up over time. So be cautious when calling System Layout Size Fitting Size. One of the uses that we sometimes see people do is forwarding that call from their self-sizing collection or table view cell to a content view. And when you do that you're actually overriding some optimizations we've made to make that scrolling, scrolling in that view faster and you're adding extra engines. So if you're currently doing that and your scrolling is no good, maybe look into that.
+
+All right, now we come to my very favorite topic in the world. Unsatisfiable Constraints. OK, so what are unsatisfiable constraints? If you haven't run into this before, this is what happens when you do something like, hey this view should be 50 points wide, also it should be 200 points wide.
+
+Well, that's not really going to work. These are not actually quantum phones. You know, I can't speak to the future but so the engine has to kind of calculate the fact that there's no layout available and break a constraint in order to generate some sort of layout for you. When it breaks that constraint it sends a very detailed log to your debugger, possibly you've seen it, that says, hey unsatisfiable constraints. Here's the constraint that I broke and here's all the other ones that affected, that caused me to have to break it.
+
+So this can sometimes affect performance directly and it can also mask other issues. So it's a good idea to get them debugged. And Mysteries of Auto Layout, Part 2, had some good debugging information so you might be interested in checking that out if you have been having trouble with your unsatisfiable constraints.
+
+OK, guys you've graduated. Congratulations. You are all Auto Layout experts and, you know, I hope that you really enjoyed learning about the internals of how it works. Now you know better how to think before you update constraints and understand the process they go through, you've got some tuning information with size and priority and inequality, and you have faster layouts in iOS 12 so that's awesome. We're going to be in the Labs tomorrow if anybody has questions. And we've got the link here for information in related sessions. Enjoy the rest of your week.
+
+[ Applause ]

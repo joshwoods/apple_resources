@@ -1,0 +1,267 @@
+---
+Title:  Understanding UIKit Rendering
+Year:   2011
+Web:    https://nonstrict.eu/wwdcindex/wwdc2011/121/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Good morning, everybody. Welcome to Understanding UIKit Rendering. My name is Josh, and I will be joined in a little while by Mathieu and Andy, who are going to do some demos for you guys. We're going to talk this morning about rendering and compositing with UIKit. So, throughout the course of the session, we're going to be building this app. Actually, we're going to look at the way that it's built. There's a few interesting things in this. We've got rotated layers, so the edges of these will need to be anti-aliased so that they don't end up looking really jagged.
+
+We have shadows around all these photos. There's nice drop shadows to give them some depth, and we've got this label in the middle that has a number of interesting things about it. It has rounded corners, there's shadows on the text, there's a reflection there. So there's a lot of interesting visual effects that we've built here, and this has all been done using UIKit with a few bits of CA, Core Animation, thrown in.
+
+But I've done it in what may be the most obvious way to generate these effects, which might not necessarily always be the best performing. So we're going to take a look at how we've done this and why I did it wrong, and Mathieu and Andy will show you how to do it right, since they're less lazy than I am.
+
+So the things that we're going to cover today, we'll start out by talking about some of the foundations of rendering with UIKit and how that relates to Core Animation. So we'll talk about UIView and CALayer, how they fit together, what their relationship is, how you decide where they show up on screen, where their content comes from, all the basics of rendering with UIKit and Core Animation.
+
+Once we know where things are positioned and how we get content into it, we're going to talk about when things get rendered. And for the purposes of what we'll be discussing, that is CA transaction and how CA transactions determine when the changes you make to your application by setting properties on UIView end up getting rendered to the screen. And then we'll end by looking at that sample app, and we'll see four main topics about that app: clipping and masking, edge anti-aliasing, group opacity, and shadows.
+
+So if some of those aren't necessarily clear right now what exactly I mean by that, probably group opacity. Don't worry, we've got explanations in here. Hopefully good. We'll see how that goes. And we'll get it all explained. So to start out, let's talk about the relationship between UIViews and CALayers.
+
+So if you thought about this initially, the first thing that you might try and do when figuring out how UIView and CALayer relate to each other is to think that they're actually a class hierarchy where UIView would subclass CALayer. And I want to start out just to be clear right off the bat, that is not the case. But let's look at why.
+
+So if CALayer were the base class and UIView inherited from that, that would be fine. There would be no problem there. But then if we wanted a UIScrollView, we would have to subclass off that UIView. So now CALayer is directly in our class hierarchy as a superclass of UIScrollView.
+
+But what if we wanted to use a different kind of layer, for example, a CA-tiled layer? There would be no way to get that into our ScrollView because the ScrollView is actually inheriting from CALayer directly. So this really wouldn't work because we would be really limited in how we could combine UIView and Core Animation.
+
+So instead of that, what we actually have is two parallel class hierarchies. UIView is a separate class hierarchy and CALayer is its own separate class hierarchy. And every UIView has a CA layer. So by default, when you just create a UIView, you get a UIView that has a regular CA layer.
+
+The same would be the case if you created a UI scroll view. By default, it would have a CA layer. But if you wanted to make your UI scroll view have a CA tiled layer instead, you can change that, although... I just realized, talking about this now, that's not actually what you would do. You would want to put that CA tiled layer in a subview of your UI scroll view, so only listen to parts of what I'm saying right now, not everything. But you could do that if you wanted, just don't.
+
+So that's basically what the relationship is. So now let's talk about how you use UIView and CALayer to actually determine where content will show up on screen. And to be able to really talk about this, we should start out at the base and talk about screen geometry and what the geometry is of an iPhone or iOS device screen. So let's take iPhone 4, for example.
+
+The top left is the origin, starting at 00, when you're holding it in portrait, and X increases to the right and Y increases down. So the native size of iPhone 4, iPhone 3GS, iPod Touch, all of the smaller iOS devices is exactly the same, top left, origin, and the size is 320 by 480. Now that's true even for the iPhone 4, which has a high resolution display.
+
+Because UIKit always talks in UIKit points. Which are equivalent to one pixel on the original iPhone. So 320 by 480. Now that's really easy and really nice because you know it's going to be consistent across every one of the devices that you look at. Now things get a little more complicated if you start asking CoreAnimation for screen geometry, because CoreAnimation doesn't actually deal in these UIKit points.
+
+So if you were to ask CoreAnimation what the size of the screen is, it would actually report a larger size. So we'll see that in just a moment. But one important thing to note about the screen geometry is that it does not change when you rotate the device. So if you use your UI view controller to do auto rotation, the screen geometry, even when you're in landscape, remains the same. With 00 being top left in portrait, X increasing up then and Y increasing to the right.
+
+So, yeah, native orientation is always portrait, even when you're in landscape. And if you start looking at Core Animation, you might have to start dealing with different display sizes if you ask Core Animation to convert to screen coordinates. So really the best advice I can give you about screen coordinates is just always use UIKit when you convert to and from screen coordinates, and we'll make sure that you always see a consistent view of the world no matter what device you're on, as opposed to when you start using Core Animation, you have to know the specifics of the display size and know that you either have 320x480 or 640x960, depending on which iPhone you're on.
+
+But of course, this actually gets a little bit more complicated when we start looking at iPad. Now from UIKit, still really easy. Portrait orientation, top left is 00, 768x2024 is the size. This is consistent no matter what orientation the iPad is in. That is always the orientation. So you can see the screen coordinates on iPad 1, iPad 2, all the same.
+
+Now Core Animation, it's a little bit less obvious, let's say. That's the screen coordinate system for an iPad, actually an iPad 2, if you ask Core Animation. So bottom left is the origin. It would actually be landscape native, basically. And on the original iPad, it's actually the top right is the origin, with x increasing down and y increasing to the left.
+
+So you probably don't want to ask Core Animation to convert to and from screen coordinates on an iPad especially, because the results you get, while they'll be consistent, they may not be exactly what you expect. So if you stick with UIKit, it's the same on all the devices. Hold portrait orientation and top left is 00.
+
+All right, so now that we know how to talk about positioning things on screen, we can start talking about positioning views. So let's create one large UIView to start, with its origin at the top left again, since that's our native orientation, and we'll fill the screen with it, so its entire size is 768 by 1024. Now, let's add some subview.
+
+How do we talk about the position and size of this subview in its superview's coordinate space? Because we always talk about views in terms of coordinate spaces. When we talk about positioning and sizing them, we're often discussing it in the coordinate space of the superview. Sometimes when you talk about sizes of views, you may talk about it in the view's own coordinate system.
+
+But most of the time, the first thing you'll learn, or the first thing that you'll deal with, is the position and size of a view in its superview's coordinate system. And that's called, in UIKit and Core Animation, the frame of that view. Now, the frame is a rect, again, in the superview's coordinate system, and it's the rectangle that is the smallest rectangle that fully encloses that view.
+
+Now, when it's rectilinear like this, you've got non-90 degree angle rotations on anything. That's really easy to understand. The origin of your frame is the distance from the top left of the superview, and the size is the size of that view in its superview. So in this case, we're about 100 points from the left, 200 points down, and we're about 200 points across and 200 points tall. So our frame is then 100, 200, 200, 200.
+
+Now, frame, and this is actually a very important point here, is not a stored property. When you set the frame of a layer, it doesn't actually get saved as the frame anywhere. Setting the frame actually changes a couple of other properties. And in fact, there's even more properties that are used to compute the frame, although setting the frame will only ever change the first two.
+
+So let's look at those first two that actually do get changed when you call set frame. So the first is the center. Now center is a point in the superview's coordinate system that defines the location of your view within its superview. And because it's called center, it defines the center of that view. So in this case, our center is about 200, 300, well, not about, exactly, because it's right in the middle of that view, and it's defining the location in our superview.
+
+So that defines the location, but what defines the size? Well, that's where bounds comes in. And in fact, bounds is a rect. It's a CG rect. So it has both an origin and a size. But for the purpose of computing frame, the only thing that matters is the size of the bounds.
+
+So we'll look at that first and leave bounds origin for a little later. So the bounds size -- well, actually, the bounds entirely is a rect in the view's own coordinate space. So I mentioned that we would talk about two coordinate spaces, super view coordinate space and the view coordinate space. The bounds is in the view's own coordinate space. So it defines the size of the view in its own coordinate space before taking into account transforms that may be applied to the view.
+
+Again, we'll see that in a second. So in this case, our bound size is 200 by 200 and exactly matches the frame size because we have no transform on this view. There's a one-to-one mapping. So we're going to do a little bit of mapping. So we're going to do a little bit of mapping. So our bounds is 00, 200, 200. And that translates into a frame of 100, 200, 200, 200.
+
+Okay. So now what happens if we actually do apply a transform, which we were just mentioning? And in this case, let's apply a 50% scale. So now keep in mind, we're not going to change the center and we're not going to change the bounds. But nevertheless, when we apply a transform, we will be changing the frame because frame is not a stored property. It's computed. And the first two things it gets computed from are bounds and center and transform is the third.
+
+So if we set a 50% scale, that will, as you would expect, shrink the size of our view and has actually reduced our frame size. So our frame is now -- that was our original frame there before we applied the transform. Our frame now is 150, 250, 100, 100.
+
+Now, in this example, we actually scaled down around the center of the view. We sort of scaled right down in place and remained centered. That's not just for the slides and it's not just sort of the view. That's sort of a convenience. That is actually what would happen because when you apply a transform, it will always be applied about the center point of the view. So we've scaled down 50% around that center point. And again, this changed our frame. Now, that frame is pretty easy.
+
+You could kind of visualize what would happen and in your mind see, yeah, okay, I've applied a 50% scale. I probably halved the size of the frame in each dimension. So you could think about it and say, yeah, I went from 200, 200 to 100, 100. And you could guess that. But what happens if you applied a rotation? And let's say we rotated 45 degrees instead of some 90-degree angle.
+
+and David Now this one's a little bit more difficult to think about and really keep in your mind. Because the frame, as I mentioned earlier, is the smallest rectangle that fully encloses that view in its superview's coordinate system. And because we're now rotated, the smallest frame that encloses that whole thing no longer has an obvious relationship to the side.
+
+I mean, it's still, I guess, obvious, depending on how mathematically inclined you are. It's the diagonal across the box in this case. But it's no longer a one-to-one mapping from bounds to frame size. So our frame is now 59, 59, 282, 282. The diagonal across that box is the size. But our bounds hasn't changed. It's still 00, 200, 200.
+
+All right, so let's just take a quick review of the components that make up frame. These are the things used to compute the frame. We talked about the three that UIKit exposes. There are actually a couple others exposed by CALayer. So we'll look at all of them, see which coordinate space they're in, and just make sure we all are on the same page about what we're talking about with all of them, because it could be a little bit confusing. So first off, we have the bound size. As we mentioned, this determines the size of the layer.
+
+Now, the bounds is a property on both UIView and CALayer. They're the exact same thing. When you tell a view to set its bounds, all the view does is tell the layer to set its bounds. So regardless of what you ask, you'll get the same value back. And this is in the coordinate space of the view itself.
+
+Next, we have center. Center is the property on UIView. If you were to ask for the property on CALayer, you would find that CALayer does not have a center property. In fact, it has a position property. Those are the same thing. When you set the center property on the UIView, it sets the position property on the CALayer. We'll see in just a second why they're named something different, but they are actually the exact same thing. And that's a CG point in the superview's coordinate system.
+
+Now, next, we have transform. Transform is a property on UIView. That property does exist on CALayer, but is not the same. So on CALayer, it's actually affine transform. Transform and affine transform are the same thing. They are a CG affine transform that defines a rotation, scale, skew, translation, any kind of affine transform in the superview's coordinate space.
+
+Now, that's it for UIView, but there are two more on CALayer. So the first is transform. This is a CA transform 3D. So it actually, instead of in two dimensions, it allows you to translate your view in three dimensions on the X, Y, and Z axes. You can do rotations, transforms, scales. There's a whole variety of different convenience functions for dealing with them. But they're just matrix multiplication, basically. So transform is just on CALayer, not exposed through UIView. And it's, again, in the superlayer's coordinate system.
+
+Now, the final property is a little bit more difficult to explain, but actually does get to the difference between center and position. And that is anchor point. Now, again, this only exists on CALayer, not exposed through UIView. It's a point in the layer's own view. It's a point in the layer's own coordinate space, except defined in unit coordinates, not in layer coordinates, that determines the point in the view that will get anchored to the superview at that view's position. Now, if that doesn't make a whole lot of sense, that's because I'm not going to get into it too much.
+
+There's great documentation online for core animation. Most of the time when you're using UIKit, you're probably not going to be changing this. So I wouldn't worry too much about it. If you really start to think you need to work with this, or if you find code that's doing it, go read the core animation documentation to get a better understanding of what it does exactly. But it will change how the other properties are interpreted a bit. Yeah. Well, not going to try and explain it much more than that right now. Okay. So those are the five properties that contribute to frame. These are used to calculate the frame.
+
+[Transcript missing]
+
+This is going to help us understand what happens when we change the bounds origin. Thinking about it mathematically, you can consider changing the bounds origin as applying a translation to this coordinate system. If we set a positive value for both the X and Y position on the bounds origin, that would actually shift the coordinate system within the visible frame of that view.
+
+Making it positive, we then shift that coordinate system up and to the left. Put another way, this changes the point that's in the view's own coordinate system that's visible at the top left of the view's frame. So now the thing that's visible at the top left of the view's frame is actually the point in our content that's at the bounds origin point.
+
+So if we said this was 100, 200, the first thing you would see at the top left of your view would be the subview positioned at 100, 200. So it's effectively a window into your view's coordinate system. The bounds defines which part of the view's coordinate system is visible, is visible in the view's frame at any given time.
+
+All right, so that was sort of the mathematical explanation. Maybe let's look at it a little bit more practically in terms of actually putting this into practice on a UIView on a screen. So again, let's add that subview. Now, those of you who have tried this before have probably noticed that by default, if you just add a subview to a UIView, it will actually spill outside of the size of that UIView. This may have bitten you for hit testing purposes if you were doing touch handling. So let's just turn on clips to bounds on that UIView to make it clearer what's happening.
+
+That will actually make sure that anything outside of the bounds of the view does not get rendered. So turning on clips to bounds will mask out all the parts that are outside of the frame of the view. So now this is set up with our default bounds with the origin of 00.
+
+So if we then apply a positive value to the bounds origin, we're effectively shifting which part of that view's content is visible within its frame. Again, we're not actually changing the frame by changing the bounds origin, so we're just shifting that part there up and to the left to change the part of the view's coordinate system that's visible.
+
+All right, so now we know where views are positioned on screen, and we know how they're sized. So how do we get content into them now that we're positioning them? Well, there's really one fundamental thing that is the underlying mechanism for everything else that draws on iOS, and that is setting a view's layer's contents property.
+
+[Transcript missing]
+
+So, just a couple of examples of taking a look at how your performance of your app will vary based on whether you use UIImageView or DrawRect for some simple things that UIImageView supports right out of the box. So the first is, let's say we've got this view here, or sorry, this image, and we want to stretch it out into a larger 320 by 200 area. Well, we'd actually have to break that into three slices to stretch it properly, because we'd need to stretch the left part, the middle part, and the right part independently. Because we don't want that arrow in the middle to get stretched out horizontally.
+
+But if we wrote our own drawing code and did it in DrawRect, we could definitely do that. We could use UIImage, it has DrawRect and a variety of methods like that, that will let you draw this in any way you like in your DrawRect. And if you did that, you'd actually find that you ended up getting this.
+
+So let's say we're going to use a 3GS, and that is at a 320 by 200 view going to be 250 additional kilobytes of dynamic memory on an iPhone 3GS. On an iPhone 4, it's actually a megabyte of extra memory that is being allocated and filled with pixels just so that you can stretch out this image that you already had in a smaller form to begin with.
+
+[Transcript missing]
+
+All right, so now we've got content positioned on screen, we've got content into our view, so how do we determine when that content is going to appear on screen, when will it actually get rendered? And the specific reason that you might be asking yourself this is because maybe you're making two changes to a view. You're changing its frame and then you're changing its transform.
+
+But you want to make sure that you don't end up seeing something on screen that only has half of those changes. You want to be sure that they both render at the same time. Well, the good news is if you do nothing, that's guaranteed to happen as long as you do it in the same turn of the run loop.
+
+So let's take a look at what will happen when we actually call setFrame and setTransform. Now, we're not actually having to do anything with CA transaction ourselves to make this happen, because Core Animation and UIKit will make sure that when you set properties on your layers, it handles creating and committing CA transactions on your behalf.
+
+So you've been doing this all along and didn't even know it, maybe. So let's say we first start out by calling setFrame on our view to move that view from the top left into the center of the screen. Now, Core Animation will create an implicit transaction on your behalf the first time that you set one of these layer properties in one turn of the run loop.
+
+So now that implicit transaction is open, and any other changes we make will be grouped up with that first change and committed as a group. So if we then call setTransform, that will be scaling that, let's say we're scaling that view down, we haven't rendered anything yet. We've got that dotted outline there of where we will be rendering it, but it hasn't appeared on screen. So the setTransform is in that same implicit transaction.
+
+Now, let's say that we're done, this is maybe in our button action method, and we return from that UI button action method. That's going to cause Core Animation to commit this implicit transaction once we go back to the turn of the run loop. And that will actually cause that content to render on screen.
+
+Now, this may have bitten some of you in the past, actually, if you didn't know it was happening. Because let's say you have a button action method and you want to start a progress spinner. So you create a UI progress indicator and tell it to start animating the spin.
+
+And then you go off and start a while loop on your main thread for the next five minutes. First of all, don't do that, please. But if you did, you would find that your progress spinner actually never started. And that's because the starting of that progress indicator was set up in this implicit transaction. You never went back to the turn of the run loop. So Core Animation never committed that implicit transaction. And it's sitting there waiting for you to make the rest of your changes before it draws anything.
+
+So implicit transactions are definitely your friend 99.9% of the time. If you're doing the wrong thing and blocking your main thread for a long period of time, we might be hurting you a little bit. But the answer to that is not fix CA transaction. It's stop blocking the main thread, please. So there's also explicit transactions. But I'm not going to talk about that this morning.
+
+Because when you're creating UIKit applications, there's really very little reason to use an explicit transaction. The main purpose of explicit transactions in Core Animation is to allow you to change properties on the implicit animations that Core Animation would create for you. But if you're using UIKit, we take care of that for you. And there's UIKit APIs to change animation durations, animation curves, animation delays, animation completion callbacks. All of the things that you normally would use an explicit transaction for in a Core Animation only app, there's alternatives available in UIKit that are easier to use.
+
+The reason I discourage you from using the explicit transactions in Core Animation is because they can actually change that commit timing depending on when you create it. So you can actually create and commit your explicit transactions. I'm not going to get too much into the details of that. But just to make sure that you understand what I'm saying, If you're working with UIKit, I would strongly encourage you to stick just with the implicit transaction and not create your own explicit ones.
+
+All right, so now let's get into the exciting cool rendering technique stuff. And we're going to look at it from the perspective of performance because this sample app that we have written, well, it looks really cool, but while you're scrolling, especially on an original iPad, it's incredibly choppy. The performance is terrible. So let's take a look at what we've got.
+
+The most important thing that we're going to cover while we talk about this app, and the biggest thing that is making it perform poorly, is off-screen rendering. And the best thing you can do, and the most common thing that you can do in your UIKit application to find places that your rendering performance is poor and improve them, is to find places where you're rendering off-screen and avoid that.
+
+So what do I mean by off-screen rendering? Well, let's say we've got this view hierarchy that we're trying to draw. We've got four views. That outer super view is gray. We've got a subview of that that is orange, and two subviews of that that are both green. So before we talk about exactly what the off-screen pass means, let's just look at what happens if there is no off-screen pass. Now, this all happens so fast that you would never see these intermediate parts, but we're breaking it down one step at a time just for the conceptual purposes here.
+
+So Core Animation would first render the deepest view. Well, actually, the shallowest view, I guess, depending on which way you're looking at it. It would render that gray view in the back. It would then be able to lay down the pixels for that orange view on top of it.
+
+It would then be able to lay down the pixels for those two green views on top of that. Now, this would be the ideal. No off-screen rendering. Core Animation can just blit each of those backing stores, one after the other, into the frame buffer on top of each other.
+
+Now, if we do something to that orange view that causes it to require off screen rendering, and we'll see in just a couple minutes a few of the things that that might be, what will actually happen when CoreAnimation has to render that frame is that first it will be able to again render that backing gray view right to the frame buffer, but then it's going to require an off screen pass for this orange view. And what that means is it can't render it right on top of that gray backing store.
+
+It has to tear down its rendering context, point the graphics processor to a piece of off screen memory, allocate that off screen memory, and then start drawing there. So it will first render that orange view into this off screen buffer that it just allocated. Then it's going to render those two sub views, the entire subtree actually, the green view and the other green view, on top of it into this off screen buffer.
+
+Once it's done rendering that, it tears down that graphics context, points the hardware back to the main screen, and then using what it just rendered off screen, it can draw that on top of the main frame buffer. So there's this whole extra overhead of additional allocation of memory, additional time spent pointing the graphics processor from one buffer to another. It has to flush all the pipelines for the graphics.
+
+It's really expensive to do this switch between on screen and off screen buffers. So requiring that CoreAnimation do this at every frame gets really expensive. And if you have something that requires off screen rendering, that's going to happen once every time the screen updates. So if you're trying to drag something in a scroll view. Sometimes it's rendering a frame while you're dragging. It'll draw some views on screen, draw some off, then draw some back on again. And it gets really expensive really fast.
+
+So avoiding those off screen passes is a great way to improve your performance. Now there is one trick you can use which can minimize this impact. And that is called layer rasterization. And the idea with layer rasterization is that you give CoreAnimation a hint that you both expect it to render your view off screen and that it's safe for it to cache that off screen rendering across frames.
+
+And reuse the same off screen rendering for the next frame that it used for the first frame. So in that case, it would basically draw that background view. And assuming it had already just drawn that frame we saw, it would have kept around that off screen rendering. So it wouldn't have to do it again. So those views on the left, it doesn't even have to render again at all.
+
+Once it does that, it can just say, oh, here, I have this buffer and draw that right on screen. So if you're rasterizing that layer that required off screen rendering, it's now much faster because we don't have to switch between the on and off screen. Now, of course, the catch with this is that CoreAnimation will actually never do incorrect rendering as a result of you telling it to rasterize something.
+
+So this means that if you were doing something in that view, say, animating those sub views around by rotating them and sliding them down, you would not be able to reuse that cached off screen version for the next frame because the next frame looks different than the last frame. So in that case, it would actually have to throw away that off screen rendering anyway, and you would be back to just as bad as you were to begin with.
+
+And if you had told CoreAnimation to rasterize something that didn't require off screen rendering before, you could actually be even worse because you weren't going to require off screen rendering. You just told it to render off screen by saying should rasterize, but it can't reuse the off screen cache. So now it's doing the off screen and on screen at every frame again.
+
+So we'll talk about a few places that you can use should rasterize to improve performance, but the important thing that I really want to just keep stressing here is, you know, is should rasterize is not some magic bullet that you can just set on everything and say, oh, should rasterize is the fast flag. That's not what that means. It's great and really useful and can help in a lot of situations, but be sure that you understand what it's doing because it can also hurt your performance in other situations.
+
+All right, so let's look at our app. The first thing I want to focus on is this text label in the middle. Now, there's a number of interesting things going on in this, but the first one that we're going to look at is the clipping and masking that we have happening. Now, we've got those rounded corners around the edges, which look really nice, but I've done it in the easiest way that I could think of, which is to set the cornerRadius property on the underlying CALayer behind the UIView.
+
+CornerRadius just lets us define that the corners of a layer should be rounded. So it's really easy. It's one property. It's one value. You just set the radius, and it just happens. But it's also quite slow because it can require an off-screen rendering pass, and it will in this case because this view actually has a bunch of subviews.
+
+The other thing that we have masked here is that reflection, and the reason that's masked is because the way I've implemented this reflection is by having two copies of that same view hierarchy with the little rounded pill-shaped thing with the text, the one at the top that's rendered, you know, full and clear, and then there's another actually below it flipped on its Y axis and masked with a gradient to make it look like it fades out and seem like a reflection. But that gradient mask is really expensive because it requires that the entire view for that -- or the entire view hierarchy for the bottom part of that label be rendered off-screen, then the final off-screen image gets composited to the frame buffer through a mask.
+
+So it's really expensive, and it happens at every frame. So we've done this using the mask. We've done this using the masks to bounds property. If you just set corner radius or just set layer masks, you would actually find that your drawing would not change in most cases because by default masks to bounds -- I can't say masks -- is turned off. Actually, it may be masks to bounds if you're asking the CA layer, but if you ask the UIView, it's actually clips to bounds. We like to change names just to confuse you a little bit, but they're actually the exact same thing.
+
+We've done that with Corner Radius, and CALayer masks, and Clips to Bounds, or Masks to Bounds. This is a really convenient way to get these appearances, but they're pretty slow, so we can do better. What techniques can we use to fix this? Well, there's a couple tricks we can use to fake it. First, we can use contents-rect. Although actually we can't in this particular example, but in some cases we could. Contents-rect defines which part of a view's content actually gets rendered.
+
+So if you have a large image, say you were maybe using some game development techniques of having a very large image that contains all your sprites, you can pick one of them out of it by using contents-rect to define the part of your content image that actually gets rendered.
+
+So it's great and really helpful if you're trying to clip out a rectangular part of the content. I'm not going to get too much into that because it's actually not going to help us in this particular example. But if you have cases where you need to clip out rectangular parts of content, go check out the documentation on contents-rect. That may be able to help you out.
+
+What we're actually going to do is use DrawRect to improve the performance of this. The idea will be that we want to actually render all those expensive things up front to avoid having to do them at every frame. And the other option that you could use, which we again won't do here, is a transparent or opaque overlay, drawing some additional content on top of views to mask out parts that you don't want to be visible without requiring off-screen passes.
+
+For this example, we could maybe use black corners around the edges that were rounded pieces of content and drop them over top of our view just to obscure the parts and make it look rounded. But of course, in the actual app that we have, we can see through this to the background, so that wouldn't really work for us. The other issue that we have is group opacity here.
+
+Now, what do I mean by group opacity? Well, let's use this UI slider in order to really explain what it means. And I'm going to set the alpha value on these sliders to 50%. With the top one, I will have group opacity enabled, and with the bottom one, I will have group opacity disabled. So when I set alpha with group opacity, it fades out exactly like you'd expect to see, and everything looks right. If I set alpha without group opacity enabled, you see through the knob to the track below.
+
+And the reason for that is UIkit actually cheats a little bit by default. Because group opacity requires an offscreen rendering pass, we don't do it normally. So if you set alpha on a view that has sub views, all we do is multiply that alpha down through all the sub views so they all render at 50% alpha, which means that they actually end up transparent with respect to their super view even though they should really be opaque like that top one. So there's a couple ways we can fix this.
+
+First we could re-enable group opacity for all of UIkit. That would be setting the UI view group opacity key in your Info.plist to yes. But this, of course, turns back on that offscreen pass and makes things slow again. We could also pre-render our view in draw rect and pay that cost once up front rather than having to do it at every frame.
+
+The other option, if our content in the view isn't changing, is to actually turn on that should rasterize bit. This will cache offscreen our entire view and make it much faster to render at every frame. Because it will just be copying an image from that view. that off screen cache.
+
+So there's a couple ways we could fix that. The other thing that we have going wrong in this label is these shadows. And it's probably a little bit difficult to see, but there's a very subtle shadow behind the text in this label. It's pretty faint. I've done that using the shadow properties on the CA layer. There's a shadow offset and shadow color. And they're really convenient, but they're also really expensive.
+
+So we could do better than that with a couple other techniques that Mathieu is going to come up and show you. So before we get started with the code, I would like to show you some tools we can use to identify those issues. So the first thing you want to do is launch Instruments.
+
+And attach a Core Animation template to your iPad or iPhone. And you want to check the-- there it is. There's the off-screen rendering. That's going to put a wash on your views where you actually draw off-screen. So let's check that on. There we go. So you see all our views mostly are yellow.
+
+Turn it off. So that's really the first thing you should do when you have a problem with performance and rendering issues, is use Instrument and this template. So as Josh mentioned, we're going to try to use DrawWrite to do most of what he was doing before with Core Animation.
+
+And I'm going to show you what we were using in Core Animation and what we use now in CG. So the first thing we're going to take care of is the rounded corner background. So Josh used the radius corner, but it's very expensive. But really what it is, it's a Bezier pass with rounded corner that we render, and we can draw directly as a background of our view.
+
+So the first thing we do here, we have the background color. We do the background color, and a bit later we have the radius corner, and then we set setNiceToBounds. So what we do is create a UI Bezier pass with rounded corner. We have those very nice convenience methods to do that for you. You don't have to build a Bezier pass. And then we just choose the same color and we fill it.
+
+So that take care of the, we can remove the corner radius here, and we already win one off-screen pass. So next thing we want to do, I'm going to show you is to draw the shadow and the text label. So before, as Josh mentioned, we were using the shadow color, the shadow offset.
+
+That's very expensive to draw, because Core Animation needs to render the, needs to draw the shadow while it's rendering the text. So what we do, It's like we set a shadow with the same property here that we were putting before. The same offset, the same blur, and the same color.
+
+There's one thing, though, that you should be careful before you do that. Core graphics draw as soon as you ask it to draw. Core animation, you can set a property and it's going to be rendered after the transaction gets committed. Here, as soon as you say draw, it draws. So you need to set your shadow properties before you start drawing anything, in this case the text.
+
+So you have the shadow property now, and the shadow color. You draw the text, and you have this, pretty much the same effect. So with that, we're going to see that we already start rendering some of our label on screen. You see the top of the label is perfectly rendered.
+
+You still have the nice shadow, you still have the rounded corners. Maybe it's not very clear, but we also have an alpha on our view, so you can see a little bit of the line in behind. But we still have the reflection that's still rendered off screen, and we want to take care of that.
+
+You're going to see in the sample code that here we create an image with a gradient on it. We put that image on the layer, and we set that layer as a mask layer on our view. And that's very expensive, too. But really, we could do it also in DrawRect. So on the left side, on your left side, you have what we used to do before. So we create an image with the gradient. We set that image on the layer, and then we set that layer as a mask layer on our view.
+
+But really, we can reuse a lot of the code we are using to create the gradient in our DrawRect method directly. So here my view is reflected. So we create the same image, the same gradient. You see the code is very similar. We just like switch the -- the only thing that really changes the location because Core Animation and CG have a different code in a space. But we have the same code. I mean, the complexity of doing the gradient is the same. So we create an image. So you need a new context, and you create this image.
+
+And then for the same reason that we were setting up the shadow property before we draw the label, you have to set that mask on the context before you actually draw anything because it gets worn as soon as you ask. The only thing we did here in this all, to try to optimize this, was moving some code around in the drawRack method because drawRack is going to get called only once before the animation and that's it.
+
+And that's something also very important, that's because your frame size doesn't change during the animation. If your frame was changing, you would have to use some other techniques to fix those issues here. So let's see, now we have... We moved most of the drawing code out of the initializing code to the drawRack method.
+
+So now if I go back to my Frog app, you can see that all the drawing now is rendered on screen. And it's pretty fast. You want to avoid those yellow wash on your UI as much as you can. Sometimes it's not possible, but in this case it's possible and your animation is going to get faster or you can do more things during your animation. Hope it was useful. Thank you very much.
+
+[Transcript missing]
+
+The problem is it's expensive, because what Core Animation has to do is it has to go to the render buffer behind your layer and sample the pixels from that in addition to the pixels from your layer and smooth those against each other. Now we already know that if you just have an image with a line in it and you rotate that image, the line isn't really jaggy. The reason for that is that Core Animation can sample just the pixels in the image of the layer itself when rotating and figuring out the color value of that rotated pixel.
+
+So we're going to draw a transparent border around our image so that when we sample at the edge, we get some of that transparent border without having to go all the way to the background. So this is our main view controller. And here's where we create our image views. This is both the top image view, the large one, and the bottom ones in the scroll view. So I'm just going to drag a little code in here.
+
+We're creating a new UI image on the fly using the froggy image, but putting a one-pixel transparent border around it. We do that with the UIGraphics functions that you may not have seen before, but which Mathieu used for the mask in the last demo. UIGraphicsBeginImageContext creates a new Core Graphics bitmap context. All it takes in this particular form is a size, which is the original image size with two pixels extra in each dimension. This is effectively what UIKit is doing for you, and I think it's important to remember this.
+
+When you implement DrawRect, we're just going to set up a context for you, call DrawRect, take the image out of that context, and set it as the contents of the layer. Here we're sort of doing it up front, and we're going to let UIImageView take care of the actual rendering of that image from here on out. So we draw our froggy into our larger image. We get the image out of the context.
+
+[Transcript missing]
+
+So now I'm going to go ahead and launch my Froggy app again. And I'm proud to show you-- oh, well, there's still a lot of yellow. There's still an off-screen rendering pass being used on all those images. And I'm going to tell you about why that isn't just a moment. There's one more thing that we could do for this edge antelias-ing.
+
+Because we're running a little low on time, I'm going to leave as an exercise to the reader. But I'm just going to talk you through it really quick. You may have noticed that before we were just using UIImageImageNamed to refer to these froggies. And so the image being used on the bottom and the image being used on the top was the same data.
+
+And you might ask, well, why are we creating this new larger image with the transparent border twice? Now we're using double the pixel data. And you'd be right. So you could share that data between the two images. But there's an issue with doing that too. If you look at the froggies on the bottom, you'll note that-- they have jagged edges.
+
+And I just promised you that this method would give you sort of smooth edges without performance costs. So why do they have jaggy edges? Well, it's the same image data. You have a really big frog image. Maybe it's 500 pixels wide. And you've drawn a one pixel border around it.
+
+And then you've asked Core Animation to scale that image down. Well, it's also going to scale down your border. So now your one pixel transparent border is maybe like a tenth of a pixel transparent border. And when you go to smooth, you don't have so much of that extra fudge data to work with anymore. And so as an exercise for you all, if you want to use this in your app, you have to be careful about using that transparent border at the actual size of the contents you're going to care about.
+
+So let's get rid of the last bit of wash here. And that last bit of wash comes from the shadows. And Josh was telling you that the shadows are really expensive. They have to do an extra off-screen rendering pass. And that's just because if there was a hole in the image, we wouldn't want to draw a shadow filling that entire hole. We would just want to draw shadows under the edge of the hole, very artfully and gracefully. And that's expensive. That requires an off-screen rendering pass for Core Animation to figure out where the holes are.
+
+But it's often really helpful in optimization of your apps to tell the system about the assumptions and constraints of your application that it doesn't necessarily know about. In this case, our frog images are all rectilinear, and they're all opaque. And the system doesn't know that. but we can tell it about that assumption and get some improvement in our performance.
+
+One thing to keep in mind is you may have noticed that the top frog image changed size when we rotated. And so we don't have a constant size shadow. Our shadow is going to be one size in portrait and another size in landscape. And so we can't do it, this optimization, when we create the image view. We have to do it when we lay the image view out. This is a method that gets called both when we create the image views and when we rotate. And I'm just going to drop some more magic code in here.
+
+And there's two parts to it. Let me address this first. We're going to use this shadow path property of ca_layer. And with that property, we can tell Core Animation, very specifically, this is the shape of the contents. This is where I want you to draw the shadow, and it's very fast. We do that with just a Bezier path. Our content is rectilinear, and so we create a rectangular Bezier path.
+
+We could use this for more complicated content, too. You may notice the popovers in iOS are really fast, and they still have shadows. Part of the only reason they are really fast is that we were able to create a UI Bezier path which describes the shape of the popovers outline. You know, it's a rounded rect that is unioned with the little arrow for the popovers pointer. And so you aren't limited to really simple shapes. You can get kind of complex.
+
+The one other thing I want to draw your attention to-- we're running out of time, so I may have to explain this a little faster than I would like. is the fact that ShadowPath is a property on Core Animation layers, and UIKit doesn't know about it. UIKit normally does a fair amount of work to help you with implicit animations using this Begin Animations API.
+
+Those details are not really necessary for you to understand, but one thing that you should understand is that if you go changing properties in Core Animation which don't have equivalents in UIKit, you're not going to get the lovely automatic animation behavior that you're used to. Here we have to do it ourselves.
+
+It's not so hard. We just use this CA Basic Animation class, and we tell it what we're changing, where we're changing it from, and what we're setting it to, and we give it a duration to animate. We're going to use the same duration which is passed to us here, which was being used for the rotation that's causing the size change in the first place. And it's important that we animate this because when we change from portrait to landscape, we want our shadow to animate size as well, just as it was doing before.
+
+And we need it to animate at the same speed so that the image doesn't change size faster than the shadow, which would look very strange. So once we've created this CA Basic Animation, we just add it to our layer. And then you'll see if we switch back to this app one last time, hooray, hurrah, all of the yellow is gone.
+
+And look how fast that rotation is. All right. Thanks, Andy. Sorry for the quick run-through there at the end. If you have more information, Bill Dudney is our evangelist. There's another session right after this, Core Animation Essentials, to talk more about Core Animation. Bill will be giving the practical drawing in iOS later today.

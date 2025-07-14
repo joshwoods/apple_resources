@@ -1,0 +1,2429 @@
+WEBVTT
+
+00:00:12.880 --> 00:00:16.570
+>>Justin Hensley: So I'm Justin Hensley and
+I'm a member of The Office of CTO
+
+00:00:16.570 --> 00:00:23.679
+at Advanced Macro Devices and my particular area of
+research is doing processing on GPUs other than graphics.
+
+00:00:23.679 --> 00:00:28.219
+So I've been working probably on what is
+classically called GPDPU for around 8 or 9 years now.
+
+00:00:28.219 --> 00:00:31.729
+And just to give you a brief overview
+of what I'm going to talk about.
+
+00:00:31.730 --> 00:00:37.890
+First I want to give you a brief overview of the actual
+architecture of the ATI Radeon HD 4870 and how it operates.
+
+00:00:37.890 --> 00:00:41.640
+So this is at a very high level but it's actually
+very important to understand the architecture
+
+00:00:41.640 --> 00:00:44.899
+that you're developing for because if you want
+that last little bit of performance you really need
+
+00:00:44.899 --> 00:00:48.049
+to understand how the architecture actually operates.
+
+00:00:48.049 --> 00:00:51.649
+Next I'll talk about what I like to
+call spread sheet performance analysis.
+
+00:00:51.649 --> 00:00:55.780
+So this is just you're doing very quick
+back of the envelope analysis and you want
+
+00:00:55.780 --> 00:00:58.270
+to figure out is an algorithm actually optimal
+
+00:00:58.270 --> 00:01:02.230
+Is it going to run well on the architecture that
+I'm concerned with and if I run an algorithm
+
+00:01:02.229 --> 00:01:06.489
+or I run a program how close to
+what I can really get am I getting.
+
+00:01:06.489 --> 00:01:13.359
+Then I'll move into some tips and tricks for
+the 4870 and finally I'll show a short demo.
+
+00:01:13.359 --> 00:01:17.640
+So if you look at the spec you'll see this view of
+the world that OpenCL has which you have the host
+
+00:01:17.640 --> 00:01:21.030
+and then you have one or more compute
+devices attached to that host.
+
+00:01:21.030 --> 00:01:24.340
+Each of these compute devices has
+some number of compute units
+
+00:01:24.340 --> 00:01:27.159
+and each of these compute units have
+some number of processing elements.
+
+00:01:27.159 --> 00:01:33.579
+So what I like to do is correlate that to
+how the ATI Radeon HD 4870 views theHp world.
+
+00:01:33.579 --> 00:01:37.030
+So your compute device, that would be the 4870.
+
+00:01:37.030 --> 00:01:40.930
+So each GPU would correspond to what
+OpenCL considers a compute device.
+
+00:01:40.930 --> 00:01:49.280
+What I'll call a SIMD is what would be the compute unit
+in an OpenCL and on the 4870 there areHp 10 of these SIMDs
+
+00:01:49.280 --> 00:01:53.390
+and then each of these SIMDs has
+some number of processing elements.
+
+00:01:53.390 --> 00:02:00.950
+So on the 4870 there are 64 elements in this
+processing elements and we refer to those as wavefronts.
+
+00:02:00.950 --> 00:02:05.280
+So anytime going forward I'll refer to
+this 64 Element long vector if you will
+
+00:02:05.280 --> 00:02:11.280
+as a wavefront cause that's our internal
+nomenclature for what that what that is.
+
+00:02:11.280 --> 00:02:18.219
+So in reality, so that's the logical view of the GPU, in
+reality the 4870, we have 10 SIMDs so we have these 10 sort
+
+00:02:18.219 --> 00:02:25.539
+of nebulous boxes that are representing the 10 SIMDs on
+the hardware but in reality there are 16 Processing "Cores"
+
+00:02:25.539 --> 00:02:28.109
+and I'm going to call them "Cores"
+with quotes there per SIMDs.
+
+00:02:28.110 --> 00:02:34.780
+So what's happens is if you remember last slide I said there
+are 64 Elements in the wavefront well we actually operate 16
+
+00:02:34.780 --> 00:02:39.650
+at a time of the 4 cycles and that's how we get to
+a 64 Element wavefront but they're actually only 16
+
+00:02:39.650 --> 00:02:43.039
+of these little processors and you just do it over 4 cycles.
+
+00:02:43.039 --> 00:02:49.459
+Each of these little processing cores actually
+has 5 arithmetic logical units per core
+
+00:02:49.460 --> 00:02:52.920
+and they are basically a very long
+instruction word processor.
+
+00:02:52.919 --> 00:02:57.929
+So we have 5 ALUs and we can issue
+what's called a VLIW instruction to all 5
+
+00:02:57.930 --> 00:03:00.719
+of these ALUs to do 5 operations in parallel.
+
+00:03:00.719 --> 00:03:07.909
+So if we look at the sort of the GPU at a whole
+we have all of these little bitty yellow boxes.
+
+00:03:07.909 --> 00:03:12.359
+So there are 800 of those so if you
+look at the 4870 there areHp 800 ALU's
+
+00:03:12.360 --> 00:03:15.630
+that every cycle you know you're
+ready to give an instruction to.
+
+00:03:15.629 --> 00:03:20.650
+We have a very large register file and then some fixed
+function logic which is what is useful for graphics
+
+00:03:20.650 --> 00:03:22.810
+but in general you don't access
+that when you're using open CL.
+
+00:03:22.810 --> 00:03:24.990
+That would be something you'd use Open GL for.
+
+00:03:24.990 --> 00:03:35.980
+Ok so one of the keys of using a GPU such as the
+4870 is that you need to recognize the fact that GPUs
+
+00:03:35.979 --> 00:03:41.639
+or the HD 4870 does not have a large register file or
+a large cache instead it has a large register file.
+
+00:03:41.639 --> 00:03:46.189
+So if you look at traditional CPU optimization
+you have this very large cache that you're using
+
+00:03:46.189 --> 00:03:50.310
+to basically amplify the bandwidth to your memory system.
+
+00:03:50.310 --> 00:03:52.330
+GPUs in general don't have large caches.
+
+00:03:52.330 --> 00:03:54.750
+Instead they have very large register files.
+
+00:03:54.750 --> 00:04:00.500
+And the way we're going to use these large register files
+is that we're going to launch more work than available ALU.
+
+00:04:00.500 --> 00:04:06.180
+So even though I have 800 ALUs at my disposal I'm
+going to actually launch more work than is available
+
+00:04:06.180 --> 00:04:13.159
+than I have actual arithmetic to operate on and what happens
+is the register file is partitioned amongst all this work
+
+00:04:13.159 --> 00:04:18.639
+that I want to do and the 4870 what it can do
+is it can switch between all the active things
+
+00:04:18.639 --> 00:04:21.129
+that can be operating at any one time very fast.
+
+00:04:21.129 --> 00:04:27.339
+So the goal is that any time something wants a piece of
+memory or wants to do an operation that takes a long amount
+
+00:04:27.339 --> 00:04:32.279
+of time we have a very fast ability to switch
+between active wavefronts that are ready to go.
+
+00:04:32.279 --> 00:04:37.299
+So basically you'll have a wavefront operating on
+the ALUs and as soon as it wants to access something
+
+00:04:37.300 --> 00:04:41.389
+such as memory it gets taken off the ALUs
+and another wavefront gets swapped on.
+
+00:04:41.389 --> 00:04:45.500
+And the whole point of this is that we want
+to keep these ALUs as busy as possible.
+
+00:04:45.500 --> 00:04:48.740
+So we have lots of work that we can
+select from and any time somebody wants
+
+00:04:48.740 --> 00:04:54.050
+to do a long latency operation we just
+swap it on the other GPU or onto the 4870.
+
+00:04:54.050 --> 00:04:59.980
+So to give you an idea of how this looks
+pictorially we have let's say we can select between 1
+
+00:04:59.980 --> 00:05:02.150
+and 4 wavefronts that are going to operate.
+
+00:05:02.149 --> 00:05:07.639
+So the first wavefront will operate and then at some point
+it's going to request something from memory and effectively
+
+00:05:07.639 --> 00:05:11.300
+that wavefront is going to stall because it
+cannot operate until it gets that piece of data.
+
+00:05:11.300 --> 00:05:16.100
+So let's see we'd have to wait at some point if we
+just basically executed this one wavefront we'd have
+
+00:05:16.100 --> 00:05:20.050
+to wait quite a bit of time till that data
+was ready before we could operate again
+
+00:05:20.050 --> 00:05:22.759
+and our ALUs wouldn't be doing anything.
+
+00:05:22.759 --> 00:05:26.219
+So what we do in the 4870 is we
+actually select another wavefront to run.
+
+00:05:26.220 --> 00:05:32.000
+So as soon as wavefront 1 stalls we're going to put
+wavefront 2 on the ALUs and operate on those guys
+
+00:05:32.000 --> 00:05:37.949
+and then they'll stall and then as soon as
+they stall we'll put wavefront 3 and as soon
+
+00:05:37.949 --> 00:05:41.399
+as wavefront 3 stalls we'll put wavefront 4.
+
+00:05:41.399 --> 00:05:46.120
+And the whole point is we're always keeping
+the ALUs as busy as possible and as long
+
+00:05:46.120 --> 00:05:48.790
+as there's the ALUs are busy we're going to be happy.
+
+00:05:48.790 --> 00:05:53.100
+And you'll notice that by the time
+wavefront 4 finishes we can swing back around
+
+00:05:53.100 --> 00:05:54.800
+and actually operate on wavefront 1 again.
+
+00:05:54.800 --> 00:06:01.290
+So as long as we have enough ALU operations in flight at
+any 1 time we never actually see these latent the fact
+
+00:06:01.290 --> 00:06:05.650
+that memory takes a very long time to access because
+we're just constantly cycling between different pieces
+
+00:06:05.649 --> 00:06:08.079
+of work that are running on the GPU core.
+
+00:06:08.079 --> 00:06:16.550
+So now that we have just a very fast sort of overview of
+how the GPU gets the performance that it's able to get
+
+00:06:16.550 --> 00:06:21.720
+or the 4870 gets the performance it gets now I'd like to
+talk a little bit about what I call spreadsheet analysis
+
+00:06:21.720 --> 00:06:25.740
+and the reason it's very valuable to do
+this is that it's extremely important
+
+00:06:25.740 --> 00:06:27.300
+to estimate the performance of your kernels.
+
+00:06:27.300 --> 00:06:32.710
+So you're writing and OpenCL kernel and you
+run it and you get some performance level.
+
+00:06:32.709 --> 00:06:36.680
+So the question is it might be fast, it might
+be extremely fast and you're happy with it
+
+00:06:36.680 --> 00:06:40.410
+but the real question is how much
+performance have I left on the table?
+
+00:06:40.410 --> 00:06:45.710
+If I look at what the device can do, so what can the
+4870 get theoretically and what you're actually getting
+
+00:06:45.709 --> 00:06:50.649
+with your kernel, you need to be able to estimate and get
+a rough idea of how much performance is left on the table.
+
+00:06:50.649 --> 00:06:56.319
+And to the first order it's actually pretty
+simple on the 4870 to do this and that's
+
+00:06:56.319 --> 00:07:00.170
+because those little processors even though
+there's a lot of them they're all in order core
+
+00:07:00.170 --> 00:07:02.420
+so they basically execute one instruction after another.
+
+00:07:02.420 --> 00:07:04.640
+There's no out of order reordering going on.
+
+00:07:04.639 --> 00:07:08.699
+So you can actually fairly easily estimate performance.
+
+00:07:08.699 --> 00:07:15.389
+So for the HD 4870 to get the Hpfirst order how long
+are kernel's going to take is just simply the max
+
+00:07:15.389 --> 00:07:20.659
+of how long it takes to do the ALU operations,
+how long it takes to do what I'll call texture,
+
+00:07:20.660 --> 00:07:26.080
+but that's just really load store, so what you can
+think of is how many addresses can I basically send off
+
+00:07:26.079 --> 00:07:30.669
+to memory per cycle and how many bytes of
+data am I actually reading from memory.
+
+00:07:30.670 --> 00:07:34.449
+So one of those three things is going to be the thing
+that limits your performance because they're all happening
+
+00:07:34.449 --> 00:07:38.839
+in parallel so all you really care about is how
+long did I take to do arithmetic operations?
+
+00:07:38.839 --> 00:07:41.199
+How long did I take to do those load store operations?
+
+00:07:41.199 --> 00:07:43.219
+And how much band width did I take?
+
+00:07:43.220 --> 00:07:46.790
+So to give you an idea of how you would
+compute this; let's say we want to figure
+
+00:07:46.790 --> 00:07:50.069
+out how much time I spent doing ALU operations.
+
+00:07:50.069 --> 00:07:52.649
+Well it's actually not that hard to compute.
+
+00:07:52.649 --> 00:07:57.899
+You just take the global size, so how
+many elements of computation am I doing?
+
+00:07:57.899 --> 00:08:02.519
+You multiply that times the number of ALU operations
+I'm doing so in this case it's those VLIW instructions.
+
+00:08:02.519 --> 00:08:05.789
+So this you can basically just look at your
+algorithm and sort of give a guesstimate
+
+00:08:05.790 --> 00:08:10.030
+of how many VLIW instructions would it
+take to actually execute this operation.
+
+00:08:10.029 --> 00:08:15.129
+So it's just how many floating point multiply
+floating point multiply ads do you have to do.
+
+00:08:15.129 --> 00:08:16.819
+So that gives us how much work we have to do.
+
+00:08:16.819 --> 00:08:20.800
+So we have our global size times the number of instructions.
+
+00:08:20.800 --> 00:08:24.860
+Well all we need to do is divide that by
+how many units of computation we can do.
+
+00:08:24.860 --> 00:08:31.430
+So we have 10 SIMDs in the 4870 and remember each
+SIMD has 16 of these little processors in them
+
+00:08:31.430 --> 00:08:35.690
+so we multiply a number of SIMDs times the number
+of Cores per SIMD and that will give us an idea
+
+00:08:35.690 --> 00:08:40.990
+of how many items we're doing but then we also have
+to take into account how fast is the engine going.
+
+00:08:40.990 --> 00:08:44.000
+So in this case the 4870 runs at 750 MHz.
+
+00:08:44.000 --> 00:08:49.809
+So we just take these pieces of information and that'll
+give us how much time we spent doing arithmetic operations.
+
+00:08:49.809 --> 00:08:55.399
+And it turns out when you do this operation
+you can get within 95, 96% of reality.
+
+00:08:55.399 --> 00:09:01.429
+So you could take number of ALU operations your doing, run
+it through this formula, and it would come extremely close
+
+00:09:01.429 --> 00:09:05.899
+to what you're doing when you really
+run an algorithm if it's ALU bound.
+
+00:09:05.899 --> 00:09:10.799
+So if you look online you can find similar information
+for number of tex units and how much bandwidth
+
+00:09:10.799 --> 00:09:16.849
+and so you can create formulas just like that that'll
+give you ALU time, texture time or load storage time
+
+00:09:16.850 --> 00:09:20.920
+and memory time and you just take the maximum of
+those and that'll tell you what's your bottleneck.
+
+00:09:20.919 --> 00:09:25.419
+And the reason you care about that is that if your
+memory bandwidth is the thing so you're memory bound
+
+00:09:25.419 --> 00:09:29.909
+like Andrew was saying earlier, it doesn't make
+much sense to actually improve your ALU time
+
+00:09:29.909 --> 00:09:33.029
+because it still doesn't matter cause you're
+spending all your time doing memory operations.
+
+00:09:33.029 --> 00:09:40.879
+So what are these what are the
+practical implications on the 4870?
+
+00:09:40.879 --> 00:09:46.289
+So if you recall I said the wavefront
+size on the 4870 is 64 elements.
+
+00:09:46.289 --> 00:09:52.409
+So what that means is our workgroup size must be a multiple
+of 64 or it shouldd be a multiple for it I should say
+
+00:09:52.409 --> 00:09:57.429
+because you can think of each of these
+wavefronts are sort of a slice of your workgroup.
+
+00:09:57.429 --> 00:10:01.579
+So you want to make sure that your
+workgroup evenly is filled up by wavefronts.
+
+00:10:01.580 --> 00:10:06.840
+So you would like your wave your
+workgroup size to be a multiple of 64.
+
+00:10:06.840 --> 00:10:10.509
+If you use smaller workgroups than that
+you're going to underutilize those SIMDs
+
+00:10:10.509 --> 00:10:15.269
+because they operate on things of multiples of 64.
+
+00:10:15.269 --> 00:10:21.269
+One other key thing is that the SIMDs actually operate
+on a pair of wavefronts so they operate on an A wavefront
+
+00:10:21.269 --> 00:10:24.220
+and then a B wavefront and an A
+wavefront and then a B wavefront.
+
+00:10:24.220 --> 00:10:28.019
+What that means is that we have 10 SIMDs.
+
+00:10:28.019 --> 00:10:33.500
+We have 2 wavefronts that we're operating on
+and each of those wavefronts has 64 elements.d
+
+00:10:33.500 --> 00:10:41.860
+So that means we need a kernel that has if we want to have
+1 kernel that fully utilizes the 4870 we need 1,280p elements
+
+00:10:41.860 --> 00:10:48.509
+or work items on the GPU in that kernel so that
+we can fully utilize the GPU with that 1 kernel.
+
+00:10:48.509 --> 00:10:56.019
+But the key thing here is that we've utilized the 4870
+but we haven't actually enabled any latency hiding.
+
+00:10:56.019 --> 00:11:00.789
+So the key to the GPU is that you can hide
+this latency by having more work available
+
+00:11:00.789 --> 00:11:03.799
+than you actually have computation units for.
+
+00:11:03.799 --> 00:11:09.439
+So that's means if you want to have minimum latency hiding
+on the 4870 you need to have 4 wavefronts in flight.
+
+00:11:09.440 --> 00:11:14.550
+So in that case it would be 1070s times
+4 SIMDps wavefronts, times 64 elements
+
+00:11:14.549 --> 00:11:20.199
+and that would give you basically 256 or 2560 elements.
+
+00:11:20.200 --> 00:11:28.530
+So with register usage recall that we we're hiding
+this latency by switching between these wavefronts
+
+00:11:28.529 --> 00:11:33.970
+but the thing is we have limited resource our register
+file that has some number of registers that you can use.
+
+00:11:33.970 --> 00:11:39.730
+So that means if you use more registers that means
+there are fewer wavefronts that you can have in flight.
+
+00:11:39.730 --> 00:11:44.950
+So basically what you can think of is we have this
+register file that has some number of elements in it
+
+00:11:44.950 --> 00:11:47.860
+and we divide it up into some number of wavefronts.
+
+00:11:47.860 --> 00:11:52.570
+The more registers you use the fewer wavefronts
+which means you have worse latency hiding behavior
+
+00:11:52.570 --> 00:11:56.120
+or the fewer registers you use that
+means more wavefronts in flight.
+
+00:11:56.120 --> 00:12:00.610
+The more things you have to select from
+means you have better latency hiding.
+
+00:12:00.610 --> 00:12:05.789
+So when your coding your algorithms to run on the 4870
+you have to consider how many registers am I going to have
+
+00:12:05.789 --> 00:12:11.490
+to use because the more registers you use that
+means the fewer wavefronts that can be on flight.
+
+00:12:11.490 --> 00:12:12.539
+There is a caveat to that.
+
+00:12:12.539 --> 00:12:16.079
+You can actually compensate for the
+fact that you have a very few wavefronts
+
+00:12:16.080 --> 00:12:18.110
+in flight by just doing more ALU operations.
+
+00:12:18.110 --> 00:12:25.019
+If you think back to that diagram where I had the wavefront
+1, 2, 3, and 4 operating if that chunk of ALU operations
+
+00:12:25.019 --> 00:12:29.829
+that are being operated on is longer that means I don't
+have to have as many wavefronts in flight to select
+
+00:12:29.830 --> 00:12:37.980
+from because basically the more ALU instructions you have
+operating in one chunk the more latency you can hide.
+
+00:12:40.929 --> 00:12:47.750
+So another key guideline to writing kernels on the 4870
+is that we want to prefer int4 float4 whenever possible.
+
+00:12:47.750 --> 00:12:52.179
+So recall those little processor
+cores are 5 wide VLIW machines.
+
+00:12:52.179 --> 00:12:58.370
+So at any one instant each of the little cores
+can do 5 math operations at any one time.
+
+00:12:58.370 --> 00:13:00.429
+So we'd like the help the compiler out.
+
+00:13:00.429 --> 00:13:07.649
+So the compiler can actually extract out ILP from your
+kernel and pack those VLIW instructions as much as possible
+
+00:13:07.649 --> 00:13:09.519
+but you should always help the
+compiler out whenever possible.
+
+00:13:09.519 --> 00:13:17.090
+So by using float4s you're explicitly telling the
+compiler hey these things can be operated on in parallel.
+
+00:13:17.090 --> 00:13:22.200
+Also the memory system is designed to operate
+on or to prefer 128 bit loads and stores.
+
+00:13:22.200 --> 00:13:27.430
+So whenever possible you want to actually load and store
+128 bit value so int4 and float4s.
+
+00:13:27.429 --> 00:13:33.239
+Again these are graphics processors so they
+are designed to work on things like XYZW RGBA
+
+00:13:33.240 --> 00:13:37.740
+so whenever possible it really helps
+to give those the compilers a hand
+
+00:13:37.740 --> 00:13:42.090
+and the memory controllers a hand
+in packing the data for it.
+
+00:13:42.090 --> 00:13:44.780
+Another key thing is to consider the access patterns.
+
+00:13:44.779 --> 00:13:50.259
+So if your data is stored in a long linear buffer and
+you're accessing it consider how you're accessing it
+
+00:13:50.259 --> 00:13:55.360
+because if you access it in nice sequential
+chunks the memory system can easily get
+
+00:13:55.360 --> 00:13:58.240
+that from the memory system and
+treat it back to the shader core.
+
+00:13:58.240 --> 00:14:00.970
+The problem is if you start striding through memory
+
+00:14:00.970 --> 00:14:06.629
+at very large offsets what happens is the memory
+controller can't coalesce those reads together and we have
+
+00:14:06.629 --> 00:14:11.639
+to multi-cycle through as we read those values
+and you end up getting less bandwidth effectively
+
+00:14:11.639 --> 00:14:15.299
+out of your memory system because the memory
+system really likes these large chunks of memory.
+
+00:14:15.299 --> 00:14:24.539
+And one other key thing for the 4870 is that AHpMG GPUs have
+large register files so there's often a trick where we want
+
+00:14:24.539 --> 00:14:28.099
+to do more work per element and I'll
+give an example later but the one thing
+
+00:14:28.100 --> 00:14:33.320
+to consider is there is local N OpenCL there is
+local memory which is faster than local memory
+
+00:14:33.320 --> 00:14:38.110
+but there's actually something that's faster than local
+memory and that would be the registers in the shader core.
+
+00:14:38.110 --> 00:14:39.730
+So whenever possible you'll want to use those.
+
+00:14:39.730 --> 00:14:45.539
+So you can compensate or you can actually
+optimize your programs by using more registers
+
+00:14:45.539 --> 00:14:51.629
+because we have this large pool of
+registers available on the 4870.
+
+00:14:51.629 --> 00:14:56.549
+So a quick example of some OpenCL code or quick
+optimization let's look at median filtering.
+
+00:14:56.549 --> 00:15:03.659
+So median filtering is just a non-linear filter for removing
+one shot noise so it's a filter where you sort pixels
+
+00:15:03.659 --> 00:15:06.490
+in a neighborhood around yourself you
+find the median and you output that
+
+00:15:06.490 --> 00:15:10.200
+and what that does is it gets rid of speckles for images.
+
+00:15:10.200 --> 00:15:15.420
+So simple algorithm is just to load the neighborhood,
+you sort the pixels and then you output the median value.
+
+00:15:15.419 --> 00:15:20.559
+So if you look at some OpenCL code here the
+first thing we're going to do is we're going
+
+00:15:20.559 --> 00:15:22.759
+to compute some indices based on global ID.
+
+00:15:22.759 --> 00:15:28.439
+We're going to handle our edge cases with an
+init statement so we are on the boarder of image,
+
+00:15:28.440 --> 00:15:29.470
+then we're going to load our neighborhood.
+
+00:15:29.470 --> 00:15:34.779
+So here I'm just loading 9 values from a
+buffer that I passed in which is a uint buffer.
+
+00:15:34.779 --> 00:15:39.600
+So I load those 4 values and then we're
+going to basically sort along the rows.
+
+00:15:39.600 --> 00:15:44.180
+So this is a very efficient way of doing the
+median filler so if you sort the rows of the 9x9
+
+00:15:44.179 --> 00:15:49.769
+or 3X3 neighborhood then you sort along the
+columns, it turns out if you just sort the diagonal,
+
+00:15:49.769 --> 00:15:51.939
+that middle value on the diagonal is the median.
+
+00:15:51.940 --> 00:15:58.550
+So this kernel loads 9 values, does this sort and then
+outputs a value and you know it's just a simple kernel
+
+00:15:58.549 --> 00:16:02.750
+that will output a median and it's
+actually fairly efficient.
+
+00:16:02.750 --> 00:16:06.730
+So here's some of the example auxiliary
+functions so you can I'll just skip through these
+
+00:16:06.730 --> 00:16:10.940
+because they're basic C code OpenCL code.
+
+00:16:12.509 --> 00:16:17.580
+So another way of doing this is to do more
+work per work item and the key to this is
+
+00:16:17.580 --> 00:16:20.920
+that we want to prefer 128 bit loads and stores.
+
+00:16:20.919 --> 00:16:24.669
+So the way we can do this is actually
+compute more than one output per work item.
+
+00:16:24.669 --> 00:16:29.120
+So the better algorithm for the 4870
+is to loaHpd a neighborhood of 8x3.
+
+00:16:29.120 --> 00:16:35.659
+So instead of loading a 3x3 we're going to load an
+8x3 and we do that via 6 and 4 loads or uint 4 loads.
+
+00:16:35.659 --> 00:16:40.289
+So we're going to load 2 values for the top row, 2
+values for the middle row, 2 values for the bottom row.
+
+00:16:40.289 --> 00:16:45.449
+We're going to sort pixels for each
+of the 4 sort for each of the 4 pixels
+
+00:16:45.450 --> 00:16:47.710
+that we're going to output and then output only 4 values.
+
+00:16:47.710 --> 00:16:52.450
+So we actually you'll notice we're actually loading
+extra data here that we don't really need but it turns
+
+00:16:52.450 --> 00:16:56.850
+out even though we're loading extra data and
+we're not changing how we're doing the algorithm
+
+00:16:56.850 --> 00:17:01.700
+at all it's actually just 20% faster just to do
+this because you're giving the memory system a hand
+
+00:17:01.700 --> 00:17:07.920
+and having it load these 128 bit values
+instead of having these 3-32 bit values.
+
+00:17:07.920 --> 00:17:16.370
+So the way this works is again we compute some
+indices, we load the row above us through 2 loads,
+
+00:17:16.369 --> 00:17:22.079
+our row through 2 loads, the row below
+us by 2 loads and then we're going
+
+00:17:22.079 --> 00:17:25.470
+to find the 4 medians and then we'll output it.
+
+00:17:25.470 --> 00:17:30.539
+And you notice one trick I'm doing here is
+I'm actually casting my memory from uint 4
+
+00:17:30.539 --> 00:17:35.009
+so that I can get a aligned uint or 128 bit load
+
+00:17:35.009 --> 00:17:38.940
+and you'll also notice I'm not actually doing any
+other optimizations as far as how much work I'm doing.
+
+00:17:38.940 --> 00:17:44.870
+I just basically load this larger window, do
+the same amount of work and output 4 values just
+
+00:17:44.869 --> 00:17:51.689
+by changing how I access the memory system you
+can actually improve performance by quite a bit.
+
+00:17:51.690 --> 00:17:54.160
+Ok, so now I'm going to move on to a quick demo.
+
+00:17:54.160 --> 00:17:59.400
+So this is a demo called Powdertoy which
+is a mixed fluid/particle simulation
+
+00:17:59.400 --> 00:18:04.600
+and by that I mean you have particles that effect
+fluid state so you can have some things such as fire
+
+00:18:04.599 --> 00:18:11.089
+and fire will heat up the air increase pressure and by
+increasing pressure you get a nice little flow of particles
+
+00:18:11.089 --> 00:18:16.000
+and so the fluid state will affect the particle motion
+and the particle state affects how the fluid flows.
+
+00:18:16.000 --> 00:18:22.450
+So before we get into that I just want to show the
+original C code is on the left so I actually reported one
+
+00:18:22.450 --> 00:18:28.710
+of our engineers wrote this as a personal project in
+just simple C and then one weekend I was at a coffee shop
+
+00:18:28.710 --> 00:18:30.539
+for two hours I converted that to OpenCL.
+
+00:18:30.539 --> 00:18:35.180
+So it literally took maybe an hour to two hours to
+convert this from the original C code to OpenCL.
+
+00:18:35.180 --> 00:18:40.519
+So on the left for part of the fluid simulation you'll see
+the original C code and on the right is the OpenCL kernel
+
+00:18:40.519 --> 00:18:44.470
+and you'll see that they're really similar except for the
+part of the top where I'm having to compute my indices
+
+00:18:44.470 --> 00:18:47.799
+but that's you know the actual core of
+the computation is actually very similar
+
+00:18:47.799 --> 00:18:50.259
+to what you would write in the original C code.
+
+00:18:50.259 --> 00:18:54.869
+So we see here is this we have this particles
+that are made of like wood and it's on fire.
+
+00:18:54.869 --> 00:18:58.349
+So they're burning, the wood's burning and
+then we'll hit some energetic particles there
+
+00:18:58.349 --> 00:19:03.909
+which we'll do some energetic things and at the bottom we
+have a fuel source; so it's just basically gas particles
+
+00:19:03.910 --> 00:19:07.870
+that are kind of floating around and been browning
+in motion and we get this nice you know fire going
+
+00:19:07.869 --> 00:19:12.459
+and then you'll notice in the background we get
+this green which denotes high pressure regions
+
+00:19:12.460 --> 00:19:17.860
+so the background is the pressure of the simulation and
+because we have increased pressure where the heat sources,
+
+00:19:17.859 --> 00:19:26.139
+at the bottom get this nice outflow of particles
+and then we can come in and I want to select some.
+
+00:19:26.140 --> 00:19:32.810
+So this is oil basically so I can select oil and ignite
+the oil and get some nice little particles flowing around.
+
+00:19:32.809 --> 00:19:39.690
+So at work we typically call this productivity tool because
+you end up wasting a lot of time just you know just sort
+
+00:19:39.690 --> 00:19:42.840
+of doodling around with it because it's just fun to watch.
+
+00:19:42.839 --> 00:19:49.439
+So and this one I note that was running on there's a
+behind here there's a Mac Pro with an HD4870 sitting inside
+
+00:19:49.440 --> 00:19:57.799
+so that was running on the GPU or the HD 4870 in OpenCL
+doing all that and then there's OpenGL for the rendering.
+
+00:19:57.799 --> 00:19:59.349
+Ok so some quick conclusions.
+
+00:19:59.349 --> 00:20:02.980
+Unfortunately I can't tell you a
+silver bullet for optimization.
+
+00:20:02.980 --> 00:20:07.620
+It's a balancing act so you have to consider
+several things when you are doing this.
+
+00:20:07.619 --> 00:20:09.099
+You have to consider your registry usage.
+
+00:20:09.099 --> 00:20:11.629
+How many wavefronts are in flight at any one time?
+
+00:20:11.630 --> 00:20:14.820
+You have to consider your ALU to memory access ratio.
+
+00:20:14.819 --> 00:20:21.200
+Sometimes it's actually better to recompute something
+because the 4870 has a lot of ALUs at your disposal
+
+00:20:21.200 --> 00:20:25.890
+so there are times when it's actually better just
+to recompute something than to fetch it from memory.
+
+00:20:25.890 --> 00:20:31.740
+Also remember that the work group size should be a multiple
+of 64 and if you wdant to have any kind of latency hiding
+
+00:20:31.740 --> 00:20:36.140
+for a single kernel you need at least
+2,500 elements in flight at any one time.
+
+00:20:36.140 --> 00:20:41.970
+Actually you'd ideally want even more than that but at a
+minimum so you do not want to write a kernel that is a 1x 1
+
+00:20:41.970 --> 00:20:46.500
+in the loop that loops over a million things
+and expect the 4870 to be able top run that fast
+
+00:20:46.500 --> 00:20:50.829
+because it wants parallel you know not long sequential runs.
+
+00:20:50.829 --> 00:20:53.899
+So with that I'd like to introduce Boaz from Intel.
+
+00:20:53.900 --> 00:20:58.110
+>> Boaz Ouriel: My name is Boaz Ouriel and
+I'm a software engineer working at Intel.
+
+00:20:58.109 --> 00:21:04.289
+I came all the way from Israel to give you this
+presentation and in the next 20 minutes I would like to talk
+
+00:21:04.289 --> 00:21:11.200
+about how you could take your own OpenCL
+code and actually optimize it for Intel CPUs.
+
+00:21:11.200 --> 00:21:16.690
+I'm going to base this discussion on a case study
+which I've performed prior to my arrival to the US
+
+00:21:16.690 --> 00:21:22.120
+where I've taken a couple of algorithms
+and ported them to OpenCL and what I would
+
+00:21:22.119 --> 00:21:29.309
+like to show you is how I optimized those
+kernels and actually show you the results
+
+00:21:29.309 --> 00:21:36.690
+and how I analyzed them using Shark which is Apple's
+profiling utility and also give you an incentive
+
+00:21:36.690 --> 00:21:43.620
+of what were the kind of things I had to do in order to get
+my codes more optimal; so that you can do the same thing
+
+00:21:43.619 --> 00:21:50.399
+when you are going to optimize your code
+when you're writing it for Intel CPUs.
+
+00:21:50.400 --> 00:21:56.490
+Based on these results I'm going to give you a check list
+of DOs and DON'Ts that you can take with you back home
+
+00:21:56.490 --> 00:22:03.500
+and when you're writing your own OpenCL code what you
+want to be optimal for Intel CPUs you can actually use it.
+
+00:22:03.500 --> 00:22:11.069
+The presentation is going to focus mostly on kernel writing
+but I am going to discuss a little about what you should do
+
+00:22:11.069 --> 00:22:17.210
+on the whole side as well and at the end I'm going
+to show you a short demo of the work I've done.
+
+00:22:17.210 --> 00:22:22.700
+So I want to start off by asking
+why write OpenCL for the CPU.
+
+00:22:22.700 --> 00:22:29.170
+So today when you want to write an efficient application
+for Intel CPUs you really have to think about 2 things.
+
+00:22:29.170 --> 00:22:33.759
+The first thing is how are you going to spread
+your work across the cores to get the benefits
+
+00:22:33.759 --> 00:22:40.349
+out of the multicore architecture and the second thing you
+want to think is how are you going to vectorize your work
+
+00:22:40.349 --> 00:22:47.149
+so that you could get the vector units which
+reside on Intel CPUs and get them working.
+
+00:22:47.150 --> 00:22:52.950
+Failing to do that will result in inefficient code
+and today when you're writing your application in C
+
+00:22:52.950 --> 00:22:57.660
+or C ++ there is quite a lot of boiler
+plate code which you need to write just
+
+00:22:57.660 --> 00:23:00.100
+to get the benefits out of the multicore architecture.
+
+00:23:00.099 --> 00:23:08.399
+Things like thread classes, wrappers, task, job queues,
+thread pools and there's and this requires a lot
+
+00:23:08.400 --> 00:23:12.240
+of time and a lot of debugging and tuning.
+
+00:23:12.240 --> 00:23:18.779
+And in addition to that you need to ramp yourself
+on the intrinsics to get the vector units to work
+
+00:23:18.779 --> 00:23:29.349
+and by the way the this means that when OpenCL
+comes in it really helps the developer a lot.
+
+00:23:29.349 --> 00:23:36.480
+It provides a set of run time APIs which will allow
+him to seamlessly spread his work across the cores
+
+00:23:36.480 --> 00:23:43.960
+and get the benefits out of the multicore architecture
+and this is very effective for both data parallelism.
+
+00:23:43.960 --> 00:23:49.400
+This has been mentioned quite a lot of time during
+the presentations but it is also very effective
+
+00:23:49.400 --> 00:23:54.210
+for task parallelism; so taking your
+serial bits importing them to OpenCL.
+
+00:23:54.210 --> 00:23:57.680
+This will work absolutely great on Intel CPUs.
+
+00:23:57.680 --> 00:24:05.840
+And in addition to that the language introduces the high
+level syntax which allow you, and I will show that later on,
+
+00:24:05.839 --> 00:24:09.359
+to get the benefits out of the vector units.
+
+00:24:09.359 --> 00:24:15.699
+So the code is now going to be very readable, very easy
+to ramp on and you're going to have a really easier time
+
+00:24:15.700 --> 00:24:23.240
+on maintaining it and this code is going to be portable
+not only across devices but it is also going to be portable
+
+00:24:23.240 --> 00:24:26.089
+across device generation and that is very important.
+
+00:24:26.089 --> 00:24:34.069
+What I'm going to show you also is that actually
+you're your code is not that difficult to optimize
+
+00:24:34.069 --> 00:24:39.210
+because you have Shark to use it
+and help you with this process.
+
+00:24:39.210 --> 00:24:45.299
+So let's start by introducing the case study where and
+as I've mentioned I've taken a couple of algorithms
+
+00:24:45.299 --> 00:24:48.950
+and those algorithms come from the video processing domain.
+
+00:24:48.950 --> 00:24:54.519
+The first algorithm is color enhancements where one
+can manipulate the saturation of individual colors
+
+00:24:54.519 --> 00:24:59.279
+of video frames and the other one is a
+contrast enhancement which will allow you
+
+00:24:59.279 --> 00:25:02.910
+to manipulate the brightness of incoming video frames.
+
+00:25:02.910 --> 00:25:08.150
+Both of these algorithms are very parallel
+meaning that each pixel can be rendered by itself.
+
+00:25:08.150 --> 00:25:14.600
+However the contrast enhancement contains a serial
+part which I have imported to OpenCL as well
+
+00:25:14.599 --> 00:25:17.869
+and I'm executing it using task parallelism.
+
+00:25:17.869 --> 00:25:25.219
+The input for those kernels are video frames and they are
+represented in YUV 4:2:0 color space which is a planar
+
+00:25:25.220 --> 00:25:29.549
+and this means that the layout of those
+frames is actually a structure of rays
+
+00:25:29.549 --> 00:25:33.480
+which is great for fetching data into the vector units.
+
+00:25:33.480 --> 00:25:37.480
+All of the video processing is
+done through fixed point arithmetic
+
+00:25:37.480 --> 00:25:44.620
+and both of those algorithms can actually run together
+since they're addressing different components of the pixel.
+
+00:25:44.619 --> 00:25:49.849
+Each pixel is represented by 3
+components which is represented in 10 bits
+
+00:25:49.849 --> 00:25:51.990
+and contained inside unsigned short.
+
+00:25:51.990 --> 00:26:01.870
+So potentially you can load 8 pixels into
+the 128 bit registers of our vector units.
+
+00:26:01.869 --> 00:26:06.039
+So I want to start by showing you how you can use Shark
+
+00:26:06.039 --> 00:26:09.440
+to optimize your OpenCL code when
+you're writing it for the CPU.
+
+00:26:09.440 --> 00:26:15.820
+My assumption is that you are already acquainted with the
+how to use Shark and after you sample it this is the window
+
+00:26:15.819 --> 00:26:21.460
+that is going to come up and it's going to give you a
+breakdown of the functions and how much time each one
+
+00:26:21.460 --> 00:26:27.230
+of them consumed from your execution, from your total
+execution time, and you're actually looking for a line
+
+00:26:27.230 --> 00:26:33.519
+which says unknown library; mystic, but
+unknown library is actually your OpenCL kernel
+
+00:26:33.519 --> 00:26:39.359
+and in this case you can actually see that it
+consumed 22% out of your total execution time.
+
+00:26:39.359 --> 00:26:47.039
+You double click on it and another window opens; don't be
+scared, this is only assembly code and you really don't need
+
+00:26:47.039 --> 00:26:49.289
+to know everything about what's going on there.
+
+00:26:49.289 --> 00:26:53.180
+The only thing you want to do is
+get yourself oriented in the codes.
+
+00:26:53.180 --> 00:26:59.940
+You are looking for markers that will help you correlate
+what you're seeing in assembly to the things that happen
+
+00:26:59.940 --> 00:27:04.529
+on your source code and in this case
+there was a 4 loop which I marked for you
+
+00:27:04.529 --> 00:27:08.819
+and this really helped me understand
+what was going on in my kernel
+
+00:27:08.819 --> 00:27:13.200
+and correlate the lines of assembly to the source code.
+
+00:27:13.200 --> 00:27:16.850
+And if you do decide that you go
+and want to go into the adventure
+
+00:27:16.849 --> 00:27:21.409
+of understanding what the certain instruction
+does there is there is always the way of doing it
+
+00:27:21.410 --> 00:27:29.140
+by highlighting the instruction and then pressing the
+Ask Some Help button which will open the documentation
+
+00:27:29.140 --> 00:27:33.660
+for this instruction taken directly
+from Intel's Manual of Instructions
+
+00:27:33.660 --> 00:27:36.769
+and you can read all about it and
+learn exactly what it does.
+
+00:27:36.769 --> 00:27:41.349
+But what you're really looking for inside
+this window is actually the hot spots.
+
+00:27:41.349 --> 00:27:42.599
+Why the hot spots?
+
+00:27:42.599 --> 00:27:48.589
+Because the hot spots are your candidates
+for the next optimization and the process
+
+00:27:48.589 --> 00:27:56.049
+of optimizing your code is actually an iterative process
+where you start looking for hotspots, you optimize them
+
+00:27:56.049 --> 00:28:03.169
+and then the next one will pop-up and this process is
+going to be very iterative and you decide when to stop it
+
+00:28:03.170 --> 00:28:08.300
+and what I did during my smaller case study is exactly that.
+
+00:28:08.299 --> 00:28:13.230
+So let's review together the optimization steps I took.
+
+00:28:13.230 --> 00:28:22.190
+So I started off by writing a very naive scholar fragmented
+version of those kernels and when I say fragmented I mean
+
+00:28:22.190 --> 00:28:27.630
+that each kernel was capable of processing a
+single pixel at the time, not more than that,
+
+00:28:27.630 --> 00:28:35.000
+and I chose on the host side the number of work items to
+be equal to the number of pixels within the video frame;
+
+00:28:35.000 --> 00:28:41.309
+and just a side comment the current CPU device
+implementation restricts you to a workgroup size of one,
+
+00:28:41.309 --> 00:28:45.819
+so actually your workgroups are
+equal to the number of work items.
+
+00:28:45.819 --> 00:28:51.500
+So this was my base version which I
+used and I called it Scalar Fragmented.
+
+00:28:51.500 --> 00:28:59.970
+The next thing I wanted to understand or evaluate was
+how much overhead was the run time actually introducing
+
+00:28:59.970 --> 00:29:02.559
+switching when switching between work items.
+
+00:29:02.559 --> 00:29:06.190
+So I wrote another version which I call the Scalar version
+
+00:29:06.190 --> 00:29:13.090
+and in this version what I did I modified the kernels only
+a bit, I added a 4 loop inside so that I can process more
+
+00:29:13.089 --> 00:29:19.500
+than a single pixel at the time and on the host side I
+changed the number of work items to be equal to the number
+
+00:29:19.500 --> 00:29:25.269
+of cores and this can be easily done
+using the runtime APIs of OpenCL
+
+00:29:25.269 --> 00:29:33.690
+so you can actually know exactly how many cores you have
+in that system at that current moment and this means
+
+00:29:33.690 --> 00:29:39.740
+that for example if you're running on a Dual Core
+machine then actually you'd have 2 work items
+
+00:29:39.740 --> 00:29:49.059
+and each work item is going to process half of the frame
+and this is this is an interesting experiment and I got 10%
+
+00:29:49.059 --> 00:29:54.099
+out of that over the in comparison
+to this Scalar Fragmented version.
+
+00:29:54.099 --> 00:30:02.259
+The next thing I wanted to see was whether the compiler of
+OpenCL was actually taking my scalar code and turning it
+
+00:30:02.259 --> 00:30:08.019
+into vector instruction, SCC instruction, so
+that my vector units are going to be active.
+
+00:30:08.019 --> 00:30:12.849
+So I looked at the codes using Shark and
+I saw that everything was color there
+
+00:30:12.849 --> 00:30:17.980
+so what I did was write another version
+which I call the vectorized version
+
+00:30:17.980 --> 00:30:26.450
+and what I did I used the OpenCL vector primitives,
+used ushort 8 and ushort Shark 16, no intrinsics here,
+
+00:30:26.450 --> 00:30:35.110
+only OpenCL syntax, and I was hoping to get
+the compiler to produce SSE instructions.
+
+00:30:35.109 --> 00:30:42.979
+So I recompiled it and I took another look at the
+code and yes jackpot it was getting vectorized.
+
+00:30:42.980 --> 00:30:49.480
+So I ran a measurement and I got an
+additional 40% versus the @scalar version.
+
+00:30:49.480 --> 00:30:50.400
+Are you pleased?
+
+00:30:50.400 --> 00:30:55.430
+I'm not. I was expecting to get a bit
+more out of the vectorized version.
+
+00:30:55.430 --> 00:31:03.720
+So I ran Shark again and I saw that there was
+a hotspot and this hotspot really correlated
+
+00:31:03.720 --> 00:31:07.069
+to a certain operation I was performing in my source code
+
+00:31:07.069 --> 00:31:13.200
+and that operation was actually
+dynamically accessing vector components.
+
+00:31:13.200 --> 00:31:21.130
+So when I say dynamically accessing think of a variable
+J for example which is currently containing an index
+
+00:31:21.130 --> 00:31:32.180
+to which you want to access with the vector and this is what
+I was doing I was accessing using J and this generated a lot
+
+00:31:32.180 --> 00:31:37.789
+of SSE code which was very inefficient and
+luckily for me in this example I was capable
+
+00:31:37.789 --> 00:31:42.079
+of replacing these accesses these
+dynamical accesses with contents.
+
+00:31:42.079 --> 00:31:43.939
+So it was kind of redundant in my case.
+
+00:31:43.940 --> 00:31:49.779
+So I wrote another version which I called Indexing
+Vectors Using Constants, sorry for the long name
+
+00:31:49.779 --> 00:31:57.250
+but I couldn't think of another one, and replace those
+variable indexing views and instead used constants
+
+00:31:57.250 --> 00:32:03.470
+and here I really got an additional
+189% over the vectorized version.
+
+00:32:03.470 --> 00:32:09.400
+Great! This this is starting to look like
+the numbers I was looking for initially.
+
+00:32:09.400 --> 00:32:13.200
+The last thing I did was actually take a small loop,
+
+00:32:13.200 --> 00:32:19.269
+a 4 loop which was which had the constant
+number of iterations and unroll it.
+
+00:32:19.269 --> 00:32:24.730
+I saw that the compiler was not doing it by itself
+I wanted to see whether unrolling it will help me.
+
+00:32:24.730 --> 00:32:29.670
+So I wrote another version on top
+of the on top of the previous one
+
+00:32:29.670 --> 00:32:36.460
+where I was unrolling the this
+loop and I got an additional 23%.
+
+00:32:36.460 --> 00:32:41.529
+So now I took another look at the at the
+results Shark produced and what I saw is
+
+00:32:41.529 --> 00:32:44.639
+that the kernel it was pretty well balanced.
+
+00:32:44.640 --> 00:32:49.720
+I mean there were no outstanding
+issues that I could reoptimize.
+
+00:32:49.720 --> 00:32:54.539
+Of course I could always take the path as was
+said previously of choosing a different algorithm
+
+00:32:54.539 --> 00:32:57.829
+but this code seemed pretty well balanced.
+
+00:32:57.829 --> 00:33:03.649
+So I decided to stop my optimizations and
+actually took a shot at writing the same,
+
+00:33:03.650 --> 00:33:08.870
+the same application using SSE and multithreading in C.
+
+00:33:08.869 --> 00:33:16.609
+So I was using pthreads and I was using intrinsics;
+I combined those 2 and I did a comparison
+
+00:33:16.609 --> 00:33:21.169
+and I call this version the Hand Tuned
+version and this was very interesting.
+
+00:33:21.170 --> 00:33:24.960
+I was actually only 5% behind the SSE version.
+
+00:33:24.960 --> 00:33:27.380
+So that's very very good.
+
+00:33:27.380 --> 00:33:35.240
+In this example I was on par with my OpenCL version
+and the optimization phases I took were fairly simple.
+
+00:33:35.240 --> 00:33:40.160
+It really took me no more than a day to get to that point.
+
+00:33:40.160 --> 00:33:50.360
+So if we look at what happened here I started off with
+a very naive version this Scalar Fragmented which was
+
+00:33:50.359 --> 00:33:56.639
+like 5 1/2 times slower than the final
+version and I was able to get to be almost
+
+00:33:56.640 --> 00:33:59.990
+on par in comparison to the Hand Tuned version.
+
+00:33:59.990 --> 00:34:07.039
+So now together let's build this check list
+of DOs and DON'Ts so that you can use it
+
+00:34:07.039 --> 00:34:09.820
+when you're getting back to your offices.
+
+00:34:09.820 --> 00:34:13.809
+The first thing you want to do is
+actually match your match your work groups
+
+00:34:13.809 --> 00:34:18.009
+to the number of cores and not do oversubscription.
+
+00:34:18.010 --> 00:34:23.180
+As we've seen here is is actually worth an
+additional 10% of your work and remember
+
+00:34:23.179 --> 00:34:27.440
+that you are restricted to a workgroup size of one.
+
+00:34:27.440 --> 00:34:30.119
+Vectorizing your code is extremely important.
+
+00:34:30.119 --> 00:34:35.339
+If you do not do that you are leaving a lot
+of performance on the table but remember
+
+00:34:35.340 --> 00:34:42.630
+that indexing vectors using variables or dynamical
+accesses is going to hurt so try avoiding those,
+
+00:34:42.630 --> 00:34:47.059
+those accesses and try using constants instead.
+
+00:34:47.059 --> 00:34:53.989
+And if this is not possible and not always is it possible
+then you're better off loading this using a V load built
+
+00:34:53.989 --> 00:35:00.909
+in command of the OpenCL language and load
+it into memory and do your work scalarly
+
+00:35:00.909 --> 00:35:03.869
+and then return it back to a vector using a V store.
+
+00:35:03.869 --> 00:35:06.869
+I've measured that as well and
+it produces very good numbers.
+
+00:35:06.869 --> 00:35:11.440
+You're better off not using not using dynamical accesses.
+
+00:35:11.440 --> 00:35:16.599
+And notice also that the accessor methods
+for vectors, things like high, low, odd,
+
+00:35:16.599 --> 00:35:22.799
+even all of those operators actually hide beneath
+them accesses to components within the vectors
+
+00:35:22.800 --> 00:35:28.190
+and these are not very efficient
+today so try using these moderately.
+
+00:35:28.190 --> 00:35:31.480
+Think twice before you do that.
+
+00:35:31.480 --> 00:35:34.920
+Loop and rolling can help especially
+if you have small loops.
+
+00:35:34.920 --> 00:35:41.530
+And in addition to that there are a couple of other
+things which I didn't show in the previous slides
+
+00:35:41.530 --> 00:35:47.290
+but are worth taking a shot at is the use
+of prefetches for example if you have a loop
+
+00:35:47.289 --> 00:35:54.539
+and you're prefetching data you can actually prefetch
+the data for the next iteration or the one after it.
+
+00:35:54.539 --> 00:36:00.889
+This might help, I've seen it I've seen
+it help from and it was worth around 10%.
+
+00:36:00.889 --> 00:36:11.609
+Duals are better than 4 loops because it will save you
+an extra branch and this is also worth around 3 to 4 %.
+
+00:36:11.610 --> 00:36:18.010
+So now before I conclude I would like to
+show you a quick demo of the work I made.
+
+00:36:18.010 --> 00:36:23.810
+[ Background sounds ]
+
+00:36:23.809 --> 00:36:29.469
+>> Boaz Ouriel: So I've written a simple player
+that illustrates the algorithms I was talking about
+
+00:36:29.469 --> 00:36:36.750
+and here are some flowers that my wife took while she
+was in Netherlands, very nice flowers and I am going
+
+00:36:36.750 --> 00:36:42.869
+to show you how I am going to play with different
+features, things like the saturation of colors.
+
+00:36:42.869 --> 00:36:49.569
+I can actually decrease the brightness or
+increase the brightness of those video frames.
+
+00:36:49.570 --> 00:36:51.080
+I can remove components.
+
+00:36:51.079 --> 00:36:57.480
+Let's say I remove the green and now the
+blue and let's leave just the yellow parts
+
+00:36:57.480 --> 00:37:00.490
+and now let's return everything back to normal.
+
+00:37:00.489 --> 00:37:10.409
+But this is not very impressive anybody can do that but
+wait on, there's a lot more going on rendering-wise.
+
+00:37:10.409 --> 00:37:14.389
+All of this was happening in the background and
+all of this is running on my dual core machine
+
+00:37:14.389 --> 00:37:19.059
+at 2.4 GHz and I can still manipulate stuff.
+
+00:37:19.059 --> 00:37:26.500
+I mean I can raise, I can reduce the saturation,
+I can remove the reds and return it and now I want
+
+00:37:26.500 --> 00:37:30.369
+to switch into what I call a benchmark mode.
+
+00:37:30.369 --> 00:37:34.949
+The rendering is going to freeze but don't
+worry this is not a bug, this is intended.
+
+00:37:34.949 --> 00:37:43.549
+And now notice here that I have a frame rate count, let's
+move and have everything focused on this and you can see
+
+00:37:43.550 --> 00:37:51.660
+that I'm currently using the very inefficient version
+I initially wrote and things are running around 140,
+
+00:37:51.659 --> 00:37:57.019
+150 frames per second and I'm going to switch
+to my optimized version, the final version
+
+00:37:57.019 --> 00:38:04.920
+and actually now I'm running at 800 frames per
+second which is around 5, 5 point something X better
+
+00:38:04.920 --> 00:38:13.010
+than the initial version and we can switch back into
+playback mode and enjoy ourselves with soothing video.
+
+00:38:13.010 --> 00:38:18.540
+[ Applause ]
+
+00:38:18.539 --> 00:38:19.340
+>> Boaz Ouriel: Thank you.
+
+00:38:19.340 --> 00:38:20.980
+Ok so I want to conclude.
+
+00:38:20.980 --> 00:38:27.500
+OpenCL is a very good framework to harness Intel CPUs.
+
+00:38:27.500 --> 00:38:35.139
+The syntax is very intuitive and easy to ramp and
+it will be very easy for you to maintain the code.
+
+00:38:35.139 --> 00:38:42.609
+And if you follow the steps which I've shown you you're
+actually going to get pretty efficient code for Intel CPUs.
+
+00:38:42.610 --> 00:38:45.180
+It will scale well across the cores.
+
+00:38:45.179 --> 00:38:54.599
+It will use your vectoring units on the CPUs
+and you can use serial parts to run on the CPU
+
+00:38:54.599 --> 00:38:59.179
+because they will work just fine using task parallelism.
+
+00:38:59.179 --> 00:39:04.349
+The code is going to be portable and it's
+going to be portable across device generations
+
+00:39:04.349 --> 00:39:10.449
+so you will write your code once and you
+will enjoy the goodness of future platforms.
+
+00:39:10.449 --> 00:39:11.279
+Thank you for your time.
+
+00:39:11.280 --> 00:39:15.580
+I would like to invite Chris from NVIDIA.
+
+00:39:15.579 --> 00:39:21.849
+>> Chris Lamb: Hi my name is Chris Lamb and I'm the manager
+for OpenCl at NVIDIA and I'd like to talk to you today
+
+00:39:21.849 --> 00:39:28.170
+about what it takes to optimize your OpenCL
+programs to run excellently on NVIDIA GPU's.
+
+00:39:28.170 --> 00:39:32.490
+Here's a quick outline of what
+I'd like to talk about with you.
+
+00:39:32.489 --> 00:39:37.289
+First I'm going to go through the hardware motivation
+for what we're going to do talk about today.
+
+00:39:37.289 --> 00:39:40.750
+Then a set of memory optimizations you might consider doing.
+
+00:39:40.750 --> 00:39:47.349
+Secondly a set of execution configuration
+optimizations, this is about how you map your work
+
+00:39:47.349 --> 00:39:54.869
+onto the OpenCL execution model and then finally in the
+optimization instructions this is what you might think
+
+00:39:54.869 --> 00:40:00.449
+about doing inside a single work item or thread you
+might think of it sort of similar on our architecture;
+
+00:40:00.449 --> 00:40:04.529
+a single work item how you might write the
+code in there and do instruction optimizations
+
+00:40:04.530 --> 00:40:06.450
+to get the best performance out of the system.
+
+00:40:06.449 --> 00:40:16.480
+Finally I'll conclude with a quick demo.
+
+00:40:16.480 --> 00:40:23.030
+Go back. Can we go back?
+
+00:40:23.030 --> 00:40:29.230
+Takes a bit.
+
+00:40:29.230 --> 00:40:32.400
+Slow. Here we go.
+
+00:40:32.400 --> 00:40:36.809
+So this is an overview of our top
+of the line 10-series Architecture.
+
+00:40:36.809 --> 00:40:43.289
+This is what you'll find today in the GTX
+285 and the FX 4800 available for the Mac.
+
+00:40:43.289 --> 00:40:52.579
+It has 240 scalar processors each of these execute threads
+or work items in OpenCL in independent thread of execution.
+
+00:40:52.579 --> 00:40:59.529
+These 240 scalar processors are configured as 30
+separate stre0aming multiprocessors in the hardware.
+
+00:40:59.530 --> 00:41:07.490
+Each of these is in the OpenCL term a compute unit in the
+execution model or the abstract hardware model for OpenCL.
+
+00:41:07.489 --> 00:41:14.859
+Each of these streaming multiprocessors contains a grouping
+of eight scalar processors, two special function units
+
+00:41:14.860 --> 00:41:21.059
+and one double precision unit on the latest
+10 series Architectures 285 and the FX 4800.
+
+00:41:21.059 --> 00:41:27.799
+As well as a local memory that enables work
+item cooperation and very fast access to data.
+
+00:41:27.800 --> 00:41:35.500
+So what does it take in general
+to optimize for this architecture?
+
+00:41:35.500 --> 00:41:38.869
+The high level is you want to maximize
+independent parallelism
+
+00:41:38.869 --> 00:41:39.869
+You want to think big.
+
+00:41:39.869 --> 00:41:47.829
+You want to maximize the arithmetic intensity, that's
+the math to bandwidth ratio of individual work items.
+
+00:41:47.829 --> 00:41:54.269
+Sometimes it's better to recompute than to cache so you
+want to think about where you're getting your data from.
+
+00:41:54.269 --> 00:42:02.050
+The GPU sends it transistors; the video GPUs spend
+their transistors on ALUs, not memory, not cache;
+
+00:42:02.050 --> 00:42:08.230
+we spend it on compute units and so unlike a CPU where
+you're thinking about a cache hierarchy that's meant
+
+00:42:08.230 --> 00:42:13.449
+to amplify bandwidth on video GPUs you want to
+think about maximizing parallel and hiding latency.
+
+00:42:13.449 --> 00:42:19.439
+You want to try and do more computation
+on the GPU to avoid costly data transfers.
+
+00:42:19.440 --> 00:42:24.300
+This is an accelerator that's typically over a
+very fast PCIE bus with the ratio of bandwidth
+
+00:42:24.300 --> 00:42:30.300
+of the local memory that's on the device, on the board there
+compared to going over the bus is going to be a big step
+
+00:42:30.300 --> 00:42:36.539
+and so you want to think about actually moving more
+computation to the device than might sort of naturally fit
+
+00:42:36.539 --> 00:42:41.509
+in a parallel way because often even
+with low parallelism tasks you'll find
+
+00:42:41.510 --> 00:42:47.290
+that though they may execute even slightly slower
+on the GPU you'll avoid a costly data transfer
+
+00:42:47.289 --> 00:42:49.539
+that might actually cost you more performance in the end.
+
+00:42:49.539 --> 00:42:55.570
+And so moving more tasks to the GPU can
+actually help your overall performance.
+
+00:42:55.570 --> 00:43:00.269
+So here's some memory optimizations you might
+think about when designing your algorithm.
+
+00:43:00.269 --> 00:43:08.179
+The probably first order affector on
+performance for the GPUs is going to be thinking
+
+00:43:08.179 --> 00:43:12.219
+about coalesced versus non-coalesced memory accesses.
+
+00:43:12.219 --> 00:43:16.730
+This can be an order of magnitude in
+performance differential and what does this mean?
+
+00:43:16.730 --> 00:43:22.670
+This means the access pattern in memory of
+sequentially numbered work items in a work group.
+
+00:43:22.670 --> 00:43:29.200
+You want to think about whether those work items are
+generally accessing the same area of memory or not.
+
+00:43:29.199 --> 00:43:34.539
+The fastest accesses are going to be when their
+accessing sequential accessing memory sequentially.
+
+00:43:34.539 --> 00:43:40.329
+But even if you're you're generally accessing
+within a similar region of space on the latest
+
+00:43:40.329 --> 00:43:45.900
+in video GPUs you'll get very close to
+peak performance out of memory sub system.
+
+00:43:45.900 --> 00:43:50.860
+You want to optimize for spatial locality
+of accesses in cache texture memory.
+
+00:43:50.860 --> 00:43:55.840
+This is when you're using OpenCL
+images to operate on image data.
+
+00:43:55.840 --> 00:44:00.880
+Images may benefit from processing in 2D blocks
+because this is how the graphics hardware,
+
+00:44:00.880 --> 00:44:06.340
+the fix function hardware that's there in GPUs to make these
+operations go really fast, this is the kind of operation
+
+00:44:06.340 --> 00:44:09.039
+that it's optimized for, this 2D block localit-y.
+
+00:44:09.039 --> 00:44:15.440
+So you may think about how you map your data onto your work
+groups and work items so that you take advantage of that.
+
+00:44:15.440 --> 00:44:20.289
+You generally want to experiment with the aspect
+ratio of the work items to see what performs best
+
+00:44:20.289 --> 00:44:23.550
+for your given algorithm and access pattern.
+
+00:44:23.550 --> 00:44:27.120
+Another important thing is to let the OpenCL
+run time allocate your memory for you.
+
+00:44:27.119 --> 00:44:32.730
+This means using the CL_MEM_ALLOC host pointer
+flag if you want host accessible memory.
+
+00:44:32.730 --> 00:44:37.130
+Implementation can optimize the alignment and
+the location of memory and generally set it
+
+00:44:37.130 --> 00:44:41.360
+up in a way that's most optimal for high
+performance processing on the device.
+
+00:44:41.360 --> 00:44:47.620
+Without actually giving up a huge amount of control you can
+still map that memory and get a direct host pointer to it
+
+00:44:47.619 --> 00:44:51.139
+that allows it to manipulate it with
+with normal C++ Objective C code.
+
+00:44:51.139 --> 00:44:56.849
+You want to take advantage of local memory.
+
+00:44:56.849 --> 00:45:01.759
+So this is another first order
+effect on performance for video GPUs.
+
+00:45:01.760 --> 00:45:05.940
+The local memory is generally 100s
+of times faster than global memory.
+
+00:45:05.940 --> 00:45:13.260
+Several 100, 750 or so gigabytPes per second on the latest
+part so it's huge in terms of its raw memory bandwidth
+
+00:45:13.260 --> 00:45:21.270
+and it's actually about as fast as registers when
+you're thinking about balancing your algorithm.
+
+00:45:21.269 --> 00:45:27.110
+Work items can also cooperate within a work group via
+local memory and this is actually a really powerful thing
+
+00:45:27.110 --> 00:45:34.349
+because with the barrier operation and the local mem
+fence you can actually share data between work items
+
+00:45:34.349 --> 00:45:37.949
+in the work group with very low
+latency and very high bandwidth.
+
+00:45:37.949 --> 00:45:42.750
+You can also use it as a technique
+to avoid noncoalesced access.
+
+00:45:42.750 --> 00:45:47.719
+So if you generally know you're going to have a more
+randomized access pattern but there's a larger scale
+
+00:45:47.719 --> 00:45:51.689
+of granularity that you can find some coherence on.
+
+00:45:51.690 --> 00:45:56.610
+You can load whole sections of data into
+the local memory staging it in there
+
+00:45:56.610 --> 00:45:59.240
+and then performing the more randomized
+access on the local memory
+
+00:45:59.239 --> 00:46:05.329
+that is very fast and can optimize for that case on ship.
+
+00:46:05.329 --> 00:46:10.989
+When you do this if you start depending on this in
+a large way you may find that you get slowdowns due
+
+00:46:10.989 --> 00:46:15.489
+to bank conflicts when high randomization of
+access patterns occur into the local memory
+
+00:46:15.489 --> 00:46:21.929
+and generally this is a far second of order of facts to
+staging and getting coalescing of loads to global memory.
+
+00:46:21.929 --> 00:46:25.429
+But if you end up finding that you
+might think that you're running
+
+00:46:25.429 --> 00:46:32.009
+into this there are optimization guides
+to help you go and tweak this code.
+
+00:46:32.010 --> 00:46:35.800
+Next I'd like to talk about some
+execution configuration optimizations.
+
+00:46:35.800 --> 00:46:43.539
+A key to getting the most out of a whole line of NVIDIA
+GPU's because the NVIDIA GPUs from the top end GX285
+
+00:46:43.539 --> 00:46:50.289
+and FX 4800 through the GPUs, the embedded GPUs
+that are in the Mac mini and the white MacBook.
+
+00:46:50.289 --> 00:46:54.279
+They're all compute capable and you really want
+to scale across the whole range of products.
+
+00:46:54.280 --> 00:47:01.730
+So you want to think about partitioning your computation
+to keep all these different types of GPUs busy.
+
+00:47:01.730 --> 00:47:03.150
+This means you want to think really big.
+
+00:47:03.150 --> 00:47:05.910
+Many work items, many workgroups.
+
+00:47:05.909 --> 00:47:11.369
+In general you want to think about mapping you
+know what would be the most inter loop of your code
+
+00:47:11.369 --> 00:47:15.909
+to a single work item to try and get as
+much independent parallelism as possible.
+
+00:47:15.909 --> 00:47:22.989
+A good rule of thumb is to think about the top end
+process you're targeting and have workgroups much,
+
+00:47:22.989 --> 00:47:26.479
+much greater in number than the number of compute units;
+
+00:47:26.480 --> 00:47:31.480
+that 's the number of streaming
+multi-processors that is on that top end device.
+
+00:47:31.480 --> 00:47:36.000
+You also want to think about the
+resource usage per thread and tune that so
+
+00:47:36.000 --> 00:47:38.829
+that you can fit a lot of them on the device.
+
+00:47:38.829 --> 00:47:46.230
+Things like local memory and the registers used for work
+item all trade off in terms of the number of work items
+
+00:47:46.230 --> 00:47:50.809
+that you can actually fit on a given
+streaming multiprocessor and you want to try
+
+00:47:50.809 --> 00:47:57.230
+and tune that so you can fit enough of them on the streaming
+multiprocessor to keep the GPU busy and hide latencies.
+
+00:47:57.230 --> 00:48:02.710
+There's a number of performance guides that are
+available through NVIDIA to help you tune these.
+
+00:48:02.710 --> 00:48:09.340
+There's some spreadsheets as well as documents to help you
+analyze your algorithm as you begin the design process.
+
+00:48:09.340 --> 00:48:20.710
+Finally some instruction optimizations: A key differentiator
+is that NVIDIA GPUs have a scalar architecture
+
+00:48:20.710 --> 00:48:25.590
+that means they they they work fine on one piece of data.
+
+00:48:25.590 --> 00:48:30.430
+A key implication from when writing
+OpenCL programs is that using vector types
+
+00:48:30.429 --> 00:48:35.190
+for OpenCL on video GPUs is mostly a convenience.
+
+00:48:35.190 --> 00:48:36.670
+It's not going to get you extra performance.
+
+00:48:36.670 --> 00:48:39.970
+In fact sometimes it may actually hurt
+performance because you'll reduce the amount
+
+00:48:39.969 --> 00:48:42.579
+of parallelism available to the architecture.
+
+00:48:42.579 --> 00:48:47.460
+The architecture will actually take your scalar work
+and auto-vectorize it and try to get the most both
+
+00:48:47.460 --> 00:48:50.710
+out of the ALUs and the memory sub system.
+
+00:48:50.710 --> 00:48:57.820
+So you generally want to prioritize more work items and more
+workgroups rather than ganging up more work per work item
+
+00:48:57.820 --> 00:49:01.690
+or auto or manually vectorizing your code.
+
+00:49:01.690 --> 00:49:06.300
+You definitely want to think about
+maximizing use of high bandwidth memory.
+
+00:49:06.300 --> 00:49:11.230
+So maximizing the use of local memory,
+minimizing accesses to global memory
+
+00:49:11.230 --> 00:49:13.820
+and maximizing the coalescing of global memory accesses.
+
+00:49:13.820 --> 00:49:19.330
+So definitely try and think of the tradeoff and the
+order in which these accesses happen in your program;
+
+00:49:19.329 --> 00:49:22.509
+where you're going to be thinking about
+hiding latency versus where you're going
+
+00:49:22.510 --> 00:49:27.120
+to be using very close, very fast resources.
+
+00:49:27.119 --> 00:49:31.480
+You also want to think about optimizing
+performance by overlapping memory accesses
+
+00:49:31.480 --> 00:49:34.500
+with hardware complication inside a single work item.
+
+00:49:34.500 --> 00:49:39.699
+You need to sort of think about phases of computation
+where you might load data and then operate on it
+
+00:49:39.699 --> 00:49:44.279
+because the the ideal cases you have many,
+many work items available for the hardware
+
+00:49:44.280 --> 00:49:49.680
+to schedule it can actually choose ones that
+have a phase of heavy computation while a number
+
+00:49:49.679 --> 00:49:54.639
+of other work items are busy going getting data
+from a high latency memory like global memory.
+
+00:49:54.639 --> 00:49:59.019
+So high arithmetic intensity programs, the
+high ratio of math to memory transactions,
+
+00:49:59.019 --> 00:50:02.800
+are generally going to be very well
+performing and you you want to focus
+
+00:50:02.800 --> 00:50:07.580
+on keeping as many current work items as possible.
+
+00:50:07.579 --> 00:50:13.460
+You also want to think about the math library
+you're using and the compiler options you're using.
+
+00:50:13.460 --> 00:50:18.630
+So using native and half math functions where
+possible can get you enormous speed ups.
+
+00:50:18.630 --> 00:50:23.519
+Many have a direct mapping onto the hardware
+ISA and these can be orders of magnitudes faster
+
+00:50:23.519 --> 00:50:28.269
+than higher precision the higher precision native variance
+or sorry the higher precision math library of variance
+
+00:50:28.269 --> 00:50:30.550
+and typically with very good accuracy as well.
+
+00:50:30.550 --> 00:50:38.580
+Note that these half functions are the type that
+operates at half precision not on the half size types.
+
+00:50:38.579 --> 00:50:43.769
+You also want to try and use the
+CL mad enable compiler option.
+
+00:50:43.769 --> 00:50:50.570
+The FMAD hardware that does fuse multiply additions
+to be mapped to a direct hardware instruction
+
+00:50:50.570 --> 00:50:57.370
+so you can actually coalesce A+B times C into a very
+fast operation that happens in a single instruction.
+
+00:50:57.369 --> 00:51:02.259
+There is some trade off with accuracy but in general
+most developers have found that the accuracy is
+
+00:51:02.260 --> 00:51:05.940
+by far good enough for their for their
+applications including some scientific ones.
+
+00:51:05.940 --> 00:51:12.700
+You also want to investigate using even more aggressive
+options if you can the CL-fast-relaxed math compiler option
+
+00:51:12.699 --> 00:51:14.969
+which enables many aggressive compiler optimizations.
+
+00:51:14.969 --> 00:51:21.339
+Now I'd like to talk a little bit
+about the demo I'm going to show you.
+
+00:51:21.340 --> 00:51:28.640
+So this is a demo of cinematic quality
+ocean surface simulation using the GPU.
+
+00:51:28.639 --> 00:51:35.549
+The algorithm is one based on wave composition where
+the ocean surface is composed of enormous simple waves.
+
+00:51:35.550 --> 00:51:42.250
+Each sine wave is a hybrid sine wave that is sort
+of a 2 dimensional sine wave called a Gerstner wave
+
+00:51:42.250 --> 00:51:45.340
+where a match point on the surface is
+actually rotating in a circular motion.
+
+00:51:45.340 --> 00:51:52.610
+This is actually exactly what happens to a sort of
+a water particle in a sea surface wave in real life.
+
+00:51:52.610 --> 00:51:58.390
+It's based on Jerry Tenssendorf's paper
+"Simulating Ocean Water" which is statistics based,
+
+00:51:58.389 --> 00:52:01.829
+that means it's not a physical
+simulation; it's meant to look very real
+
+00:52:01.829 --> 00:52:06.789
+by approximating what what would actually be
+happening with the dynamics of the system.
+
+00:52:06.789 --> 00:52:10.719
+It generates a wave distribution in the
+frequency domain and then performs an inverse FFT
+
+00:52:10.719 --> 00:52:14.069
+to get the physical geometry for the waves.
+
+00:52:14.070 --> 00:52:19.720
+This technique is already been widely used in movie
+CGI since the 1990s and games since the 2000s.
+
+00:52:19.719 --> 00:52:27.980
+In general movie CGI size of the height map is very, very
+large, 2 K x 2 K is very common for a number of these movies
+
+00:52:27.980 --> 00:52:31.550
+that are quite popular that feature water centrally.
+
+00:52:31.550 --> 00:52:35.039
+In games the size of the height mount
+has generally had to been quite small.
+
+00:52:35.039 --> 00:52:43.969
+Crysis had 64 x 64, Resistance too had 32 x 32
+and all of these the simulation has been done
+
+00:52:43.969 --> 00:52:46.239
+on the CPU or Cell SPE in a game console.
+
+00:52:46.239 --> 00:52:52.959
+So what's been limiting the cinematic quality
+has actually been a performance issue.
+
+00:52:52.960 --> 00:53:00.090
+The simulation required to generate the displacement map
+is needed to be done in real time and computing the FFT
+
+00:53:00.090 --> 00:53:04.340
+on CPU becomes a bottleneck when
+displacement map gets larger.
+
+00:53:04.340 --> 00:53:07.700
+Larger texture also takes longer to
+transfer from the CPU over the bus
+
+00:53:07.699 --> 00:53:11.329
+to the GPU leading to another performance bottleneck there.
+
+00:53:11.329 --> 00:53:16.690
+However, the large displacement map is
+a must have for detailed wave crafts
+
+00:53:16.690 --> 00:53:19.780
+that I'll show you on a close up later in the demo.
+
+00:53:19.780 --> 00:53:24.420
+Fortunately GPU computing NVIDIA GPUs are
+really really great at doing these FFTs.
+
+00:53:24.420 --> 00:53:31.320
+Multiple 512 x 512 or even 1 k x 1 k transforms
+can be done in real time on modern GPUs.
+
+00:53:31.320 --> 00:53:34.519
+So now I'd like to go ahead and show you the demo.
+
+00:53:34.519 --> 00:53:44.559
+So here we have in real time the water being being
+rendered and simulated on the same GTX 285 GPU.
+
+00:53:44.559 --> 00:53:46.179
+All the data is staying on the GPU.
+
+00:53:46.179 --> 00:53:50.710
+The simulation is being directly handed over the
+ravder [assumed spelling] ring by a GL interop
+
+00:53:50.710 --> 00:53:55.500
+which is a really great way if you're
+doing games or you want to present stuff.
+
+00:53:55.500 --> 00:54:00.619
+If you want to use the GP to its fullest because you
+don't have to go back across the bus to the host memory.
+
+00:54:00.619 --> 00:54:06.710
+So here we can see that we've got nice
+specular, we've got nice highlights of the waves.
+
+00:54:06.710 --> 00:54:10.829
+We can go down really close here and here's what
+I was talking about those detailed wave crests.
+
+00:54:10.829 --> 00:54:13.389
+You can see how there's really
+fine detail on the waves here.
+
+00:54:13.389 --> 00:54:19.009
+You wouldn't get that with a lower quality height
+map because they'd be smoothed out by the algorithm.
+
+00:54:19.010 --> 00:54:31.540
+[ Background sounds ]
+
+00:54:31.539 --> 00:54:32.880
+>> Chris Lamb: Very pretty.
+
+00:54:32.880 --> 00:54:35.690
+[Applause] Thank you.
+
+00:54:39.480 --> 00:54:43.010
+That concludes my talk
+
+00:54:43.010 --> 00:54:49.980
+[ Applause ]
+
+00:54:49.980 --> 00:54:51.539
+>> Thank you Chris.
+
+00:54:51.539 --> 00:54:57.869
+OK folks let me just start by thanking
+our our guest speakers today.
+
+00:54:57.869 --> 00:55:02.420
+So Chris, Boaz and Justin and also earlier today Andrew.
+
+00:55:02.420 --> 00:55:08.070
+Thank you all for for joining us today and your work
+on these sessions we really appreciate it so thank you.
+
+00:55:08.070 --> 00:55:11.220
+[Applause]

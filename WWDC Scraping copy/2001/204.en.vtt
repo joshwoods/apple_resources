@@ -1,0 +1,2116 @@
+WEBVTT
+
+00:00:01.760 --> 00:00:05.930
+Over the last couple of years with
+working with the developers and
+
+00:00:05.930 --> 00:00:11.290
+working with Apple's engineering team,
+we've learned a lot about what
+
+00:00:11.350 --> 00:00:16.400
+Mass Storage device drivers need to do
+and what we were doing wrong in Mac OS 9.
+
+00:00:16.480 --> 00:00:20.610
+So hopefully you'll find with what
+we're doing in 10 to be a much more
+
+00:00:20.610 --> 00:00:24.700
+powerful solution for you to create
+device drivers without necessarily
+
+00:00:24.700 --> 00:00:26.500
+needing to write the entire driver.
+
+00:00:26.500 --> 00:00:29.170
+You can leverage off of major
+portions of ours and to sort of
+
+00:00:29.170 --> 00:00:34.910
+describe that overall architecture,
+I'd like to bring up Craig Marciniak.
+
+00:00:34.910 --> 00:00:34.910
+Craig?
+
+00:00:37.000 --> 00:00:39.610
+Good evening, I'm Craig Marciniak,
+Senior Engineer at Apple.
+
+00:00:39.610 --> 00:00:42.720
+I've been working on Mass Storage in
+X for about a year now.
+
+00:00:42.900 --> 00:00:46.040
+And tonight we're going to
+delve in and get into all the
+
+00:00:46.040 --> 00:00:47.900
+details of that architecture.
+
+00:00:47.900 --> 00:00:52.000
+I've partitioned this talk
+into really two pieces:
+
+00:00:52.430 --> 00:00:56.900
+third party hardware vendors that want
+to bring their hardware to the platform,
+
+00:00:56.900 --> 00:01:01.550
+and utility writers and people
+that need to talk to hardware
+
+00:01:01.650 --> 00:01:03.870
+from application space.
+
+00:01:03.900 --> 00:01:10.170
+The second group that want to talk to
+applications from user space will find
+
+00:01:10.300 --> 00:01:15.040
+the first half semi-interesting because
+it exposes how things work in the kernel,
+
+00:01:15.040 --> 00:01:19.870
+which will help you understand and debug
+talking to those drivers from user space.
+
+00:01:20.010 --> 00:01:24.900
+So we're going to really expose and get
+into the details of the architecture.
+
+00:01:24.900 --> 00:01:29.710
+I'll do this mostly by showing how
+the driver stack is instantiated,
+
+00:01:29.810 --> 00:01:32.840
+how to subclass support
+for given devices,
+
+00:01:32.950 --> 00:01:33.830
+how to talk to drivers.
+
+00:01:33.910 --> 00:01:35.900
+How to talk to those
+devices from user space.
+
+00:01:35.970 --> 00:01:38.900
+And most importantly,
+how to get more information.
+
+00:01:39.100 --> 00:01:41.890
+And if there's time at the end,
+we'll do some Q&A.
+
+00:01:43.060 --> 00:01:45.790
+How many people here have a
+comfortable understanding of
+
+00:01:45.800 --> 00:01:49.230
+the basic concepts in I/O Kit?
+
+00:01:50.600 --> 00:01:52.840
+That's about what I expected.
+
+00:01:52.870 --> 00:01:55.560
+So drivers are kernel extensions.
+
+00:01:55.560 --> 00:01:57.250
+We refer to them as KEX.
+
+00:01:57.370 --> 00:02:07.750
+They're written in a restricted subset of
+C++ that is most notably missing RTTI and
+
+00:02:10.520 --> 00:02:16.260
+Templates, Multiple Inheritance,
+and Exceptions.
+
+00:02:16.380 --> 00:02:17.400
+Thank you.
+
+00:02:17.500 --> 00:02:21.770
+I/O Kit makes a big distinction
+between family versus drivers.
+
+00:02:21.770 --> 00:02:26.400
+Families are an encapsulation of
+all the commonality and drivers
+
+00:02:26.400 --> 00:02:32.390
+in the vernacular of I/O Kit are
+really instances of device specific
+
+00:02:32.390 --> 00:02:34.400
+things that you would subclass over.
+
+00:02:34.400 --> 00:02:36.260
+I'm going to keep refining that.
+
+00:02:36.260 --> 00:02:40.380
+It may seem a little repetitive,
+but it's really an important concept.
+
+00:02:40.490 --> 00:02:46.490
+I've been doing drivers in 9Space for a
+decade and when I hear the word driver,
+
+00:02:46.490 --> 00:02:49.990
+I tend to think of this monolithic
+giant driver that encompasses a lot
+
+00:02:49.990 --> 00:02:52.400
+more than what drivers mean in I/O Kit.
+
+00:02:52.400 --> 00:02:57.560
+We refer to them as leaf
+classes of the family.
+
+00:02:58.040 --> 00:03:00.360
+Another concept that's really
+important is the registry.
+
+00:03:00.360 --> 00:03:02.080
+A registry is a dynamic database.
+
+00:03:02.150 --> 00:03:04.790
+It's a tree that contains
+a whole bunch of properties
+
+00:03:04.790 --> 00:03:06.800
+that get filled up over time.
+
+00:03:06.850 --> 00:03:11.520
+And these properties are used for
+matching so that devices and objects
+
+00:03:11.520 --> 00:03:13.900
+can be instantiated and built up.
+
+00:03:14.030 --> 00:03:17.410
+There's some other sessions this
+week that go into detail and
+
+00:03:17.410 --> 00:03:21.150
+depth and they'll be enumerated
+at the end of this presentation.
+
+00:03:21.480 --> 00:03:25.900
+There's some appropriate URLs sprinkled
+through this and summarized at the end.
+
+00:03:25.940 --> 00:03:28.070
+uh... there's a
+
+00:03:28.840 --> 00:03:33.850
+New book that just got released
+called Inside Mac OS X:
+
+00:03:33.860 --> 00:03:38.200
+The Kernel Environment that has a very
+good overview of I/O Kit concepts.
+
+00:03:38.240 --> 00:03:39.780
+And finally, there's always Darwin.
+
+00:03:39.830 --> 00:03:42.720
+I've spent a lot of
+time reading the header,
+
+00:03:42.720 --> 00:03:48.430
+especially of ioservice.h and looking
+at the implementations in ioservice.cpp,
+
+00:03:48.570 --> 00:03:52.820
+which really can help a lot.
+
+00:03:53.530 --> 00:03:57.730
+I'm going to put the whole
+thing into context here.
+
+00:03:57.790 --> 00:04:03.860
+We have devices that we find
+and the first layer is the
+
+00:04:03.900 --> 00:04:05.260
+physical interconnect layer.
+
+00:04:05.360 --> 00:04:08.300
+This layer encompasses a
+whole bunch of a collection of
+
+00:04:08.300 --> 00:04:11.080
+objects of bus specific things.
+
+00:04:11.160 --> 00:04:14.840
+These are the SCSI drivers,
+the SCSI bus drivers,
+
+00:04:14.840 --> 00:04:19.890
+the controller drivers, excuse me,
+the firewire controller drivers,
+
+00:04:19.900 --> 00:04:23.410
+the USB controller drivers,
+and all the objects that are
+
+00:04:23.560 --> 00:04:25.460
+needed to support that layer.
+
+00:04:25.600 --> 00:04:29.590
+The transport driver layer is
+where requests get packaged up
+
+00:04:29.730 --> 00:04:33.850
+and turned into commands to go
+down to the appropriate bus.
+
+00:04:33.850 --> 00:04:36.720
+We're going to go into more
+detail in that in a minute.
+
+00:04:36.860 --> 00:04:40.660
+The device services
+layer is a generic layer.
+
+00:04:40.750 --> 00:04:44.700
+It contains partitioners
+and a generic driver.
+
+00:04:44.700 --> 00:04:50.900
+And then finally we have,
+the yellow line there represents
+
+00:04:51.100 --> 00:04:54.370
+the user kernel boundary and
+above that we have clients,
+
+00:04:54.370 --> 00:04:56.860
+ultimately your applications.
+
+00:04:56.940 --> 00:05:00.690
+So we're going to zoom in
+and get into the details of
+
+00:05:00.900 --> 00:05:03.060
+the transport driver layer.
+
+00:05:04.530 --> 00:05:07.700
+Historically,
+we were looking at 9 and we had
+
+00:05:07.700 --> 00:05:10.350
+a sense of deja vu because we
+kept pretty much writing the
+
+00:05:10.400 --> 00:05:12.100
+same driver over and over again.
+
+00:05:12.170 --> 00:05:16.730
+And we had no reusability and
+invariably there were subtleties in
+
+00:05:16.790 --> 00:05:21.940
+implementation from one interpretation
+of how to do this and that and another.
+
+00:05:22.010 --> 00:05:26.240
+And over time, all kinds of metadata
+bled into those drivers.
+
+00:05:26.550 --> 00:05:30.700
+Partition information, special commands,
+special control and status calls.
+
+00:05:30.780 --> 00:05:35.020
+And we're going to be able to
+finally get away from that.
+
+00:05:35.310 --> 00:05:42.640
+What we did in 10 is we had a chance
+to really reuse that commonality.
+
+00:05:42.640 --> 00:05:45.240
+We wanted to reuse that commonality.
+
+00:05:45.240 --> 00:05:51.000
+I/O Kit gave us an object
+framework to actually achieve that.
+
+00:05:51.210 --> 00:05:54.740
+So we were discussing how
+are we going to do this.
+
+00:05:54.740 --> 00:05:59.190
+And it turns out that there was a
+formal document that served as a
+
+00:05:59.190 --> 00:06:01.700
+really good guideline to do this.
+
+00:06:01.700 --> 00:06:03.090
+It's called SAM.
+
+00:06:03.230 --> 00:06:05.900
+SAM is a SCSI architectural model.
+
+00:06:05.930 --> 00:06:07.590
+And I want to stop and
+make a distinction here.
+
+00:06:07.600 --> 00:06:13.740
+When I say SAM and I mean SCSI in the
+sense of SCSI architectural model,
+
+00:06:13.760 --> 00:06:15.300
+I'm not referring to SCSI hardware.
+
+00:06:15.300 --> 00:06:16.870
+I'm not talking about SCSI hard drives.
+
+00:06:16.900 --> 00:06:19.110
+I'm not talking about SCSI scanners.
+
+00:06:19.240 --> 00:06:21.410
+I'm not talking about anything.
+
+00:06:21.410 --> 00:06:24.300
+When I mean that, I'll say SCSI parallel.
+
+00:06:24.410 --> 00:06:28.140
+So SAM was this wonderful document
+that really was a blueprint for
+
+00:06:28.260 --> 00:06:32.700
+us to do exactly what we wanted
+to achieve by implementing and
+
+00:06:32.700 --> 00:06:36.700
+specifying a partitioning of the
+command sets in the internet protocols.
+
+00:06:36.760 --> 00:06:40.270
+Not internet, interconnect protocols.
+
+00:06:40.370 --> 00:06:43.480
+You can go to the URL in the
+bottom to get more information
+
+00:06:43.590 --> 00:06:45.400
+in the formal SAM document.
+
+00:06:45.440 --> 00:06:49.200
+When we started on SAM a year ago,
+When we started on SAM a year ago,
+
+00:06:49.200 --> 00:06:53.200
+I believe we were using Draft 5.
+
+00:06:53.310 --> 00:06:55.800
+And it has been,
+it is not ratified at this point,
+
+00:06:55.800 --> 00:06:58.580
+but it is definitely farther
+than when we started.
+
+00:06:58.740 --> 00:07:03.350
+Another thing is half the challenge
+of understanding this is getting
+
+00:07:03.350 --> 00:07:05.000
+the subtleties of all the language.
+
+00:07:05.140 --> 00:07:10.080
+We used a lot of the wording and
+terminology out of the SAM document
+
+00:07:10.180 --> 00:07:11.690
+in our class and implementation.
+
+00:07:11.700 --> 00:07:14.800
+So that's where all this comes from.
+
+00:07:14.910 --> 00:07:16.530
+So,
+
+00:07:16.960 --> 00:07:21.720
+The Transport Driver layer is
+split into two natural layers.
+
+00:07:21.790 --> 00:07:24.920
+The SCSI Protocol layer,
+which is bus specific,
+
+00:07:24.920 --> 00:07:29.640
+and the SCSI Application layer,
+which is device specific.
+
+00:07:29.750 --> 00:07:33.600
+What I mean by that is,
+
+00:07:33.870 --> 00:07:39.540
+We ship bus specific drivers for USB,
+TAPI, Firewire,
+
+00:07:39.920 --> 00:07:42.800
+bus specific stuff at the protocol layer.
+
+00:07:42.800 --> 00:07:48.980
+And we expand this other layer
+into the SCSI application layer.
+
+00:07:49.120 --> 00:07:50.800
+We have this peripheral device type nub.
+
+00:07:50.800 --> 00:07:56.410
+The peripheral device type nub's job in
+life is to really send an inquiry command
+
+00:07:56.500 --> 00:07:59.800
+down to the device and discover what
+kind of peripheral device type it is.
+
+00:07:59.800 --> 00:08:05.700
+Is it going to be one of
+the peripheral device types?
+
+00:08:05.800 --> 00:08:08.790
+In Kernel we have above
+that a logical unit driver.
+
+00:08:08.800 --> 00:08:12.950
+We have a peripheral device
+type 00 which is block storage,
+
+00:08:12.950 --> 00:08:15.870
+peripheral device type
+5 which is multimedia,
+
+00:08:16.170 --> 00:08:21.800
+7 which is magneto-optical,
+and E which is reduced block commands.
+
+00:08:21.800 --> 00:08:26.250
+So what happens is the peripheral
+device type nub populates the registry
+
+00:08:26.420 --> 00:08:29.800
+with the peripheral device type type
+so that it's not just a block type.
+
+00:08:29.880 --> 00:08:34.270
+a logical unit driver can be
+instantiated appropriately.
+
+00:08:35.240 --> 00:08:41.140
+So there's one other thing above that,
+and it's the service device layer.
+
+00:08:41.260 --> 00:08:44.720
+And this is just some linkage
+objects that link the logical
+
+00:08:44.720 --> 00:08:49.100
+unit driver to the appropriate
+generic system driver above it.
+
+00:08:49.250 --> 00:08:52.400
+In a typical instance,
+what will happen is,
+
+00:08:52.400 --> 00:08:56.290
+let's say we have plugged
+a device into the USB bus,
+
+00:08:56.370 --> 00:09:01.510
+that we would instantiate an
+I/O USB Mass Storage Class Protocol
+
+00:09:01.520 --> 00:09:04.170
+driver,
+which would in turn instantiate
+
+00:09:04.230 --> 00:09:07.740
+the peripheral device nub,
+which would in turn query and
+
+00:09:07.830 --> 00:09:11.100
+populate the registry with
+the appropriate device type,
+
+00:09:11.100 --> 00:09:15.100
+and if it was a block storage device,
+in the case of a hard drive,
+
+00:09:15.100 --> 00:09:21.100
+a peripheral device type 00 logical
+unit driver would be instantiated.
+
+00:09:21.180 --> 00:09:24.540
+So up until this point,
+I've only been talking about the
+
+00:09:24.680 --> 00:09:31.480
+functional stacking and layering of
+how all these pieces interrelate.
+
+00:09:31.870 --> 00:09:33.370
+You have to work with
+me here a little bit.
+
+00:09:33.470 --> 00:09:36.800
+This slide may be kind
+of confusing at first.
+
+00:09:36.850 --> 00:09:38.840
+A little bit of convention context here.
+
+00:09:38.940 --> 00:09:43.400
+These puzzle pieces aren't components,
+they're not extensions, they're objects.
+
+00:09:43.400 --> 00:09:45.600
+This is just an object hierarchy.
+
+00:09:45.690 --> 00:09:48.370
+You usually see them as ovals.
+
+00:09:48.630 --> 00:09:51.980
+I don't know if you can tell,
+but the darker purple means
+
+00:09:51.980 --> 00:09:55.940
+that it's a concrete class,
+excuse me, an abstract class,
+
+00:09:56.010 --> 00:10:00.210
+and the lighter purple
+are concrete classes.
+
+00:10:01.230 --> 00:10:05.410
+Now, at the SCSI protocol layer,
+the base class is
+
+00:10:05.490 --> 00:10:07.430
+I/O SCSI protocol services.
+
+00:10:07.790 --> 00:10:10.650
+We subclass a family for
+a given bus off that.
+
+00:10:10.780 --> 00:10:15.670
+So if we wanted to support SCSI,
+we would do an I/O SCSI parallel
+
+00:10:16.210 --> 00:10:21.570
+transport subclass of the
+I/O SCSI protocol services.
+
+00:10:23.260 --> 00:10:27.690
+The next layer in the stack is the
+SCSI application layer object hierarchy.
+
+00:10:27.980 --> 00:10:33.260
+Here are basically the pieces that
+represent the logical unit drivers.
+
+00:10:33.390 --> 00:10:38.230
+So in the case of a block storage driver,
+the peripheral device type 00 is
+
+00:10:38.360 --> 00:10:43.400
+subclassed off of the SCSI block commands
+device and the base class in this layer
+
+00:10:43.430 --> 00:10:46.620
+is the I/O SCSI primary commands device.
+
+00:10:49.900 --> 00:10:53.760
+So I'm going to bring this all
+kind of together right now.
+
+00:10:53.770 --> 00:10:57.540
+Here's an example of a FireWire drive.
+
+00:10:57.600 --> 00:11:01.170
+At the physical interconnect layer,
+the appropriate objects are
+
+00:11:01.210 --> 00:11:02.940
+instantiated and built up.
+
+00:11:03.020 --> 00:11:07.430
+What I'm showing here is this
+driver stack to the left and the
+
+00:11:07.590 --> 00:11:10.340
+object hierarchy works this way.
+
+00:11:10.950 --> 00:11:16.240
+So what will happen is once the
+appropriate objects have been built up,
+
+00:11:16.240 --> 00:11:20.700
+a peripheral SCSI protocol
+driver will be instantiated.
+
+00:11:20.750 --> 00:11:26.220
+The base family will be
+I/O Firewire/CeoBus protocol transport,
+
+00:11:26.220 --> 00:11:28.760
+which in turn instantiates
+that peripheral device nub,
+
+00:11:29.050 --> 00:11:31.470
+which in turn would
+
+00:11:31.700 --> 00:11:48.900
+[Transcript missing]
+
+00:11:49.880 --> 00:11:52.790
+Now this is the magic slide
+here to put this all together.
+
+00:11:53.060 --> 00:11:56.470
+I keep referencing the subclassing and
+exactly really what does that mean,
+
+00:11:56.540 --> 00:11:59.100
+how does it fit into context.
+
+00:11:59.180 --> 00:12:05.280
+When we subclass something,
+in this case we're going to subclass the
+
+00:12:05.850 --> 00:12:09.840
+Peripheral Device Type 00
+driver with my device subclass.
+
+00:12:09.910 --> 00:12:13.920
+All we're doing is inserting a
+new leaf class and shifting the
+
+00:12:13.920 --> 00:12:16.100
+object hierarchy to the right.
+
+00:12:17.350 --> 00:12:23.550
+So if I want to subclass and add some
+support to the SCSI protocol layer,
+
+00:12:23.560 --> 00:12:29.690
+I would simply subclass the IO Firewire
+Serial Bus Protocol Transport that would,
+
+00:12:29.690 --> 00:12:32.220
+when we instantiated the stack,
+that is the name that would
+
+00:12:32.220 --> 00:12:35.490
+actually show up in the registry,
+and we would shift that
+
+00:12:35.960 --> 00:12:38.310
+hierarchy one to the right.
+
+00:12:40.480 --> 00:12:42.390
+So, matching is really important.
+
+00:12:42.400 --> 00:12:46.740
+The matching heuristics are a little
+bit different in implementation,
+
+00:12:46.790 --> 00:12:48.380
+given on what layer you're on.
+
+00:12:48.420 --> 00:12:50.640
+The highest probe score wins.
+
+00:12:50.670 --> 00:12:53.260
+At the...
+
+00:12:53.500 --> 00:12:56.690
+In the previous slide,
+above the peripheral device
+
+00:12:57.000 --> 00:13:00.530
+type nub and where the logical
+unit driver gets instantiated,
+
+00:13:00.540 --> 00:13:02.680
+we have this kind of matching logic.
+
+00:13:02.800 --> 00:13:06.060
+The peripheral device type
+chooses what logical unit driver,
+
+00:13:06.060 --> 00:13:08.200
+if any, is going to get instantiated.
+
+00:13:08.370 --> 00:13:11.470
+Then if we have a vendor match,
+the probe score goes up.
+
+00:13:11.780 --> 00:13:14.640
+If we have a product ID,
+the score goes even higher.
+
+00:13:14.970 --> 00:13:17.000
+And then finally,
+if we have a revision ID,
+
+00:13:17.000 --> 00:13:20.680
+we've actually honed in to a
+specific instance of a device that
+
+00:13:20.740 --> 00:13:23.400
+we want to add certain support for.
+
+00:13:24.180 --> 00:13:28.600
+Sometimes you want to refer
+to the previous matching,
+
+00:13:28.600 --> 00:13:31.250
+that's all passive matching,
+just using the properties
+
+00:13:31.250 --> 00:13:33.000
+that are in the registry tree.
+
+00:13:33.130 --> 00:13:38.530
+Sometimes you need to have
+active matching in which
+
+00:13:38.530 --> 00:13:40.420
+we override a probe method.
+
+00:13:40.610 --> 00:13:43.850
+Overriding probe,
+sometimes you might have a property that
+
+00:13:43.860 --> 00:13:47.060
+has some bits scrolled the way up and you
+have to mask them out and pull them out
+
+00:13:47.120 --> 00:13:49.100
+to determine what kind of device you are.
+
+00:13:49.110 --> 00:13:51.000
+You'll know your requirements
+more than we will.
+
+00:13:51.000 --> 00:13:56.900
+Be careful if you use probe not
+to reference or count on the state
+
+00:13:56.980 --> 00:14:02.000
+of member variables because other
+potential candidate drivers could
+
+00:14:02.000 --> 00:14:05.440
+be loaded and could have changed
+the state of the device behind you.
+
+00:14:05.440 --> 00:14:08.990
+To see an example of how all this works,
+you can look in Apple FireWire
+
+00:14:09.100 --> 00:14:10.480
+Mass Storage Drivers.
+
+00:14:10.480 --> 00:14:14.500
+There's a good example of overriding
+probe that's quite extensive.
+
+00:14:14.500 --> 00:14:16.600
+Now for me, the best thing,
+I come to WWDC, I see the slides,
+
+00:14:16.600 --> 00:14:17.880
+and it all starts with the data.
+
+00:14:18.700 --> 00:14:21.000
+I come to WWDC, I see the slides,
+and it all starts with the data.
+
+00:14:21.000 --> 00:14:24.500
+It all seems pretty and makes some sense,
+but it's kind of abstract.
+
+00:14:24.560 --> 00:14:27.790
+And I learned the most by standing
+over a competent engineer's
+
+00:14:27.790 --> 00:14:29.930
+shoulders and watching him do it.
+
+00:14:30.010 --> 00:14:31.500
+And that's what we're
+going to do right now.
+
+00:14:31.500 --> 00:14:34.550
+We're actually going to go in,
+I'm going to bring up Chris Sarcone,
+
+00:14:34.550 --> 00:14:37.880
+and we're going to subclass
+a logical unit driver.
+
+00:14:43.140 --> 00:14:44.720
+Thanks, Craig.
+
+00:14:44.860 --> 00:14:47.000
+If we could bring up demo one, please.
+
+00:14:47.000 --> 00:14:50.750
+All right.
+
+00:14:51.160 --> 00:14:54.500
+So I'm going to go ahead
+and fire up Project Builder.
+
+00:14:54.640 --> 00:14:57.460
+We're going to go ahead
+and create a subclass of a
+
+00:14:57.460 --> 00:14:59.000
+peripheral device type driver.
+
+00:14:59.060 --> 00:15:01.500
+So we're going to create a new project.
+
+00:15:01.620 --> 00:15:05.590
+We're going to scroll down
+here and choose I/O Kit Driver.
+
+00:15:05.990 --> 00:15:11.530
+And we're going to call
+this MyLogicalUnitDriver.
+
+00:15:14.710 --> 00:15:19.780
+Okay, Project Builder goes ahead
+and creates us a new project.
+
+00:15:20.420 --> 00:15:26.430
+And inside here it'll place a
+dummy header file and a C++ file.
+
+00:15:26.660 --> 00:15:30.850
+What we want to do is we want to go
+over to the Targets pane right now and
+
+00:15:30.880 --> 00:15:33.270
+take a look at the bundle settings.
+
+00:15:33.300 --> 00:15:37.640
+Craig just went into some details
+about how we do matching and
+
+00:15:37.700 --> 00:15:40.300
+how a driver gets instantiated.
+
+00:15:40.460 --> 00:15:45.300
+We do this by creating an
+I/O Kit personality inside of our text.
+
+00:15:45.430 --> 00:15:50.950
+So what I'm going to go ahead and do here
+is create a new child and we're going
+
+00:15:50.950 --> 00:15:54.210
+to call this child MyLogicalUnitDriver.
+
+00:15:54.590 --> 00:16:00.430
+if I could type and the
+I/O Kit personality is a dictionary.
+
+00:16:00.990 --> 00:16:03.800
+Inside of it we will have more
+properties which we will add.
+
+00:16:03.800 --> 00:16:07.260
+So I'm going to go ahead and change
+that to a dictionary and I'm going to
+
+00:16:07.270 --> 00:16:09.590
+create a whole bunch of properties here.
+
+00:16:09.730 --> 00:16:13.660
+From experience I know I need
+to create six properties here.
+
+00:16:13.660 --> 00:16:19.000
+Depending on what type of driver
+you write you will need to add more
+
+00:16:19.000 --> 00:16:21.310
+properties or have less properties.
+
+00:16:21.310 --> 00:16:24.600
+It all depends on what kind
+of driver you're writing.
+
+00:16:24.710 --> 00:16:29.170
+The first item that should
+be inside of your personality
+
+00:16:29.170 --> 00:16:31.770
+is the CFBundle identifier.
+
+00:16:31.780 --> 00:16:35.870
+Since we are going to load a code
+fragment from this bundle that
+
+00:16:36.220 --> 00:16:41.100
+we've created we're going to paste
+the same CFBundle identifier in.
+
+00:16:41.300 --> 00:16:45.940
+You can of course have a personality
+which loads code from another module.
+
+00:16:45.940 --> 00:16:48.980
+If you do do that then you need to make
+sure that you have the correct code.
+
+00:16:48.980 --> 00:16:55.980
+The next property that we
+need to add is an IOClass.
+
+00:16:55.980 --> 00:17:03.160
+We need to instantiate a particular
+class when we load our kernel extension.
+
+00:17:03.160 --> 00:17:05.800
+So we're going to put in my
+logical unit driver because
+
+00:17:05.810 --> 00:17:07.650
+that will be our class name.
+
+00:17:08.560 --> 00:17:12.900
+The next thing that I/O Kit needs
+for matching is a provider class.
+
+00:17:13.210 --> 00:17:19.900
+This tells I/O Kit to consider your
+driver for every instance of this class.
+
+00:17:20.170 --> 00:17:26.700
+The class that we want to attach to is
+the I/O SCSI Peripheral Device node.
+
+00:17:29.790 --> 00:17:35.430
+Now, this is where IO Kit's generic
+matching services stop,
+
+00:17:35.430 --> 00:17:38.180
+and this is where the
+I/O SCSI architecture model
+
+00:17:38.180 --> 00:17:41.200
+family-specific matching begins.
+
+00:17:41.330 --> 00:17:47.040
+Craig mentioned that we score
+on peripheral device type first,
+
+00:17:47.170 --> 00:17:50.690
+so we need to specify a
+peripheral device type.
+
+00:17:52.900 --> 00:17:55.580
+Which is of course a number.
+
+00:17:55.740 --> 00:18:01.840
+Now if you want to subclass
+a block command device,
+
+00:18:01.870 --> 00:18:03.840
+you would want to have a zero here.
+
+00:18:04.190 --> 00:18:07.850
+I don't have one of those
+devices here on this machine,
+
+00:18:07.940 --> 00:18:11.670
+but I do have a CD-ROM drive and that
+shows up as a peripheral device type 5.
+
+00:18:11.830 --> 00:18:17.280
+So we're going to go ahead and subclass
+the CD-ROM driver for this machine.
+
+00:18:17.280 --> 00:18:24.160
+The next two properties that we need
+to have are a vendor identification
+
+00:18:24.260 --> 00:18:29.270
+and a product identification.
+
+00:18:33.840 --> 00:18:39.390
+Now, to find these values,
+we need to look in the I/O Kit registry.
+
+00:18:40.250 --> 00:18:42.590
+I'm going to go ahead and
+fire up terminal and type
+
+00:18:42.700 --> 00:18:48.390
+ioreg-c ioskzperforaldevicenub.
+
+00:18:52.330 --> 00:18:55.480
+This goes ahead and prints
+out the contents of the
+
+00:18:55.480 --> 00:18:58.270
+I/O SCSI peripheral device nub entry.
+
+00:18:58.270 --> 00:19:03.240
+What I am interested in here are the
+vendor identification right here,
+
+00:19:03.390 --> 00:19:05.240
+which says this is a Pioneer drive.
+
+00:19:05.540 --> 00:19:09.260
+So I'm going to go ahead and
+copy paste that directly into
+
+00:19:09.530 --> 00:19:12.200
+my vendor identification here.
+
+00:19:12.360 --> 00:19:17.030
+And then it also tells me
+the product identification.
+
+00:19:17.780 --> 00:19:20.950
+I'm going to paste that
+into my driver here.
+
+00:19:20.950 --> 00:19:24.690
+Now, if you wanted a driver that
+matched on all Pioneer drives,
+
+00:19:24.700 --> 00:19:29.280
+you could of course remove this product
+identification property and take your
+
+00:19:29.410 --> 00:19:31.690
+chances that your driver will match.
+
+00:19:31.690 --> 00:19:37.650
+Of course, if somebody had a Pioneer
+DVD-RW-DVR-103 driver,
+
+00:19:37.970 --> 00:19:41.700
+that would get considered for
+matching before yours would.
+
+00:19:41.840 --> 00:19:44.810
+So,
+for vendor and product identification,
+
+00:19:44.920 --> 00:19:48.900
+it's very important that you have
+those keys in there to get your
+
+00:19:48.900 --> 00:19:50.700
+driver considered for matching.
+
+00:19:50.730 --> 00:19:53.460
+Now,
+if you only want to match on a specific
+
+00:19:53.460 --> 00:19:57.700
+firmware revision for the device,
+you could also add that in,
+
+00:19:57.700 --> 00:20:02.640
+and that is the product revision level,
+which you would see right here.
+
+00:20:02.790 --> 00:20:04.550
+We're not going to add that key today.
+
+00:20:04.700 --> 00:20:09.700
+So, that is it with our personality here.
+
+00:20:09.700 --> 00:20:12.770
+A couple more properties that
+we need to add to our text
+
+00:20:12.840 --> 00:20:14.700
+are the OS bundle libraries.
+
+00:20:14.700 --> 00:20:21.470
+This key allows you to specify
+families that you require to have
+
+00:20:21.470 --> 00:20:25.330
+your module loaded into the kernel.
+
+00:20:25.790 --> 00:20:30.540
+I know from experience that I need
+to have two of such modules.
+
+00:20:31.240 --> 00:20:34.050
+One is the OS bundle library.
+
+00:20:34.720 --> 00:20:39.600
+ComApple I/O Kit:
+I/O SCSI Architecture Model.
+
+00:20:39.600 --> 00:20:45.220
+And the other one is...
+
+00:20:47.930 --> 00:20:53.300
+IOSCSI Multimedia Commands Device.
+
+00:20:53.530 --> 00:20:58.300
+And in the string category here,
+you just put the revision level of
+
+00:20:58.300 --> 00:21:00.980
+that kernel extension that you require.
+
+00:21:01.260 --> 00:21:03.800
+Both of these can be 100 for now.
+
+00:21:03.990 --> 00:21:06.890
+And the last piece that we
+need is to make sure that
+
+00:21:06.890 --> 00:21:08.600
+we get loaded at boot time.
+
+00:21:08.770 --> 00:21:13.010
+So to add that key,
+we have OS Bundle required.
+
+00:21:14.740 --> 00:21:18.900
+and that is local-root.
+
+00:21:18.930 --> 00:21:21.910
+If you need more specifics on
+what each of these properties
+
+00:21:22.060 --> 00:21:28.490
+does and which ones are required,
+I ask you to consult the inside
+
+00:21:28.490 --> 00:21:36.200
+Mac OS X kernel extension or-- is it
+inside kernel or kernel extension?
+
+00:21:36.840 --> 00:21:39.900
+One of those books has the
+correct information and of course
+
+00:21:39.930 --> 00:21:42.900
+you can reference the website.
+
+00:21:45.120 --> 00:21:49.640
+And now we need to actually
+write some code for this driver.
+
+00:21:49.650 --> 00:21:55.100
+We can go ahead and add code to
+subclass a particular function.
+
+00:21:55.100 --> 00:22:00.860
+We can go ahead and add code to write an
+entire logical unit driver if we want.
+
+00:22:00.920 --> 00:22:07.100
+What I'm going to do is actually open
+up some prefab files that I did already.
+
+00:22:07.100 --> 00:22:13.190
+And I'm going to copy paste that into
+
+00:22:17.060 --> 00:22:21.750
+As you can see we're working with
+a peripheral device type 05 driver
+
+00:22:22.080 --> 00:22:26.080
+which is a CD-ROM driver and
+
+00:22:26.480 --> 00:22:31.570
+I'm most familiar and most comfortable
+with the read table of contents command.
+
+00:22:31.570 --> 00:22:38.560
+So I have decided to subclass the read
+talk command and inside the C++ file,
+
+00:22:38.770 --> 00:22:40.800
+all I've done is add a status log.
+
+00:22:41.190 --> 00:22:47.370
+The status log here is and will print
+out an IOLOG message to the system log.
+
+00:22:47.490 --> 00:22:51.500
+So when this driver gets loaded,
+anytime we do a read
+
+00:22:51.660 --> 00:22:56.200
+table of contents command,
+it will get spit out to the console.
+
+00:22:57.630 --> 00:23:02.360
+And we can go ahead here and build this.
+
+00:23:09.420 --> 00:23:11.550
+And it succeeded in building
+our kernel extension,
+
+00:23:11.550 --> 00:23:14.930
+so let's go ahead and put it
+on this machine and load it.
+
+00:23:36.920 --> 00:23:38.360
+And I'll go ahead and copy this over.
+
+00:23:38.590 --> 00:23:41.650
+So I'm going to copy the directory into
+
+00:23:45.390 --> 00:23:47.440
+The extensions folder.
+
+00:23:47.440 --> 00:23:50.150
+We're going to go ahead and reboot
+this machine and you will see
+
+00:23:50.160 --> 00:23:55.090
+that it is really that easy to
+subclass and add vendor specific
+
+00:23:55.170 --> 00:24:00.270
+functionality to your device,
+or for your device rather.
+
+00:24:09.210 --> 00:24:13.530
+There was already a driver loaded
+for the CD-ROM driver here.
+
+00:24:13.760 --> 00:24:17.470
+Of course, if we had a FireWire
+drive or a USB drive,
+
+00:24:17.530 --> 00:24:19.500
+which we could dynamically
+load a driver for,
+
+00:24:19.720 --> 00:24:22.080
+we could have loaded the
+driver into the kernel.
+
+00:24:22.420 --> 00:24:27.670
+And as long as it was
+the kernel extension,
+
+00:24:27.670 --> 00:24:33.620
+the I/O Kit personality
+matched for that drive,
+
+00:24:33.680 --> 00:24:34.250
+we could definitely load for that drive.
+
+00:24:36.970 --> 00:24:41.740
+So as soon as this starts up here,
+I'll go ahead and pop up terminal again.
+
+00:24:41.740 --> 00:24:46.830
+You'll see that in the IR registry,
+our driver will be
+
+00:24:46.890 --> 00:24:49.500
+loaded for this computer.
+
+00:24:55.820 --> 00:25:00.580
+So let me go into a couple of reasons
+as to why you might want to subclass.
+
+00:25:00.580 --> 00:25:07.680
+You might want to subclass a logical
+unit driver to add some sort of
+
+00:25:07.680 --> 00:25:11.930
+functionality to your device,
+like say you have password protection
+
+00:25:11.970 --> 00:25:18.340
+or say you're developing a product that
+has SDMI support in it and you want
+
+00:25:18.440 --> 00:25:20.060
+to send those commands to your drive.
+
+00:25:20.480 --> 00:25:24.630
+That would be a very good reason to
+just subclass the generic support that
+
+00:25:24.630 --> 00:25:29.560
+we bring to the table with the generic
+I/O functionality and then just add your
+
+00:25:29.560 --> 00:25:31.930
+vendor specific functionality to it.
+
+00:25:32.200 --> 00:25:35.430
+And you'll see here,
+my logical unit driver got loaded
+
+00:25:35.520 --> 00:25:38.000
+right above the peripheral device node.
+
+00:25:38.160 --> 00:25:41.700
+So with that,
+I'll turn this back over to Craig.
+
+00:25:41.720 --> 00:25:44.210
+He can finish his presentation.
+
+00:26:02.920 --> 00:26:04.920
+Thanks a lot, Chris.
+
+00:26:05.140 --> 00:26:08.610
+Okay, I hope that made sense.
+
+00:26:08.800 --> 00:26:10.830
+So close to it,
+it's sometimes hard to know if we're
+
+00:26:10.830 --> 00:26:14.520
+actually telling you what you need
+or making too many assumptions.
+
+00:26:15.510 --> 00:26:18.690
+So up until this point we've
+talked really about instantiating
+
+00:26:18.840 --> 00:26:21.870
+the stack and all the pieces
+that get put together for that.
+
+00:26:21.930 --> 00:26:25.620
+We've gone into the hierarchy,
+the object hierarchy of
+
+00:26:25.620 --> 00:26:27.400
+those functional pieces.
+
+00:26:27.420 --> 00:26:30.550
+There are other objects
+in the SAM implementation
+
+00:26:30.550 --> 00:26:32.390
+that we need to talk about.
+
+00:26:32.460 --> 00:26:35.600
+The SCSI task is a very important object.
+
+00:26:35.630 --> 00:26:41.640
+A SCSI task is an encapsulation of a CDB,
+data buffers, error information,
+
+00:26:41.640 --> 00:26:48.100
+just about everything you need to
+take and actually process a CDB and
+
+00:26:48.100 --> 00:26:56.440
+A really good place to understand what
+we mean by this is basically what we've
+
+00:26:56.440 --> 00:27:01.380
+done is we've made an object out of the
+SCSI command model in the SAM document,
+
+00:27:01.400 --> 00:27:03.100
+which is Chapter 5.
+
+00:27:03.130 --> 00:27:08.510
+In fact, the names come right out of
+the guidelines in that chapter.
+
+00:27:09.900 --> 00:27:13.890
+So another thing we provide
+is this command builders.
+
+00:27:13.900 --> 00:27:21.370
+These are utility classes that build up
+command set specific commands for you.
+
+00:27:21.470 --> 00:27:25.490
+Obviously we have block commands
+for peripheral device type 00
+
+00:27:25.490 --> 00:27:30.820
+and the multimedia MMC commands
+and reduced block commands.
+
+00:27:30.910 --> 00:27:35.770
+In the future if a new set of commands
+come out you would want to probably
+
+00:27:35.770 --> 00:27:38.210
+build a utility class for that.
+
+00:27:38.740 --> 00:27:43.750
+So how are SCSI tasks processed?
+
+00:27:43.950 --> 00:27:48.070
+We've talked about just instantiating
+and building these stacks up.
+
+00:27:48.130 --> 00:27:48.950
+So what happens?
+
+00:27:49.170 --> 00:27:52.520
+An I/O request is going to come in
+from the system for something and
+
+00:27:52.520 --> 00:27:57.040
+it's going to get into the transport
+driver layer and it's going to
+
+00:27:57.060 --> 00:27:58.700
+get packaged up into a SCSI task.
+
+00:27:58.820 --> 00:28:01.910
+That SCSI task is then going to
+get handed off to the SCSI protocol
+
+00:28:02.050 --> 00:28:04.860
+driver layer and that's going
+to get packaged up into the
+
+00:28:04.860 --> 00:28:06.720
+appropriate for the target device.
+
+00:28:06.800 --> 00:28:09.520
+So in the case of FireWire,
+the SCSI task will get
+
+00:28:09.520 --> 00:28:10.790
+turned into an orb.
+
+00:28:10.800 --> 00:28:13.800
+The orb will be thrown out onto the bus,
+processed.
+
+00:28:13.800 --> 00:28:17.560
+It all happens asynchronously
+and the completion routine
+
+00:28:17.560 --> 00:28:19.800
+will fire back up the stack.
+
+00:28:21.730 --> 00:28:23.870
+So, device compliance.
+
+00:28:23.960 --> 00:28:26.810
+We really don't want you to
+have to reinvent the wheel here.
+
+00:28:26.990 --> 00:28:30.290
+By subclassing and adding
+your device specific stuff,
+
+00:28:30.390 --> 00:28:35.350
+you get power management,
+you get driver lifecycle stuff,
+
+00:28:35.350 --> 00:28:38.260
+hot plugging support,
+all the termination,
+
+00:28:38.290 --> 00:28:42.710
+all the gnarly undocumented stuff
+that you really don't want to do.
+
+00:28:43.400 --> 00:28:48.920
+What we mean by device compliance is
+that your device will process commands
+
+00:28:48.990 --> 00:28:54.300
+as they're documented in the command
+sets in the official SCSI documentation.
+
+00:28:54.480 --> 00:28:56.290
+Always override the whole stack.
+
+00:28:56.290 --> 00:28:58.860
+All you need to do is outscore
+the probe at the protocol
+
+00:28:58.960 --> 00:29:01.040
+layer and do anything you want.
+
+00:29:01.300 --> 00:29:04.300
+We will not prohibit that.
+
+00:29:04.430 --> 00:29:09.210
+So what's supported in X as it ships
+today is we have a TAPI support,
+
+00:29:09.340 --> 00:29:12.300
+FireWire support, and USB support.
+
+00:29:12.300 --> 00:29:16.300
+Ironically, we don't have SCSI parallel
+support at this time.
+
+00:29:16.300 --> 00:29:20.300
+It's a work in progress and we're
+investigating it and working on it.
+
+00:29:20.300 --> 00:29:25.070
+And ATA just doesn't apply because it
+doesn't use a SCSI compliant command set.
+
+00:29:25.330 --> 00:29:27.880
+In theory,
+we were discussing that it would
+
+00:29:27.890 --> 00:29:33.300
+be possible to actually make a
+shim layer and wrap up ATA requests
+
+00:29:33.300 --> 00:29:36.680
+and use our architecture,
+but it added an extra layer
+
+00:29:36.770 --> 00:29:41.300
+that we didn't want to take
+the performance hit on.
+
+00:29:41.300 --> 00:29:45.300
+So we decided to use a
+monolithic ATA driver instead.
+
+00:29:45.520 --> 00:29:50.370
+So, I want to grab some water.
+
+00:29:59.180 --> 00:30:02.560
+Accessing Devices from Applications.
+
+00:30:02.560 --> 00:30:05.450
+There's a lot of compelling
+reasons you want to do this.
+
+00:30:05.700 --> 00:30:09.100
+By resources we mean if you don't have
+to wire memory down in the kernel,
+
+00:30:09.100 --> 00:30:09.980
+we don't want to.
+
+00:30:10.130 --> 00:30:11.060
+That's really precious stuff.
+
+00:30:11.110 --> 00:30:15.100
+There's a much better tool
+environment up in user space.
+
+00:30:15.100 --> 00:30:17.100
+You have a source level debugger.
+
+00:30:17.520 --> 00:30:21.100
+You have much better tools.
+
+00:30:21.100 --> 00:30:23.790
+You don't have to use
+GDB from the command line.
+
+00:30:23.800 --> 00:30:26.700
+And system stability is another thing.
+
+00:30:26.760 --> 00:30:31.000
+If you blow up in user space,
+there's less of a statistic probability
+
+00:30:31.000 --> 00:30:32.300
+you'll take the whole machine down.
+
+00:30:32.300 --> 00:30:35.370
+If you blow up in the kernel,
+it's much higher risk.
+
+00:30:36.170 --> 00:30:40.310
+Examples would be utilities that
+need to set some kind of intrinsic
+
+00:30:40.630 --> 00:30:46.900
+device feature with a vendor specific
+CDB and any out of kernel driver.
+
+00:30:46.900 --> 00:30:50.430
+What I mean by that is
+we ship a block storage,
+
+00:30:50.780 --> 00:30:56.210
+a multimedia,
+magnetic optical and a RBC logical
+
+00:30:56.600 --> 00:30:59.700
+unit driver that are in kernel.
+
+00:30:59.880 --> 00:31:03.240
+And if you have a tape drive,
+which is a peripheral device
+
+00:31:03.240 --> 00:31:06.640
+type one for sequential access,
+it really doesn't need
+
+00:31:06.640 --> 00:31:07.740
+to be in the kernel.
+
+00:31:07.820 --> 00:31:11.660
+As a general rule of thumb,
+if your device doesn't require booting
+
+00:31:11.660 --> 00:31:15.300
+and it doesn't require a file system,
+its driver does not need
+
+00:31:15.300 --> 00:31:16.730
+to be in the kernel.
+
+00:31:17.030 --> 00:31:20.670
+User clients are nothing more
+than a mechanism to negotiate
+
+00:31:20.670 --> 00:31:22.300
+the user kernel boundary.
+
+00:31:22.390 --> 00:31:25.670
+There may be other places in this
+big stack that you want to connect.
+
+00:31:25.890 --> 00:31:28.260
+You might want to have a
+user client connect to the
+
+00:31:28.390 --> 00:31:29.890
+physical interconnect layer.
+
+00:31:29.900 --> 00:31:32.560
+In the case of FireWire,
+if you look in their SDK,
+
+00:31:32.990 --> 00:31:37.900
+they have a user client that allows
+you to connect to the SPP2 layer.
+
+00:31:37.900 --> 00:31:41.070
+You might want to have a
+utility that does firmware that
+
+00:31:41.210 --> 00:31:44.900
+connects at a lower device,
+or a lower point in the stack.
+
+00:31:45.030 --> 00:31:47.900
+Also,
+this is a good place to point this out,
+
+00:31:47.900 --> 00:31:51.710
+on our website,
+in the developer documentation,
+
+00:31:51.710 --> 00:31:55.180
+there's a document called "Accessing
+Hardware from User Space" that
+
+00:31:55.180 --> 00:31:58.900
+just recently was updated and
+went from like 50 to 100 pages.
+
+00:31:58.900 --> 00:32:01.600
+And that's something you want
+to really get your hands on,
+
+00:32:01.650 --> 00:32:04.740
+especially because there's a summary
+of the I/O Kit that's a lot more
+
+00:32:04.850 --> 00:32:06.900
+extensive than what I've got into here.
+
+00:32:06.900 --> 00:32:10.760
+I found it to be a good reference
+for getting my head around some
+
+00:32:10.770 --> 00:32:13.020
+of the basic concepts of I/O Kit.
+
+00:32:13.900 --> 00:32:18.440
+The SCSI Task User-Client is
+what we've implemented at our
+
+00:32:18.440 --> 00:32:20.300
+layer for user-client access.
+
+00:32:20.660 --> 00:32:22.600
+We have two access points.
+
+00:32:22.730 --> 00:32:26.160
+We have the Peripheral
+Device Type Nub access point.
+
+00:32:26.210 --> 00:32:30.180
+If you think back to
+the diagram I showed,
+
+00:32:30.380 --> 00:32:36.490
+This is the point where you would attach
+a non-in-kernel logical unit driver.
+
+00:32:36.490 --> 00:32:39.670
+And we also have the generic
+service layers for multimedia,
+
+00:32:40.090 --> 00:32:43.670
+and this is for authoring.
+
+00:32:44.370 --> 00:32:51.270
+and I'll get into more
+details in the next slides.
+
+00:32:52.290 --> 00:32:58.510
+The user client uses a
+COM-like CFPlugin architecture.
+
+00:32:58.510 --> 00:33:03.010
+Again, the document I just referenced,
+the Accessing Hardware from User Space,
+
+00:33:03.270 --> 00:33:08.130
+goes into some of the rules on that.
+
+00:33:08.360 --> 00:33:11.330
+There are some tools that
+we'll provide in the SDK to
+
+00:33:11.330 --> 00:33:13.660
+show you how to do all that.
+
+00:33:13.660 --> 00:33:18.740
+We have three interfaces
+into our SCSI client.
+
+00:33:18.790 --> 00:33:21.300
+The first one is the
+MMC device interface.
+
+00:33:21.430 --> 00:33:25.000
+This is only for the authoring needs.
+
+00:33:25.070 --> 00:33:28.850
+It basically exists so you can
+get device and media information
+
+00:33:29.440 --> 00:33:31.260
+for the purposes of authoring.
+
+00:33:31.320 --> 00:33:34.460
+We have a SCSI device interface
+which lets you create,
+
+00:33:34.810 --> 00:33:38.170
+release, and do all the maintenance
+things that you need.
+
+00:33:38.290 --> 00:33:44.310
+Create the callback handlers
+and connect up the CF run loops,
+
+00:33:44.310 --> 00:33:44.990
+etc.
+
+00:33:45.140 --> 00:33:47.220
+And finally there's the
+SCSI task interface.
+
+00:33:47.310 --> 00:33:52.030
+Once you've actually connected up,
+this is where you send and this
+
+00:33:52.110 --> 00:33:56.560
+is the interface you use to send
+raw SCSI tasks that encapsulate
+
+00:33:56.560 --> 00:33:59.050
+the CDBs to drive your device.
+
+00:33:59.700 --> 00:34:00.870
+So we have two access models.
+
+00:34:00.940 --> 00:34:05.550
+We have an exclusive access model
+and a non-exclusive access model.
+
+00:34:05.550 --> 00:34:08.580
+Once you have instantiated
+the user client,
+
+00:34:08.700 --> 00:34:12.040
+that user client is the
+logical unit driver.
+
+00:34:12.190 --> 00:34:16.600
+So I'll have a diagram in a few slides
+that will really bring this home.
+
+00:34:16.600 --> 00:34:18.230
+But there are no restrictions.
+
+00:34:18.230 --> 00:34:19.590
+The client has absolute control.
+
+00:34:19.710 --> 00:34:23.830
+We don't filter or disallow
+any kind of commands.
+
+00:34:23.840 --> 00:34:29.050
+And this last point,
+if you happen to be using the
+
+00:34:29.050 --> 00:34:34.600
+generic services for multimedia,
+the authoring APIs,
+
+00:34:34.600 --> 00:34:37.770
+and you need to transition
+to exclusive access,
+
+00:34:37.770 --> 00:34:40.670
+what has to happen is you have
+to unmount any mounted media,
+
+00:34:40.670 --> 00:34:45.260
+any mounted partitions,
+and obtain a reservation for that
+
+00:34:45.260 --> 00:34:47.130
+media through disk arbitration.
+
+00:34:47.140 --> 00:34:50.280
+And in our SDK,
+we'll have an example code
+
+00:34:50.290 --> 00:34:52.040
+to show how to do this.
+
+00:34:53.680 --> 00:34:57.950
+The non-exclusive access model
+is for the generic services
+
+00:34:58.070 --> 00:35:00.430
+multimedia access point only.
+
+00:35:00.510 --> 00:35:06.040
+This is, like I said before,
+only to get device and media specific
+
+00:35:06.040 --> 00:35:08.450
+information for the purposes of offering.
+
+00:35:08.480 --> 00:35:09.680
+It is API driven.
+
+00:35:09.680 --> 00:35:12.070
+You cannot send raw CDBs.
+
+00:35:12.330 --> 00:35:19.230
+And if an existing client, a user client,
+has got exclusive access,
+
+00:35:19.580 --> 00:35:22.990
+it will not allow non-exclusive access.
+
+00:35:23.710 --> 00:35:25.890
+So here's an example.
+
+00:35:25.900 --> 00:35:29.840
+If we have a tape backup drive
+that gets discovered by the
+
+00:35:29.840 --> 00:35:33.370
+physical interconnect layer,
+in this example it's FireWire again,
+
+00:35:33.370 --> 00:35:38.160
+it would be instantiated and built
+up and there'd be a SCSI protocol
+
+00:35:38.160 --> 00:35:43.400
+driver instantiated and it would
+build up and the I/O peripheral
+
+00:35:43.510 --> 00:35:47.420
+device would issue an inquiry,
+find out that it's a
+
+00:35:47.420 --> 00:35:49.070
+peripheral device type 1,
+populate the registry
+
+00:35:49.070 --> 00:35:49.070
+with it and just stop.
+
+00:35:49.460 --> 00:35:54.420
+Then what will happen is you will
+launch an application up in user
+
+00:35:54.420 --> 00:35:59.840
+space and the SCSI test user client
+that we provide straddles the
+
+00:36:00.380 --> 00:36:05.590
+user kernel boundary and once the
+application is launched it will look
+
+00:36:05.820 --> 00:36:11.500
+for the appropriate peripheral device
+information through a command called,
+
+00:36:11.890 --> 00:36:13.880
+I always get this wrong, IOServiceGet.
+
+00:36:13.950 --> 00:36:18.010
+At that point the client application
+is the logical unit driver
+
+00:36:18.020 --> 00:36:21.070
+and it can drive that device.
+
+00:36:21.660 --> 00:36:25.820
+The other interesting one is in the
+case of authoring where we have a
+
+00:36:25.820 --> 00:36:29.970
+DVD device that's been instantiated
+up and we have an internal driver,
+
+00:36:30.040 --> 00:36:34.550
+a peripheral device driver type 5
+that's going to drive this device
+
+00:36:34.710 --> 00:36:40.900
+and we might have been doing I/O to
+it all day long and eventually an
+
+00:36:41.250 --> 00:36:44.210
+application will get launched and
+
+00:36:44.730 --> 00:36:48.770
+your user client will be-- this is
+the second type I was talking about.
+
+00:36:48.790 --> 00:36:55.080
+You can use the APIs to get device
+information and media information
+
+00:36:55.160 --> 00:37:00.320
+and in a non-exclusive fashion,
+at some point you will have unmounted
+
+00:37:00.330 --> 00:37:04.940
+the media and you will seize
+control and become exclusive access.
+
+00:37:05.010 --> 00:37:10.100
+You would again call the I/O,
+create CFPlugin for service,
+
+00:37:10.100 --> 00:37:15.870
+at which point the client application
+has become the logical unit driver
+
+00:37:15.870 --> 00:37:20.620
+and we will acquiesce the in kernel
+peripheral device type driver 5.
+
+00:37:20.740 --> 00:37:24.750
+So now the user client logical
+unit driver has absolute
+
+00:37:24.900 --> 00:37:27.740
+control over the device and
+can do whatever it needs to do.
+
+00:37:30.530 --> 00:37:35.130
+And in summary, it should be relatively
+straightforward and easy for you to,
+
+00:37:35.270 --> 00:37:40.100
+instead of having to ship gigantic
+monolithic drivers for all of your stuff,
+
+00:37:40.210 --> 00:37:46.970
+to bundle up and ship out strategic
+small keks and make everybody happy.
+
+00:37:48.300 --> 00:37:50.800
+resources.
+
+00:37:50.800 --> 00:37:55.050
+So I've covered most of
+this in the slides already.
+
+00:37:55.050 --> 00:38:01.090
+There's nothing here that I haven't.
+
+00:38:03.810 --> 00:38:08.290
+Later this week,
+the IOC update was yesterday,
+
+00:38:08.410 --> 00:38:11.720
+the PCI drivers are tomorrow morning.
+
+00:38:11.890 --> 00:38:15.260
+FireWire in-depth and both USB in-depth
+is a good place to go if you need to get
+
+00:38:15.260 --> 00:38:18.700
+more information on bus specific stuff.
+
+00:38:18.700 --> 00:38:23.700
+If you have a bridge that your company is
+providing that has unique requirements,
+
+00:38:23.700 --> 00:38:26.700
+it might be interesting or
+helpful for you to go there.
+
+00:38:26.700 --> 00:38:31.770
+I'll be there if anyone has any
+protocol transport specific information
+
+00:38:31.780 --> 00:38:33.700
+they'd like to ask me about.
+
+00:38:34.130 --> 00:38:38.700
+Finally, we have a mailing list
+that you can get on.
+
+00:38:38.700 --> 00:38:42.390
+This is a place where we'll be making
+announcements of where you can get
+
+00:38:42.390 --> 00:38:44.700
+SDKs and help on everything we have.
+
+00:38:44.700 --> 00:38:49.500
+If you have any questions at all,
+please feel free to get
+
+00:38:49.550 --> 00:38:51.700
+a hold of Craig Keithley.

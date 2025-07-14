@@ -1,0 +1,205 @@
+---
+Title:  What's New in Cocoa Touch
+Year:   2018
+Web:    https://nonstrict.eu/wwdcindex/wwdc2018/202/
+
+[!] This transcript has potential transcription errors.
+---
+
+Alright, good morning. Thanks so much for coming out this morning to learn all about what's new in Cocoa Touch. Now normally, Eliza would join me up here a little bit later although this year actually you're just going to be hearing from me. So, she'll be back in later years. Don't worry about it. This morning we're going to talk about things in three main categories.
+
+We're going to start with some framework updates including things like performance and security. Then we're going to talk about some API enhancements across a number of different existing APIs in the SDK, including notifications and messages. And then we're going to end with Siri Shortcuts. So let's get started with our first topic: Performance Updates. Now we're going to talk about performance across three main areas: scrolling, memory, and auto layout. Now before we get in to it, it's important to keep in mind one little bit of background information about scrolling.
+
+Scrolling on iOS follows a pretty common pattern in most places. We load content to be displayed into the views and then we're just moving that content around. And while we're moving it around, most of those frames are really cheap to generate because we don't have to load anything new.
+
+But every now and then, a new view first becomes visible and the one frame when that first happens is quite a bit more expensive to generate than those other cheaper ones. Now, of course, once that one frame is loaded, we're just back to moving content around, so the amount of work we do on the CPU goes back to being pretty small for most of that other scrolling.
+
+So what's happening during that really expensive frame that causes that one to be more than all the others? Well, let's take a look from the perspective UI Table View but everything we look at here will really be the same for UI Collection View or really any of your own custom views that you may build that behave in similar ways. So the work in that expensive frame probably starts in your implementation of TableView, cell For Row At index Path delegate method.
+
+Now the first thing we're going to do in there is get the cell that we want to display. And so we're going to try and dequeue it ideally from the reuse queue although if one is not available already in the queue, we might actually have to do some memory allocation in order to get it ready.
+
+Once we have the cell, we're then going to populate it with your model data. Now how expensive that is will vary depending on your application but it can be including a fairly large amount of expensive operations like reading files, loading data out of databases, or other things of that nature. So you'll definitely want to look at the expense here in your own apps but it tends to be this is where a good portion of it will exist.
+
+Now, you may think looking here that that's the end of the expensive work but even once you return from this method, there's actually more work that has to happen in order to get the cell prepared to have it show up on screen. So, of course, next, we have to lay out all of the content in that cell. We need to size all the views and position them in the right spot. Now, this can actually be a pretty substantial amount of the total time that we're spending because it can include other expensive operations like measuring text.
+
+Once everything is properly sized and positioned, then it's time to generate any content that would need to be drawn using drawing calls and to do that we have to call draw Rect on all of the subviews within that cell. Again, this can be a pretty large amount of the time because we'll also be doing things like drawing text.
+
+So overall, there's a lot of work that has to happen across this whole piece of code and it has to happen in a really short period of time. On our 60-hertz devices, you have 16 milliseconds to complete all this work in order to make sure you don't drop any frames, and maintain smooth scrolling. On our 12-hertz iPads, on the iPad Pro, you have only 8 milliseconds to complete all of that work. So, it really needs to be done as quickly as possible.
+
+Now, to help with that, in iOS 10, we introduced a cell prefetching API and the idea with the prefetch API is to take some of this work, populating your cell with model data, and pull it out of this critical section that's happening on demand in that short window, do it earlier, and do it on a background thread so it can happen asynchronously with some of the other work, in particular those cheaper scrolling frames we talked about.
+
+Now adopting this is really easy. It's just a UI Table View Data Source Prefetching protocol and it only has two methods, only one of which is actually required. And the idea here is to move some of that expensive work of loading things from files or reading your database into here so that you don't have to do it on demand.
+
+You data is already prepared when the cell is needed for display. So this in most cases can be a really big win although while we were looking at some of our own apps in iOS 12, we actually noticed a case where this was causing an issue instead of helping us. So let's take a look at what that looked like.
+
+Now here's an example of a trace that we took while scrolling on an iPhone 6 Plus. The vertical bars across the top, those represent frames that we want to display. The alternating light and dark blue colors represent frames that we did swap to the display as they were changing.
+
+And that double wide light blue bar, that is a place where we drew the same frame for two full frame durations. So for a customer looking at the device while this was happening, that looked like a dropped frame or a scrolling hitch, which obviously is what we're trying to avoid.
+
+So what was happening in this case? Well, here you can see that red bar is representing the time that we're spending in the critical section we just talked about, all the self-[inaudible] index path, layout, and drawing. And here, it's actually taking longer than the 16 milliseconds we had to draw the frame.
+
+Now because the device can only swap new frames onto the screen at fixed positions in time, once we miss that deadline, we ended up displaying the same frame for two full durations, which was obviously not great. So why did that happen here? In this case, we're looking at an app where we actually had implemented the cell prefetching method so our data should've been ready. Ideally, this could've been done more quickly.
+
+Well, if we look at a little more of the trace, we can see what was going on. The cell prefetching API was being called at the same time that we were requesting the current cell. Now it wasn't being called for the data for the current cell. It was being called for data that we might need in a future cell, but it was getting run at the same time. And so there was now contention for the CPU as we tried to both load the current frame and also load data for a future frame that we don't actually need yet.
+
+So because of that contention, it actually caused both tasks to take a little bit longer. Now in iOS 12, we're much more intelligent about scheduling these background prefetch operations so that rather than happening concurrently and causing some CPU contention, they'll now happen serially, shortening the time that you need to take to load the current cell and helping avoid dropped frames in many cases.
+
+[ Applause ]
+
+So once we had that fixed, we kept profiling our apps and we actually found another case where there was a bit of a surprising cause of some dropped frames. Now what we found was that when the device was not under load, there was no background activity, all we were doing was a little bit of scrolling in the foreground app.
+
+Counterintuitively, we could actually drop more frames than times when there was some small amount of light background work going on. That didn't really make a lot of sense. And to understand why it was happening, we had to drop down a level and take a look at the behavior of the CPU when it was scheduling our workloads. So let's take a look at another trace.
+
+Here, we've got the same situation. Double wide blue bar is causing us to drop a frame or rather is our dropped frame. Now here we can see a graph of our CPU's performance over time. Now during most of those cheap frames, our CPU performance is staying pretty low.
+
+There's no background work going on. All we're doing is scrolling things and that's exactly what you would want because when we're not doing expensive work for scrolling, you want to keep the CPU as low as possible to preserve battery life. So that was great. What wasn't great is that it took a little bit of time before it could ramp up. You heard about this yesterday in the keynote.
+
+Now when it did finally ramp up, it was already too late to have completed the work to load the cell that we needed to display and so we ended up missing that frame again. Now because we own the full software stack from top to bottom, in iOS 12 we took all the information we have in the high-level UIKit framework about what scrolling is happening and when these critical sections are occurring and pass that information all the way down to the low-level CPU performance controller so that it can now much more intelligently reason about the work that's happening and predict both when these bursts will occur and how much CPU performance will be required to meet the deadline for the historical demand that your app has had. So once that change happens, where the load starts right here, we end up seeing that we've ramped the CPU far more frequently or, far more quickly, to the exact amount of perform it needs to make sure that we hit that deadline and don't drop frames.
+
+This has caused a really great improvement across many different scrolling scenarios around iOS. So all of your applications will get all of this enhancements, both of them and a number of others, for free with no additional work on your part, but there are a couple of things that you can do to make sure that you get the most out of both of them. So first of all, if you haven't already adopted that tableView cell prefetching API or the Collection View one, definitely look into that because having your data ready is one of the best things you can do to make sure that loading cells is as quick as possible.
+
+Of course, it's also important that you profile your full critical sections of your cell loading and reduce that demand as much as you can. iOS 12 will now try to match the CPU performance to the needs of your application during this period but the best thing that you can do will always remain to reduce the amount of work that you have to do to make sure that you give your customers a really smooth scrolling experience. So that's scrolling in iOS 12. Next, let's turn our attention to our next performance topic: memory.
+
+Now, you might wonder why memory is showing up right here in the middle of a performance discussion, but I assure you that that actually makes a lot of sense and, in fact, the reason is because memory really is performance. The more memory that your app is going to use, the more that it will have an impact on the performance of your application. So to understand why, let's take a look at a really high-level overview of what the overall memory on the system might look like in a common situation.
+
+So, of course, you can see here, a lot of the system's memory is being used by other applications and the system itself. Your app is using some amount for the moment. And there's some that's being kept free to service new allocation requests as they come in. Now, most of that memory is probably not truly free. It's likely including things like caches or other things that can be quickly thrown away to make sure that the memory is available to satisfy demand right away but in general it's probably actually being used for something, but it is readily available.
+
+So let's look at what happens when your application requests some memory. Maybe you'll make a small request, something that can be satisfied by the amount that's currently available in that free pool. Well, if that's the case, it'll be return right away to your app and you can continue on with your work.
+
+Now, let's say, though, that your application makes a larger request, and maybe it doesn't need it for a long period of time, so you might not be real worried about it. Perhaps you're just going to load an image off disc and decompress it, perform some quick operation on some of the pixels and then throw it away. So it seems like a quick operation that you don't have to worry too much about.
+
+Well, we'll make that big request and now that is more memory that is currently easily readily available to the system. So it won't be able to satisfy it immediately and we'll have to go find that memory from somewhere else. And, in fact, the most likely place to come from is from other applications or things on the system.
+
+Now, that might not worry you too much because you're trying to get the memory for your app right now, so you're not so worried about what's happening elsewhere. But, of course, this will have an impact on something else later that your customers will be expecting will be working, but more importantly to you right now, it will have an impact on your app as well because the system has to do work to go get this memory for you. The fact that it's not readily available means that the kernel has to go find it and perform operations on the CPU in order to make it available.
+
+And that time it's spending getting that memory for you is time that could be better spent doing whatever your app does best. So finding ways to either chunk these larger requests or just reduce those overall peak demands can actually have both a big impact on the performance of your app while you're using it and also improve the customer experience across other apps later.
+
+So there's many ways that you can reduce the total memory usage of your apps and starting with a profile and instruments is a great way to look at that. But for this morning, we're just going to take a look at one new technique that iOS 12 brings along that helps reduce the memory usage of your apps and that's Automatic Backing Stores. So let's say we want to draw this lazy prairie dog in portrait mode on an iPhone X. Now, how big is that going to be? Portrait mode on iPhone X, 375 points wide and, to preserve our aspect ratio, it'll be 250 points tall.
+
+So how much memory will that use? Well, 375 by 250 at 3x, with 64 bits per pixel because this is a deep color device, is going to be 2.2 megabytes of memory to draw a prairie dog. That seems like a pretty decent amount, but in this case that's actually probably memory well spent. We're actually trying to represent this full-fidelity image and that's the amount of memory that's needed to draw it into this buffer. So that's probably expected.
+
+But now let's say that we were going to draw a lower-fidelity version of our prairie dog, maybe something in black and white that we were going to sketch out with core graphics, maybe it was drawn with an Apple pencil on an iPad. That might look something like this.
+
+So how much memory is our low-fidelity prairie dog going to use? Well, it'll actually use the exact same amount of memory. Now here, that clearly is not as good of a use of memory. It's all grayscale. All of that deep color information is not even being used in this image. So hopefully we could do much better and iOS 12 introduces automatic backing store support to help make that exactly be the case.
+
+So all of your views now that implement draw Rect will have their backing stores defined by the depth of the content being drawn into them. So in this case where we're using Core Graphics to sketch out only grayscale content will actually automatically use an 8-bit per pixel backing store instead of a 64-bit per pixel one. This reduces the memory demand for that drawn view by an order of magnitude down to 275 kilobytes from 2.2 megabytes. That's a really big improvement across many different applications, both yours and ours.
+
+[ Applause ]
+
+So Automatic Backing Stores are enabled by default for all apps built with the iOS 12 SDK. All implementations of draw Rect on UIView will have this happen automatically as well as all content that you draw with UI Graphics Image Renderer into offscreen bitmaps. Now in the case of UI Graphics Image Renderer, we don't necessarily know what you're planning on doing with the image that you get out at the end.
+
+So in cases where you actually know that the automatic behavior is not what you want, from Image Renderer, you can specify the specific backing store style that you want, for example using the new Range API to specify specifically that you want an extended-range image. Now you can learn all about this and many more techniques around UI Image in the Images and Graphics Best Practices Session later this week.
+
+So that's our second top for performance. Next, let's move on to Auto Layout. Now Auto Layout in iOS 10 has some really great improvements. The team has been working incredibly hard to optimize Auto Layout for your apps as much as possible. So you'll find that Auto Layout is now faster by default in iOS 12. We'll talk about a number of ways that's the case.
+
+But while they were profiling and optimizing Auto Layout, they also were looking across the system at many of our own apps and how they were using Auto Layout and they found a number of cases where there were some common pitfalls that different apps were falling in to. So we'll show you some of the simple best practices that you can follow in order to optimize your app layout as well.
+
+So this morning, though, let's look at how Auto Layout is faster by default in iOS 12 by looking at the asymptotic behavior of Auto Layout as we add more views in some common user scenarios. Now, we're looking at the asymptotics because we really want to look at what happens as we dramatically increase the number of views. This can really make performance issues show up quickly when we go to a really like absurdly large number of views. That just helps us see it though. The optimizations really do apply and make things faster even for small numbers of views.
+
+So let's start with a really common pattern, the simplest case really, Independent Sibling Views inside of some container. Now, these views are positioned with constraints against the container or other views but not against each other. They're independent of one another. Now in iOS 11, the cost of these independent siblings, as you continue to add more, grew linearly.
+
+So that's actually pretty great. That's exactly what you'd expect for a situation like this. Basically, what we're saying is that there's a fixed constant cost for each additional new view that you added into your hierarchy that was positioned independent of those other views. Now because that was already growing with the exponentials that we expected, that remains the case in iOS 12; however, the team has worked really hard to reduce that constant cost to make additional views as cheap to add as possible.
+
+So let's look at a more interesting example next. And in this case, we're going to take a look at Dependent Siblings. So this is the case where you have multiple child views and they're now, they have constraints between each other. So their layout is dependent on one another.
+
+Now, unfortunately, in iOS 11, you'll find that the asymptotics here weren't quite as nice. In fact, it was growing exponentially. So the more views that you added, the surprisingly larger cost you would find as you added additional ones. Now, the team worked really hard to identify the source of this exponential growth and fixed the algorithm so that is no longer the case. So on iOS 12, these now grow linearly.
+
+[ Applause ]
+
+And, of course, the team's also been working to reduce those constant costs for these cases as well. Now in addition to dependent siblings, there's another common type of layout that you'll find and that's Nested Views, when one view is inside of another and there's constraints out to those outer ones. This is obviously also a pretty common pattern in your apps and, unfortunately, here as well in iOS 11, we found some exponential growth. And again, great news. The team has also made this linear in iOS 12 as well.
+
+[ Applause ]
+
+So there's a number of really great improvements across Auto Layout in iOS 12 and you'll see these improvements in your apps as soon as you start running them on iOS 12 yourselves. To learn more about all of that, get a better sense, develop a good sense of how to get some gut feel for the performance of different layouts and here are some of these topics I was talking about that are common pitfalls. Definitely check out the High Performance Auto Layout talk later this week.
+
+So for our final framework update topic, let's turn to Swiftification. As you heard, iOS 12 introduces Swift 4.2. And for Swift 4.2 we really wanted to make sure that UIKit had a really great feel when used in Swift across your app, especially where it interacted with other Swift Standard Library or places that Swift had common patterns.
+
+So, we audited all of UIKit and made sure that everything feels like it fits really naturally. Even better, we made sure that all of the changes that we made to UIKit are all automatically migratable so there's no additional work that you should have to do in order to get these updates.
+
+Now, these updates fall into really three categories that we'll talk about this morning, although there's actually a ton of improvements and consistency improvements that you'll find as you look at the SDK. But today we'll talk about nesting of types, constants, and functions. So let's first look at nesting types.
+
+Now in Swift 4, there were a number of types that were in the global name space, things like UI Application State. For types like this that have a really strong use along with another class, we've now nested them within this class. So we looked at all the enumerations and other global types of this sort and now have moved them to be child types of the relevant class. So this becomes UIApplication.State. This sends a much stronger message about the relationship between these two and makes them easier to find as well.
+
+Now in comes cases this can also help improve understandability and remove some confusion. So in this case, let's look at UI Tab Bar Item Positioning. Now do you think that's UITabBarItemPositioning or UITabBarItem Positioning? It could actually be either. Those are both classes. And in Swift 42, it is now perfectly clear that it is, in fact, UITabBar ItemPositioning.
+
+So in addition to nested types, we've also nested a bunch of constants. So if we look here at Swift 4, we had NS notifications were all in the global NSNotification.Name namespace and their associated user info keys were actually just global constants that were floating out there. So for consistency with AppKit and to make it easier to find and associate these types together, they've now all been nested under the class that they're used with. So something like did Change Status Bar Orientation is now under UI Application did Change Status Bar Orientation Notification and its user info key moved along with it so that they're all co-located.
+
+Now we've also audited all of the other global constants all throughout UIKit and nested all of them in appropriate places. So things like UI Float Range Zero and UI Float Range Infinite have not just become properties on UI Float Range so they're both easy to find and easier to use. In places to take a UI Float Range, you can now just type .zero or .infinite and, in fact, because they're now properties, Xcode can suggest them as auto-completions for you in places where they make sense.
+
+Now in addition to constants, we've also audited all of our global functions. So things like UI Edge Inserts and UI Image had some global functions for operating on different types. Now in Swift 4.2, these had become methods on the appropriate type. So it's now really easy to inset Rect or get png Data from an image in a really natural Swift feeling way.
+
+[ Applause ]
+
+Now, here was one other big class of functions that I want to mention this morning and that was all of these string conversion functions for all of the many types in UIKit, CGPoint, CGRect, CGSize, CGVector, all of them, there's quite a lot, both to and from strings. Now, when we looked at these and tried to decide where they should go, we realized that they actually have two different use cases. One is for encoding and decoding.
+
+But the other is that they're commonly used to print things when you're just trying to get some debug descriptions. And those are two very different uses but, in fact, Swift has first-class support for both of those cases. And so we've made sure that all of these types will work really great with Swift's built-in support for both. So in Swift 4.2, all of these types will conform to Codable so that you can very easily do things such as encode and decode JSON for all of these different types.
+
+[ Applause ]
+
+Of course, debug printing in Swift is actually even easier than in Objective-C because you don't have to do any additional conversion. The built-in introspection of the types can allow you to print them directly. So in Swift 4.2, you just actually pass these types directly to your print functions if you want to print them out for debug purposes or log them.
+
+And then finally, you may already have some existing code that was using the behavior of the old string conversion functions and need a compatible functionality going forward. And so for that we've actually just renamed all of these and moved them to be properties on NSCoder. This really helps to emphasize the fact that the intent of these methods was to be used for encoding and decoding, so it's a pretty natural fit for them to go over there.
+
+So these are just a few of the consistency improvements that you'll find across the iOS 12 SDK for Swift 4.2 but you'll find many more as well. Now speaking of encoding and decoding, NS Secure Coding, in iOS 12 there are now new secure by default encoding and decoding APIs.
+
+Adopting NS Secure Coding for all of your encoding needs on NS Keyed Archiver is really key to ensuring that you're protecting your customers from both malicious and corrupted data. You'll also find that the older insecure APIs are not deprecated. So you can learn all about that and get much more detail on it in the Data You Can Trust Session on Thursday at 9:00 a.m.
+
+And that's framework updates. Next, let's turn our attention to some enhancements to a number of existing APIs and we'll start with notifications. Notifications has a number of really great improvements in iOS 12 but we're going to focus on just three this morning. Interaction within custom notifications, grouping of notifications, and access to your notification settings within your own apps. So let's start with interaction.
+
+Now custom notifications have for a while now allowed you to define a predefined set of actions for those notifications. In iOS 12, this set of actions is now no longer static. It can be defined programmatically and you can change them at runtime. In addition to these actions, and even better than that, the notifications themselves can now be made interactive. So for example, here, you can see Messages is now allowing you to reply quickly to a message inline directly in that notification.
+
+Now in addition to interaction, iOS 12 now includes grouping of notifications by default and the default behavior will be to group all the notifications for a particular app into a single group. But, of course, your app may have custom needs to have more granular groupings so something like iMessage will group all of the messages from a particular conversation together and separate from all the rest of the notifications for that app. Now you can adopt this in your app as well by just tagging your notifications with a particular thread identifier and then all the notifications for that threat identifier will appear in a single group.
+
+Now the UI updates for notifications in iOS 12 also include some new ability for users to customize the delivery behavior of their notifications. But, of course, your apps may also include some existing, more granular controls for notification management within your apps as well. And iOS 12 introduces a new API that makes it easy for your customers to get directly deep linked into your notification settings UI exactly when they're looking for those more granular controls. So you can learn more about all of these notification things in What's New in User Notifications and Using Grouped Notifications later this week.
+
+That's notifications. Next, let's talk about messages. Now messages in iOS 12 includes some really new and exciting features in the camera. And you can bring all of your iMessage stickers directly into the camera as well. If you're using the Xcode sticker template, this will work automatically by default with no additional work on your behalf.
+
+But if you're building a more custom sticker experience using the MS Messages App View Controller, some small amount of adoption is required. Now there's a new MS Messages Supported Presentation Contexts API that you can add into your user info plist and then specify that you want to appear both in the messages context and the media context.
+
+Once you've done that, your apps will appear both in the App Strip and also within the camera. Now if at runtime you need to figure out which context you're in so that for example you want to customize the display of your stickers a little bit, there's a new API for that as well.
+
+By checking the presentation context, you can quickly see whether you're in messages or in the camera. Now in addition to these features, iOS 12 also brings a new access for interaction to your messages apps. In compact mode, previously swiping horizontally down in your messages app would switch between apps. In iOS 12, these horizontal swipes and interactions that move horizontally are now available for us by your apps directly so they'll interact with your apps rather than switching to a different app.
+
+And that's Messages. Next, let's talk about automatic passwords and security code autofill. Now iOS 11 introduced automatic passwords or password entry into your apps. And in iOS 12, we're taking these a whole step further. But let's go back to the beginning for a minute and talk about the entire experience.
+
+So for users that have passwords stored in iCloud Keychain, since iOS 11 it's now been possible to have those automatically get populated into your app in your login flows. Now in iOS 12, these passwords can also be stored into iCloud Keychain from your apps both from your login window flows and also from your password change request UIs.
+
+As soon as a user logs in, they'll be prompted to save the password to iCloud Keychain. Now even better, iOS 12 can automatically generate passwords in your new account flows and in your password change flows. Adopting this is really easy. You just make sure that you've tagged your password fields with either the password text content type, if it's a login field, or the new password text content type if it's either a new account or password change field.
+
+If your services have a specific requirement on passwords for example if they got required or disallowed characters or if they have other requirements such as maximum number of consecutive repeated characters, you can specify these requirements as well to make sure that the automatically generated passwords are fully compatible with all of your requirements.
+
+Now, the final bit of friction during some of your login experiences is when you have to take that two-factor authentication code, get it out of a text message and into your apps. IOS 12 makes this really easy by automatically identifying these notifications, noting the security code in them, and suggesting it right in the Quick Type candidate bar so that it's really easy to get it right into your app. Now the only thing you have to do to make sure this works in your app is to be sure that you're using standard iOS text interaction APIs in order to accept these passcodes.
+
+With all of these new features, iOS 12 is enabling a much more secure future with unique, strong passwords used for every service that you never have to memorize or type ever again. You can learn all about this in the Automatic Strong Passwords and Security Code Autofill Session later this week.
+
+Now, our final API enhancement topic is actually a bit of a review but now with a little bit more context. So in iOS 11, we introduced Safe Area insets. Safe Area insets are a really great way to make sure that your content is avoiding any overlap from other parts of the user interface such as bars on the top and bottom of the screen.
+
+This is really great on iPhones where bars are pretty straightforward, but it's really powerful as well. Safe Area insets give you that safe area coordinate in the local coordinate space of any view in your application, so it scales even the much more complex interfaces, things like iPad Split View which has different height bars on the master and detail side of the Split View. The Safe Area insets in any view underneath these bars will be appropriate for the amount that they're overlapped by the bar on their side of the split.
+
+So this is really great on devices with rectangular screens but it also is really powerful on devices that have non-rectangular screens like iPhone X. Now, you can see here we've got our larger bars at the top and bottom than we have on devices that have home buttons. And the Safe Area insets obviously have just grown to accommodate that larger size.
+
+Now, unique to iPhone X is that there are Safe Area insets even in cases where no bars are present and this extends the landscape mode too where it can really help you make sure that you've got a rectangular area at all times that's safe to display content and will never be clipped.
+
+So I want to thank you all for those of you who have adopted Safe Area insets and updated your apps for iPhone X. It's been a really great experience over the last year and I'm sure most of you have already done that. If you haven't, now is a really great time to do so.
+
+Your customers will always prefer apps that are being kept up to date and support for iPhone X is a really visible indicator of that being the case. So if you haven't, definitely go do it now. And to help make sure you have all the information necessary to do that, you can check out the UIKit Apps for Every Size and Shape Session later this week which will tell you both all about Safe Area insets and all of the other related inset APIs all throughout UIKit making it easy to make sure you have apps that scale to every shape and size.
+
+So that's our framework updates and our API enhancements. Next, let's talk about Siri Shortcuts. So Siri Shortcuts is an exciting new API in iOS 12. Siri Shortcuts makes it easy to get common actions out of your app and make them accessible via Siri. Now, Siri Shortcuts can be suggested proactively right on the coversheet making it easy to access actions that you would want to access at the exact time and place that you want to access them. Even better, they can also be suggested right on the Siri watch face on Apple Watch. Now not only are Siri actions suggested proactively but they can also be set up to be executed using a custom voice phrase.
+
+Now, adding Siri Action Support to your apps is really easy. You can use two APIs. There's NS User Activity, which you may already be using for support for Handoff and Spotlight integration, and there's also support for Siri Intents for more complex scenarios where you have more custom interactions. So let's look first at NS User Activity.
+
+Now as I mentioned, NS User Activity is a common API with Handoff and Spotlight and this could be a really great API to use if your Siri Shortcuts should get your customers back to a specific place in your app, for example loading a particular message or document, the same as you would do if you were trying to hand that off to another device. If you're already doing this, it's really easy to add support for Siri Shortcuts. You just set Eligible for Prediction to true. And if you're not, this may still be a great way if your shortcut fits into one of these categories.
+
+Now, if your app has other more custom needs or if you just want a lot more control, you can adopt the Siri Kit Intents API. Now Siri Kit Intents provides a number of predefined intents that you can easily adopt on your own. These are the same as the Siri Kit Intents in previous years. Now if your apps have more custom behaviors, though, you can now in iOS 12 define your own custom intents.
+
+Custom intents can be really flexible and they do anything that you would want. In this case here, I've created one to help me create my WWDC slides next year. Now the categories that you could put your intents in to are pretty broad already. So here I've used the Create category. But if your intents are even more generic than that, there are even more general ones available such as General Do, Run, and Go options.
+
+Now once you've created your intent, you also want to make it really easy for your customers to create these custom shortcuts to get to them. And so there's now an API from right within your app you can allow customers to create a custom voice shortcut. So here I've got a button that will just bring up a new panel enabling me to create a new shortcut right within my app as soon as I finished an operation. So if you're doing something like ordering a coffee in the morning and you notice it's something that might be done again, this is a great opportunity to offer to create a Siri Shortcut to do that next time.
+
+Now even better, you can also combine these shortcuts together using the new Shortcuts app available from the app store. So you can learn all about this and much more in the Introduction to Siri Shortcuts, Building for Voice Siri Shortcuts, and Siri Shortcuts on the Siri Watch Face Sessions later this week.
+
+So we've talked a lot this morning about what's new in iOS 12, but there are also a number of great sessions that are worth mentioning that aren't necessarily about what's new. So if you're new to creating apps for iOS, there's a really great session you should check out called I have This Idea For an App. So definitely check that out.
+
+And if you already have an app, and are just looking to add more polish, there's a couple other great sessions as well, A Tour of UI Collection View and Adding Delight to Your IOS App. So thanks so much for coming out this morning to hear what's new. Look forward to seeing you in the labs and I hope you have a great week. Thanks.
+
+[ Applause ]

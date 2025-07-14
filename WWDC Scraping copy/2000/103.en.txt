@@ -1,0 +1,343 @@
+---
+Title:  I/O Kit Overview
+Year:   2000
+Web:    https://nonstrict.eu/wwdcindex/wwdc2000/103/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+My name is John Signa. I am the technology manager for Mac OS X, and I focus on the Core OS, covering drivers, file systems, and networking. And I'd like to welcome you to the I/O Kit session. It's really good to see we have a full house today. How many of you like the I/O Kit demos that have happened so far?
+
+We've been doing a ton of them. In case you haven't noticed, they've done some in the Carbon session, some in the Keynote. Let's see them do those fancy graphics demos without the display drivers and so forth. Those are the cool demos. The drivers are working. So to tell you actually how you can actually get your devices working with Mac OS X, I would now like to introduce Dean Reece, who is the manager of the I/O Kit engineering team. Dean Reece.
+
+Good afternoon. Thanks for coming out. It's good to see you all here. So if you've come to previous WWDCs, you've probably seen me up here before talking about what I/O Kit is going to be. And this year, I'm going to talk to you a lot about what it is and has been and is going to evolve into. So we've got a little bit of history, and we've also got some future direction for you. So let's get started.
+
+So I'm sure you've seen plenty of these by now. This is sort of the view from orbit, and we'll be getting closer and closer. So we're going to be focusing in on the very bottom box here, the Darwin section. And of course, within that, we'll be focusing in a little bit finer on I/O Kit and drivers.
+
+So today we'll talk a little bit about the current state of I/O Kit, and then we'll spend a little time talking about developing code to run inside the Mac OS X kernel, because there are some very special conditions that you have to follow to be successful at doing that, that are definitely different than what you would encounter doing application development.
+
+We're also going to spend some time talking about the I/O registry, because this is probably the single most important element that is in the core part of I/O Kit. This is used by all families, and all drivers will be involved in it, whether they know it or not. We're also going to talk a little bit about our user-client model. Basically, drivers live inside the kernel, users don't.
+
+So you have to get-- wow, they like that. So we're going to have to figure out a way to move the data across the user kernel boundary. And there are a number of ways of doing that inside Mac OS X. I/O Kit has a small bag of tricks for doing this. And there are other mechanisms available, but we'll talk about those.
+
+And then I'm going to spend, actually, some good amount of time this year going down each individual family and explaining where we stand, where we're going, and directing you to what other sessions are coming up that will actually give you some details about how to use those families. So let's get started.
+
+What is I/O Kit? So there's really two main definitions that I use. And the first one is it makes it as easy as possible to develop correct Mac OS X drivers. Now, kind of a vague blanket statement. We'll get back to the word correct a little bit later. But that is basically our goal. We're a framework that's intended to enable all of you to write drivers for Mac OS X. That's its primary purpose. Would you like fries with that driver? We're a service organization.
+
+So the next one, the other definition is not from the driver-writer perspective, but what does I/O Kit do from the system perspective? And that is, it provides software abstractions for all the hardware on your system. Because if there's not a way to find a device from software, apps aren't going to talk to it.
+
+And more from a tactical perspective, I/O Kit is delivered as part of the Mac OS X KDK, the Kernel Developer Kit. And we've kind of broken from the traditional DDK terminology, because it's not just for writing drivers. It's writing all kernel extensions for Mac OS X. So I/O Kit is in there.
+
+So who is I/O Kit for? Well, if you're writing a device driver, there's a good chance I/O Kit is for you. There's a little bit of special language here that we add in, is if your driver must run inside the Mac OS X kernel, then you use I/O Kit. Now, we'll be talking a little bit more later about why you would or would not be running inside the kernel. Ideally, we put as much code as possible outside of the kernel, for reasons I'll get into later.
+
+But keep this in mind throughout the whole presentation. When you're thinking about your software product, you need to be thinking about where does it need to fit into Mac OS X. And I'll be giving you clues all along as the subjects come up. But as an example, printer drivers do not live inside the kernel.
+
+They live actually inside the printer framework, and there's a session to talk about how to do those. Also, developers of applications that need to talk to devices directly. By directly, I mean there's a-- a USB security dongle, and you've got an application that wants to directly talk to that dongle.
+
+Indirectly would be your application wants to talk to files. Well, obviously, the file systems live on devices. In that case, by going through the file system to access files, you are, of course, getting to a device. But I don't consider that direct access. That's not really an I/O Kit thing. But also-- OK, I've already talked about the third point, so I got out of order for myself.
+
+So the state of I/O Kit. Last year, we first shipped I/O Kit code in binary form. The developer preview that we gave out was actually running on I/O Kit. All I/Os were going through it. But it was not quite mature enough or stable enough to give to developers because we didn't want to misdirect them. We knew there were areas that were changing and improving. So that was the first time it ever really saw the light of day.
+
+Then last February, we shipped the first KDK, and inside of that was a lot of I/O Kit, but not all of it. We had the KDK elements for a number of families, like USB and SCSI and so on, but it wasn't complete. Now, with this year, with DP4, we've given you an updated KDK, it's actually part of the CD, and you might look on there trying to find a package that says KDK. We haven't broken it out as a separate thing. When you install the developer package, you get all of the KDK bits. There are still some things that are missing. We'll go over exactly what's there and what's not there, but we're continuing to add more.
+
+And in June, we intend to ship an add-on for DP4 that you would be able to install that would add even more, and would update a few things. So we're making progress here, and hopefully we've gotten to the point now where most of you can get started. Many of you, if not most of you, will actually be able to complete your work based on DP4. Some of you will have to wait for additional support from Apple before you can get going, but we'll get into who you are and how you would go about getting that information.
+
+So Mac OS X uses kernel extensions to extend the kernel. Simply put, a kernel extension is just a wrapper for code. It's a way to get a chunk of binary code linked into the kernel and get it executing. And each environment, like I/O Kit is an environment inside the kernel, the network kernel extension support is an environment inside the kernel, and the file system plug-in is an environment. Each of these environments have their own set of APIs that a driver developer would use to, excuse me, a software developer would use to get at the services they need. So, at the top level, a kernel extension is just a way to deliver the code.
+
+It doesn't actually have any real API in it yet. The other thing I want to say about kernel extensions is they're not synonymous with Mac OS 9 extensions. Now, there are certainly Mac OS 9 extensions that would map to kernel extensions in Mac OS X. But this is not an assumption you want to make.
+
+You want to consider very carefully where your software fits into Mac OS X. So, an example would be a foreign file system plug-in extension would be a file system plug-in in Mac OS X. So, it would be a kernel extension in that case. But a shared library in Mac OS 9 is not going to be a kernel extension in X. We have other ways to deliver that functionality.
+
+Now that being said, I will reiterate, you should only put your code inside the kernel if you have to. And here's some of the reasons. When you develop inside a kernel, you are, first off, you have to use our tools right now. I don't believe there's an alternative tool set available to develop kernel extensions. If there is, I certainly am not aware of it.
+
+Now, it's certainly, we will work with any developer that is building IDEs and wants to be able to have a tool to develop Mac OS X kernel extensions, but it's going to be their products. They have to drive that development. So, just to be clear, Apple will provide you with an IDE for developing kernel extensions.
+
+And we will work with third parties to get their tools up to speed if that's their intention. The other thing about developing in the kernel is debugging. Has to be done using a tech tool. So, we will be using a two machine debug environment. And this is done not over a serial port, but over Ethernet.
+
+So, what happens is you have one machine that actually has the kernel extension you are testing. And that's connected on the same Ethernet segment to a host machine where typically you'll also be doing your development, which will have GDB running over there. You'll attach to the kernel running on your target machine. You'll be able to stop it, single step it, look at the stacks, look at memory, things like that.
+
+It is not as seamless as it looks. It is as seamless a debugging experience as you would get with applications. We are going to work on improving it, but it's not probably ever going to be as glitzy as application, you know, GUI application debugging because it's just a very different development style.
+
+Also, there are limited language features. And this is-- we talked about this a little bit last year. I/O Kit uses C++ object-oriented structures for managing a lot of the way our framework works. But we've restricted what features of C++ we use. And we've done this for a couple reasons. Probably the most important is for stability. The entire Mac OS X kernel is not in C++.
+
+[Transcript missing]
+
+Okay, so the next issue with developing inside the kernel is that you can't directly interact with the user. Now, we do have some services that will allow your code to throw up alert panels, for example. In general, though, the theory is that drivers should drive hardware, and you should have some higher-level policymaker deciding what the user experience is. There are a few cases, however, a good example would be an encrypted disk that needs a password before it can be mounted, where it may be reasonable for the driver to actually throw up some UI.
+
+We have some resources for that coming in to later releases, but for now at least, if you want to have a user entity interact with a driver, you have to write both pieces of code. You have to have a user piece that communicates with the driver to throw up UI.
+
+The other thing about developing inside the kernel that you have to keep in mind, I can't stress this enough, resources inside the kernel are more expensive than user resources. And what I mean by that, kernel memory is by default wired. You don't want to take page faults when running inside the kernel, because that can lead to various problems that will end up with a dead machine.
+
+So effectively, when you allocate a K of memory inside the kernel, that's a K of memory that isn't available to any application, no matter whether they're paged out or paged in or what. If you allocate a K of memory in an application, and that application is idle, then it's going to be paged out as part of the application's working set, and other applications will be hot. So effectively, memory inside the kernel is much more expensive. There are other resource issues inside the kernel as well, but memory is really the one you want to look at. Also, failures are fatal.
+
+If you crash inside the kernel, you've crashed the entire machine. You've panicked the kernel. An application, something running outside of the kernel, only crashes itself, its own process. So these are all good reasons to stay outside the kernel. Now, of course, a lot of you are going to have to develop code that runs inside the kernel, and that's fine. We intend-- I have lots of no lifeguard on duty warnings and so on. But we do it all the time. There's quite a lot of code and quite a lot of drivers that we develop and put inside the kernel. So it is possible.
+
+And to get you started with this, we've put together a few tutorials. Now, in DP4, these tutorials show you how to generate first a Hello Kernel extension. This is just sort of the minimal piece of code that will load in, it will log a message to the console when it's loaded, then you can manually unload it, it will log a message saying goodbye, and it will unload. And you can sit there and load it and unload it and load it and unload it and experiment.
+
+It's a great way for you to get started because it shows you how to go through your development cycle. It gives you the skills you need to build a project, get it loaded, see that it's loaded, and then you can start adding code and experimenting with APIs. The second tutorial is I/O Kit focused, and this is called Hello I/O Kit. It layers on top of the first one in the sense that it adds I/O Kit-specific APIs. It shows you some of the basic entry points like start and stop that most driver writers are going to need to override and do something with.
+
+It also shows you a little bit about the way our matching works. These tutorials, by the way, are not intended to educate you as to why you are doing all of these things. They are intended to walk you through the steps so that you can then begin to experiment. We are working on some improved versions of these tutorials. Both of them, by the way, show you the project builder web objects.
+
+The I/O Kit is a new interface, excuse me, IDE. So when you follow these instructions, you'll be using the older style project builder, and then you will build these projects. You can import them into the new project builder, the fancier one, and you can, I believe, continue to make progress there.
+
+In the June KDK that I mentioned, we intend to cut over all development of drivers to the new project builder. And at that point, we'll give you new tutorials that show you how to create those projects in the new project builder. But they do work as expected now using the old project builder, project builder web objects.
+
+Oh, the second tutorial that talks about I/O Kit also spends a good bit of time showing you how to set up the two machine debug environment. This is going to be a tricky step for a lot of you if you don't have Unix or GDB experience. It requires that you spend some time at the command line and manipulating some files in a way that won't be immediately familiar to a lot of you.
+
+So just be patient and work through it. It's an important skill to have. And I assure you it is possible, it does work. It's very, very powerful once you get it connected. So these are exercises you should all be going through, I think. So I/O Kit's design goals.
+
+In the very early slide, I told you that I/O Kit is to help you write correct drivers. Well, this is where I talk about what I mean by correct. The Mac OS X kernel environment has some real complexity to it, and I/O Kit is there to help smooth over a lot of it.
+
+MP and preemption. The Mac OS X kernel is intended to be able to run on an MP machine, and as it works out, the software constructs are more or less identical to what you need to support kernel preemption, which we will be turning on at some point to get better real-time performance.
+
+For those of you that have not developed software that either runs on MP or runs in a preemptive environment, there's a lot of stuff you have to do to protect your data because you might have code that gets re-entered. I/O Kit has some primitives, Command Gate and Work Loop and a few other things that help you thread your driver accordingly so that you get the expected behavior with the minimum amount of fuss. This is not to say this is the only way to thread your driver.
+
+You have complete power to write it however you want. You can use a lot of the BSD locking primitives if that's your preference. We recommend, of course, following the I/O Kit models that you'll see in the example drivers. You'll, I think, have a much quicker bring-up of your driver. But I/O Kit is not there to limit you, it's simply there to assist you.
+
+Another thing that the Mac OS X kernel gives you is multiple address spaces. The kernel runs in its own address space. Each application also runs in its own address space. And by that I mean address 4000 is going to mean something completely different to each application as it does to the kernel. It may not be mapped at all in some application or in the kernel space.
+
+So when you write a driver that receives a request from a user, You've got to be aware of the fact that that request may not be in an address space that you can directly access. You have to go through and either copy it or map it into the kernel address space and do some I/O. Again, I/O Kit has some primitives for making this easy. By and large, most of you won't have to do this because if you follow what I/O Kit's done, it comes for free.
+
+Another thing that we have thought about in I/O Kit is architecture neutrality. The Darwin presentation the other day, I guess yesterday, you saw an Intel machine running the Darwin kernel. And one of the reasons that's possible is I/O Kit has built-in byte swap capabilities. There's actually OS byte order, I think, is the header that you look at. But it allows you to write a driver that can be compiled for architecture of any Indianness and work correctly.
+
+Now, I/O Kit drivers really are intended to focus on mechanism. And by that, I mean providing the conduit for information to flow from the operating system into the device. We try to avoid having drivers make user experience policies. And one of the reasons for that is we want to have a more uniform user experience. We'd like those policies to be enforced at a higher level.
+
+So the way a disk drive, for example, is dealt with as far as whether it mounts on the desktop or not shouldn't be driven out of the device driver. It should be driven out of something higher level that looks at the volumes and decides what's to mount or not. This does also have the side effect of making the drivers a little simpler for you because you get to write the code to deal with mechanism and not policy.
+
+Another fundamental design goal we had with I/O Kit is that we're not going to do something that is private for Apple. I/O Kit is not intended to be Apple's private I/O system and, oh, by the way, third parties can maybe do a few things. We're actually giving you the power to write your own families. You can pick a standard that Apple is probably not going to do a family for, like IEEE 488 or some other protocol. You can define a standard set of headers.
+
+You can public open source it in Darwin. In fact, I would strongly encourage that. If you do develop a family, follow Apple's lead. We're open sourcing our families. You could do the same. This gives you an opportunity to present new API that other developers can then build on and it does it within a standard framework. You don't have to invent your own mechanism for doing this.
+
+We actually have it built in. So you have all the same power that Apple does. And as I said, their families are a little bit different. Another fundamental design goal we had with I/O Kit, the Mac OS X driver model, how they are dynamically loaded, how they are dynamically loaded, and how to begin making your own families work with Mac OS X.
+
+families are open source so you can also if you want to follow the Apple public source license you can also lift our code for your family and plagiarize Okay, so I've talked a lot about families and drivers. I'm going to explain a little bit about what the distinction is and why.
+
+So I/O Kit is just a framework. It doesn't understand anything about particular protocols. There's no built-in SCSI support in I/O Kit proper. So it's just a framework. It's a bunch of services for memory management, interrupt management, device discovery, matching and loading. There's a lot there, but it doesn't know anything about particular devices.
+
+So families are loadable chunks of code. They are themselves kernel extensions. Some of them are built into our kernel for now, but we intend to make all the families loadable as kernel extensions. And that's where the code that deals with a protocol lives, but not for a particular device. So this is the middle piece.
+
+So for example, all SCSI controllers have some things in common. The way they queue messages, the way that maybe they'll deal with error recovery, the way they scan their bus. These things are not something that the controller driver, the SIM writer, wants to have to implement every single time. It also gives you the opportunity to get wrong or get behavior different from one controller to another. The family is, you can think of largely as a library that provides that functionality for you.
+
+And since it's object-oriented, you can also override it. So we give it to you, you can use it, but you can also override it and say, "You know, I want to scan my SCSI devices in the reverse order because I think it's cooler that way." So we give it to you, you can use it, but you can also override it and say, "You know, I want to scan my SCSI devices in the reverse order because I think it's cooler that way." You have that power, but we encourage you to take advantage of the functionality we do provide in the family superclasses. So the device specifics then go into a third piece, which is the device driver.
+
+And our intent is by the time you get down to that level of code, you're really only writing code to deal with a particular piece of hardware or a particular set of hardware. That you don't have to worry about scanning the SCSI bus. All you have to do is be able to take a SCSI command and push it out on the bus. And when it completes, call a completion routine.
+
+That's it. The superclass will make use of that to cause the scanning to occur. It's a very nice layering. It's very powerful. And we take advantage of KEXTs. Kernel extensions really in this case are a library mechanism. And we have the built-in understanding in KEXTs for dependencies. So for example, a SCSI controller driver would be dependent on the SCSI family, obviously. But it's also going to be dependent on typically this. The PCI family because you're making a PCI SCSI controller driver.
+
+So what happens when you actually go to load that device driver, it's going to see, the KEXT mechanism will see that there's a dependency on both the SCSI family and the PCI family. And we'll make sure that they're both loaded for you and that you're linked against them.
+
+And in fact, it's arbitrarily deep. So let's say you have a very complex product space, and you have some code that can be shared between a number of your drivers. Well, cut and paste obviously works, but that can be a real maintenance burden. But you can also introduce your own sort of private family.
+
+That is something that maybe extends the SCSI family, but isn't even a complete driver in and of itself. You can then have a set of drivers, a small cloud of other drivers, that then depend on that. So it's a generic library mechanism. It's actually very cool. Once we got it working and started using it ourselves, we were actually pretty pleased with how easily it is to work with.
+
+So each family contains a set of classes that present an abstract view of a device. Now, this is important because this is the point of mix and match. I/O Kit has a stacking mechanism so that you can have any file system, for example, talking to any disk drive.
+
+Well, any implies that they all look reasonably similar. Well, this is the point at which we make them look similar. So first and foremost, a family provides a set of abstractions that you must conform to if you are a device of that family. A storage device, for example, needs to have more or less the same access APIs as some other storage device. So you start with that base class and you override.
+
+We'll also include a lot of functionality there. As I said, minimally, we provide the APIs. We could get by with basically just a virtual empty class and then require you to do the entire implementation. But our intent is to go a lot farther and actually give you as much of the implementation as we believe is useful to you. And a couple examples of that, I/O PCI device is an abstraction that every PCI device in the system will be derived from this class. Same I/O parallel SCSI controller, same thing.
+
+So ideally, drivers will inherit most of the device's independent details from the family. Now, the other thing is that we have an I/O prefix in front of all the families of I/O Kit. Apple is reserving this prefix. We do intend to allow you to introduce new families. But for support reasons, we ask that you release those families with a different prefix other than I/O.
+
+We'll talk about vendor naming in just a minute. But when you encounter a class that has the I/O prefix, that is officially part of Apple's I/O Kit or one of its families. And that means it's something that's intended for developers to use. It's either there for you to instantiate or to subclass or to call into.
+
+So drivers are leaf classes. They basically have to be because they need to be complete. They have to drive hardware. So for those of you not familiar with object-oriented terminology, a leaf class is simply something that doesn't have anything else building upon it. It's the final implementation. So in the class hierarchy, what you would see is some classes provided by I/O Kit proper, and then some additional subclassing going on in the family, and then you would write the final class in your driver.
+
+It inherits a lot of functionality from the family, as I said before, and it focuses on the details of one specific device. Now, for naming your drivers, we use Apple as a prefix for our classes. So when you, in Darwin, encounter a class that starts with Apple, you'll know that that actually is not intended for a developer to extend. That is what we consider a Leaf class. It's one of our own device drivers. Certainly a good choice as an example, but probably not something you should be subclassing.
+
+Now, we have a namespace issue, and that is in the Mac OS X kernel,
+
+[Transcript missing]
+
+Really, it's only when you're defining them. It's actually a pretty flexible mechanism. This is what we're intending to go forward with, but would welcome any feedback from you as to alternatives that you think might be better.
+
+So I've talked about families and drivers, which are sort of static elements, what goes where. Talk a little bit more about the dynamic aspects of I/O Kit. When do things happen? So driver matching is really at the heart of our plug and play and our hot swap story.
+
+And in general, matching is provided by the family. The bulk of the matching is provided there. And the reason it goes there is because matching typically depends on device protocol specifics. So you aren't going to, for example, see SCSI device matching overlap very much with, say, FireWire device matching. There may be some similarities, but it's sufficiently different that it makes sense to codify the details of each bus in the family. Now, we use a subtractive logic, which means we start with the list of all available drivers on the system.
+
+And we remove them from the list at each layer in our matching system until we get down to one. So the very first step is class matching. As I said, we use classes to present abstractions of devices. I named IOPCI device as an example. So you could pretty easily declare that my driver will only talk to something of class IOPCI device.
+
+And when a PCI device nub pops up and wants to be matched, it's going to ask for a list of everything that can consume it. So I'm going to say, I'm going to use this list of everything that can consume IOPCI device objects. And that will eliminate a tremendous number of drivers from the list right there. Obviously, USB device drivers need not apply. So that's done in I/O Kit proper.
+
+That's part of a service we call the I/O Catalog. And once that's done, it's up to the family to take that list of drivers and then apply what we call passive matching. Now the reason we call it passive matching, it's passive from the driver developer's point of view. The person writing the driver doesn't write any code here. You're going to put some matching strings in your definition file, and the family will look at that file and look at those strings and decide if you're a candidate for further matching or if you should be excluded.
+
+So for example, in PCI, you can use a name match, which is sort of derived from the open firmware device naming, or you can use vendor ID and device ID with a wild mask right out of the PCI config space. Different families, as I said, will apply different logic here, but it allows you to very quickly whittle down the list of drivers to a couple that are appropriate.
+
+Now, one of the things that we did not want to do was invent a new language. We could very easily have gone overboard and put in all sorts of regular expression goo and had the passive matching be just incredibly powerful. But we decided that C++ is already a pretty good language.
+
+Some people will debate that. But it's certainly something that our compiler already supports and is very flexible. So we came up with a third stage, which we call active matching. And as the term implies, this means the driver being matched is active in this process. Its probe entry point gets called with a reference to the thing it's being matched against.
+
+And it's then up to the driver to actually talk to the thing. Is this one of my devices? Is it something I can talk to? This is sort of the ultimate catch-all. Ideally, we want to filter out as much as we can in passive matching. But realistically, we know you're never going to get 100%. So active matching gives us the hooks to do very, very thorough matching.
+
+It also allows you to make decisions based on dynamic characteristics. Do I want to match this right now? Whereas passive matching is static. You set the strings once, and you'll match or not based on that. Now, this scheme allows for ties. You can have multiple drivers that all claim to be able to drive a device.
+
+And we wanted to come up with a reasonably safe mechanism for breaking those ties, and it's simply based on scores. Our theory is that a more generic driver should lose out to a more specific driver when both of them claim to be able to drive a device. In practice with I/O Kit, we have not run into cases where we have We have collisions past this point.
+
+It is entirely possible that somebody else writes a generic driver that has the same match score as the Apple-provided generic driver. And in this case, right now, the system, I think, picks the first one that it sees. We might improve on this if it proves to be necessary, but I suspect that what we have here is flexible and powerful enough to be complete. There's a lot you can do here. If you're writing a family, it's your responsibility to do the passive matching. Class matching, as I said, is done by I/O Kit proper, and the active matching is done by the driver writer.
+
+All right, the I/O Registry is very central to I/O Kit. It is sort of the glue that holds it all together. I've said object, object, object quite a bit up here. Well, I/O Registry is the collection of all the objects that make up the running system. So if you imagine that each device driver is represented by a single object, and some of the other device abstractions, like partitions on a disk are represented by single objects, you have this sort of cloud of objects. Well, the Iowa registry ties them all together.
+
+It's dynamic. It's the collection of actual live running drivers. I want to call it a database, but that implies, you know,
+
+[Transcript missing]
+
+Also, every driver has a property list, and this is incredibly important in the registry and in an I/O Kit. The property list is really a description of random properties that, some of them are things that we declare that you need for the family, some of them are just notes that you care to put in there.
+
+It is a collection, typically a dictionary, and a dictionary is a named set of values. So, for example, a driver would have a property called version, and you could do a The I/O Kit is a very simple, easy-to-use software that allows you to create a lot of different types of I/O Kit. It's a very simple, easy-to-use software that allows you to create a lot of different types of I/O Kit.
+
+It's a very simple, easy-to-use software that allows you to create a lot of different types of I/O Kit. The I/O Kit is a very simple, easy-to-use software that allows you to create a lot of different types of I/O Kit. It's a very simple, easy-to-use software that allows you to create list file in your driver as part of the kernel extension. And in there, you put in your primordial property list. So later on, when you actually get down to running your code, that same bit of data is given to you. And you can then use that as input parameters.
+
+You can also use it, once you've gotten it, as a dynamic communication mechanism. There are libraries available to allow an application to scan the registry looking for a particular object, either by its type or by some property in this property list. And once you've found the object, you can do get property and set property calls on it. And the driver can just allow those calls to communicate with its property list directly, or it can override them. And this is where it gets cool. So an application can do a set property, say it wants to send a password down.
+
+The driver receives the set property call, and because they've overridden set property, they look at the property being set and see that it's my password. And they intercept that call, they do something special, and they don't actually have to put the password into the registry. You can actually kind of hijack that as a communication mechanism for low bandwidth configuration-y type stuff.
+
+I know a lot of driver developers will use this for turning on and off verbose mode. You can do a set property verbose and set it to some number, and then your driver can receive that call and do something with it. So it's very open-ended as to what you can do with this.
+
+So how do you see it and how do you get at it? It's important that you, I think, understand what it's there for and how it's used. So we've put an application together. It's actually a pretty nice graphical application called I/O Registry Explorer.app. It was present in the KDK that we shipped last February, and it's present again in DP4 and will continue to be present as a developer tool. It allows you to use a browser view to walk through any plane of the registry. So by default, it lets you walk through the service plane, but it will allow you to switch planes, I believe.
+
+Once you land on a driver, it also shows you the property list for that driver. So we don't yet have the ability to allow you to change those properties, but right now, today, you can take a look at the actual set of drivers running in your system and what properties they have and how they're being used. And it's great just to sit down and explore and see how the thing's put together.
+
+Now, for Darwin developers that don't have the GUI, or if you're just interested in, say, maybe piping some information into an email message, you want to cut and paste it, like, why is this object showing up here when I don't understand it, to send that to us so we can explain it to you.
+
+We have a command line version called I/O Reg, and this is sort of a BSD-style command line utility that you can run. By default, it just gives you a list of which drivers are out there. You can also give it an option to actually give you all the drivers and all of their properties, and it will spew a tremendous amount of text.
+
+But it's a very powerful way to figure out what's in the system. Look at it before you load your driver and after to verify that your driver is matching where you expect it to and present. So, very, very powerful tool both during development and actually as a mechanism for communicating with your driver.
+
+Which leads us into the user kernel boundary. Now, as I said before, drivers are inside the kernel and users and applications are outside the kernel. So obviously, we've got to bridge this user kernel boundary for I/O to be of any use at all in the operating system. So we have several mechanisms at our disposal in the Mac OS X kernel. System calls, and by this I mean sort of the BSD-style system call. This is also how networking communication works using the socket system calls. We also have a Mach inter-process communication that's available, and we have Mach shared memory.
+
+I/O Kit uses all of these mechanisms at various times to communicate between user space and the kernel. And in most of these cases, we try to wrap this with family code. So inside the kernel, it's buried inside of a family, and in user space, it's buried inside of a library.
+
+So you don't have to actually get at the guts of this. If you have special communication requirements between user and kernel space, then you might actually have to get at these mechanisms directly. And I direct you to Darwin. There's a rich source of examples of how to do this, because all three of these are used.
+
+Well, in I/O Kit, we really are trying to push a wrapped version of those mechanisms that is a little cleaner. We call it the user-client model. And by user-client, that name is really from a kernel perspective. And what this means is I am a kernel driver, and I have a client that's actually in user space.
+
+So this is part of the I/O Kit infrastructure, the main framework. And the cool thing is, from a driver-writer's perspective, you don't have to do anything different. A user client looks like an internal client. But from an application's viewpoint, it looks like a library or a CF plug-in. And effectively, we've written both of the pieces of code and wrapped the transmission mechanism, and you just make use of the simple APIs that you already would be doing in kernel anyway. And you have a communication mechanism.
+
+And as I said, if you have additional requirements for low bandwidth communication, you can hijack get property set property. If you have requirements for other high bandwidth communication, then you're probably going to have to do something like shared memory or some other mechanism. If you need something, let us know.
+
+Give us the feedback. Because again, as I said, I/O Kit is a framework there to help you make your drivers easy to write. And if you need it, there's a good chance somebody else needs it. And if it looks like we've got a community of developers that need a service we're not providing, we'll try to add that in.
+
+The other thing that's important, as I described earlier, the matching process of I/O Kit starts at the bottom, the platform expert, and matches up as we discover devices, we load and add new drivers. Well, user client reaches down from user land. The kernel can't really go out and find an app and say, "Oh, I bet you need to talk to me." It really has to happen the other way around.
+
+So the application has to request the connection. So here's how it works. First, the application is going to find the target driver, and it does this by looking in the I/O registry. It will, again, it'll search for something of a given class, or it'll search for something with properties. But once it finds the driver it's interested in, it generates a connection request through the appropriate user client.
+
+That causes a temporary kernel object to be created to act as the kernel half of that communication. And from that point on, the user, application, and the client are going to be able to connect to the driver. And then the application has access to communicate with the device.
+
+If the user application dies unexpectedly or exits normally, the Mach kernel will notice the fact that that communication pathway no longer has any user space listeners and will clean up all resources. So you don't have to worry about an application dying, leaving some device in an inaccessible state. This is part of our push to make sure that one app can't affect another app.
+
+Okay, so that was really the high-level overview of how I/O Kit is put together. Now I want to give you a roadmap of where we're going and show you what other sessions are going to be of interest to you. So, in DP4, we have driver loading and unloading, and that's available for a number of families. Actually, it's available for any family you can write a driver for.
+
+Plug and Play and Hot Swap are there now and implemented for USB, FireWire, and storage, and we'll be making it available a little bit more widely. But it really depends on the semantics of the family. Right now, we don't have the ability to hot swap PCI, so we don't have hot swap capabilities in the PCI family. As those technologies become important, we'll extend families to deal with that.
+
+And device power management has been implemented for screen dimming and for drive spin down. We'll be coming to other families shortly. This is something we're pushing on rather aggressively right now. We actually had done a lot of work that was not ready for DP4. So we didn't want to risk destabilizing DP4 by dumping in changes at the last minute. But it is, we've made actually quite a lot of progress and we'll be coming out with that soon.
+
+And there are many families in DP4. As I said earlier, we're going to be pushing out another KDK for you to install on top of DP4. And so we're going to provide updates for a few families. And we're going to add more documentation and examples beyond what you see in DP4.
+
+And there'll be more user clients. This is another area we're pushing. Right now in DP4, the primary user clients for storage have been there for a while because it's necessary to get at disks. But we really only had direct device access for USB devices. In June, we hope to add SCSI and possibly some others as well.
+
+Then the public beta this summer, we will have boot time driver loading. Right now, kernel extensions have to be loaded after the system comes up, because the mechanism through which we load them requires a system folder effectively to be mounted. But we're adding that capability into the booter so that in future versions you won't have to have your drivers built into the kernel, which I know is going to be very difficult for most of you. So, boot time driver loading is coming. Full device and system power management. As I said before, we've got a strong push going on here. And also more families and user clients.
+
+So now I'm going to walk through each of the families and just give you some status and pointers. For the SCSI family, this is of particular interest to people writing SCSI controller drivers. So if you're writing a parallel SCSI controller driver, you're going to need to inherit from a class in this family.
+
+It also provides SCSI device access. So if you are writing a driver that talks to the SCSI bus, then you're also going to care about this family. You won't be inheriting from it, but you will be communicating with its abstraction. So you will be including headers that it provides.
+
+So it was in the alpha KDK that we shipped in February, and it's also in DP4. It's effectively final. We expect a few minor changes, a few bug fixes, and maybe adding some additional helper functions. But by and large, you can consider what's in there, what we intend to ship for SCSI.
+
+So you should be able to make progress there. So there is not presently a user client available for it. That will be available in June. It has been HeaderDoc'd. It has been open sourced. And there are example drivers in Darwin. So if you're developing this area, you should be fairly good to go.
+
+We recommend going to session 108 on Friday morning. We're going to actually not be spending a tremendous amount of time talking about SCSI controllers, but we will be talking about the infrastructure needed for writing a peripheral driver, a storage peripheral driver. So if you're writing a SCSI disk driver or some description, this would be a good session for you.
+
+The ATA and ATAPI family is, again, of interest to you if you're writing a controller for ATA. And it also is of interest to you if you're writing a device driver that needs to communicate through the ATA bus, either as an ATA or an ATAPI device. It is in DP4 and, like SCSI, only has minor changes left, some cleanup and some bugs removed, as you would expect. But you should be able to make progress there.
+
+We expect to have a user client in June. This is not quite as far along, so this is a little bit softer of a promise, but this will be particularly for a TAPI devices. I don't think we intend to export ATA devices outside the kernel. It is not yet HeaderDoc'd, but will be. It is open sourced and there are example drivers, so you should be able to at least look at them and...
+
+[Transcript missing]
+
+So FireWire and SPP2 are obviously of great importance to Apple.
+
+And for those of you that don't know, SPP2, Serial Bus Protocol 2, is a sort of a CDB or command descriptor based mechanism for delivering command packets over the FireWire bus. And a large number of devices are SPP2 devices other than camcorders. So like SCSI, or excuse me, FireWire disk drives are typically SPP2. You will care about this family if you're writing a FireWire controller or if you're trying to gain access to a FireWire or an SPP2 device. This is in DP4.
+
+There's going to be more provided in the June KDK. And again, it's mostly done--we're syncing up with development that's been done against Mac OS 9. Those teams are bringing some bug fixes forward that we didn't have in our code base. So coming soon, we hope to have basically parity with what Mac OS 9 has.
+
+So, as I said, for ATA and a TAPI, we're only providing a TAPI as a user client. Same is true with FireWire. We only intend to allow SPP2 as a user client, because FireWire is really a memory bus protocol, and for security reasons, we don't want to expose that out into user space.
+
+It's not yet HeaderDoc'd, but it is open sourced, and there are examples, and we will be documenting it soon. So there are two FireWire sessions coming up tomorrow and Thursday. If you're interested at all in FireWire, I recommend you attend these. The in-depth session in particular will be talking about I/O Kit drivers for FireWire.
+
+The USB family. If you're writing a USB controller driver, then you will need to subclass from code in here. If you are attempting to access a USB device, then you also need to include headers from this family. Again, it's mostly done. We're syncing up with some development effort that had gone on for Mac OS 9, but we, again, hope to have parity there soon. It was in the Alpha KDK last February. It's in DP4 today, and there will be more coming in June.
+
+So there is a user client for it. It was there back in February. So from an application, you can find and talk to USB devices directly. It's not yet HeaderDoc'd, but we are working on that. It is open sourced, and it does have example drivers. So you should be able to poke around and figure out what we're doing there quite easily. So there's a USB session. There's not going to be a lot of depth here about writing USB I/O Kit drivers, I believe, but we'll give you some more pointers.
+
+The PCI and AGP families, family singular, is what you would use for getting access to a PCI device. And also, if you're writing a PCI or AGP bus controller, you're going to inherit from this, but I expect that's mostly for Apple at this point. And it's considered feature complete in DP4. Obviously, there's always going to be bugs to fix, but it's basically there.
+
+So we don't intend to create a user client. We don't expect for applications to directly generate PCI bus cycles. Again, it's a security issue, and it's not something we actually see as that useful. There are a few cases where it might be. But any time you need to talk to a PCI device, you should write a driver that lives inside the kernel.
+
+It is HeaderDoc'd, it is open sourced, and there are samples. So just after this, there is a session on PCI and Open Firmware. There actually is going to be a demonstration of the I/O Registry Explorer application that I discussed earlier. And they're going to go into a good bit of detail about how to get at PCI resources.
+
+So serial and telephony. This family today really only supports serial modems, AT-style serial modems. In the future, we want to have USB modem support, feature phones, who knows? There's a lot that can be done here. But what we have in DP4 is not what we expect to be final.
+
+It's actually not even structured very much like what we expect to be final. So if you have telephone or serial needs, then DP4 is probably not going to get you very far. We do have support for AT-style modems and basic PPP connectivity in there. But from a developer perspective, there's not much you can do.
+
+It does have a user client. That is, you can go through the /dev/tty interface to get at serial ports Unix style. So it is not the final way we want to do this. It's not HeaderDoc'd. And by the way, when I put this slide together, it was not open sourced.
+
+It actually now is. So if you go out to Darwin, you can see the current serial drivers, which then also implies that they're examples. This is not what we intend to be final, but it does work. And if you need to have a serial product working in the near term, you should build on what we've done.
+
+So I'm going to talk a little bit more about telephony in the early part of the networking hardware session on Friday morning. Again, there's not a whole lot to say there because it's mostly in the future, but it will give you a little more idea of what's going on.
+
+ADB family, not particularly interesting at this stage in Apple's evolution, but if you're wanting to write an ADB dongle, then say a USB to ADB dongle driver, then you're going to need to subclass from the ADB controller class. And if you're wanting to talk to an ADB device, then you're going to need to communicate with an I/O ADB device by looking at that header. It's basically complete at this point.
+
+It's pending review. As I said, it's not our top priority at this point because we're obviously focusing forward on technologies like USB and FireWire, but we need to review it and close it out so we can say this is done. We don't expect any major changes, and if it's reviewed in time, it may be in the June KDK. So it's not yet HeaderDoc'd. It does have a user client, and it is open sourced.
+
+Not a whole lot more to stay there. The storage family, this is kind of a long buzzword, but we don't want to say disks because, you know, they're solid state storage and other forms of storage. So persistent mass storage devices. How's that not offending anybody? Storage family is used to represent both the drives and the media. And we distinguish between the two of them in I/O Kit because it's very important. Obviously, with removable media, the drive sticks around, but the media goes. Or in FireWire, sometimes the whole drive goes.
+
+And it's important to know the difference. You're going to care about this if you're writing a partition scheme, if you're writing a new disk drive, if you are trying to do software arrayed. This is where you're going to look. The infrastructure is basically complete in DP4. We are, as I said, continuing to do some bug fixes and some enhancements, but what's there is basically what's going to be there. And you should be able to make progress.
+
+So it does have a user client. The stated mechanism for getting at storage devices in Mac OS X is through /dev/disk whatever. This is the way the mechanism that the file system is used to get at it. And it goes through the Unix buffer cache, which provides a lot of performance benefits.
+
+So that is what we consider the user client for storage. That being said, all of the drivers, all the storage drivers, are visible in the registry. And you can find them and do get property, set property on them. But the way that you actually get data on and off the disk is through /dev.
+
+It is HeaderDoc'd, it is open sourced, and there are examples. So this family is actually in very good shape and you should be able to make progress here. First thing, Friday morning, for you early birds, 9:00 AM. We're going to go through this in depth. This session is pretty meaty and really talks about the details of how you fit your code into the stack.
+
+HID family is not particularly far along. Human Interface Devices is something that we support now, and we do a fairly good job of it, but it's not as flexible as we'd like it to be. So what we have in there today is temporary until HID Manager comes along.
+
+And for those of you familiar with Input Sprocket, HID Manager is the evolution of that, and there's going to be a session to talk about this. So since what we have today is relatively primitive compared to what we want with HID Manager, I believe we'll be able to provide backwards compatibility.
+
+So if you do any work here, we'll see what we can do to allow you to continue to work even once HID Manager comes along. We don't have a user client. It's not HeaderDoc'd yet, but it is open sourced, and there are examples out on Darwin, so if you want to poke around, I certainly encourage you to do that.
+
+This session, Input Devices for Applications, I believe we'll be talking a little bit about the direction we want to go with HID Manager. Graphics family, frame buffers, 2D accelerators, 3D accelerators. It's not quite finished. This is very complex, and we've been working hard, as you know, on OpenGL, getting the performance where we want it to be, or at least getting it to work, and then starting to get performance where we want it to be. So this family has been evolving to catch up with that.
+
+We do have support for NDRVs to sort of bootstrap you. We don't intend for your graphics NDRV to be your final solution because there's no acceleration there, and I'm guessing customers are not going to rush out and buy graphics cards that aren't accelerated. So you're going to need to do more work, but at least you can get pixels on the screen very easily if you have a reasonably well-behaved NDRV. So it's not there for you yet. It is open-sourced, so you can poke around at the source code, but we don't really have a DDK for you in graphics yet. So there are a number of sessions here in graphics overview and OpenGL that would apply.
+
+And the audio family. We have a version in DP4 that's very close to what we intend to ship. We know we're cleaning it up a little bit. We went through an API review that just missed getting the final version into DP4, but we are going to get it into the KDK that we're shipping next month. So if you're into audio, look there, look in DP4, and watch the developer website for updates. So it's not HeaderDoc'd yet, but everything else is basically there for you to go.
+
+And there's two sessions on Friday that will give you a lot more detail. In fact, the 177 audio drivers is going to outline the architecture that we intend to be final, not the architecture that's in DP4, which, as I said, are similar but not identical. So this is the more forward-looking approach. Network family. It's considered, at least for Ethernet devices, as complete in DP4. In the future, we may consider adding support for other interfaces, but this is not my decision. This is just a framework mechanism that we can add them to as the demand appears or not.
+
+So there is a user client for networking. It's Sockets. There's a whole stack that lives inside the kernel that acts as the primary client for network drivers. And Sockets is its mechanism for communicating with apps. The network family is HeaderDoc'd. It is open sourced. And there are examples. We also have a cookbook which is coming together. And in this session on Friday morning, actually we'll be seeing the example driver and some discussion there about how that cookbook is coming along. Thanks, everyone.
+
+PC Card family is under development. It's going to allow you to write controller drivers for PC Card socket drivers and also allow you to access PC Card devices. It is derived actually as one of the few pieces of I/O Kit that actually has been imported from the open source community.
+
+It's being heavily recrafted to fit into the way I/O Kit works, but it's leveraging heavily what's gone on for Linux. So we don't intend to have a user client for this. Again, for memory buses, we tend not to want to expose those in the user space for security reasons. But as it's under development, we don't have anything present for you yet.
+
+So imaging devices are not part of I/O Kit. Printers and scanners and cameras get to their hardware by talking through I/O Kit, but they are user-land entities. So I recommend going to one or more of these sessions to learn more about how software to drive imaging devices gets plugged into the system.
+
+So in summary, I/O Kit is real. There are several companies, not Apple, there are several companies out there that have working I/O Kit drivers today. I've seen them, they haven't shipped them yet because they don't really have a platform on which to ship them against, but you can expect to see them coming. Now, I/O Kit isn't finished by any means. There's more work to be done in many areas, there's certainly more documentation to be done.
+
+But I would recommend very strongly that you look at what's there and figure out what you can do today, because your competitors may be farther along, and you really don't want to give them the opportunity to have an uncontested market in the beginning of a new operating system launch. So I strongly recommend that you take advantage of what is there today and make as much progress as you can.
+
+So on both DP3 and DP4, all I/O goes through I/O Kit. It's all open sourced. I/O Kit is real. It's working. If you've got DP4 running on your PowerBook in your lap, it's going through I/O Kit. So we can't stress enough that it's there and really working, and you can make progress just like Apple has and other companies have too. So with this, I'd like to hand the mic over to John Signa. Thank you, Dean.
+
+We have just a few minutes to go before we have to wrap this up. But beforehand, what I wanted to do was talk a little bit about the resources that we are providing and where you should go next. First of all, as Dean mentioned heavily throughout his presentation, we do have the Darwin open source available to you. While code isn't exactly the same thing as documentation, it does give you very good insights as to what's going on. And it gives you actually some very good examples of what we're doing down there.
+
+As far as Mac OS X Developer Preview 4, it's actually nice to be able to actually be at one of these conferences and say the DDK is going to be shipping this summer. Well, it's actually nice to say that it's shipping now. So, actually, on your CD, you will find the I/O Kit DDK. You'll find in the documentation folder, you'll find the tutorials, you'll find a bunch of the header documentation and so forth.
+
+Please take a look at that and get started with that. And finally, for future updates, I'm going to refer you to check the Mac OS X developer page on the Apple Developer Connection website. Any notifications about updates or changes that we're doing, we'll have a notification up there telling you how to get to the new packages.
+
+The one other resource that we do have available, and I actually did want to spend a little bit of time clarifying, is we will be hosting several I/O Kit kitchens throughout between now and the time Mac OS X ships, and actually even beyond that. I do want to set some expectations, however.
+
+First, when we have I/O Kit kitchens, they will be family-focused. Because the differences between storage drivers and input device drivers are very different. You can't just put them in the same room and expect to support them all. So they are going to be very family-focused. We'll have a storage family kitchen, we'll have a display card kitchen, along that line.
+
+Also, we do have a limited number of attendees. So because of this, I can't just post a notice out there saying, OK, everyone that wants to come to the Display Card Kitchen, come. Because I'd get 6,000 responses saying, yes, I want to be there. And we want to ensure that we get some of the key players in there that are really important to the majority of the customers.
+
+So what we'll be doing is actually a balance between companies that are very prominent out in that particular field and companies that we feel have interesting products that need to come onto the platform very early. We're trying to support as many developers as we can. However, we do have to make some limitations.
+
+So the best way to find out about I/O Kitchens is to actually just keep us informed of what you're doing with your products. If we don't know what products you are coming out with, we can't invite you to the appropriate kitchens. I've already had it happen to me already that one company came to me and said, oh, I wish I was at that kitchen. I was like, I didn't know you were doing anything in that space. So please keep us informed of what you're doing. And as we have appropriate kitchens, we may be sending invitations for them.
+
+So I'm doing a little bit more. Normally we just put up your email address, but I'm also putting up my snail mail address. Because if you want, please put me on your mail list for product literature. I do devour that stuff. I actually have a full file cabinet full of it. And I do pass it along to engineering. So just keep us informed on what you're doing with your products. And with that, I'm going to go ahead and we're going to go into some Q&A.

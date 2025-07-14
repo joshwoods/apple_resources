@@ -1,0 +1,357 @@
+---
+Title:  Cocoa Tips and Tricks
+Year:   2009
+Web:    https://nonstrict.eu/wwdcindex/wwdc2009/116/
+
+[!] This transcript has potential transcription errors.
+---
+
+ My name is Tony Parker. I'm an engineer on the Cocoa Frameworks team, but that's enough about me. Let's talk about you guys. Who's out there. So, I know that the sign on the outside says intermediate but we have a wide variety of developers in the audience today. Some of you might be just starting out. And for some of you guys, we have a beginner level tips and tricks and you can identify those by looking for the 1 cup of cocoa icon on the following sites.
+
+[Laughter] Oh, it's get better. For intermediate developers, we have 2 cups of cocoa. And for you advanced developers, we have some expert tips and tricks, and those are marked with 3 cups of cocoa, of course. OK, so let's see what we're going to talk about today. First we're going to talk about Zombies.
+
+Zombies help you find memory management errors in your application early in the development life cycle. After that, we'll talk about some debugging tips and tricks and this is going to include both gdb and dtrace. Then we'll talk about overlay views, which let you easily add overlapping view drawing to your application. And then finally we'll talk about key-value observing and concurrency, and some of the challenges that you'll encounter there.
+
+OK, so let's go ahead and get started with Zombies, but first the pop quiz. So, you've been at the conference for a week now and I expect you've learned something. So, we are going to give you a quiz and it only has one question. What do the following have in common? This crash in objc_msgSend, you can identify that by looking at the back trace.
+
+Here in the top frame 0, you see that we have objc_msgSend of course. And right below that in our some of our codes, ZombieAppDelegate in this case. Next, a crash in the Notification Send, so you can identify this by looking for the words notification in the back trace and there's objc_msgSend again at the top.
+
+How about this crash in an autorelease pool pop? CFAutoreleasePoolPop, NSAutoreleasePool drain or perhaps NSAutoreleasePool release, and our old friend, the objc_msgSend again. And this crash in the delegate callback, objc_msgSend_vtable5 which is objc_msgSend, and NSTextfield textShouldBeginEditing. And finally, all of these disappointed users [laughter] including this guy who was actually trying to make your application crash. Well, the answer is pretty obvious, right? Right there on the top of everyone in those back traces, objc_msgSend, that thing sure is buggy, right?
+
+[Laughter]
+
+Yeah
+
+[Applause]
+
+Well, no. The answer is actually that these are usually the result of accessing over-released memory in your application, but I can argue with you, some of you in the back, saying "But tell me only the first one of those was in my code." And to explain why, unfortunately some of these crashes might be the result of something in your application. At first, can you explain what the difference between a library and a framework is? So, let's take this pretty standard greeting function.
+
+It calls printf with the usual thing. Now when you call this greeting function from MyApp, then you go to printf, control the transfer from MyApp to libc where printf resides. And then when printf is done printing that usual thing, control of course returns back to MyApp and that greeting function. Now in contrast, let's look at this delegate method, textShouldBeginEditing, which returns whether or not the time is right. In this case, the AppKit perhaps is handling some event.
+
+And in the course of handling that event, maybe a key-down event, it is going to transfer control to MyApplication as textShouldBeginEditing. And when the answers comes back, we go back to handling that event in the AppKit. And this difference between libraries and frameworks is sometimes called the Hollywood principle or "Don't call us. We'll call you."
+
+Now, with all of these places in Cocoa Frameworks, we reuse the Hollywood principle, archiving, key-value observing, drag and drop, et cetera, how do you of any hope whatsoever of determining if an over-released crash like the ones we've seen is the result of something in your application? Well, luckily we have a tool to help you with that.
+
+It's another Hollywood favorite, Zombies. So, what's a Zombie? It's a special class which stops the execution of your program when a message is sent to a deallocated object. And you enable it by setting this environment variable, NSZombieEnabled, to a value of YES. Let's talk about how Zombies actually work.
+
+So, I'm going to create an object doing the usual thing, going back to Cocoa memory management 101 here, and the result of this alloc init is a new object with a retain count of 1. Now, when someone decides to take ownership of that object as well, they call retain of course, and the retain count is incremented to 2. And then they release it and the retain count is decremented back to 1. Now, when this object gets another release message, because the retain count is 1, this object is going to be deallocated.
+
+At that point, the retain count doesn't matter anymore. But if we have ZombiesEnabled, we're going to zombify that object, that is, swap out the class that it was for our Zombie class. At that point, if someone decided to send a message to this object, ah, doStuff, for example, your application will stop giving you a chance perhaps in gdb to investigate what went wrong and perhaps fix it.
+
+So, let's see a quick demo. OK, so here I've got an application called Zombie and it's designed to crash in all kinds of interesting ways, so please don't go looking for it at the attendee site. But there's two crashes in particular that I want to show you. The first is a crash in a delegate call. So when I click this button, I'm going to over-release the delegate, and there we go. But you can see we haven't actually crashed yet, that's because we don't actually crash until I type in that text field.
+
+And here we are in the debugger. I want to bring up the window here and you can see there's objc_msgSend_vtable5 and NSTextField textShouldBeginEditing. Let's restart this application. And the second crash is this crash in objc_msgSend. And when I click this button, I'm not only going to over-release an object, but access it right away. So it's going to crash, right? Well, no. And that's because the memory that that object was using has not been reused and that object is still living there.
+
+But there is still an error in this application, and Zombies can help you find that error before your customers do.
+
+[Pause]
+
+OK, so I'm going back to Xcode now and over here on the left side of the window, you can see under the executable section. I'm going to double click on Zombie and that brings up this helpful info window. The second section is what I'm interested in, variables to be set in the environment.
+
+That would be an environment variable, and that's NSZombieEnabled and set that to a value of YES. Zoom out again here. Now, I'm going to run our application again. And this time when I click on that second button, we stop right away in the debugger. And you can see we got a message there, it tells us what object, what message and the pointer to the instance that was deallocated. And this is really useful information for debugging. So, also new in Snow Leopard, there's another way to enable Zombies. I'm going to quit this here, and that's to use instruments.
+
+So, I'm going to go to run, choose run a performance tool, and then the Zombies instrument, and there's instruments, and here's our Zombie application. So, this time I'm going to press the first button. Here we go, and then type in that field and you can see, YES, Zombie quit. And right here, instruments has told us a Zombie was messaged and this message looks pretty much similar to what we saw in the Xcode debugger. But the interesting part is this little arrow right here.
+
+When I click that, you can see that we have a list of every retain, release and autorelease that they happen on that object that was just accessed. And this is a great way to match up retains and releases in your application. Also, if you click this View button and go to extended detail, you get a full back trace for each one of those events. So, this is a handy tool to know about.
+
+OK, let's go back to our slides. All right. So that was Zombie. To help you detect problems early in the development cycle of your application, enable them when you're testing and see if you have any errors lurking in your application like I had in my objc_msgSend button. Remember, you enable them with NSZombieEnabled set to YES, or use the new Zombies instrument from within Xcode or instruments. And finally a note, Zombies aren't used in garbage-collected applications.
+
+OK, let's move on but first a fun fact. And the fun fact is bugs happen, OK. Not a fun fact, but it is a fact, and sometimes bugs even happen in Apple frameworks. So, a question we get pretty often is, I think I found a bug in an Apple framework, what do I do? Do I post a message to CocoaDev, perhaps start a new topic on this Snow Leopard develop forums Well, those are both great places to get help about your issue But if you found a bug in an Apple framework, we really want to hear about it.
+
+So, file a bug report at bugreport.apple.com. And what I'd like to point out to you is that we will really like you to include a few things. A system configuration-- it could be the case that we're gathering information about what configuration does this particular bug reproduces on, or perhaps you've already fixed the bug and we can tell you that. Also regression information, something is simple as "It worked great on the last Snow Leopard developer scene, but it doesn't work at all on this Snow Leopard developer scene."
+
+That information can really help us narrow down the source of the problem. Steps to reproduce, sometimes to get the bug to happen it requires some level of nuance. When you include these steps, we know exactly how to make it happen. And finally, a test case, now a test case is like the ultimate steps to reproduce.
+
+ When you include a test case, we know if we fixed your issue because we can run the test case and find out.
+
+But it's also useful because if you make a test case, sometimes you find that the problem actually isn't in an Apple framework but in your application and you can fix it right away. Also if there is a bug in our code, when you have a test case, you more easily know how to work around it while we work on fixing it. Of course, at the end of the day, when you take time out of your busy schedule to file a bug report and include these things, you're doing us a huge favor and we really appreciate it. We take every bug report we get very seriously, so thank you.
+
+OK, next some debugging tips and tricks.
+
+[Pause]
+
+So you probably already know some things about gdb or the Xcode debugger which is built on top of gdb. You know how to control the execution of your application using these handy buttons in the toolbar, for example restart, continue, step, et cetera. You probably also know about the print-object command or po even if you only use it through Xcode's variable display interface. Now print-object of course calls the debug description method on any object.
+
+And if debugDescription is implemented then we're going to go ahead and call description. And we recommend you implement description on your objects. This is because when you're debugging with gdb, having a snapshot of the state of your object is really useful. And also if your object is in a collection like array or dictionary, when you print out the description of that collection, you also get the descriptions of your objects.
+
+But there's so much more you can do with gdb. For example calling other methods in functions, not just description, you can call pretty much anything. You can change the state of your application by changing memory. You can execute alternate branches. One reason to use this is maybe you've got some error handling code in your application that's hard to make execute. Using gdb, you can make sure that that works correctly when you need it most.
+
+You can run debugger commands automatically or conditionally using Breakpoint commands and Breakpoint conditions. So I think the best way to learn about some of these gdb tips is to see someone use them. So what I've done is I channeled our little double-horns guy from the Zombie section and inserted 2 bugs into the sketch sample application. Then I shifted far and wide and got back some bug reports, so I'm going to show you these 2 bug reports and then show you how I've discovered what the problems are and fix them using gdb.
+
+So here is the first one. "Sometimes when I move shapes around in Sketch, they don't draw right. Help! I have a school assignment due tomorrow!" That's from a registered ADC developer, SketchKid2002. Yeah, they get younger every year, right? [Laughter] But we take bug reports from even our youngest developers seriously, so let's use gdb and find out what's going on.
+
+I have a document here opened in Sketch which exhibits the problem reported in that bug. And if I take the circle and I drag it on top of the rectangle, you can see that something is not quite right there and vice versa. So how are we going to investigate this problem? Well, where does drawing happen? It happens in drawRect, so that seems like a great place to set a Breakpoint. So let's go ahead and do that.
+
+Let me switch to Xcode and actually sketch, there we go. And let's go to the SKTGraphicView class where the drawing happens, and here's drawRect. And let's go down a little bit further in drawRect here to this line. And that's where each graphic in the document is actually drawn. So, I think that when the circle overlaps the rectangle, they should both be drawn.
+
+But if they're not overlapping, then only one of them should be drawn. So I'm going to find that out by putting the Breakpoint here and let's go back to Sketch. And if I drag that and-- well, I've stopped but the circle isn't on top of the rectangle yet, so I know what I'll do.
+
+I'll just continue and we're stopped again, and clearly this isn't going to work, drawRect is called far too many times for just putting a Breakpoint there to be useful. So what I'm going to do is actually use a Breakpoint command. And what I'm interested in is what's being drawn and maybe what coordinates it's being drawn at.
+
+So I'm going to double click on that Breakpoint. And if we look here at the right side of this Breakpoint inspector, when you see that little + that's where we add Breakpoint commands within the Xcode interface. And what I'm going to put in there is a printf. Yes, gdb has a printf just like the one you're used to.
+
+And what I'm going to print is a string and I get that string from the description of the class. We already know we can call description, but also I'm going to print the origin of the shape that's been drawn, and I get that by calling this graphic bounds method and grabbing some values out of it.
+
+Now, I don't want to stop every time in drawRect of course, so I'm going to also check this button up here in the corner which means "continue." There we go, and we're going to go ahead and do that now, continue. And I'm also going to close that and I'm also going to show the console which is where those messages will be drawn back to sketch. Now, if I drag this circle around, yeah OK, the circle is being drawn. And if I drag the rectangle, there is the rectangle. And if I drag them on top of each other just the circle, so clearly the rectangle isn't being drawn when it should be.
+
+OK, let's go back to gdb now, I'm sorry, Xcode. So if I look at this code, you can see what I'm doing here is getting all the list of graphics out of this sketch document and then I'm looping over them. And then this statement right here controls if that graphic is going to be drawn or not. And it says if NSContainsRect.
+
+But if I look a few lines up, you see, draw every graphic that intersects the rectangle to be drawn, I think this should probably say NSIntersectsRect. Now, I can of course just change the code, rebuild it, rerun it again and try to get my problem to reproduce. But often you need a technique you can use when you don't have access to the source code or perhaps you just want to try something out. So what I'm going to do is set another Breakpoint here right before that if statement executes.
+
+And I'm going to use another Breakpoint technique, a Breakpoint condition. So this means that when this condition is true, gdb will execute this Breakpoint and the command I'm going to put there is the NSIntersectsRect that I think should be happening here. And the command will be to jump into the if statement.
+
+So I'm going to control the execution of my program and execute a different branch. And I don't want to stop every time again, so I click that Continue button. Now back to sketch, and if I-- let's cause that to-- OK, now if I drag this on top, you see it's working correctly now.
+
+And remember, I didn't even stop the application. I just did this entirely within gdb. So when you have a hard to reproduce problem that's caught in gdb, you can use this technique to investigate the cause without having to restart. Let's actually make that change, NS, NSIntersectsRect, and I don't need these Breakpoints any longer so let's get rid of them, rerun it.
+
+Yes.
+
+[ Pause ]
+
+Open our rectangles document and there we go. Great. Thank you.
+
+[ Applause ]
+
+OK, so I said 2 bugs, what's the second one? Here we go, I'm not going to try and read that but I think it says something like "when I make lolcat pictures with Sketch, the pictures are sometimes drawn upside down. Sketch has this feature that lets you draw images. And it turns out that people drawing lolcat images is-- Sketch is largest user demographic. Don't want to annoy them, so let's use some more gdb tips and tricks and find out how to fix this one.
+
+[ Pause ]
+
+OK, we don't need that one anymore. So I have a file here which seems to exhibit the problem. I didn't have any cats handy but I do have a dog, there he is. And right away, we can tell it looks fine to me because the pig is right side up.
+
+[Laughter] Yeah. OK, but the dog is upside down. It is probably what they were complaining about, so let's figure out how to fix this thing as well. So we need a plan of attack. Now sketches are document-based application and perhaps we can use that to our advantage and get to the actual image data in this document and see if the image data itself is upside down, like it was saved incorrectly. So to do that, back to Xcode. I'm going to bring up the Xcode console again. Sometimes for some of the more advanced gdb techniques you'll need to drop down into the console like I'm doing here.
+
+I'm going to do control C to stop sketch and we're going to go ahead and print the shared document controller. So I'm just going to call another Objective-C method here and get the value. And we've got a pointer here and also this $1, which means gdb has assigned that value to a place in our history. And we can use that $1 in further commands to avoid retyping that pointer, which is handy so I'll do it now, and get the list of documents in the Sketch application.
+
+As expected, we have one window open and one document and there it is. Let's go ahead and get the value out of that array. Here I'm using set to assign my own name for a gdb variable, $doc, and I'm just going to grab the first document, OK. Next, every sketch document are-- every sketch document has, or excuse me, the sketch document class has a method called Images, and that returns a list of the SKTImage classes that are in that document. So I'm going to go ahead and ask the list of images and grab the first one since there's only one image there, and you can see we have our result, $2 SKTImage.
+
+So SKTImage has an instance variable called contents and that variable holds an NSImage which has our dog in it. So let's go ahead and grab that by just dereferencing that pointer, and there is our NSImage.
+
+ All right, so now that we have been here for a while together, I'll let you in on a little secret. Gdb is great for a lot of things, but displaying image data is just not one of them. So, we're going to need some alternate way to look at the contents of this NSImage. So what I'm going to do is use a few more method calls.
+
+NSImage has a method called TIFFRepresentation And that returns the contents of that image in TIFF form and an NSData. And an NSData has a method called writeToFile:atomically that let's us write any NSData out to disc. So I'm going to go ahead and do that by just calling those methods. I'm putting the file in /temp. Result was 1, that means it worked. Now how do we get at it?
+
+Well, the gdb shell has another command called shell, and that let's you execute any shell command straight from within gdb. I'm going to open the preview application and just point it at the image data we just wrote out. There you go, OK, pig upside down, dog right side up, so image right side up. So that wasn't root cause of the issue, it's probably something else. Let's close preview here. So let's see, SKTImage has another instance variable called isFlippedVertically. And if that's true, it will draw the image upside down.
+
+I probably should have thought of that first. Well, let's see what the value is. There we go, print the value and it's 1. OK, so that's probably why it's upside down. Let's verify that by going ahead and changing the state of that variable by setting-- using setVar to set the value to 0.
+
+Now we'll continue back to Sketch. If I cause that to redraw, there we go, it's right side up. OK, so now we know why it's upside down but we don't know why it was set to be upside down in the first place. Luckily, gdb has another technique we can use to investigate that and that's called watchpoints.
+
+Go back to our SKT source here. We're going to bring up the SKTImage class. So every SKT document when it's read in, since it's an NSDocument class, it reads in some data from disc. And what it does with that data is gets a property list out of it and those property lists that it gets out of the data describe every SKTGraphic class in the document, including SKTImages.
+
+And then it calls SKTImage initWithProperties for example here. So this seems like a great place to watch the instance or the-- yeah, the instance variable of the SKTImage class. Now we want to watch every class, so we can do that by using another Breakpoint command. I'll set a Breakpoint here.
+
+This seems to be pretty early when an SKTImage is created. Set a command here and that command is going to be watchSelfIsFlippedVertically, so I'm watching these images ivar. And again, I don't really care to stop here so I'm going to click that button. Now let's go back to sketch, excuse me, sketch, and we'll close this and reopen it and there we go. So gdb has told us the new value is 1, the old value is 0. So we know that that variable was set, now we got to find out how.
+
+So it looks like-- OK, here we are, the instruction pointer will be put right after the set happening, and that is that line right there, isFlippedVertically. And which gets from this NSNumber, and if we look up a little bit, it says isFlippedVertically number is set to the isFlippedHorizontally key out of this property list.
+
+And actually if I look up a little further, the horizontally one has got the vertically key, so I've swapped them. This time, we're just going to go ahead and change the source code, that up there and that goes down here.
+
+[ Pause ]
+
+Let's run this again to give you that Breakpoint first.
+
+[ Pause ]
+
+ And there you go, pig upside down, dog right side up, so document right side up.
+
+[ Applause ]
+
+OK. I know all those lolcat users are going to be very happy now. OK, so there's couple other gdb tips and tricks I'd like to tell you as well. You can actually enable Breakpoints from other Breakpoints.
+
+So in the case of the drawRect, for example, maybe you don't have a concrete condition at which to set up a condition of Breakpoint. You just know that you want to stop there after something else earlier happens, and you can do this pretty easily. In the gdb console again here, I set a Breakpoint up at my earlier event, EarlyFunc, and I get Breakpoint 1. Then I set the Breakpoint at the later function, maybe drawRect, maybe something else, Breakpoint #2.
+
+Then I disable the second Breakpoints since we don't want to stop there right away. And in the command list for the first Breakpoint-- this is equivalent to what you are doing within the Xcode interface a minute ago-- I enabled the second Breakpoint and then continue. And then in the command list for the second Breakpoint, it disables itself but does not continue because we want to stop there and investigate what happened. Here's one, you can play a sound at the Breakpoint. Just use that sound pop-up. And why must you want to do this? Well, you can see there I put a Breakpoint at textStorageDidProcessEditing, which is a delegate method.
+
+Maybe you want to hear every time a delegate method is called. So you use that sound thing and hit that check box for it to continue and get a cacophony of audio feedback when you run your application. I already mentioned you can call pretty much any method in the Cocoa frameworks, and that includes archiving and unarchiving.
+
+So I'm going to call the NSKeyedArchivers archive object to file method and put a whole object graph and NSCoding compliant objects out on disc. Then maybe I'll continue execution, stop, go get coffee, come back later, whatever. And I will restore that data back into my application by setting set var foo with the NSKeyedUnarchiver method unArchiveObjectWithFile and I point it at that data.
+
+OK, a few words of caution when using gdb like I've described today. First of all, gdb doesn't solve every thread in your application when you're executing these methods. The kernel controls the execution of your application, not gdb. If you have a method that reenters as a result of calling it from within gdb, you need to make sure that that method is safe for re-entrancy.
+
+Otherwise you might have unexpected side effects. In a similar vein, if you take a lock, then execute a method in gdb that attempts to take that same lock again, you might wind up in a deadlock situation, so watch out for that. The bottom line of course is you need to understand what your application is doing and what these methods you're calling are doing and understanding your application as a whole. OK, so quick summary of gdb. You just call other methods and functions, not just description.
+
+Change the state of your application. I changed that isFlippedVertically instance variable from 1 to 0. Execute alternate branches, maybe jumping into a branch that you, based on a Breakpoint condition like I did in Sketch, and run debugger commands automatically or conditionally. I did that all over the place with Breakpoint conditions and Breakpoint commands.
+
+OK, let's talk about dtrace. So dtrace is often built as a low level system debugging and profiling utility which is available of course starting in Leopard. But thanks to the Obj-C provider, dtrace is useful for investigating higher level applications as well like your Cocoa application. And you can use it via Instruments which is built on top of dtrace of course, or the dtrace utility. And I'm going to use the dtrace utility to investigate one problem in particular, and that is the archiving time of sketch documents.
+
+So let's create a sketch, I'm sorry, a dtrace script. And in that scripting I'm going to put some dtrace approach. Here I'm using the Obj-C provider so that goes up first, then I'm going to use $1 which is the first argument to this script, and that's going to be the pid of the sketch process. Next, I need to tell dtrace what in the Obj-C provider what class I'm interested in observing. In this case it's SKTDocument.
+
+And the method on that class is dataOfType?error? where the archiving happens. Now Objective-C method names often have colons in them, and as you can tell, dtrace also uses colons to separate the fields of this probe specification. So we need to substitute the colons and the method name with something else. And in this case, that something else is a question mark which is a one character wildcard. Incidentally if you use instruments, it takes care of this for you.
+
+OK, and I'm interested in the entry point of this method. There I'm going to record a timestamp. I'm using this dtrace facility, vtimestamp, gives me a high accuracy kernel timer. And I record it in some thread local storage, that's what the self is and it's called enterTime. One timestamp is great but in order to get time, elapsed time we need 2, so we look at the return of this method and there we're going to calculate the elapsed time by subtracting the start time from the current time, and sort of that some probe local storage, this->totalTime. And then I'm just going to print that out to the screen. So let's see that in action.
+
+[ Pause ]
+
+Let's bring up a terminal window here.
+
+[ Pause ]
+
+And here I'm going to run my dtrace script and I have a little shell script there to grab the current pid of the sketch. Let's go back to Sketch, excuse me, Sketch.
+
+[ Pause ]
+
+OK, so I have an untitled document open here. Let's save it, the desktop sounds fine and you see, we get a result there.
+
+But that's not very interesting.
+
+ What if we have a rectangle in there, another result. OK. How about if I have 2 rectangles and there's another result. Well, you know, 1 or 2 answers is fine. But, I'm interested in a trend. So, how does the archiving time sketch increase as I add graphic elements to this document? Is it linear or perhaps increase exponentially? And these are important questions you might have when you're investigating. In this case maybe, can I allow users to add thousands and thousands of graphics to a sketch document?
+
+So let's find out. I'll just draw another rectangle, and another rectangle, and I could be here all day adding rectangles. But fortunately, Sketch has another feature which is also useful for you to implement in your applications. They'll help you with testing and investigating with dtrace like I'm doing here, and that is that sketch is scriptable. So I have a script handy right here. And this script will add a random shape to the frontmost Sketch document, then save, and do that a hundred times, pretty straightforward. Let's run it.
+
+Here we go, lots of shapes and lots of results from dtrace. OK? So now we have a lot of numbers, let's find out with that trend is.
+
+[ Pause ]
+
+ There we go, looks mostly linear, interesting pattern that we got going on there. But, so dtrace allowed us to really quickly get information about a question we had, in this case what was the archiving time?
+
+OK, let's go back to our slides.
+
+[ Applause ]
+
+ Thank you. OK. So, I have some other dtrace tips as well. You can actually stop your application from within dtrace. Here I've got a W parameter, that means distructive of which stop in your application is certainly one of these. And then, I'm going to put a probe on this new static probe that we have introduced into the Cocoa framework in Snow Leopard. It's called error_no_pool. So, this one will be fired when an object is autoreleased with no AutoreleasePool in place.
+
+You can get more information on this one and a couple others in NS debug.h. So, here what I'm going to do is stop when that happens and you can see if I run my dtrace script against that application and attach to it in gdb, I get a SIGSTOP and NSAutoreleaseNoPool as expected.
+
+You can poke around in gdb or continue. You can log the method entry in your class, here's something you see pretty often, #if DEBUG NSLog. I'm in methods 2 and if, and you see that in every method in a class. Dtrace can do that for you. Here I put a probe on every method in SKTDocument, that's what that star is, a wildcard for any number of characters, and I'm going to printf there. And probefunc here for the Obj-C provider will be the name of the method and you get a result that looks something like this.
+
+[ Pause ]
+
+Here's a more complicated one, slightly more advanced thing. I want to debug a certain kind of deadlock in an application. I'm using Obj-C provider once more, and I'm interested in the NSLock class and 2 methods in particular on NSLock that is lock and unlock. And now, each of those I'm interested in entry and return of those methods. So what I'm going to do is in entry to lock, I'm going to record arg0 which is self in an Obj-C provider.
+
+So I want to know what NSLock this method is being called on. Then, when that lock method returns, that lock has been locked and I want to print that message out. That some particular thread identifier, that's tid has locked a lock instance. Also, I'm going to keep that information around in this dtrace associative array.
+
+So here I'm mapping the instances of NSLock to the threads which owned them or have them locked. And also, when we enter lock, I'm going to print a message saying that some particular thread has attempted to lock some particular NSLock instance. And if it is currently that NSLock is currently locked by some other thread, we'll find out right here.
+
+And now on the unlock side, on entry I'm again going to record the instance that we're calling this method on, and on return, clear our associative array of that lock and also print out another message saying that this lock has been unlocked. So, if you run this against the really buggy application, you might get something like this-- I simplified it a bit for the slides-- thread 1 attempts to lock A, NSLock A, which is currently owned by nobody, and it gets it. Next, thread 1 attempts to lock NSLock B, which is also currently owned by nobody.
+
+But before thread 1 has a chance to lock that lock, thread 2 gets the chance to run, and thread 2 attempts to lock, lock B as well. And here you see it is not yet owned by anybody and it goes ahead and gets it. Next, thread 2 attempts to lock A which is currently owned by thread 1. So now we have thread 2 waiting on thread 1 and thread 1 waiting on thread 2, which is deadlock.
+
+The root cause of this of course is taking 2 locks in an opposite order. OK. So dtrace, use it to investigate code behavior and trends in your application. So a trend I was investigating was what's the archiving time as I increase the number of graphics in my Sketch document?
+
+Answer questions about your application like why is my applications deadlocked? Add hooks almost anywhere in Cocoa with the Obj-C provider. So for the sketch demo and for the NSLocking and for everything else in dtrace, I added absolutely no code to Sketch or to the Cocoa frameworks. I did it all within a dtrace probe.
+
+So it's a very powerful utility for inserting your own behavior into an application with dtrace. OK, another fun fact. You can actually attach to a process that hasn't launched yet using gdb with this under documented argument, gdb-- waitfor. Here I'm going to wait for TextEdit and you could see gdb says "All right, I'll wait for that to launch."
+
+And when you launched TextEdit, then bingo, you're in a gdb command prompt. Now remember the kernel controls the execution of your application, not gdb. So you don't know exactly where you will be in the execution of TextEdit in this case. But nonetheless, it's very handy for caching short-lived processes or processes that are launched by other processes.
+
+And also in Snow Leopard, in Xcode there's another way to do this through the Xcode interface. OK, let's move on to our next topic and that's overlay views. So here I've got a really great interface that I hope you don't copy. But, I wanted to point out a couple of interesting things about this Interface Builder window.
+
+First you can see at the top there's a handy arrow that goes up to the top there, and that points out where that selected control lines up with at the top of the window. And also if we look to the left of that button, you can see that there's a 215 that tells us how many pixels that button is from the left side of the window. And both of these are joined right on top of the views that they are overlapping, that 215 is in on top of the date picker.
+
+So we get a common question is how do I do this? And there's a couple of ways, one is an overlay window. Overlay windows have been around for quite some time, addChildWindow ordered is the method you're going to use. Create a transparent window that's the same size as its parent window and it follows it around.
+
+But this is potentially more resource intensive. Now there are a few cases where you actually do want to use an overlay window, that's when you want to overlap an NSOpenGLView or a layer-backed view for example, also to provide the effect of drawing "outside" a window. So also an Interface Builder when you draw a connection from you inspector palette down to something in the document, for example. And there's a session earlier today presenting user data with table views and browsers that showed really great examples of using overlay windows.
+
+So if you missed it, check that out on the video and download the sample code. But I want to talk about an overlay view. So an overlay view is simply a sibling of other views, and it's the last subview of a parent. And this behavior that we're going to demonstrate, you can use starting in Leopard.
+
+They're really simple to implement and pretty easy to understand. So let me show you a graphic of how that works. Here's a parent view and inside that parent view I've got an NSBox, nice green box. And inside that box, I'm going to put some other views, NSButton, TextField and further boxes which have other subviews like a ColorWell. Now my overlay view, I want to overlay all of those things. So I'm going to make it a sibling of that green NSBox and a child of the parent view.
+
+That is I slide it right there, same size, same place. Let's see how we do this in some code. So in the controller class, I'm going to actually create this OverlayView right in the code. You can create it within Interface Builder, but sometimes it's hard to manage a big transparent view in Interface Builder so we'll do it here. First, I'm going to create it, and you see that I'm calling alloc initWithFrame and viewToOverlay is an outlet that I hooked up within Interface Builder. So I get the same size as the view we're overlaying and set up our overlayView in the same way.
+
+I also set up the AutoresizingMask so that it resized correctly when the window is resizes. Then I set the hidden flag. I don't want my overlayView to show up immediately. And finally I-- Well next, I set up the call set overlayView viewToOverlay. So I tell the overlayView which view it is overlaying, and we do this for hit test purposes, and you'll see more about that in a second. And finally, we add this overlayView as a subview of the viewToOverlays parent view. That means it's a sibling and it's the last sibling, so it will be drawn on top of the view to overlay.
+
+ Also, we need to show and hide this overlayView, really straightforward.
+
+We just set the hidden flag. And in the overlayView itself, we are going to show you drawRect and mouseMoved, Down, and Dragged. And the reason we're implementing these is because we want to sort of imitate Interface Builder a bit and let users drag around views in the window.
+
+OK, let's do another demo. OK, so here is our overlay view code. I already showed you the controller code so let's look at the view itself. First, I want to show you initWithFrame. So here you can see I've used a tracking area to set up mouseMoved events and this is available of course also on Leopard.
+
+And if you're going to get mouseMoved events on Leopard later, we really recommend that you use a tracking area, and you can see it's really simple to set up, it's only a few lines of code. So speaking of mouse events, let's look at mouseMoved and mouseDown down here. And these will call this method called selectViewForEvent.
+
+We are interested in what view happens to be underneath the mouse when these things happen. If I command double click there, it will just go straight to the implementation like this. And here I'm going to do a hit test right there on the view that is overlaid. So I'm making sure to convert the coordinates of the mouse event into the right coordinate space using this code right here.
+
+And then I just call hit test to find out what view is underneath the mouse. There is some special handling in this for NSBoxes and scroll views and you can investigate that later. This code is available for download from the attendee site. And then I'm going to set selected view.
+
+And this basically means I'm going to keep track of which view is currently selected, and also make sure to invalidate the proper rectangles in this overlay view so it's redrawn correctly when the selection changes.
+
+[ Pause ]
+
+Next let's look at mouseDragged, and here I'm going to calculate a delta X and Y based on where the mouse event is to allow the user again to drag views around in the demo. And then I just set the frame here and that line right there is where I set the frame specifically.
+
+And again, I make sure to invalidate the proper rectangles in the overlayView so that it redraws, gets overlays correctly. And finally, let's look at the drawRects method itself. I'm going to fill this overlay view with mostly transparent color just for demo purposes so it's more easy to see where it is.
+
+But also, I calculated rectangle to surround the currently selected view and I draw that here. Then I'm going to draw those dimension lines. Those are the ones that go from the selected view to the edges of the superview and print out the number which tells me how many pixels it is from that edge. And again, I'm not going to go into the implementation of these specifically but download the code and check that out as well. OK, let's run this and see what it looks like.
+
+[ Pause ]
+
+OK, so here is our overlay view. You can see these pretty standard views, I can select things or delete that, maybe check some boxes or even change the value of that color well. When I check this edit button, your overlay view has been shown now, it's got that fill color. Now if I move my mouse over view in that view that it's overlaying, we get our selection box and also those lines to the edges which are guidelines.
+
+And because I implemented those mouseMoved events, I can actually drag these around as well to get an effect just like Interface Builder has. And we can-- say move that there, there. And you could see here also, it works within subviews as well and I've got dimensions to the edges of that box and I'll uncheck that edit box and you know, these work again just like you would expect them to. So it's powerful technique for drawing on top of other views, OK.
+
+[ Applause ]
+
+Thank you. OK, so use overlay views to draw on top of overlapping sibling views. And remember that what makes it draw on top here is that it's the last subview of a parent view and the use is starting in Leopard. And finally I mentioned this, download the overlay view example from the Cocoa tips and tricks section and you can get that code, but not now because we have another fun fact. That fun fact is something that is an oldie but a goodie but since we've been talking so much about views lately, I feel I need to point it out again.
+
+So when you're debugging, get a list of view information by calling this special description method, and that is subtreeDescription with an under bar in front. And the result is I'll put like this, you get a whole slew of really useful information about the view you've called this on and all of its subviews, the whole tree.
+
+And you can see we got information about autoresizing, what exact class those are, pointers to them, frame sizes, et cetera. So one caveat, please don't parse the output of _subtreeDescription, yeah, or use it in your application, your shipping application. We really want to be able to update this method with new information as we add it to Mac OS. But it's great for debugging, get a really insightful view into what your views are doing.
+
+OK, on to our last topic, that's Key-Value Observing and Concurrency. So first let's do a quick overview of KVO. It basically allows objects to be notified of changes to properties in other objects. So here's a model and that model has 4 observers. Now when I change a property on that model, let's say the value property, observeValueForKeyPath will be called on each one of the registered observers of that model and property. So KVO saves you from writing that code right there. And it's a really powerful tool so a lot of people take advantage of it.
+
+Now, a completely natural thing to do as a result of a model property changing is to update a view, like an AppKit view. But here is the gotcha. If this model value property changes on a background thread, um, 42, then the observeValueForKeyPath will also happen on that same background thread, and that means this update of the user interface will happen on a background thread.
+
+But as I'm sure you already know, AppKit views typically should only be updated on the main thread. So a common question we get is "How do I connect those two things, how do I update a model object on the background thread but make my user interface update as a result of that?"
+
+The technique I like to show you today is a KVO Receptionist. So we've talked about the Receptionist before at earlier WWDCs, 2006, and also earlier this week in the designing your Cocoa application for concurrency talk. But here I'm going to use it basically as a thread middleman. And what I mean by that is that it's going to receive a change notification on the background thread and then execute some task on another operation queue, perhaps the main operation queue. Now how do we define a task and the data that that task needs?
+
+We're going to use the new Snow Leopard feature of block objects. So a couple more diagrams to explain how this works. So I've got my worker thread here and that worker thread is going to have a model and that model has a Receptionist object. I'm also going to have a reference to the main operation queue. Now when I change a value property on that model object, observeValueForKeyPath will be called on the Receptionist object.
+
+And as a result of that, the Receptionist will add some operation for our task to the main operation queue. And no matter how many times I update that model property on the background thread, observeValueForKeyPath will be called on the Receptionist and the Receptionist will add that operation to the main operation cue.
+
+Let's zoom out a bit to the whole application and look at the main thread. Now here I'm going to ask something to start, and what I mean by that is I'm going to create an operation queue for background work. And the background work itself, I'm going to encapsulate in some NSOperations. Those operations go on to the operation queue, and that operation queue is free of course in Snow Leopard using GCD, to split up that work onto multiple background threads.
+
+As each of those operations execute in the background, they are going to update that model property. And as a result of the model property changing, the observer, the receptionist will be notified and the receptionist will enqueue some task on the main operation queue where it is executed on the main thread. Let's look at some code.
+
+So first the receptionist, let's define what that task is first. Here you can see I'm using a block, that's what the caret's for, RCTaskBlock, and I'm using a typedef so that the rest of the code is a little bit clearer. And this block takes 3 parameters, and these 3 parameters should look very familiar to you if you're familiar with key value observing.
+
+Those 3 parameters are key path, object, and a change dictionary. Next, the receptionist object itself, first we have the observedObject, next we have the observedKeyPath on that object. We also have the task which we've been asked to execute, and finally the queue on which we are going to execute that task. And finally we need a way to create a receptionist. So here we got receptionistForKeyPath, object, queue, and task factory method.
+
+Let's see how we implement that method. First, I'm going to create the receptionist object.
+
+ Next I need to copy the task. Now remember, blocks are objects so that means I can send it a message. Here I'm sending it the copy message. That's going to move this block from the stack where it was created over to the heap where we can reference it keep it around for later when we need to execute it.
+
+Next, we copy the observedKeyPath, retain the observedObjects and retain the queue on which we are executing our task, then add the receptionist as the key value observer of that property on the model object. I'm passing NSKeyValueObservingOptionNew and Old so that the change dictionary is populated with the correct values for the task to use.
+
+Also, no for the context, that's because there's no superclass of this Receptionist that is going to observe the model object. And finally, return that new object autorelease. We need to implement observeValueForKeyPath as well. And this is actually really straightforward, so I'm going to use this new 10.6 API, addOperationWithBlock on the NSOperationQueue which we've been asked to execute our task. So what do we do in the block?
+
+Run the task. Keep out object and change, and these few parameters you see we've grabbed from the observeValueForKeyPath method. Next in the controller, so how do we actually use one of these receptionist objects? Well first, I need to grab a reference to the main queue. This is also a new Snow Leopard API.
+
+Next, I'm going to create the receptionist object itself, pass in the key path, the model and the queue. And then here's the power of using blocks for this receptionist pattern. I put that task right there in line where I create the receptionist. That means that it has easy access to any data that we need and the logic is right in line with where we expect it to be. No creating other data structures to hold the extra pointers, et cetera, really straightforward.
+
+And inside that block goes what happens on the main queue. Next we have the worker queue. So this is our background work and what goes there, stuff on background. I'm doing one more trick here, and that is that I'm having the worker operation actually hold a ref retain on the receptionist object. And blocks makes this possible.
+
+I'm retaining the receptionist outside of that block and releasing it as the last item in the block I put it on the BackgroundWorker queue. OK, so I want to show you demo, but first I need to set it up a bit. So I need a window, OK. Now, inside this window I want a collection view and you'll have to take my word for it that there's a collection view there.
+
+And then in that collection view, I'm going to put a view which represents a model object. So here I've got an NSBox and the model object that it represents has one property, and that's color. Now the background work that I want done is doing the difficult work of calculating what the next color is going to be in a sequence of colors.
+
+So as I update that on the background, the color of that box will change on the main view because our task will set the fill color of that NSBlock, and of course I have more than one operating at the same time. And after each worker operation is done calculating that hard work of what the next color is, reaches the end, I want each of these views to disappear from our collection view, like so.
+
+OK, let's do another demo. Let's look at the receptionist. So, I saw the receptionist code already. Let's look at the controller. Well, actually first, let's look at the model. We can see as promised very simple, just one property and that's the color. And in the receptionist app delegate here, I'm going to create some number of those boxes in this 4 loop. So in there, I am going to first-- here I go-- create the model, set its initial color to something, then create the receptionist that watches that model object.
+
+Here in line is the task which I wanted to execute which basically boils down to this one line right here, where I set the fill color of the NSBox view. The rest of this is some paperwork, if you will, to look up the view a little bit more quickly. And down here I actually need to create the worker operation, that's the thing that's going to update the model on the background thread. And that boils down to this line right here where I set the model value.
+
+And I told you a white lie, this isn't actually very hard so I put a sleep in there. Hopefully you have more meaningful work to do on your background threads. And finally, I mentioned of course that I want the views disappear when the model is done being modified. Well, one way we can do that is by looking at the is finished property of our worker operation.
+
+Now if you look at the documentation for NSOperation, it warns you, you don't know what thread that is finished property will be changed on. But we have a solution to that of course, and that's a receptionist. So I'm going to create one more here, watch the is finished property of our operation.
+
+The work we want done will happen on the main queue and the task is going to be essentially this line which sets the content of our collection view to remove that view which represents the model that's finished. Finally, remember we're still on the loop here creating our models and adding them to the collection view, and this is where we add them, set content. And then finally at this line is where we actually enqueue that background work in our BackgroundWorker queue.
+
+Enough talk, let's see it run.
+
+[ Pause ]
+
+Here's my receptionist, and if I click that run button, here we go, lots of color properties being updated in the background. Each one of those colors represents a change on background thread and that task being executed on the main thread which updates the fill color in this collection view.
+
+Let's do it again. Now NSOperations and NSOperationQueues are pretty flexible, right? You can add operations pretty much anytime you like. So this, it's a great demo of the power of using an NSOperationQueue and NSOperations to move work around, and of course on Snow Leopard using Grand Central Dispatch. OK, let's go back to our slides.
+
+[ Applause ]
+
+ So that was a receptionist. It moves a notification to a different queue, perhaps the main queue to do user interface updates. It allows the creator to define a task right in line in the code with the data that it needs and with the logic exactly where you would expect it to.
+
+Using blocks, that's really easy to do. It can be expanded to filter, redirect or more pretty much anything you like since you know, you, the creator of the receptionist are defining it. And finally, this example is available for download as well from the attendee site, Cocoa tips and tricks, the "Receptionist" is the name.
+
+OK, let's go once more of what we talked about today, since there was a lot of it. So Zombies, they help you detect memory management errors early in the development last cycle of your application. Enable them when you're testing and make sure that your users don't find your Objective-C, Obj-C methods then crashes. OK, debugging. Using gdb techniques like I showed you, Breakpoint commands, Breakpoint conditions, changing execution of your application by jumping or changing the memory of your application, help you find the root cause of an issue very quickly. And dtrace, you can use to investigate code behavior or trends.
+
+Overlay views let you easily add overlapping view drawing. I used it to make Interface Builder like application. And finally the KVO receptionist, which lets you update the model on the background thread but update the user interface on the main thread. Great, for some more information, talk to Matt Drance.
+
+I think this is like the tenth title I've seen for him at the conference, Application Technologies Evangelist here. Also Zombies, gdb, Creating Custom Instruments with DTrace, Key-Value Observing and Concurrency Programming Guide, which is new for Snow Leopard and fantastic. I recommend you check out all of those. So, I hope you find something useful in these tips and tricks. Go out and make some great application.

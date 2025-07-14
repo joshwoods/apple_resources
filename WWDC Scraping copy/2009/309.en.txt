@@ -1,0 +1,275 @@
+---
+Title:  Mastering OpenCL
+Year:   2009
+Web:    https://nonstrict.eu/wwdcindex/wwdc2009/309/
+
+[!] This transcript has potential transcription errors.
+---
+
+[Justin Hensley]
+So I'm Justin Hensley and I'm a member of The Office of CTO at Advanced Macro Devices and my particular area of research is doing processing on GPUs other than graphics. So I've been working probably on what is classically called GPDPU for around 8 or 9 years now. And just to give you a brief overview of what I'm going to talk about.
+
+First I want to give you a brief overview of the actual architecture of the ATI Radeon HD 4870 and how it operates. So this is at a very high level but it's actually very important to understand the architecture that you're developing for because if you want that last little bit of performance you really need to understand how the architecture actually operates. Next I'll talk about what I like to call spread sheet performance analysis.
+
+So this is just you're doing very quick back of the envelope analysis and you want to figure out is an algorithm actually optimal Is it going to run well on the architecture that I'm concerned with and if I run an algorithm or I run a program how close to what I can really get am I getting.
+
+Then I'll move into some tips and tricks for the 4870 and finally I'll show a short demo. So if you look at the spec you'll see this view of the world that OpenCL has which you have the host and then you have one or more compute devices attached to that host. Each of these compute devices has some number of compute units and each of these compute units have some number of processing elements. So what I like to do is correlate that to how the ATI Radeon HD 4870 views theHp world.
+
+So your compute device, that would be the 4870. So each GPU would correspond to what OpenCL considers a compute device. What I'll call a SIMD is what would be the compute unit in an OpenCL and on the 4870 there areHp 10 of these SIMDs and then each of these SIMDs has some number of processing elements. So on the 4870 there are 64 elements in this processing elements and we refer to those as wavefronts.
+
+So anytime going forward I'll refer to this 64 Element long vector if you will as a wavefront cause that's our internal nomenclature for what that what that is. So in reality, so that's the logical view of the GPU, in reality the 4870, we have 10 SIMDs so we have these 10 sort of nebulous boxes that are representing the 10 SIMDs on the hardware but in reality there are 16 Processing "Cores" and I'm going to call them "Cores" with quotes there per SIMDs.
+
+So what's happens is if you remember last slide I said there are 64 Elements in the wavefront well we actually operate 16 at a time of the 4 cycles and that's how we get to a 64 Element wavefront but they're actually only 16 of these little processors and you just do it over 4 cycles.
+
+Each of these little processing cores actually has 5 arithmetic logical units per core and they are basically a very long instruction word processor. So we have 5 ALUs and we can issue what's called a VLIW instruction to all 5 of these ALUs to do 5 operations in parallel.
+
+So if we look at the sort of the GPU at a whole we have all of these little bitty yellow boxes. So there are 800 of those so if you look at the 4870 there areHp 800 ALU's that every cycle you know you're ready to give an instruction to. We have a very large register file and then some fixed function logic which is what is useful for graphics but in general you don't access that when you're using open CL.
+
+That would be something you'd use Open GL for. Ok so one of the keys of using a GPU such as the 4870 is that you need to recognize the fact that GPUs or the HD 4870 does not have a large register file or a large cache instead it has a large register file.
+
+So if you look at traditional CPU optimization you have this very large cache that you're using to basically amplify the bandwidth to your memory system. GPUs in general don't have large caches. Instead they have very large register files. And the way we're going to use these large register files is that we're going to launch more work than available ALU.
+
+So even though I have 800 ALUs at my disposal I'm going to actually launch more work than is available than I have actual arithmetic to operate on and what happens is the register file is partitioned amongst all this work that I want to do and the 4870 what it can do is it can switch between all the active things that can be operating at any one time very fast. So the goal is that any time something wants a piece of memory or wants to do an operation that takes a long amount of time we have a very fast ability to switch between active wavefronts that are ready to go.
+
+So basically you'll have a wavefront operating on the ALUs and as soon as it wants to access something such as memory it gets taken off the ALUs and another wavefront gets swapped on. And the whole point of this is that we want to keep these ALUs as busy as possible. So we have lots of work that we can select from and any time somebody wants to do a long latency operation we just swap it on the other GPU or onto the 4870.
+
+So to give you an idea of how this looks pictorially we have let's say we can select between 1 and 4 wavefronts that are going to operate. So the first wavefront will operate and then at some point it's going to request something from memory and effectively that wavefront is going to stall because it cannot operate until it gets that piece of data.
+
+So let's see we'd have to wait at some point if we just basically executed this one wavefront we'd have to wait quite a bit of time till that data was ready before we could operate again and our ALUs wouldn't be doing anything. So what we do in the 4870 is we actually select another wavefront to run.
+
+So as soon as wavefront 1 stalls we're going to put wavefront 2 on the ALUs and operate on those guys and then they'll stall and then as soon as they stall we'll put wavefront 3 and as soon as wavefront 3 stalls we'll put wavefront 4. And the whole point is we're always keeping the ALUs as busy as possible and as long as there's the ALUs are busy we're going to be happy.
+
+And you'll notice that by the time wavefront 4 finishes we can swing back around and actually operate on wavefront 1 again. So as long as we have enough ALU operations in flight at any 1 time we never actually see these latent the fact that memory takes a very long time to access because we're just constantly cycling between different pieces of work that are running on the GPU core.
+
+So now that we have just a very fast sort of overview of how the GPU gets the performance that it's able to get or the 4870 gets the performance it gets now I'd like to talk a little bit about what I call spreadsheet analysis and the reason it's very valuable to do this is that it's extremely important to estimate the performance of your kernels. So you're writing and OpenCL kernel and you run it and you get some performance level. So the question is it might be fast, it might be extremely fast and you're happy with it but the real question is how much performance have I left on the table?
+
+If I look at what the device can do, so what can the 4870 get theoretically and what you're actually getting with your kernel, you need to be able to estimate and get a rough idea of how much performance is left on the table. And to the first order it's actually pretty simple on the 4870 to do this and that's because those little processors even though there's a lot of them they're all in order core so they basically execute one instruction after another. There's no out of order reordering going on.
+
+So you can actually fairly easily estimate performance. So for the HD 4870 to get the Hpfirst order how long are kernel's going to take is just simply the max of how long it takes to do the ALU operations, how long it takes to do what I'll call texture, but that's just really load store, so what you can think of is how many addresses can I basically send off to memory per cycle and how many bytes of data am I actually reading from memory.
+
+So one of those three things is going to be the thing that limits your performance because they're all happening in parallel so all you really care about is how long did I take to do arithmetic operations? How long did I take to do those load store operations? And how much band width did I take?
+
+So to give you an idea of how you would compute this; let's say we want to figure out how much time I spent doing ALU operations. Well it's actually not that hard to compute. You just take the global size, so how many elements of computation am I doing? You multiply that times the number of ALU operations I'm doing so in this case it's those VLIW instructions.
+
+So this you can basically just look at your algorithm and sort of give a guesstimate of how many VLIW instructions would it take to actually execute this operation. So it's just how many floating point multiply floating point multiply ads do you have to do. So that gives us how much work we have to do.
+
+So we have our global size times the number of instructions. Well all we need to do is divide that by how many units of computation we can do. So we have 10 SIMDs in the 4870 and remember each SIMD has 16 of these little processors in them so we multiply a number of SIMDs times the number of Cores per SIMD and that will give us an idea of how many items we're doing but then we also have to take into account how fast is the engine going. So in this case the 4870 runs at 750 MHz. So we just take these pieces of information and that'll give us how much time we spent doing arithmetic operations. And it turns out when you do this operation you can get within 95, 96% of reality.
+
+So you could take number of ALU operations your doing, run it through this formula, and it would come extremely close to what you're doing when you really run an algorithm if it's ALU bound. So if you look online you can find similar information for number of tex units and how much bandwidth and so you can create formulas just like that that'll give you ALU time, texture time or load storage time and memory time and you just take the maximum of those and that'll tell you what's your bottleneck.
+
+And the reason you care about that is that if your memory bandwidth is the thing so you're memory bound like Andrew was saying earlier, it doesn't make much sense to actually improve your ALU time because it still doesn't matter cause you're spending all your time doing memory operations.
+
+So what are these what are the practical implications on the 4870? So if you recall I said the wavefront size on the 4870 is 64 elements. So what that means is our workgroup size must be a multiple of 64 or it shouldd be a multiple for it I should say because you can think of each of these wavefronts are sort of a slice of your workgroup. So you want to make sure that your workgroup evenly is filled up by wavefronts.
+
+So you would like your wave your workgroup size to be a multiple of 64. If you use smaller workgroups than that you're going to underutilize those SIMDs because they operate on things of multiples of 64. One other key thing is that the SIMDs actually operate on a pair of wavefronts so they operate on an A wavefront and then a B wavefront and an A wavefront and then a B wavefront. What that means is that we have 10 SIMDs.
+
+We have 2 wavefronts that we're operating on and each of those wavefronts has 64 elements.d So that means we need a kernel that has if we want to have 1 kernel that fully utilizes the 4870 we need 1,280p elements or work items on the GPU in that kernel so that we can fully utilize the GPU with that 1 kernel.
+
+But the key thing here is that we've utilized the 4870 but we haven't actually enabled any latency hiding. So the key to the GPU is that you can hide this latency by having more work available than you actually have computation units for. So that's means if you want to have minimum latency hiding on the 4870 you need to have 4 wavefronts in flight.
+
+So in that case it would be 1070s times 4 SIMDps wavefronts, times 64 elements and that would give you basically 256 or 2560 elements. So with register usage recall that we we're hiding this latency by switching between these wavefronts but the thing is we have limited resource our register file that has some number of registers that you can use. So that means if you use more registers that means there are fewer wavefronts that you can have in flight.
+
+So basically what you can think of is we have this register file that has some number of elements in it and we divide it up into some number of wavefronts. The more registers you use the fewer wavefronts which means you have worse latency hiding behavior or the fewer registers you use that means more wavefronts in flight.
+
+The more things you have to select from means you have better latency hiding. So when your coding your algorithms to run on the 4870 you have to consider how many registers am I going to have to use because the more registers you use that means the fewer wavefronts that can be on flight. There is a caveat to that.
+
+You can actually compensate for the fact that you have a very few wavefronts in flight by just doing more ALU operations. If you think back to that diagram where I had the wavefront 1, 2, 3, and 4 operating if that chunk of ALU operations that are being operated on is longer that means I don't have to have as many wavefronts in flight to select from because basically the more ALU instructions you have operating in one chunk the more latency you can hide.
+
+So another key guideline to writing kernels on the 4870 is that we want to prefer int4 float4 whenever possible. So recall those little processor cores are 5 wide VLIW machines. So at any one instant each of the little cores can do 5 math operations at any one time.
+
+So we'd like the help the compiler out. So the compiler can actually extract out ILP from your kernel and pack those VLIW instructions as much as possible but you should always help the compiler out whenever possible. So by using float4s you're explicitly telling the compiler hey these things can be operated on in parallel.
+
+Also the memory system is designed to operate on or to prefer 128 bit loads and stores. So whenever possible you want to actually load and store 128 bit value so int4 and float4s. Again these are graphics processors so they are designed to work on things like XYZW RGBA so whenever possible it really helps to give those the compilers a hand and the memory controllers a hand in packing the data for it.
+
+Another key thing is to consider the access patterns. So if your data is stored in a long linear buffer and you're accessing it consider how you're accessing it because if you access it in nice sequential chunks the memory system can easily get that from the memory system and treat it back to the shader core.
+
+The problem is if you start striding through memory at very large offsets what happens is the memory controller can't coalesce those reads together and we have to multi-cycle through as we read those values and you end up getting less bandwidth effectively out of your memory system because the memory system really likes these large chunks of memory.
+
+And one other key thing for the 4870 is that AHpMG GPUs have large register files so there's often a trick where we want to do more work per element and I'll give an example later but the one thing to consider is there is local N OpenCL there is local memory which is faster than local memory but there's actually something that's faster than local memory and that would be the registers in the shader core.
+
+So whenever possible you'll want to use those. So you can compensate or you can actually optimize your programs by using more registers because we have this large pool of registers available on the 4870. So a quick example of some OpenCL code or quick optimization let's look at median filtering.
+
+So median filtering is just a non-linear filter for removing one shot noise so it's a filter where you sort pixels in a neighborhood around yourself you find the median and you output that and what that does is it gets rid of speckles for images. So simple algorithm is just to load the neighborhood, you sort the pixels and then you output the median value.
+
+So if you look at some OpenCL code here the first thing we're going to do is we're going to compute some indices based on global ID. We're going to handle our edge cases with an init statement so we are on the boarder of image, then we're going to load our neighborhood. So here I'm just loading 9 values from a buffer that I passed in which is a uint buffer.
+
+So I load those 4 values and then we're going to basically sort along the rows. So this is a very efficient way of doing the median filler so if you sort the rows of the 9x9 or 3X3 neighborhood then you sort along the columns, it turns out if you just sort the diagonal, that middle value on the diagonal is the median.
+
+So this kernel loads 9 values, does this sort and then outputs a value and you know it's just a simple kernel that will output a median and it's actually fairly efficient. So here's some of the example auxiliary functions so you can I'll just skip through these because they're basic C code OpenCL code.
+
+So another way of doing this is to do more work per work item and the key to this is that we want to prefer 128 bit loads and stores. So the way we can do this is actually compute more than one output per work item. So the better algorithm for the 4870 is to loaHpd a neighborhood of 8x3. So instead of loading a 3x3 we're going to load an 8x3 and we do that via 6 and 4 loads or uint 4 loads. So we're going to load 2 values for the top row, 2 values for the middle row, 2 values for the bottom row.
+
+We're going to sort pixels for each of the 4 sort for each of the 4 pixels that we're going to output and then output only 4 values. So we actually you'll notice we're actually loading extra data here that we don't really need but it turns out even though we're loading extra data and we're not changing how we're doing the algorithm at all it's actually just 20% faster just to do this because you're giving the memory system a hand and having it load these 128 bit values instead of having these 3-32 bit values.
+
+So the way this works is again we compute some indices, we load the row above us through 2 loads, our row through 2 loads, the row below us by 2 loads and then we're going to find the 4 medians and then we'll output it. And you notice one trick I'm doing here is I'm actually casting my memory from uint 4 so that I can get a aligned uint or 128 bit load and you'll also notice I'm not actually doing any other optimizations as far as how much work I'm doing. I just basically load this larger window, do the same amount of work and output 4 values just by changing how I access the memory system you can actually improve performance by quite a bit.
+
+Ok, so now I'm going to move on to a quick demo. So this is a demo called Powdertoy which is a mixed fluid/particle simulation and by that I mean you have particles that effect fluid state so you can have some things such as fire and fire will heat up the air increase pressure and by increasing pressure you get a nice little flow of particles and so the fluid state will affect the particle motion and the particle state affects how the fluid flows.
+
+So before we get into that I just want to show the original C code is on the left so I actually reported one of our engineers wrote this as a personal project in just simple C and then one weekend I was at a coffee shop for two hours I converted that to OpenCL. So it literally took maybe an hour to two hours to convert this from the original C code to OpenCL.
+
+So on the left for part of the fluid simulation you'll see the original C code and on the right is the OpenCL kernel and you'll see that they're really similar except for the part of the top where I'm having to compute my indices but that's you know the actual core of the computation is actually very similar to what you would write in the original C code. So we see here is this we have this particles that are made of like wood and it's on fire.
+
+So they're burning, the wood's burning and then we'll hit some energetic particles there which we'll do some energetic things and at the bottom we have a fuel source; so it's just basically gas particles that are kind of floating around and been browning in motion and we get this nice you know fire going and then you'll notice in the background we get this green which denotes high pressure regions so the background is the pressure of the simulation and because we have increased pressure where the heat sources, at the bottom get this nice outflow of particles and then we can come in and I want to select some.
+
+So this is oil basically so I can select oil and ignite the oil and get some nice little particles flowing around. So at work we typically call this productivity tool because you end up wasting a lot of time just you know just sort of doodling around with it because it's just fun to watch.
+
+So and this one I note that was running on there's a behind here there's a Mac Pro with an HD4870 sitting inside so that was running on the GPU or the HD 4870 in OpenCL doing all that and then there's OpenGL for the rendering. Ok so some quick conclusions. Unfortunately I can't tell you a silver bullet for optimization. It's a balancing act so you have to consider several things when you are doing this. You have to consider your registry usage. How many wavefronts are in flight at any one time?
+
+You have to consider your ALU to memory access ratio. Sometimes it's actually better to recompute something because the 4870 has a lot of ALUs at your disposal so there are times when it's actually better just to recompute something than to fetch it from memory. Also remember that the work group size should be a multiple of 64 and if you wdant to have any kind of latency hiding for a single kernel you need at least 2,500 elements in flight at any one time.
+
+Actually you'd ideally want even more than that but at a minimum so you do not want to write a kernel that is a 1x 1 in the loop that loops over a million things and expect the 4870 to be able top run that fast because it wants parallel you know not long sequential runs. So with that I'd like to introduce Boaz from Intel.
+
+[Boaz Ouriel]
+My name is Boaz Ouriel and I'm a software engineer working at Intel. I came all the way from Israel to give you this presentation and in the next 20 minutes I would like to talk about how you could take your own OpenCL code and actually optimize it for Intel CPUs.
+
+I'm going to base this discussion on a case study which I've performed prior to my arrival to the US where I've taken a couple of algorithms and ported them to OpenCL and what I would like to show you is how I optimized those kernels and actually show you the results and how I analyzed them using Shark which is Apple's profiling utility and also give you an incentive of what were the kind of things I had to do in order to get my codes more optimal; so that you can do the same thing when you are going to optimize your code when you're writing it for Intel CPUs.
+
+Based on these results I'm going to give you a check list of DOs and DON'Ts that you can take with you back home and when you're writing your own OpenCL code what you want to be optimal for Intel CPUs you can actually use it. The presentation is going to focus mostly on kernel writing but I am going to discuss a little about what you should do on the whole side as well and at the end I'm going to show you a short demo of the work I've done. So I want to start off by asking why write OpenCL for the CPU.
+
+So today when you want to write an efficient application for Intel CPUs you really have to think about 2 things. The first thing is how are you going to spread your work across the cores to get the benefits out of the multicore architecture and the second thing you want to think is how are you going to vectorize your work so that you could get the vector units which reside on Intel CPUs and get them working.
+
+Failing to do that will result in inefficient code and today when you're writing your application in C or C ++ there is quite a lot of boiler plate code which you need to write just to get the benefits out of the multicore architecture. Things like thread classes, wrappers, task, job queues, thread pools and there's and this requires a lot of time and a lot of debugging and tuning.
+
+And in addition to that you need to ramp yourself on the intrinsics to get the vector units to work and by the way the this means that when OpenCL comes in it really helps the developer a lot. It provides a set of run time APIs which will allow him to seamlessly spread his work across the cores and get the benefits out of the multicore architecture and this is very effective for both data parallelism.
+
+This has been mentioned quite a lot of time during the presentations but it is also very effective for task parallelism; so taking your serial bits importing them to OpenCL. This will work absolutely great on Intel CPUs. And in addition to that the language introduces the high level syntax which allow you, and I will show that later on, to get the benefits out of the vector units.
+
+So the code is now going to be very readable, very easy to ramp on and you're going to have a really easier time on maintaining it and this code is going to be portable not only across devices but it is also going to be portable across device generation and that is very important.
+
+What I'm going to show you also is that actually you're your code is not that difficult to optimize because you have Shark to use it and help you with this process. So let's start by introducing the case study where and as I've mentioned I've taken a couple of algorithms and those algorithms come from the video processing domain.
+
+The first algorithm is color enhancements where one can manipulate the saturation of individual colors of video frames and the other one is a contrast enhancement which will allow you to manipulate the brightness of incoming video frames. Both of these algorithms are very parallel meaning that each pixel can be rendered by itself.
+
+However the contrast enhancement contains a serial part which I have imported to OpenCL as well and I'm executing it using task parallelism. The input for those kernels are video frames and they are represented in YUV 4:2:0 color space which is a planar and this means that the layout of those frames is actually a structure of rays which is great for fetching data into the vector units. All of the video processing is done through fixed point arithmetic and both of those algorithms can actually run together since they're addressing different components of the pixel. Each pixel is represented by 3 components which is represented in 10 bits and contained inside unsigned short.
+
+So potentially you can load 8 pixels into the 128 bit registers of our vector units. So I want to start by showing you how you can use Shark to optimize your OpenCL code when you're writing it for the CPU. My assumption is that you are already acquainted with the how to use Shark and after you sample it this is the window that is going to come up and it's going to give you a breakdown of the functions and how much time each one of them consumed from your execution, from your total execution time, and you're actually looking for a line which says unknown library; mystic, but unknown library is actually your OpenCL kernel and in this case you can actually see that it consumed 22% out of your total execution time. You double click on it and another window opens; don't be scared, this is only assembly code and you really don't need to know everything about what's going on there. The only thing you want to do is get yourself oriented in the codes.
+
+You are looking for markers that will help you correlate what you're seeing in assembly to the things that happen on your source code and in this case there was a 4 loop which I marked for you and this really helped me understand what was going on in my kernel and correlate the lines of assembly to the source code.
+
+And if you do decide that you go and want to go into the adventure of understanding what the certain instruction does there is there is always the way of doing it by highlighting the instruction and then pressing the Ask Some Help button which will open the documentation for this instruction taken directly from Intel's Manual of Instructions and you can read all about it and learn exactly what it does.
+
+But what you're really looking for inside this window is actually the hot spots. Why the hot spots? Because the hot spots are your candidates for the next optimization and the process of optimizing your code is actually an iterative process where you start looking for hotspots, you optimize them and then the next one will pop-up and this process is going to be very iterative and you decide when to stop it and what I did during my smaller case study is exactly that. So let's review together the optimization steps I took.
+
+So I started off by writing a very naive scholar fragmented version of those kernels and when I say fragmented I mean that each kernel was capable of processing a single pixel at the time, not more than that, and I chose on the host side the number of work items to be equal to the number of pixels within the video frame; and just a side comment the current CPU device implementation restricts you to a workgroup size of one, so actually your workgroups are equal to the number of work items. So this was my base version which I used and I called it Scalar Fragmented. The next thing I wanted to understand or evaluate was how much overhead was the run time actually introducing switching when switching between work items.
+
+So I wrote another version which I call the Scalar version and in this version what I did I modified the kernels only a bit, I added a 4 loop inside so that I can process more than a single pixel at the time and on the host side I changed the number of work items to be equal to the number of cores and this can be easily done using the runtime APIs of OpenCL so you can actually know exactly how many cores you have in that system at that current moment and this means that for example if you're running on a Dual Core machine then actually you'd have 2 work items and each work item is going to process half of the frame and this is this is an interesting experiment and I got 10% out of that over the in comparison to this Scalar Fragmented version.
+
+The next thing I wanted to see was whether the compiler of OpenCL was actually taking my scalar code and turning it into vector instruction, SCC instruction, so that my vector units are going to be active. So I looked at the codes using Shark and I saw that everything was color there so what I did was write another version which I call the vectorized version and what I did I used the OpenCL vector primitives, used ushort 8 and ushort Shark 16, no intrinsics here, only OpenCL syntax, and I was hoping to get the compiler to produce SSE instructions. So I recompiled it and I took another look at the code and yes jackpot it was getting vectorized.
+
+So I ran a measurement and I got an additional 40% versus the @scalar version. Are you pleased? I'm not. I was expecting to get a bit more out of the vectorized version. So I ran Shark again and I saw that there was a hotspot and this hotspot really correlated to a certain operation I was performing in my source code and that operation was actually dynamically accessing vector components.
+
+So when I say dynamically accessing think of a variable J for example which is currently containing an index to which you want to access with the vector and this is what I was doing I was accessing using J and this generated a lot of SSE code which was very inefficient and luckily for me in this example I was capable of replacing these accesses these dynamical accesses with contents. So it was kind of redundant in my case.
+
+So I wrote another version which I called Indexing Vectors Using Constants, sorry for the long name but I couldn't think of another one, and replace those variable indexing views and instead used constants and here I really got an additional 189% over the vectorized version. Great! This this is starting to look like the numbers I was looking for initially. The last thing I did was actually take a small loop, a 4 loop which was which had the constant number of iterations and unroll it.
+
+I saw that the compiler was not doing it by itself I wanted to see whether unrolling it will help me. So I wrote another version on top of the on top of the previous one where I was unrolling the this loop and I got an additional 23%. So now I took another look at the at the results Shark produced and what I saw is that the kernel it was pretty well balanced.
+
+I mean there were no outstanding issues that I could reoptimize. Of course I could always take the path as was said previously of choosing a different algorithm but this code seemed pretty well balanced. So I decided to stop my optimizations and actually took a shot at writing the same, the same application using SSE and multithreading in C.
+
+So I was using pthreads and I was using intrinsics; I combined those 2 and I did a comparison and I call this version the Hand Tuned version and this was very interesting. I was actually only 5% behind the SSE version. So that's very very good. In this example I was on par with my OpenCL version and the optimization phases I took were fairly simple. It really took me no more than a day to get to that point.
+
+So if we look at what happened here I started off with a very naive version this Scalar Fragmented which was like 5 1/2 times slower than the final version and I was able to get to be almost on par in comparison to the Hand Tuned version. So now together let's build this check list of DOs and DON'Ts so that you can use it when you're getting back to your offices. The first thing you want to do is actually match your match your work groups to the number of cores and not do oversubscription.
+
+As we've seen here is is actually worth an additional 10% of your work and remember that you are restricted to a workgroup size of one. Vectorizing your code is extremely important. If you do not do that you are leaving a lot of performance on the table but remember that indexing vectors using variables or dynamical accesses is going to hurt so try avoiding those, those accesses and try using constants instead.
+
+And if this is not possible and not always is it possible then you're better off loading this using a V load built in command of the OpenCL language and load it into memory and do your work scalarly and then return it back to a vector using a V store. I've measured that as well and it produces very good numbers. You're better off not using not using dynamical accesses.
+
+And notice also that the accessor methods for vectors, things like high, low, odd, even all of those operators actually hide beneath them accesses to components within the vectors and these are not very efficient today so try using these moderately. Think twice before you do that. Loop and rolling can help especially if you have small loops.
+
+And in addition to that there are a couple of other things which I didn't show in the previous slides but are worth taking a shot at is the use of prefetches for example if you have a loop and you're prefetching data you can actually prefetch the data for the next iteration or the one after it.
+
+This might help, I've seen it I've seen it help from and it was worth around 10%. Duals are better than 4 loops because it will save you an extra branch and this is also worth around 3 to 4 %. So now before I conclude I would like to show you a quick demo of the work I made.
+
+[ Background sounds ]
+
+[Boaz Ouriel]
+So I've written a simple player that illustrates the algorithms I was talking about and here are some flowers that my wife took while she was in Netherlands, very nice flowers and I am going to show you how I am going to play with different features, things like the saturation of colors. I can actually decrease the brightness or increase the brightness of those video frames. I can remove components. Let's say I remove the green and now the blue and let's leave just the yellow parts and now let's return everything back to normal.
+
+But this is not very impressive anybody can do that but wait on, there's a lot more going on rendering-wise. All of this was happening in the background and all of this is running on my dual core machine at 2.4 GHz and I can still manipulate stuff. I mean I can raise, I can reduce the saturation, I can remove the reds and return it and now I want to switch into what I call a benchmark mode. The rendering is going to freeze but don't worry this is not a bug, this is intended.
+
+And now notice here that I have a frame rate count, let's move and have everything focused on this and you can see that I'm currently using the very inefficient version I initially wrote and things are running around 140, 150 frames per second and I'm going to switch to my optimized version, the final version and actually now I'm running at 800 frames per second which is around 5, 5 point something X better than the initial version and we can switch back into playback mode and enjoy ourselves with soothing video.
+
+[ Applause ]
+
+[Boaz Ouriel]
+Thank you. Ok so I want to conclude. OpenCL is a very good framework to harness Intel CPUs. The syntax is very intuitive and easy to ramp and it will be very easy for you to maintain the code. And if you follow the steps which I've shown you you're actually going to get pretty efficient code for Intel CPUs. It will scale well across the cores.
+
+It will use your vectoring units on the CPUs and you can use serial parts to run on the CPU because they will work just fine using task parallelism. The code is going to be portable and it's going to be portable across device generations so you will write your code once and you will enjoy the goodness of future platforms. Thank you for your time. I would like to invite Chris from NVIDIA.
+
+[Chris Lamb]
+Hi my name is Chris Lamb and I'm the manager for OpenCl at NVIDIA and I'd like to talk to you today about what it takes to optimize your OpenCL programs to run excellently on NVIDIA GPU's. Here's a quick outline of what I'd like to talk about with you. First I'm going to go through the hardware motivation for what we're going to do talk about today.
+
+Then a set of memory optimizations you might consider doing. Secondly a set of execution configuration optimizations, this is about how you map your work onto the OpenCL execution model and then finally in the optimization instructions this is what you might think about doing inside a single work item or thread you might think of it sort of similar on our architecture; a single work item how you might write the code in there and do instruction optimizations to get the best performance out of the system.
+
+Finally I'll conclude with a quick demo. Go back. Can we go back? Takes a bit. Slow. Here we go. So this is an overview of our top of the line 10-series Architecture. This is what you'll find today in the GTX 285 and the FX 4800 available for the Mac. It has 240 scalar processors each of these execute threads or work items in OpenCL in independent thread of execution. These 240 scalar processors are configured as 30 separate stre0aming multiprocessors in the hardware.
+
+Each of these is in the OpenCL term a compute unit in the execution model or the abstract hardware model for OpenCL. Each of these streaming multiprocessors contains a grouping of eight scalar processors, two special function units and one double precision unit on the latest 10 series Architectures 285 and the FX 4800. As well as a local memory that enables work item cooperation and very fast access to data.
+
+So what does it take in general to optimize for this architecture? The high level is you want to maximize independent parallelism You want to think big. You want to maximize the arithmetic intensity, that's the math to bandwidth ratio of individual work items. Sometimes it's better to recompute than to cache so you want to think about where you're getting your data from.
+
+The GPU sends it transistors; the video GPUs spend their transistors on ALUs, not memory, not cache; we spend it on compute units and so unlike a CPU where you're thinking about a cache hierarchy that's meant to amplify bandwidth on video GPUs you want to think about maximizing parallel and hiding latency. You want to try and do more computation on the GPU to avoid costly data transfers.
+
+This is an accelerator that's typically over a very fast PCIE bus with the ratio of bandwidth of the local memory that's on the device, on the board there compared to going over the bus is going to be a big step and so you want to think about actually moving more computation to the device than might sort of naturally fit in a parallel way because often even with low parallelism tasks you'll find that though they may execute even slightly slower on the GPU you'll avoid a costly data transfer that might actually cost you more performance in the end. And so moving more tasks to the GPU can actually help your overall performance. So here's some memory optimizations you might think about when designing your algorithm. The probably first order affector on performance for the GPUs is going to be thinking about coalesced versus non-coalesced memory accesses.
+
+This can be an order of magnitude in performance differential and what does this mean? This means the access pattern in memory of sequentially numbered work items in a work group. You want to think about whether those work items are generally accessing the same area of memory or not.
+
+The fastest accesses are going to be when their accessing sequential accessing memory sequentially. But even if you're you're generally accessing within a similar region of space on the latest in video GPUs you'll get very close to peak performance out of memory sub system. You want to optimize for spatial locality of accesses in cache texture memory.
+
+This is when you're using OpenCL images to operate on image data. Images may benefit from processing in 2D blocks because this is how the graphics hardware, the fix function hardware that's there in GPUs to make these operations go really fast, this is the kind of operation that it's optimized for, this 2D block localit-y. So you may think about how you map your data onto your work groups and work items so that you take advantage of that.
+
+You generally want to experiment with the aspect ratio of the work items to see what performs best for your given algorithm and access pattern. Another important thing is to let the OpenCL run time allocate your memory for you. This means using the CL_MEM_ALLOC host pointer flag if you want host accessible memory. Implementation can optimize the alignment and the location of memory and generally set it up in a way that's most optimal for high performance processing on the device.
+
+Without actually giving up a huge amount of control you can still map that memory and get a direct host pointer to it that allows it to manipulate it with with normal C++ Objective C code. You want to take advantage of local memory. So this is another first order effect on performance for video GPUs.
+
+The local memory is generally 100s of times faster than global memory. Several 100, 750 or so gigabytPes per second on the latest part so it's huge in terms of its raw memory bandwidth and it's actually about as fast as registers when you're thinking about balancing your algorithm. Work items can also cooperate within a work group via local memory and this is actually a really powerful thing because with the barrier operation and the local mem fence you can actually share data between work items in the work group with very low latency and very high bandwidth. You can also use it as a technique to avoid noncoalesced access. So if you generally know you're going to have a more randomized access pattern but there's a larger scale of granularity that you can find some coherence on.
+
+You can load whole sections of data into the local memory staging it in there and then performing the more randomized access on the local memory that is very fast and can optimize for that case on ship. When you do this if you start depending on this in a large way you may find that you get slowdowns due to bank conflicts when high randomization of access patterns occur into the local memory and generally this is a far second of order of facts to staging and getting coalescing of loads to global memory. But if you end up finding that you might think that you're running into this there are optimization guides to help you go and tweak this code.
+
+Next I'd like to talk about some execution configuration optimizations. A key to getting the most out of a whole line of NVIDIA GPU's because the NVIDIA GPUs from the top end GX285 and FX 4800 through the GPUs, the embedded GPUs that are in the Mac mini and the white MacBook. They're all compute capable and you really want to scale across the whole range of products.
+
+So you want to think about partitioning your computation to keep all these different types of GPUs busy. This means you want to think really big. Many work items, many workgroups. In general you want to think about mapping you know what would be the most inter loop of your code to a single work item to try and get as much independent parallelism as possible. A good rule of thumb is to think about the top end process you're targeting and have workgroups much, much greater in number than the number of compute units; that 's the number of streaming multi-processors that is on that top end device.
+
+You also want to think about the resource usage per thread and tune that so that you can fit a lot of them on the device. Things like local memory and the registers used for work item all trade off in terms of the number of work items that you can actually fit on a given streaming multiprocessor and you want to try and tune that so you can fit enough of them on the streaming multiprocessor to keep the GPU busy and hide latencies.
+
+There's a number of performance guides that are available through NVIDIA to help you tune these. There's some spreadsheets as well as documents to help you analyze your algorithm as you begin the design process. Finally some instruction optimizations: A key differentiator is that NVIDIA GPUs have a scalar architecture that means they they they work fine on one piece of data.
+
+A key implication from when writing OpenCL programs is that using vector types for OpenCL on video GPUs is mostly a convenience. It's not going to get you extra performance. In fact sometimes it may actually hurt performance because you'll reduce the amount of parallelism available to the architecture. The architecture will actually take your scalar work and auto-vectorize it and try to get the most both out of the ALUs and the memory sub system. So you generally want to prioritize more work items and more workgroups rather than ganging up more work per work item or auto or manually vectorizing your code. You definitely want to think about maximizing use of high bandwidth memory.
+
+So maximizing the use of local memory, minimizing accesses to global memory and maximizing the coalescing of global memory accesses. So definitely try and think of the tradeoff and the order in which these accesses happen in your program; where you're going to be thinking about hiding latency versus where you're going to be using very close, very fast resources. You also want to think about optimizing performance by overlapping memory accesses with hardware complication inside a single work item.
+
+You need to sort of think about phases of computation where you might load data and then operate on it because the the ideal cases you have many, many work items available for the hardware to schedule it can actually choose ones that have a phase of heavy computation while a number of other work items are busy going getting data from a high latency memory like global memory.
+
+So high arithmetic intensity programs, the high ratio of math to memory transactions, are generally going to be very well performing and you you want to focus on keeping as many current work items as possible. You also want to think about the math library you're using and the compiler options you're using.
+
+So using native and half math functions where possible can get you enormous speed ups. Many have a direct mapping onto the hardware ISA and these can be orders of magnitudes faster than higher precision the higher precision native variance or sorry the higher precision math library of variance and typically with very good accuracy as well.
+
+Note that these half functions are the type that operates at half precision not on the half size types. You also want to try and use the CL mad enable compiler option. The FMAD hardware that does fuse multiply additions to be mapped to a direct hardware instruction so you can actually coalesce A+B times C into a very fast operation that happens in a single instruction.
+
+There is some trade off with accuracy but in general most developers have found that the accuracy is by far good enough for their for their applications including some scientific ones. You also want to investigate using even more aggressive options if you can the CL-fast-relaxed math compiler option which enables many aggressive compiler optimizations. Now I'd like to talk a little bit about the demo I'm going to show you.
+
+So this is a demo of cinematic quality ocean surface simulation using the GPU. The algorithm is one based on wave composition where the ocean surface is composed of enormous simple waves. Each sine wave is a hybrid sine wave that is sort of a 2 dimensional sine wave called a Gerstner wave where a match point on the surface is actually rotating in a circular motion. This is actually exactly what happens to a sort of a water particle in a sea surface wave in real life.
+
+It's based on Jerry Tenssendorf's paper "Simulating Ocean Water" which is statistics based, that means it's not a physical simulation; it's meant to look very real by approximating what what would actually be happening with the dynamics of the system. It generates a wave distribution in the frequency domain and then performs an inverse FFT to get the physical geometry for the waves.
+
+This technique is already been widely used in movie CGI since the 1990s and games since the 2000s. In general movie CGI size of the height map is very, very large, 2 K x 2 K is very common for a number of these movies that are quite popular that feature water centrally.
+
+In games the size of the height mount has generally had to been quite small. Crysis had 64 x 64, Resistance too had 32 x 32 and all of these the simulation has been done on the CPU or Cell SPE in a game console. So what's been limiting the cinematic quality has actually been a performance issue.
+
+The simulation required to generate the displacement map is needed to be done in real time and computing the FFT on CPU becomes a bottleneck when displacement map gets larger. Larger texture also takes longer to transfer from the CPU over the bus to the GPU leading to another performance bottleneck there.
+
+However, the large displacement map is a must have for detailed wave crafts that I'll show you on a close up later in the demo. Fortunately GPU computing NVIDIA GPUs are really really great at doing these FFTs. Multiple 512 x 512 or even 1 k x 1 k transforms can be done in real time on modern GPUs. So now I'd like to go ahead and show you the demo.
+
+So here we have in real time the water being being rendered and simulated on the same GTX 285 GPU. All the data is staying on the GPU. The simulation is being directly handed over the ravder [assumed spelling] ring by a GL interop which is a really great way if you're doing games or you want to present stuff. If you want to use the GP to its fullest because you don't have to go back across the bus to the host memory. So here we can see that we've got nice specular, we've got nice highlights of the waves.
+
+We can go down really close here and here's what I was talking about those detailed wave crests. You can see how there's really fine detail on the waves here. You wouldn't get that with a lower quality height map because they'd be smoothed out by the algorithm.
+
+[ Background sounds ]
+
+[Chris Lamb]
+Very pretty. [Applause] Thank you. That concludes my talk
+
+[ Applause ]
+
+ Thank you Chris. OK folks let me just start by thanking our our guest speakers today. So Chris, Boaz and Justin and also earlier today Andrew. Thank you all for for joining us today and your work on these sessions we really appreciate it so thank you.
+
+[Applause]

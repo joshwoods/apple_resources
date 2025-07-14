@@ -1,0 +1,257 @@
+---
+Title:  iOS App Performance: Graphics and Animations
+Year:   2012
+Web:    https://nonstrict.eu/wwdcindex/wwdc2012/238/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Hello, everyone. My name is Dan Crosby. I'm an engineer on the iOS performance team. And I'm going to be talking about graphics and animation performance today. So when I say graphics and animation performance, what I really mean is two things that we think really help to distinguish a really good functional app on iOS from a really great -- an app that makes the user really glad to be using an app. And that's responsive animations and smooth animations. And by responsiveness, I mean an animation that begins immediately when the user expects it to begin, when they gesture or tap or rotate or whatever it is that they do.
+
+And by smooth animations, I mean animations that don't drop any frames, that don't stutter, that seem to be smooth all the way through. And then -- so we're going to be talking about today an introduction to animations, how animations work on iOS. We're going to be talking about how to make your animations in your app responsive and smooth.
+
+And then in particular, we're going to talk about scrolling, which is a special type of animation on iOS, which is particularly difficult sometimes to stay smooth. So we have a lot to talk about. I'm going to dive right in. But first, I want to remind you of this performance bug workflow, which you may have seen if you went to the learning instruments or responsiveness talk earlier.
+
+This is a really important set of steps that are useful in any performance bug analysis, but they're especially important in graphics and animations bugs. So whenever you encounter a problem, a performance problem, you want to start by measuring the problem so you have a baseline so you know when you fix the problem.
+
+Then you want to profile -- and I'm going to show you how to do that. So you want to profile using the tools, form a hypothesis from the data you get from that profile, maybe choose another profiling method to further hone that hypothesis, iterate on that a few times. Do that before you make a change.
+
+Then make a change, and you can start with a simple, you know, not shippable code change just to test your fix. And then, most importantly of all, measure the problem again so that you know that you've actually fixed it. And this is especially important for graphics and animations because some of the strategies I'm going to be talking about will help in some situations and will actually make your problem worse in other situations. So you don't want to blindly do any of the advice that I'm going to be giving you here.
+
+Okay. So let's start with an introduction to animations. How do animations work on iOS? Well, let's start with a very brief introduction to how views and layers and animations work. So if you've worked with UIKit at all, of course you've worked with UI views, either creating them with interface builder and putting them in a nib file or creating them programmatically.
+
+But in fact, every UI view on iOS is backed by a CA layer. And it's the same thing with UI views. You can create a UI view on iOS, and it's the CA layer that actually does most of the heavy lifting. That's what core animation acts on to display something to the screen or to perform an animation on or whatever.
+
+So when you're doing view layout in your application, you're actually doing layer layout. And when you draw rect to draw the contents of a view, you're actually drawing into the CA layer's backing store. And that backing store is what gets shipped off to the render server and then sent off to the GPU to display on the screen.
+
+Now, that part, the layout and draw rect happens in your application. But you can actually do that in your application. So you can actually do that in your application. But layer properties and animations are actually handled in another process in the render server, which lives in a process called springboard if you're working before iOS 6 or an application called -- a process called backboard in iOS 6.
+
+That's where the actual animations and layer properties are handled. And any changes you make to your layer tree are committed to the render server inside a function called CA transaction commit. Now, you never call that yourself. That's called implicitly when you create an animation and start it going. Or implicitly when you create an animation, or implicitly at the end of the run loop if you make any changes to your layer tree outside of an animation, happens at the end of the run loop.
+
+So when you kick off an animation, there's three stages that it goes through. The first stage is to create the animation and update the view hierarchy, and I'll be talking about each of these in a little bit more detail. The second is to prepare and commit the animation, and finally, to render each frame and turn. Now, that first phase, creating an animation, happens inside your application, and it's the part you usually do explicitly.
+
+So you have some simple animation like this where I'm going to create a new view, start it with a transform to make it very, very small, and then inside an animation block, I'm going to add it to a super view and expand it by changing the transform. That'll get animated up over a half-second duration. At the end of this, a CA transaction will be implicitly committed for you.
+
+The next phase is preparing the animation. That also happens in your application, but it happens implicitly. You don't ever actually call anything to make this happen. And at the beginning of an animation, if you were to take a time profile, you'd actually see something like this. So all the stages I'm going to be talking about in more detail, you can actually see in your time profiler trace.
+
+And there's four steps to preparing the animation. There's layout to set up the views, display to draw the views, prepare to do other core animation work that needs to be done before the animation can begin, and commit, where we actually package up the views and send them off to the render server.
+
+So in the layout phase, this is where you actually put the subviews in the place where they need to be at the end of the animation. So this often has expensive view creation. The first time you go to a given view, we may have to create the subviews underneath it if they've never been drawn before. We may have to do some expensive data lookup to populate the views. So if you need to set text on some strings or something like that, you might look up in a database.
+
+It's often--it's usually CPU bound in this phase, but sometimes it can become I/O bound if you're doing some of that database work, or maybe you've got a worker thread going on in the background and you need to check up with that, synchronize with that to get your data. So it's usually CPU bound, but sometimes I/O bound.
+
+The next phase is display, and this is where we actually draw the contents of your views. So if you've overridden drawRect in any of the classes that are-- any of the views that are involved in the animation, this is where we'll call drawRect. And implicitly, lots of other drawRects get called for string drawing and other very expensive things. So this is also usually CPU-bound.
+
+The next step is the prepare phase. This is where CA does other work to get ready the contents of the layers that aren't happening inside a draw rect. So the most obvious example of this would be in an image view. An image view doesn't even implement draw rect, so it doesn't draw the contents of the image, but it's updating the CA layer's contents with the bitmap of that image. So this is where you'll see Core Animation do work like decoding the image that's going to be displayed in an image view. Now be careful with this one.
+
+If you are decoding images, sometimes not all the time will show up in this backtrace in the time profiler trace. Sometimes we do image decoding in parallel, and so you may see like this copy image block set ping happening on multiple threads. So when you're trying to time how long this takes, you need to watch out for that.
+
+Finally, the commit phase is where we package up all the layers, encode them for IPC, and send them off to the render server. Usually, this doesn't take very long, and in this case, it's like five milliseconds. But if you have a very expensive, a very complex view hierarchy with lots and lots of sublayers, you can see this taking a long time.
+
+And after this part, now the work has left your application. It's gone off to the render server, and it's going to take care of updating the animation every frame after that. So this phase is outside your application. It's usually GPU bound. But if you were to look at a CPU strategy view of a time profile or trace during an animation, you'd see something like this.
+
+Those blue parts are not your app, but they're the render server, so springboard or backward, spinning up 60 times a second to prepare the next frame. Usually this doesn't take very long, but if you have a very complex view hierarchy and you're running on a single core device, that work can be interfering with work that you're trying to do in your application. So you do want to watch out for that.
+
+Okay, so with that very brief introduction to how views and animations work, let's talk about making animations responsive. So going back to our chart, the three stages of the animation, we're worried about the first two stages in this case: creating the animation and then preparing and committing the animation.
+
+Now, the first part you can profile yourself. That's something you're doing explicitly. So the second part is what I'm going to focus on here. So some of the things that delay an animation are, first of all, layout. You might have slow layout because you have a very complex hierarchy. You are trying to position lots and lots of subviews in their appropriate places. You have to do a lot of expensive calculation.
+
+We do lazy construction of views. So the first time that you go to a particular view, if you're animating a flip or something like that, we have to create all those subviews. And then, of course, if you have to populate the views by doing database access going down to the flash, something like that, to populate the views, that's also very time consuming.
+
+Drawing can also slow your animation. It's important to note that we do all the work to prepare the entire animation up front. So even if you have a view that doesn't appear until frame 15 of your animation, we're going to lay out and draw that view ahead of time. So any draw rect that's going to be used anywhere in your animation, we have to do it up front, and that's going to delay the beginning.
+
+So if you've got your own draw rect, of course, that can take arbitrarily long. String drawing is expensive, especially on a retina display. We have to render four times as many pixels, so string drawing can take a long time. And image decoding, depending on the size of the image, can be very time consuming.
+
+So we're going to talk about a number of steps to help you improve responsiveness. We'll talk about doing less setup and less drawing. That obviously is always good. We'll talk about being smart with images to make those as fast as possible. We'll talk about a new feature in iOS 6 called Draws Asynchronously that can help in drawing particularly slow layers. And finally, speculative preparation.
+
+So doing less setup is stuff that sounds kind of obvious, but if you take a time profiler trace and you see that most of your time is in the layout if needed part, this is the first place you should look. Try to avoid any CPU heavy or blocking operations during your layout phase. So if you're doing really expensive database work, could you have that -- the part of the database that you need, could you have the actual entries that you need cached and ready up front?
+
+Cache whatever information you're going to need for the next time that you draw the view. If you do have to do database lookup during a scroll operation or during the beginning of an animation, make sure that you have the appropriate indices on your database to make it as performant as possible.
+
+And finally, always reuse your cells and sometimes even reuse views. So for UI table view and UI collection view, there's really easy API for reusing those table cells so you don't have to reconstruct them every time. Make sure that you're using the correct identifier so you can reuse as much as possible.
+
+Keep similar types of cells grouped together. But even views. If you have a view -- two views, you can use a table view to make sure that you're using two very similar looking views that appear at completely different places of your application. Can you reuse the view from the other spot and simply give it a new super view?
+
+[Transcript missing]
+
+If you do have to implement draw rect and call set needs display, try to implement a smart draw rect, that is one that only redraws the part of the rectangle that has been passed in as having changed, and then call set needs display and rect, so that if you only have a section of your view that's changed, you'll only redraw that section. The core graphics drawing functions are usually pretty smart about this. Make sure that your own draw rect code is also smart about only redrawing the parts it needs to.
+
+When possible, instead of using DrawRect, try to use CALayer properties instead. This gets the work out of your application and during the DrawRect part of your application and sends the work over to the render server and hopefully even to the GPU, where it won't take any CPU time at all. Now, this isn't true for all CALayer properties. If you're using CALayer properties for things like shadows, which actually sound like they should be expensive, that can sometimes be slower than drawing it yourself, so you'll want to experiment with this. But in general, try to use CALayer properties.
+
+Now, a very simple example. Suppose we have a case where we have a view that all is really being used for is a background color in which we put subviews on top of it. So it's just a colored place where we position different views on top of it.
+
+Well, one way to achieve that would be to call drawRect, set red as our fill color, and then call UIRectFill on our bounds. Well, there's a couple of things wrong with this. One is that this is something we can achieve perfectly well with a CA layer property, as I'll show you in a moment.
+
+The other one is that you notice in my UIRectFill, I'm filling the entire bounds of my view, which I don't really have to do. I really should only be calling that on the rect that was passed in. But a better way overall to do this is ditch the drawRect entirely and call setBackgroundColor on the view.
+
+That will in turn set the background color on the layer, and we can avoid calling drawRect at all. There's no backing store to allocate, and everything should perform better. Now, there's some exceptions to this, as we'll see, but generally this is the pattern you want to try to follow.
+
+Now let's talk about being smart with images. And so I want to start by talking a little bit about how images work on our platform. The way you would usually display a picture in an iOS app is using a UI image view, which of course is backed by a UI image.
+
+What all UI image is actually is a very lightweight wrapper around CG image. It's a core graphics data structure that does most of the heavy lifting of scaling the image, blending it, and so forth. And then the image decoding part is in a related framework called Image.io. So UI image does a little bit of work, but really most of it lives over there in CG image. Well, as we know, all views are backed by CA layers.
+
+So with a UI image view, what's actually happening is the CG image is set as the contents of the CA layer. So both the UI image and the CA layer are both backed by that CG image. So when it's time to display this image, UI image view doesn't have a draw rect.
+
+The layer simply asks the CG image for the contents that it needs directly. By the way, a CG image works, it usually starts its existence backed by a file or backed by data. So it might be backed by a ping, for instance. It doesn't decode that ping in advance.
+
+It doesn't decode it until it needs to. So when you create a CG image or a UI image, you'll find it's usually very cheap. But then the first time you display it on screen, that's when the bitmap gets decoded. And that bitmap is then what gets sent off to the render server.
+
+So one of the consequences of these is that generally you want to use these UI image views whenever you want. It's generally a better strategy than using the UI image draw at point or draw in rect methods in your draw rect. Some of the advantages of this are that, for instance, core animation will ask directly for the bitmap data in exactly the format that it needs it. Instead of allocating a separate backing store and then copying that bitmap data into it.
+
+It also allows any blending, if there's blending into other things that are in the view. It allows that blending to happen on the GPU instead of on the CPU. So that's one of the kind of things GPUs are good at. And it also gives you some extra forms of bitmap caching, which we'll look at in more detail in a moment.
+
+[Transcript missing]
+
+The other image format to consider is JPEG, and this is a bit of a change from the past. We used to say JPEG was slow on iOS and to avoid using it. We've made a lot of improvements in the last few major revisions of iOS, and now JPEGs are pretty fast. So this, of course, gives you great compression, small files. It's great compression, especially for very noisy images, things that don't compress well in ping.
+
+But it does sometimes have noticeable artifacts, so we don't recommend JPEG for UI elements, for instance. Stick with pings for those. It also--JPEGs can't have alpha, so if you actually need transparency in your image, you have to stick with ping for that. But sometimes you can play a trick, like using the center of the image where there is no alpha, use a JPEG for that, and then have a border with alpha as a series of pings or something like that.
+
+Now, of course, those aren't the only two image formats out there. There's TIFFs, there's JPEG 2000, there's things like that. But our advice for that is very simple. Don't use anything else. Ping and JPEG have been really well optimized for iOS. We're going to continue to optimize those.
+
+Really, our focus is not on any other image formats. You might think that you have--maybe you found a raw bitmap-based format that seems to--you take a time profiler trace, it seems to be really fast. Usually, with those other formats, any win you get in decode time on CPU is going to be made up for by the extra time in I/O when we have to actually pull the less compressed image off disk. So--and because of the page cache and a lot of things, it's really hard for you to tell when that's happening. So our advice really is stick with Ping and JPEG unless you have a really overwhelming reason to do something else.
+
+Now, of course, the best image decode of all is the one that you don't have to do. So we do have a number of unfortunately complicated caching strategies for images on iOS where we'll actually cache the bitmap so we don't have to decode it every time you display the image.
+
+And as I say, this is a little bit complicated, so bear with me. But when you're drawing into a bitmap context, so when you're using UIImage, Draw and Rect, or Draw at Point, it depends on how you made the image whether we're going to cache the bitmap or not.
+
+So if you created your image using UIImage Image Named, we will cache the image in purgeable memory, so it'll stick around until we're under severe memory pressure and then we'll evict it. And we'll also cache it in UIKit's Image Table in case you call Image Named on that same image again. But if you create your image with UIImage Image with Contents of File and you draw it into a bitmap context, we will not cache the bitmap for you.
+
+We'll have to re-decode it every time you draw it. So keep that in mind when you're deciding both how to draw your images and how to create your images. All CG images, no matter how they were created, cache their bitmaps when they're set as the contents of a layer.
+
+So if you use UIImageView, you don't have to worry about how the CG image was created. We will always cache the bitmap for you. Now if you're not using UIKit, if you're using CG image functions to create your images, if you set the case CG image source should cache flag when creating the image, we'll give you the same caching and purgeable memory behavior. So generally try to rely on these bitmap caching strategies.
+
+Don't try to cache the bitmap. There are various ways you can do that by drawing into a bitmap context and getting an image out of the bitmap context. There are situations where that's called for, but generally you want to try to rely on the built-in image caching strategies because it will do the right thing under low memory and things like that.
+
+So here's another very, very simple example. Suppose we want to draw an image scaled to the size of the view that we're displaying it in. Well, we could implement a draw rect and call draw in rect using the bounds of our view, and that will scale it appropriately.
+
+But a much better way to do it is simply set the CG image out of that image as the contents of the view's layer. That will give you more bitmap caching. You don't have to worry about where the image came from. In the first example, we don't know how the image was created at this point in the code, so we don't know whether the bitmap's going to be cached or not. It will also allow blending to happen on the GPU. And this is exactly what happens if you create your--if you use a UI image view instead of drawing it.
+
+Okay. Now I'm going to talk about the only new feature in iOS 6 that I'm going to be talking about here, which is a new flag on a CA layer called Draws Asynchronously. And a bunch of people are going to get very excited when I say this, but this is not as exciting as it first sounds. Draws Asynchronously is hardware accelerated drawing for your views.
+
+So what we'll actually do is in your draw rect, instead of drawing into the contents immediately on CPU, Core Graphics will queue up the drawing commands and have the GPU fill in the backing store later. And the GPU can usually do that very fast, but this has a high setup cost.
+
+So when we do this, there's a fixed cost associated with a view that's going to happen every time. And there's also a high fixed memory cost. So the very first time that you set Draws Asynchronously on any layer, there's going to be a memory hit that you're never going to get back. That's just going to stick around.
+
+So this is very good if you're drawing lots and lots of things into a single large view, so a view that would look like a web page, for instance, Draws Asynchronously can work very, very well for you. If you're doing lots of views and drawing a little bit into each view, this will probably actually make things worse.
+
+So you always want to test your performance before enabling Draws Asynchronously and then test it again afterward. And turn it off if you don't see a noticeable improvement. This is the kind of thing that if you set it and forget about it, it might end up biting you later on.
+
+Okay, finally, if you tried all those other strategies for speeding up your layout in your drawing and it's still not fast enough and your animation's still not responsive, the last strategy is to do speculative work. And that's where you actually do work in advance so that it's already ready in those first two stages of the animation.
+
+So this might mean looking up the data you need to populate future table views. It might mean before you flip over to go to that other view, you create those views in advance. You can even do the image decoding on a background thread so that it's all ready.
+
+But any time you do this, you're going to end up doing some work that's going to turn out you didn't need because you don't know in advance what your user's going to do. And caching this stuff is going to entail a memory hit. So this is really something to do only as a last resort.
+
+And it's also not easy to do safely and performantly. In fact, it's easy to do this and make your application worse. If you think just a little bit about it, you have to have some kind of thread-safe cache. You have to have some kind of cancellation mechanism. You have to know--the main thread has to know when it gets to a bit of a dead end. And that's what we're going to do. So this is a little bit of a summary of what we're going to do. And this is a little bit of a summary of what we're going to do.
+
+When it gets to a bit of data that it needs, whether that data is already being generated in the background thread or whether it should generate itself right now. So there are times where this can really save you, but it's also difficult to get right. So it really ought to be the last thing that you try.
+
+For my first demo, I've got a very simple painting application that it turns out performs pretty well on older iPads, but strangely enough, on the newest iPad, it doesn't perform as well as it used to. And it's a very simple painting application that all it does is it has a page that says, "I'm going to do this." And it's a very simple painting application that all it does is it has a page that says, "I'm going to do this." And it's a very simple painting application that all it does is it has a page paint view that has a touches began, touches moved, and touches ended. It tracks where the user's touches are going and then it adds to a CG path with the line from the previous point.
+
+It also allows you to choose a color. And then in the draw rect, it draws all the previous paths that since the -- where the user drew something and then let go and then draw something new, it draws all the previous paths with their colors and then it draws the current path with its color. So, when I run this, When I run this, okay, I'm painting, and that's great, but responsiveness is poor, to say the least.
+
+At the beginning, everything's fine, but then after I draw a little bit, it starts taking a long time to track what I'm doing. Okay, so I have no idea why that's happening to start with. A good strategy whenever you have any performance issue you don't know what else to do about, it's always a good idea to start with Time Profiler. Time Profiler is a good-- I don't know what else to look at, and we'll see what this turns up. We'll see what's going on on CPU. So I'm gonna run Time Profiler on my application.
+
+And as I draw, I see that the CPU time on my main thread is basically maxing out. It's basically counting out with the wall clock time as I draw. And that's not a good sign. And I'll blow that up a little bit for you. So obviously I seem to have a CPU bound problem here. So I'm going to open up my extended view and go to the main thread.
+
+And this shows me the heaviest call trace of anything that's going on in what I have selected over here on the left. And I see that all of my time is in my draw rect in my paint view and specifically in the CG context draw path. So I'm actually spending all of my CPU time drawing these paths. And in particular, the current path. This is not inside the array enumeration. This is inside the current path.
+
+Okay. So my next step is to try to confirm that. So I have a hypothesis that my draws are taking too long. I'm going to try to confirm that by actually instrumenting my draw rect. So I'm taking the absolute time at the beginning and the absolute time at the end. And I'm logging this.
+
+Don't leave this in your shipping code, please, by the way. But this is a good way to instrument and verify my theory. And I see in the console view down below that Okay, so now I have a good theory that -- and I'll be able to -- because I've got this profiling in place, I'll know when I fixed it.
+
+When those times get down much smaller, it's going to look good. I still don't really know why this is happening, so I'm going to set a breakpoint in draw rect and just see if there's anything obvious that's -- that's going to be there. Okay, so now I have a good theory that -- I'll be able to -- because I've got this profiling in place, I'll know when I fixed it.
+
+When those times get down much smaller, it's going to look good. I still don't really know why this is happening, so I'm going to set a breakpoint in draw rect and just see if there's anything obvious that's -- that's going wrong here. So I set my breakpoint in DrawRect, and I don't really need it yet. Draw a little bit. Set my breakpoint.
+
+and see if there's anything obviously wrong. And one thing jumps out to me right away, and that is that the rect that's being passed in here is the size of my entire view. Now, remember that we have a scale factor of 2, so the entire screen size is only 768 by 1024. So we're redrawing the entire rect here on every draw rect. So that's bad. So I know that someone must be calling set needs display on me, so I'll just do a quick search.
+
+Okay, I'm calling set needs display in my erase method. That seems like it's probably right. And I'm calling set needs display in my touches moved method. So that's causing me to mark the entire rectangle as dirty and redraw it from scratch. Now, I've already done the work here to calculate the dirty rect. It's very simple. It's just the previous point to the current point is my dirty rect. So let's change this to set needs display in rect dirty and try it again.
+
+And that is a whole lot better. That is a whole lot better. And I'll ask you to take my word for it that it is actually behaving much more responsively. But it's still not great. You notice that after a little bit of drawing, I'm still getting up to 19, 20 milliseconds here, and that's still too much.
+
+So my next strategy is I look at my draw rect, and I notice that I'm redrawing all the previous paths that the user already drew in addition to the one that they're currently in the process of drawing. That seems wasteful. It seems like the ones that have already happened and are not going to change again. I shouldn't need to redraw those every time.
+
+So that's where you have to think a little creatively and decide what is it that I could do about that. And what I decided to do was... In my view controller, I created a background view in addition to the paint view that I can put in anything that I want.
+
+And it's actually a UI image view at the moment. So, what I'm going to do, when I get the delegate callback from my paint view saying that the user lifted up and finished drawing a particular path, I'm going to merge the paint view into that background view so I don't have to draw it again. And there's no magic to this. All I'm going to do is create a new graphics context. I'm going to draw the current background view here. So, what's already in the background view, I'm going to draw that into the current background -- into the current graphics context.
+
+Then I'm going to draw the current paint view, render that into the current graphics context, and erase the paint view. So, now all the paths that are rendered into my background view, we're not going to redraw in the paint view anymore. And then get the current -- get the image from the current graphics context, set that as the background view. And then I'm going to draw the current paint view, render that into the current graphics context, and erase the paint view.
+
+So, now all the paths that are rendered into my background view, we're not going to redraw in the paint view anymore. And then get the current -- get the image from the current graphics context, set that as the current graphics context, set that as the new background view. So, essentially, I've taken the existing paths from my paint view and flattened them into a background view, so we only have to draw the new paths on every draw rect. So, I've already implemented that code. All I have to do is turn it on.
+
+And then I'm going And let's see if our draw recs are any better. So, it's not perfect. There's still some things I could do, but in two very simple steps, I actually went from several hundred milliseconds per draw rec, sometimes over a second, to I'm very rarely over 10 milliseconds here. That might actually be good enough to stay responsive. Oh, yay.
+
+Okay, so we talked about responsive animations. Now let's take a look at making animations smooth. Now, animation smooth, as I said, means it doesn't stutter, it doesn't drop any frames. So what does it take for your animation to be smooth on iOS? This is very, very simple. 60 frames per second.
+
+Not 24 frames per second, not 30, not even 55. And it occurred to me the other day working with a developer in a lab, the way to think about this is, "So why is 55 so much worse than 60?" 55 frames per second means that in a one-second animation, you dropped five frames.
+
+And the user will definitely see that. So you need to aim for 60 frames per second if you can possibly reach it. Anything less than that is going to be noticeably worse, even if it's 58, 59. Doing some very simple math, that means we have 16 milliseconds, or 16 two-thirds milliseconds, per frame to do all the work we need to do to put that frame onto the screen.
+
+Okay, so going back to our three stages of the animation, we're done with the first two stages. That was in responsiveness, and now we worry about rendering each frame. Now, I said before, rendering each frame, that happens outside your application, in the render server and on the GPU, but there's still a lot you can do in your application to make this work as easy as possible for the render server to complete in time.
+
+So the first thing you need to do when you have a smoothness problem is determine whether your problem is CPU bound or GPU bound. Now remember we talked before that CG drawing and image IO for image decoding, those things are CPU bound, but usually those things have already happened by the time the animation starts. Now scrolling, which I'll get to soon, is an exception to that, but usually that's already done.
+
+But work in the render server to actually determine where each layer needs to be in the next frame, that takes CPU that's a cost per layer every frame. So the more layers you shipped off to the render server, the more CPU work it's going to have to do every frame. Now the rendering itself, where we actually composite those layers together and produce the final display, that's usually GPU bound.
+
+So the way you figure out which your application is is by using instruments again. And I'll be showing this in a demo in a moment, but the first thing you usually want to do is use the OpenGL ES instrument. You go to the Configure FlipView, which I'll take you through, and there's a little bit of a demo here. So you can see that it's a device utilization percentage checkbox. When you enable that, it will actually tell you how busy the GPU is during your animation.
+
+[Transcript missing]
+
+Another core animation instrument that is sometimes helpful, another checkbox there, is off-screen rendering. And this one I'm going to show you here because I'm not going to be demoing it. In the list of checkboxes there on the bottom left, there's one that's color off-screen rendered yellow.
+
+This shows you its colors on the screen every time we had to go off into one of those separate off-screen contexts to create some effect. Now, this is most often needed either because you use set should rasterize, and we had to go off-screen for that, or if you have any kind of masking going on.
+
+So if you either used a mask layer or if, as very commonly, you use the corner radius property of your CA layer, in order to get that corner radius properly right, we actually have to go off-screen to do the masking, and that requires a context switch. It also requires some extra compositing by the GPU. And so that can slow you down. But once again, there's usually ways to avoid this, but don't go out of your way to avoid it until you've determined that you're actually GPU bound. Thank you.
+
+Okay, the last type of animation I want to talk about is scrolling, which is particularly difficult because it works very differently from other animations. So for most animations, if you have a half-second animation, so it's going to be 30 frames, you kick it off at the beginning, you do all the work ahead of time, and then it simply renders each of those 30 frames, and your application's work is done.
+
+But for scrolling, we don't work like that. For scrolling, we actually do a separate animation for every single scroll update. So in one 16-millisecond window, we have to calculate the new scroll position, prepare and commit the animation, so all the stuff that I talked about in responsiveness, and render the frame, so all the stuff I talked about in smoothness, all has to happen in 16 milliseconds. And that's a pretty tall order. In particular, for table view scrolling, the table view cells that are already on screen, of course, we're not going to redraw those every time. We're only going to redraw them the first time.
+
+But the first time a new table view cell appears on screen, we have to lay out and draw that table cell from scratch, and we've only got 16 milliseconds to do that, and that's assuming that the user is scrolling relatively slowly. If they're scrolling quickly, two table cells or three or the entire screen might appear all in the same frame. So your goal for this is not to get the layout and drawing down to 16 milliseconds. Your goal is to get it down just as low as you possibly can, so that you'll maintain a smooth scrolling experience, even if the user scrolls very, very quickly.
+
+So the strategies for scrolling are some of the same strategies we talked about in responsiveness and smoothness. Reuse your cells and views always whenever you can. Minimize your layout and drawing time using the same strategies we talked about in responsiveness. Consider doing speculative work. So when row 47 comes up on screen, should you be kicking off a background thread to get rows 48, 49, 50 ready? That's something you'll have to decide depending on your own circumstances. And look at flattening your view hierarchy if you're GPU bound. But this, more than any other, is a test and iterate case.
+
+If you start out GPU bound and you flatten a little bit, you might get to where you're not GPU bound anymore. Great. If you flatten a little bit more, you might become CPU bound from doing all those draw racks. So sometimes you want to reduce, say, from 100 layers down to 50, but if you go less than 50, it's going to actually make it worse.
+
+So you need to find what the right place for your particular scenario is. Okay. And that brings us to our second demo, which is the WWF. And that's the WWC app. If you saw the responsiveness talk, you saw a performance problem fixed -- one particular performance problem in the WWC app fixed. Now we're going to look at another one.
+
+We didn't have mirroring on the original iPad. Okay. So when I scroll on an original iPad in the schedule view, it's pretty choppy. It's not terrible, and you can't see just how bad it is up there, unfortunately, but it is not great. We're clearly not getting 60 frames per second.
+
+So I'm going to start this investigation, again, by profiling, but this time I'm going to use the Core Animation Instrument to get a baseline for what my scrolling performance is right now. So I'm going to pull up in the graphics. I'm going to use the Core Animation Instrument.
+
+I'm going to scroll and watch my core animation frames per second. And for this, remember that you want to keep it moving continuously because the screen's not going to update unless it actually needs to. So as I scroll around here, I see that I'm getting in the mid-30s for my frames per second, which is not very good.
+
+So I'm going to then try, since I've already got the core animation instrument open, I'm going to switch over so you can see what I'm doing. I'm going to check the color blended layers checkbox. So this is going to, as I showed you before, it's going to color the opaque parts green and the blended parts red.
+
+And when it comes up here, I immediately see there's quite a lot of blending in this view. The top and bottom are almost completely blended, some of it's very deeply blended, and I've got a lot of blending in the actual grid cells themselves. And so, and this is actually the debugging process we went through here, I think, okay, I've got too much blending, I'm going to try to reduce that.
+
+And the easiest way to do that, if I go to my grid view where I'm actually creating the thing, here I'm creating the labels, adding them as subviews, I've also got a couple of images in there. I'm going to try just to see if it helps. I'm going to do self layer should rasterize equals yes. So that's going to set should rasterize, as I talked about before.
+
+And so I'm going to run that. Actually, I'm going to profile that. I'll do that from over there. Okay. So I'm going to run that.
+
+[Transcript missing]
+
+I see this. So my grid cells that are already on the screen are green. When new ones come on screen, they're red, which is expected, because I have to cache at one time. And then they're green after that. So my cache is working. But if I -- Uncheck that, attach to all processes, and record again to see what my frame rate is.
+
+My frame rate is not actually any better as I'm scrolling around. Eh, maybe a little bit better, which is unexpected. But for the most part... The most part, if I scroll very quickly, this has not actually helped, which makes me wonder, my cache is working. Why am I still only getting in the 30s for my frames per second? Well, the answer is that I didn't do what I said I should do and start by looking at the device utilization percentage.
+
+I'm running low on time, so I'm not going to actually do that, but the device utilization percentage, if I run this, tells me I'm actually only in the 20s for my utilization. So that makes me wonder, okay, if I'm not GPU bound, what actually happens? And that's actually my problem.
+
+Fortunately, when you run the core animation instrument, you also get the time profiler instrument along with it. So I'm going to bring that up, and we see something very surprising. Most of my CPU time is not in my application as I'm scrolling. Most of the CPU time is in Springboard, which is the process where the render server lives. That gives me a new theory that I have too many layers.
+
+So I'm by going to a place where I know that all my layers are going to be in place and using a little trick that a lot of developers don't know about. So I'm going to my view controller's scroll view did scroll method where I know that all the layers are actually there. And I'm going to set a break point there. And then I'm going to scroll. So I break. And I'm going to use a special method called recursive description. Let's clear the contents here because this is a lot of data.
+
+So I'm going to print out I'm going to print out self.view recursive description. And this is actually going to recursively go through all the views and show all the subviews. And I get an absolute mountain of text. If I put that into a text editor where I get line numbers, there are about 700 layers in this display, which is a lot. So that tells me, yes, I probably have too many layers.
+
+What I do then to test this theory and make sure that the number of layers is actually a problem, I'm going to do something very, very strange here. I'm going to remove the set should rasterize, which I know didn't help. I'm still going to do all the work to create those subviews because I don't want to disturb this more than I have to. But I'm simply going to go and remove all the add subviews.
+
+So I'm still going to do all the work to create these things. I'm not reducing the amount of drawing because I don't draw them every single time anyway. I'm just going to display the background, make sure that I still get -- I get 60 fips in this scenario, and then I'll know that the number of layers was actually the problem.
+
+So basically the process that I went through here is I removed all the subviews, I verified that in fact I get 60 fips without the views being there, the subviews being there. And then I decided, well, let's test out what happens if I actually draw these instead of using subviews.
+
+So I implemented a draw rect that is not shippable code, and that's okay at this stage of prototyping it, where I simply take those subtitles and, you know, the title, the subtitle, all those subviews that I created. I have them draw themselves in my draw rect instead of setting them up as subviews. So now the same drawing is going to occur, but the render server doesn't have to process so many layers. And when I did this and ran it in the OpenGL instrument again, now I get 60 fips and my content actually looks right.
+
+Now I'm creating a lot of views that I'm not actually using. I'm also calling drawTextInRect, which is documented but says don't call this directly. So I'm not going to ship this code. But for a prototype, this works perfectly well and demonstrates that the number of layers actually was the problem.
+
+So, a couple of final thoughts. Test animations on a wide range of devices. It's not just a matter of raw performance. It's a matter of the particular capabilities of the device in question. Some devices are more likely to be CPU-bound, some GPU-bound. Different scenarios call for different solutions. Measure, test, and iterate. Okay, for more information, talk to Michael Jurowicz, the evangelist for performance. Visit the developer forums. We talked about animations, responsive animations, smooth animations, and I think I'm over time. So thank you very much.

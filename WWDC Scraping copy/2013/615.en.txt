@@ -1,0 +1,166 @@
+---
+Title:  Integrating JavaScript into Native Apps
+Year:   2013
+Web:    https://nonstrict.eu/wwdcindex/wwdc2013/615/
+
+[!] This transcript has potential transcription errors.
+---
+
+[Mark Hahnenberg]
+Good morning everyone. My name is Mark Hahnenberg and I'm an engineer on the JavaScriptCore team. And today, I'm going to be talking to you about how to integrate JavaScript into your Native Apps on both iOS and Mac. So, prior to today, there has been a C API to the JavaScriptCore framework available on Mac. And if you're interested in that, there is a session that was done on WWDC a number of years ago about the C API.
+
+But today, I'm going to be talking to you about the new Objective-C API that we're releasing to JavaScriptCore, and it will be available on both Mac and iOS. So what were some of our goals when developing this new API? Well for one, we want it to be automatic.
+
+And what this means is that there are certain things that you want to do with a framework like JavaScriptCore and we tried to make that as automatic and easy as possible. The second thing is we want the API to be safe. So, we want you to be able to recover from errors if you happen to pass something of the wrong type across this border because JavaScript is a dynamic language as you know.
+
+So you can pass various objects around and we want it-- we want you to be able to not-- we want you to not crash your application if you end up doing something a little squirrely, so we want you to-- it to be recoverable. And the final goal that we had was this notion of fidelity and what I mean by that is whenever you're programming in Objective-C and you're interacting with JavaScriptCore, we want you to feel like you're programming in Objective-C when you're writing Objective-C, and we want you to feel like you're writing JavaScript when you're writing JavaScript.
+
+So we don't want there to be, you know, these crazy names that lead with underscores or maybe dollar signs in there somewhere. We want it to look like JavaScript and look like Objective-C in their respective worlds. So what are-- what exactly will you learn today? First, we'll talk about how to get your Objective-C application to talk to JavaScript, so to call-- to evaluate JavaScript scripts, to call JavaScript functions, and to create JavaScript values.
+
+Then we're going to talk about how to get your JavaScript code to be able to interact with your Objective-C objects and call Objective-C methods. Then we'll talk a little bit about memory management. Objective-C uses ARC and JavaScript is a garbage collected language. So, getting these to play nicely together requires some extra attention. Then we'll talk about threading and how that interacts with the API. And then we'll speak to-- a little bit about interfacing with the C API that already exists today. And finally, we'll talk a little bit about using JavaScriptCore in the context of a WebKit WebView on Mac.
+
+So, to start off, I'd like to show you just a simple application, a simple demo using JavaScriptCore. So I have a simple Cocoa app here. It has an NSTextView. You can see there are some words in there. And what you're seeing is that the words that correspond to colors are being highlighted with their corresponding color. So for example, brown is highlighted brown, red is highlighted red. And the logic that implements this highlighting that determines whether a particular word corresponds to a color is implemented in JavaScript.
+
+So I have a couple other things that are implemented in JavaScript here. I have a button that's connected to a JavaScript function that shuffles the colors and reassigns them to drive yourself a little crazy. And if I don't want to wait around for the random shuffle to get back to the original assignment, I can reset back to the original assignment.
+
+So I can-- as I type, it will continue to highlight words so you can type red, orange, yellow, but there's a couple bugs. So for example, we have grey but we don't have G-R-A-Y, that doesn't work correctly. And also typing capital colors doesn't highlight as we would expect. And my favorite color cyan is also not highlighted correctly.
+
+So we can fix that pretty easily actually. I have the script that implements this color mapping. And what I'm going to do is I'm going to edit the script to give us a new gray and cyan here. You can see that this is a map of normal JavaScript objects that maps color names to their corresponding red, green, and blue value stored inside the JavaScript objects. And down here, here's our callback for determining what color a word should be if any.
+
+So, you can see that if I uncomment this, then we will take into account words that have uppercase in them that are still colors. So I'm going to save this file, go back to my application and I have this Reload button down in the bottom right and it will reload the script and now we correctly highlight the colors, and I didn't have to recompile which is kind of neat. So, that is a simple way to use JavaScript in an application. You just saw a simple use of JavaScript in an application, a Cocoa application. So let's look at how we might implement something like this.
+
+So, first we're going to talk about how to get Objective-C to talk to JavaScript. So, here is a simple Hello World program, Hello World. We implement-- or we import the framework header, so JavaScriptCore.h. We create something called a JSContext, and we'll talk about what that is in a second.
+
+We use that context and call evaluateScript, evaluating 2 + 2 and that will return a result in a-- with a type of JSValue and finally, we convert that JSValue to an integer that we can print out to the screen. So let's talk about these two core data types, JSContext and JSValue.
+
+First JSContext. JSContext is a context for evaluating JavaScript code. It corresponds to a single global object, so in web parlance for you guys coming from the web world, it corresponds to a window object. But there is no thing called a window but there is a single global object for global variables. And the other type is JSValue. JSValues live inside of a JSContext. They can be things like-- it's just a reference to a JavaScript value so they can be objects, JavaScript arrays, JavaScript functions, Booleans, et cetera.
+
+And they have a strong reference to that value. So it's kind of a strong handle to that JavaScript value. So keep it alive as long as you're interacting with that JSValue. And they're tied to a particular JSContext, each JSValue is tied to a particular JSContext. And why is that?
+
+Well, any JSValue might want to evaluate code which we need a JSContext to do. For example a function, a JavaScript function needs a JSContext in order to evaluate code. And that is also a strong reference, so JSValue keeps alive all of those things that it needs to do its job.
+
+So there's a variety of ways to create JSValues. This is the-- you can create things using the corresponding Objective-C primitives like Boolean's, doubles, et cetera. You can create the JavaScript values null or undefined. You can create new JavaScript objects, new JavaScript arrays, regular expression and errors, hopefully not too many of those.
+
+And you can also create new JSValues and pass an arbitrary Objective-C object. So, this particular method, this class method deserves its own slide because a lot of magic happens here. So we will automatically bridge your Objective-C object to JavaScript so that JavaScript can interact with it. And we'll talk more about exactly how that works in a second.
+
+Once you have a JSValue, if you get it back from a call or something, you want to be able to access the data that's inside of it so we have various things like converting to a Boolean, to numbers, to dates, strings, et cetera. And when you call one of these on a JSValue, JavaScriptCore will do its best effort to convert it to the type that you asked for using the semantics of the JavaScript language. You'll also notice at the bottom, the two object method. And this allows you to get-- if you bridge an Objective-C object to a JSValue, this allows you to get that Objective-C object back out of the JSValue.
+
+So now that we know how to create values, let's talk a little bit about calling JavaScript functions. So here's a simple factorial function written in JavaScript, and here's what it looks like to call it. So first, we load the script from wherever it resides on disk perhaps. We evaluate the script using the context like we saw earlier.
+
+And since the script defines a single global function, we can use this new subscript notation and pass the name of the function from the context to load that JSValue from the global object, from the global scope. Once we have that function, we can-- we simply use callWithArguments and pass this-- and pass an NSArray of arguments.
+
+So this is this new Objective-C notation for creating array literals. And you'll notice that we passed an NSNumber 5 and this is significant because JavaScript doesn't know how to interact with NSNumber. However, JavaScriptCore will automatically bridge this for you so that when you call that function, it gets the correct value, it will get 5 as its argument.
+
+And finally, we get the result back and we print it. It should be 120, right? If the factorial function is correct. So, now that we know how to interact with JavaScript from Objective-C, let's recap the demo that I showed you previously to show where it uses some of these things. Here are the callbacks for the Shuffle and Reset button.
+
+And what we do is we look at the plug-in object that we create inside of our JavaScript file, and we use the subscript notation that I showed you earlier. You can use this, not only on the context, but any JavaScript value also works with this subscript notation to access fields of the object. So we load the shuffleFunction from the plug in, and then we call the function with an empty set of arguments. So, if we look at the corresponding JavaScript code, here's the shuffleFunction, it's a property on the plug-in object named Colors and it does some shuffling for us.
+
+If you look up here, when we're loading the plug-in, we get the path from the bundle, we load the script from the file and then we use evaluateScript to get the result of loading that plug-in and we store it. Now that you've seen how we use interacting with JavaScript from Objective-C in that simple application, let's move on to getting JavaScript to talk back to Objective-C. There are two primary ways to interact with Objective-C from JavaScript. The first is to use blocks, Objective-C blocks.
+
+And these will be wrapped inside of a JS function that is callable from JavaScript. So-- And that's a really easy way to expose just a single function to JavaScript that you want to be able to call back into Objective-C. The other way is to use something called the JSExport protocol and this protocol, by using this technique, you allow JavaScript to interact with your Objective-C objects as if they were JavaScript objects. It's a very powerful technique for maintaining that fidelity that I spoke about earlier. So let's look how these work exactly. First is blocks.
+
+So, like I said before, it's an easy way to expose Objective-C code to JavaScript, very easy. And we automatically wrap the Objective-C block inside of a callable JavaScript function. So what does that look like? We can insert a block into the context using this subscript notation that I talked about earlier. And we pass a block as the value that we're bridging to JavaScript.
+
+And you'll notice that the block takes an NSDictionary of RGB values as its argument. And it returns a new NSColor using those red, green and blue values. So, what this does is when we pass this block in-- across this JavaScriptCore barrier, we create a makeNSColor function, JavaScript function around the block.
+
+Then, in our code, we call makeNSColor and we use these JavaScript objects that I showed you earlier in the color map and they're just normal JavaScript objects. And the cool thing about this is that, you notice before that the block accepts an NSDictionary as its argument. JavaScriptCore will automatically bridge JavaScript objects to NSDictionaries when calling out to Objective-C code. We call this makeNSColor, and what happens? colorForWord calls the function and it forwards that call to the Objective-C block.
+
+It gets the resulting NSColor and wraps it in turn inside of a JavaScript object, and then this colorForWord function returns that NSColor. So although blocks are very easy to use, there are a couple of caveats you have to be careful about when using them. So, the first is you should avoid capturing JSValues inside of your blocks.
+
+And the reason for this is that JSValues maintain a strong reference to both their context and their corresponding JavaScript value. And so if they're captured by the block, you'll leak that memory because you won't be able to release that JSValue. You should-- instead you should prefer to pass JSValues as arguments to your blocks.
+
+The second caveat is along similar lines. You should avoid capturing JSContext inside of your blocks. And it's for the same reason, the JSContext maintains a strong reference to the global object and it will leak all of your memory when it's captured. Instead, you should use the class method on JSContext called currentContext inside of the block, and that will return to you the context of the caller, whoever invoked that block.
+
+This is an example of what not to do. You create a context, you pass a block, and you use, you capture that context inside of the block, this is bad. The right way to do it is to create the context, insert the block and then use JSContext currentContext where you were capturing it before.
+
+So now that we've talked about blocks, let's talk about JSExport and how that works. JSExport is, like I said before, it's a really easy way for JavaScript to interact with Objective-C objects. So, let's take a look at what it would look like. So imagine that I have a MyPoint class represents a two dimensional point, it has an X and a Y property, description, instance method, and a factory method to create new MyPoints, so a class method.
+
+And what would we like this to look like when interacting with this-- an object of this class in JavaScript? Well, we'd want the properties to look like JavaScript properties. So, you could get their value, you could set their value. We want the instance methods to look like functions on those objects, so dot description in this case.
+
+And we want class methods to look like functions on these global class objects, in this case, capital MyPoint. So, the way to get this to work with JSExport is simply to change its interface into a protocol that inherits from JSExport. So now, we have a MyPointExports. And this, by inheriting from JSExport, you signal to JavaScriptCore that this is the list of methods and properties that I want JavaScript to be able to access when I pass an object that implements this MyPointExports protocol.
+
+So, you'll also notice that when you had your interface for MyPoint now, you don't have to re-list all of those methods because it's a protocol so that's how protocols work. And that's nice because you don't get a lot of duplication of information. But you can also, if you don't list a particular method in your JSExport protocol, it will not be exported to JavaScript. So if you only want to-- it's a purely opt-in protocol.
+
+And then your implementation of MyPoint will look just exactly like Objective-C code. This speaks to that kind of fidelity that we were talking about earlier. You don't have to register all sorts of functions, you don't have to do a lot of extra stuff like you just write your-- you write your Objective-C class, you write your JavaScript code and you're done.
+
+So like I said before, when you inherit from JSExport, you enumerate the methods and properties that you want to export to JavaScript. Properties become JavaScript getters and setters on the objects as you're interacting with them in JavaScript so it will-- the getter and setter will call into Objective-C code.
+
+Instance methods become JavaScript functions on those objects. And class methods become JavaScript functions on the global class object, the capital MyPoint that we saw earlier. So let's look at how we would use this. So we allocate our context like before. We evaluate some geometry script which I'll show you in a second.
+
+Then we create two of our points just like we normally would, alloc init with XY, and we load the function from the context like we saw earlier, in this case, it's euclideanDistance between two points. And then, we callWithArguments and pass the two points and they're automatically bridged to JavaScript. Similarly, if we want to expose the global class object, capital MyPoint, we can pass the class to the context as well and it will automatically be bridged so that JavaScript can interact with it.
+
+Then we can load, for example, a function named midpoint which might want to create a new point given two other points and we can call it the same way that we did before. We get a result back in the form of a JSValue and we use toObject to get the new point back out.
+
+So this is the geometry script that I referenced earlier. It has two functions, euclideanDistance and midpoint. They accept two arguments each, point1 and point2. And I'd like to call your attention to how this script uses those properties that were defined on point. It looks exactly like a normal JavaScript property. It looks like you're programing in JavaScript here. It's completely transparent that these are actually Objective-C objects under the hood.
+
+[ Pause ]
+
+So, now that we've talked about bridging the gap between JavaScript and Objective-C and vice versa, let's talk about some more advanced API topics. First of all, memory management. So as you all are probably aware, Objective-C uses ARC, yes. And JavaScriptCore uses garbage collection. So what does this mean? Well, first of all, it means that all the references in JavaScript are strong. It doesn't matter if you create reference cycles because the garbage collector can handle reference cycles.
+
+So for this particular JavaScript, the Objective-C API, the memory management is mostly automatic, JSValue keeps things alive for you as long as you're using the JSValue so you don't really have to worry about that. However, there are two situations that require a little bit of extra attention: First is storing JavaScript values in Objective-C objects as instance variables. You can't just store a JSValue inside of your object, you will very easily create a reference cycle and we'll talk about how to deal with that in a second.
+
+The second is adding JavaScript fields to Objective-C objects, and what I mean by that is if you have an Objective-C object that you bridge to JavaScript, if you add a field to it that is not one of the properties that you listed in your JSExport protocol, we will-- we allow that but we'll create a new extra JavaScript-only side field, so you have to be careful in that case too and what-- the mechanism to manage this correctly-- manage these two situations correctly, I'll talk about it in a second.
+
+So, here's an example of how you can create a retain cycle doing the wrong thing. So we have a JavaScript constructor, ClickHandler, looks like a function but it's a constructor, and it accepts a button and a callback, so the button is an Objective-C object and the callback is the JavaScript function you want to call whenever this button is clicked. So the ClickHandler makes a reference to the button and it also sets the buttons onClickHandler to itself and then it stores the callback for use later, pretty, pretty pedestrian.
+
+However, you get into a little bit of trouble if you try to implement the setOnClickHandler setter like this. The onClickHandler, if you just assign the JSValue directly into the instance variable of MyButton, then you'll create a retain cycle as you can see here. So MyButton has a strong reference to its onClickHandler through its JSValue to the ClickHandler object.
+
+And the ClickHandler has a strong reference back to the button through this.button. And it wouldn't really work to make this a weak reference either because then ClickHandler would disappear and we wouldn't get our callbacks as we expected. So we need a different type of edge, a different type of reference.
+
+And the name of that reference is JSManagedValue. So, this is the correct setOnClickHandler. We take the JSValue that's passed to us and we create what's called a JSManagedValue using managedValueWithValue passing the handler there, and we assign that to our onClickHandler field. Then we ask the JavaScript virtual machine, which has access through the context, to add a managed reference between ourselves, the button, and the onClickHandler that we're now referencing. Now, what exactly is this addManagedReference deal?
+
+So you can think of addManagedReference as creating a garbage collected reference, it's not a strong reference, it's not a weak reference, it's a new type of reference, it's a garbage collected reference as represented here by the dashed line. So now we have this garbage collected reference that tells JavaScript-- it tells the JavaScript garbage collector about this edge, it lets it know that this edge exist and that it may need to do some special things to keep that memory alive.
+
+So we resolved our reference cycle here. So, JSManagedValue by itself is a weak reference to a JavaScript value. So this is how you create weak references. JSValue is a strong reference, JSManagedValue by itself is a weak reference to a JavaScript value. addManagedReference:withOwner which is the-- notifying the virtual machine of the presence of this JSManagedValue, turns the JSManagedValue into a garbage collected reference. And what this means is that, if JavaScript can find the owner where you saw the owner parameter at the end, withOwner, if JavaScript can find that during its garbage collection cycle, it keeps the reference alive. Otherwise, the reference is released.
+
+So now that we talked about memory management, let's talk a little bit about threading. But first to talk about threading, we have to talk about virtual machines. In this case, JSVirtualMachine which we used in the previous slide when we were calling addManagedReference. So, a JSVirtualMachine is a container that can contain multiple JSContexts and you can have multiple JSVirtualMachines in a single process that have different contexts and some JSValues live inside of these contexts, and you can pass JSValues between JSContexts in the same virtual machine.
+
+That's good. But, you can't pass them between JSVirtualMachines. And the reasons for this are a little bit technical, but shortly, each JSVirtualMachine has its own heap and its own garbage collector. So if you pass-- if you were to pass a JSValue from one JSVirtualMachine to another, that particular garbage collector doesn't know how to deal with things from a different heap. So that's the reason that you're not allowed to do that.
+
+So how does JSVirtualMachine affect threading? Well, so the API itself, JavaScriptCore, is a thread safe API. You can call into various JSContexts and evaluate code and create values and that sort of thing on different threads and everything will work fine. However, the locking granularity is at the level of a JSVirtualMachine. So, this means that you can call into JavaScript on different threads in the same virtual machine, however, whenever one thread is executing JavaScript, no other thread can be executing JavaScript in that virtual machine.
+
+So, if you want to add concurrency or parallelism to your JavaScript program in your native application, you should use separate JSVirtualMachines which can execute concurrently on separate threads, in that way you can take advantage of the parallelism there. We're going to talk about interfacing with the JavaScriptCore C API. The C API has its inherent warts, but it's very easy to start to convert over to the new Objective-C API.
+
+There's a one to one correspondence between JSValues and JSValueRefs and JSContexts and JSGlobalContextRefs. And we make it very easy to get one where you wanted the other or get the other where you have one. So, for example, if you have a JSGlobalContextRef, you can call contextWithJSGlobalContextRef and pass that JSGlobalContextRef and we'll give you the appropriate-- the corresponding JSContext. The same goes for the other way. You can call JSGlobalContextRef on the context that you have and we'll give you the C API equivalent.
+
+Same for JSValue. Now that we looked at all of these advanced features of the API such as memory management, let's take a look at sort of the tip of the iceberg of what is possible using the new Objective-C API in an application. So I'm going to show you an application called ColorMyCode.
+
+And to give you an idea of what this application is before I start opening things, it's a simple text editor similar-- along the same lines as ColorMyWords, but it's kind of turned up to 11. So it's a text editor that can highlight code as many of you probably use something like that. And it uses JavaScript to implement a sort of plug-in system, so that it's very easy to add new languages that it can syntax highlight.
+
+It also uses JavaScript to allow the definition of new color schemes and uses JavaScript to load a configuration file that, you know, sets all of these different things up. All right. So, I'm going to open the project here. Build it. We open a new window. Now, I'm going to type some JavaScript code.
+
+[ Pause ]
+
+OK and let's save it. And now that we have a file extension, the editor detects that this is JavaScript so it highlights it accordingly. So, we can also-- this particular-- I implemented two languages. One is JavaScript of course and the other is Scheme. OK, I want to do some Scheme. Let's just save that for now.
+
+Probably you don't want to watch me code Scheme. So, I'm going to save it as a Scheme file. And now, the editor is configured to use a different color scheme for Scheme. And you can see that it highlights different keywords. So, if I were to type function in here, it doesn't really work because that's not a keyword. It does things like comments so I can type a comment, "Hello, this is my comment." It does strings, so string.
+
+Sure, strong, why not. [laughter] You can do numbers, et cetera, same goes for JavaScript. We have comments, we have block comments, we have strings again, and numbers as well. So that is that, and if you look at the code here, I'll just show you very briefly, don't be afraid. It's split up into separate plug-ins on this for-- different ones for highlighting. In this particular case, we pass a token and based on the type, if it's a keyword, we do one color; if it's an identifier we do another color.
+
+Here's the configuration file that says, "For a particular file, type JavaScript, use this plug-in, this highlighting, this color scheme, et cetera." So that's just a brief example of what's possible using the new Objective-C API to JavaScriptCore. And I don't want to scare you away with kind of the relative complexity of that demo.
+
+It only took about a weekend to throw that together and it's actually not very much coded at all. So, it's definitely possible and it's very, very easy. So, now that you've seen that, now we talked about native applications outside of web content. Let's talk a little bit about how to use JavaScriptCore in the context of a WebKit WebView on Mac.
+
+So first of all, why would you want to use this? Well, for example, you could implement your own custom console for your application that displays web pages. And you could log in a very specific way like you could log back to the web server or, you know, a variety of things. You can pass your own objects that you defined, your own native objects and use them inside of your web content.
+
+So, the way to do this is to use the WebFrameLoadDelegate, and this is a delegate that you set on the WebKit WebView. And you want to-- it's an informal protocol, so you'll want to override the -webView: didCreateJavaScriptContext: forFrame delegate callback. And so you can install your custom objects using the context argument passed as the second argument, so it didCreateJavaScriptContext.
+
+And you can build your whole native API using that context like I showed you earlier with the subscript notation, you can insert things into the global object and all of that good stuff. You can evaluate new scripts, et cetera. And if you used some of the old callbacks before like the WebScriptObject interface in the WebFrameLoadDelegate, it replaces those old callbacks gracefully, meaning that if it's running on-- if your application is running on a client that doesn't have the new API available to it, it will fallback gracefully to use your old implementation of your callbacks.
+
+And a good example of this is the iTunes store on Mac uses a WebView for its content. The iTune store uses HTML, CSS, JavaScript web technologies but it uses its own custom native objects to do things like when you click the Buy button, it-- the rest of iTunes already has a lot of code set up to like process your credit card and all of that good stuff. So, they just call into that code that they've already written and they can take advantage of that directly in their web content.
+
+So here's a simple example using the console example that I described earlier. So I define my MyFrameLoadDelegete and I override the callback. You can see the second argument is the context, that's the one that I really care about. And I create a new console using alloc init. Imagine it's like a kind of a normal console that has like a log that you can call. And I insert it directly into the global object using the context.
+
+And so here's the HTML that could take advantage of this. So you'll see I have a normal HTML web page. In the body there's a button and when you click the button, it calls this handler guy which will then call the myConsole.log function instance method on that Objective-C object that you inserted. So in summary, we've covered getting Objective-C to talk to JavaScript and in turn, getting JavaScript to talk back to Objective-C.
+
+We talked about interfacing with the JavaScriptCore C API. We talked about how to get reference counting and garbage collection to play nicely together using JSManagedValue and addManagedReference. We talked about threading and how to use threads effectively at the granularity of JSVirtualMachine. And we talked about using custom objects in WebKit WebViews and using that WebFrameLoadDelegate callback to insert your own native objects into your web content.
+
+So I have a Call to Action. For all of you who views the C API, I would challenge you to convert one bit of your-- one small segment of your old code to use the new Objective-C API. You'll see that it's much more concise where something might have taken five lines before, it might take only one now. It's much less verbose and it eliminates a lot of the retain release bugs that you might have experienced using the old JavaScriptCore C API.
+
+And if you're new to this whole JavaScriptCore framework, I would challenge you to add a small snippet of JavaScript somewhere in your app, maybe to load a configuration file or something on those lines. And you'll see that it's really, really easy to do what you were trying to do and it's very concise. But you-- at the same time, you feel like you're still programming in either Objective-C or JavaScript depending on what you're currently writing.
+
+For more information, I-- contact John Geleynse. He's the technology evangelist. The documentation is not current but it's coming. This is the-- this documentation on the slide is for the current JavaScriptCore C API but it will be updated in the future. And of course you can go the Apple Developer Forums.
+
+So related sessions, this is for the people online. These are all the kind of web content related because JavaScript is a web technology. So if you want to know more about web technologies, I'd recommend you to check out these sessions. Most of them have already passed. But, yeah, thank you very much.
+
+[ Applause ]

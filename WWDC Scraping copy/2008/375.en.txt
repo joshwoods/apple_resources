@@ -1,0 +1,235 @@
+---
+Title:  Using Filesystem APIs Efficiently
+Year:   2008
+Web:    https://nonstrict.eu/wwdcindex/wwdc2008/375/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Good afternoon, everyone. My name's Christopher Linn, and I work on the core services team at Apple, which means we work on a whole constellation of pieces of technology down at the core services, application services layer. And today, we wanted to talk about the file system APIs at the framework levels and let you know what we're doing in Snow Level to improve efficiency and how you can take advantage of it. So here's our agenda.
+
+I wanted to give a quick overview of the current state of the APIs for accessing the file system. And that's to set the stage for giving you an idea of what the limitations are and what we're looking at improving. And then we'll go into a fair amount of detail about the solutions that we want to present in Snow Leopard for certain parts of accessing the file system.
+
+We're not talking about things like reading and writing, opening files right now or mounting volumes. But the areas we're concentrating on today are, getting info out of the file system, info about specific files, enumerating directories, and we're also going to touch on creating long-lived persistent references to files, tracking files.
+
+Okay. So these are the kinds of things that we hope you'll be able to take away. What are the problems that we're both internally at Apple and you guys are facing in writing your applications, the kinds of performance problems you're facing? How can approved APIs help solve these problems. How will these new APIs affect your application in Snow Leopard even without adopting and how you can take advantage of them in your own code?
+
+So here's the overview. We've got a long history in the operating system. We've had a lot of different pieces coming together over the years with companies coming together and many different layers of the system. So what we've got right now are pretty much three different ways to get at the file system. We've got the CoreOS or POSIX APIs.
+
+And sitting on top of that, we have the Carbon File Manager and Cocoa APIs, primarily NS File Manager. And these APIs all give mostly overlapping access to the file system. And so right away, you can probably guess it. So let's look at some of the problems that this presents. The redundancy is sort of heavy in the system.
+
+There's different ways to do the same thing. There's complexity associated with all these different APIs, and it gives rise to some kinds of inefficiency that I'll go into here. So first of all, complexity. As I mentioned, there's a lot of different ways, different APIs for getting at some of the same information. These APIs use different data types to identify files. So, for example, we have in POSIX APIs primarily we have C strings representing paths to identify a file. At the Cocoa layer, we mostly looking at an NS file manager, we use paths but as NSStrings.
+
+The Carbon File Manager uses FSRefs, which those of you who aren't too familiar with them, they're 80 byte opaque data. And so they're path independent, regardless of the path to the file, they're always 80 bytes in size, and you have no idea what's inside them. But it's just a different way to refer to a file.
+
+We also have APIs that are URL based that only accept file URLs and of course file URLs are ultimately just another form of a path. But those APIs don't accept a string as a path. You have to have an NSURL or CFURL object passed to them. And so the APIs wrapped around these data types are sort of mutually exclusive.
+
+For example, with a C string, you would be using to get some basic information about a file, you'd be calling Lstat or stat. The equivalent call in the Carbon File Manager is FSKit Catalog Info. NS File Manager uses attributes, the method attributes of item path and takes an NSString path.
+
+So while there's many different ways to do similar stuff, none of these APIs is actually complete. And so you often are faced with the requirement of switching to a different data type in order to get at some piece of information you need that you can't get from NS File Manager or you can't get from POSIX or you can't get from the Carbon File Manager. And so this switching around requires conversion.
+
+So in your application, if you're primarily path-based and you want to get, you're able to get it, given a path, you're able to get it, say, the name or the file size from the APIs that you have available for paths. And then you need to get some other information, say, the localized name or the display name, as Launch Services calls it, or you want to get the icon. Well, you either need to convert to an FSRef yourself by calling fspath make ref, or you might be using some of the convenience functions in Cocoa that give you access to this information.
+
+But the fact is that under the covers, Cocoa is often doing a conversion to an FSRef in order to call through to the Carbon File Manager. And vice versa, sometimes you find yourself holding onto an FSRef and you need a path, and so you call FSRef make path to do another data type conversion.
+
+And there's a lot of problems with this. First of all, it's just not any fun. It's -- it's -- it feels like a waste of time. You're going along and you scratch your head and you think, darn, I need to do this data type conversion here, and it adds to my code, and it's just unpleasant or yucky to have to do this in your application. It would be much more convenient if you didn't have to.
+
+But worse than that, it also triggers IOs. Whenever you're converting between a path and an FSRef or vice versa, we have to actually look on disk to generate the internals of an FSRef or to turn it back into a path, because what's in an FSRef is a persistent file ID and a device identifier.
+
+And so usually, you know, it's pretty quick because it's usually cached in the kernel. But you can get into situations where if you do have to go out over the network, when you're talking to a file server, you've got network latency problems that can slow you up or worse. The network could actually be disconnected or have a hiccup and you might hang for a long time. So this can really interfere with your application.
+
+[Transcript missing]
+
+Okay.
+
+So I wanted to show an example of what I was just talking about, opening up a document. And I wanted to use a very low-level debugging tool or analysis tool called FS Usage, which can show all access to the file system by the entire system or, in this case, just from one application. So we're going to use -- we're going to be opening up an image in preview and I want to launch preview first so that we're not seeing anything related to launch activity. We're just looking at the I/O from opening up a document.
+
+Start up FS Usage. This command says I want to look at file system access and network access. I want to look at just preview. Now we're ready to go. I'm going to open up the document. As I mentioned, there's a lot of things happening here. Before I open this, we're sending an Apple event to the application. It receives the Apple event and there's an alias in it.
+
+It has to resolve the alias, compute the localized name of the document, get the icon of it so it can show it in the title bar. It has to add it to the application recents menu. It has to add it to the system's global recents menu. We tell Spotlight that the document was opened. At some point we read the file and actually display the contents.
+
+Let me go ahead and open it. So that was pretty quick. But let's look back at what happened. Okay, that's too slow. Let me go back. So there's over 600 lines of output here. And
+
+[Transcript missing]
+
+And we're opening the file and closing it again four times. All to open it. It happens pretty fast. It might not seem like something to really get all that worried about. But it's a lot more apparent when you're on, say, a network file server that this can slow you up.
+
+But also, we know that it is preventing us from really being zippy. It must be easier than just doing the same work over and over again in a very short period of time. So that gives you an idea of the problem we're trying to solve here. Let me go back to slides. No, I lost my clicker.
+
+So we thought about this a long time and we've come up with some solutions. We want to simplify and provide a clear direction for everyone, both internally at Apple and app developers like yourselves, a preferred file system API that we can optimize for and is designed to work well with all different kinds of file systems. In order to do that, we need to unify all of our APIs around a particular file type or file identifier.
+
+Some of the things we can do to make this API more efficient are make sure that we're caching at a high level, say in the application process, so we have at least short-term caching of values that are being computed over and over again, avoid the kind of object reallocation that happens in bursts right now.
+
+And we are also looking at directory enumeration and making that as efficient as possible so that when you hit a directory with 10,000 items in it in particular, and we definitely have a bunch of customers out there like that with those kinds of configurations, that you can be assured you're as efficient as possible at enumerating those directory contents.
+
+And then finally, we want to eat our own dog food on this and design these APIs for use in our own frameworks so that we can get benefits from these APIs right in Snow Leopard even before we get wide application adoption. So it kind of started with, well, what are we really going to base all these APIs on? What's the best choice here? Because we do have several choices.
+
+We have existing APIs, as I mentioned, that are using paths. We have FS refs. We have some APIs that are URL-based. Or we could do something new. And, you know, something new is kind of a neat idea, a new object type, because it could be completely pristine and do everything just exactly the way we want it to. But the effect on our APIs would be pretty bad because we would have to have a completely new API set. and it would be unfamiliar to everybody.
+
+And so looking back at paths and FSRefs and URLs, well, paths kind of are what they are. They give us one way to identify a file. FSRefs, likewise, they're purely ID-based. FSRefs are not objects. It's one of the problems we've had over the years is that FSRefs are just stack-based largely, and we have no idea when they come and go. And so that makes it difficult for us to do any kind of cache management or cache policy to know when an FSRef is no longer going to be in use.
+
+So considering all these different pros and cons, let's look at URLs. There are a bunch of advantages to focusing our APIs. First of all, I mentioned that creating a whole new data type would explode our APIs. URLs are nice because we actually have quite a few APIs that are already using file URLs. So these are the frameworks or technologies that... Sorry, I'm getting distracted because they're counting down my timer at about one minute every five seconds right now.
+
+I'm going to talk really fast. These technologies are using URLs for file system access right now. So they have APIs that accept only file URLs. And AppKit has a whole bunch in, say, for NS document and even pasteboard, using pasteboard. What else? Core Foundation uses them heavily in the CFBundle API. Launch Services has always supported URLs, both file URLs and arbitrary other URLs. So you can see there's actually a wide adoption of URLs already, but we didn't really have any core API that gives us access to directory contents and file properties via URLs.
+
+There are some other things that are attractive about URLs. We already have NSURL and CFURL as toll-free bridged objects. So you can cast back and forth between C and Objective-C all you want without any sort of conversion cost. Because URLs are objects in the sense that we know when they come and go, it allows us to do some smart cache management. We know when you're no longer going to be referencing the file through a particular URL object.
+
+And on top of all that, there's a general URL syntax that's very flexible, right? So you can imagine wanting to access resource domains other than the file. So we can use that to do that. We can use that to do that in the file system. But even within the file system domain, URLs give us a lot of flexibility for how we identify files. And I'll talk about that in a few minutes.
+
+So as you have guessed, we picked the URL as the new preferred file identifier on Mac OS X at the foundation layer and core foundation and above. So we're introducing new APIs in Snow Leopard in both foundation and core foundation that largely mirror each other so that it's convenient for Objective C and C developers or for lower level programs that need just C access. And it consists of new methods on NSURL and some new methods in NSFileManager, particularly for directory enumeration. And in core foundation, we have new CFURL methods for accessing file properties and a new type CFURL enumerator for enumerating directories as well as the volume list.
+
+So what does the API look like? Well, in the URL language that we're using, everything's a resource. That's what URL, that's what the R in URL stands for. So everything's a resource. And so resources have properties, which are identified by keys. And every property key can be turned into a value for that property.
+
+And so it's a pretty familiar sort of API model on our platform. And we have more than three properties, but these are three examples. NSURL name key, NSURL modification date key, NSURL file size key. So these are string constants in the API that you would pass in if you wanted to get the value of one of these keys, one of these properties.
+
+We have both getters and setters for properties. Many of the properties are read-only, but anything that you would expect to be settable, as long as you have access to the file, is settable. We also support temporary properties, which is something whose use will become a little more obvious later in the talk. It's basically a way for you to, say, in memory only, set a property value of your own design and be able to get back at that property value through the same URL instance later on.
+
+So I wanted to just show you a whole list just to help emphasize how much we're supporting. We've got over 40 properties available, and I think there will definitely be a few more before we ship Snow Leopard. We've got the core set that you might expect, the name, some Booleans like is it a file, is it a directory, is volume, is package, that is, is it a packaged directory, is it immutable, is it hidden, does it have a hidden extension, all the dates, creation date, modification date and so on.
+
+What's the parent directory? You get that back, of course, as a URL. What's the volume URL that it's on? These are the kinds of core properties you can get for any file system resource. And then there's other higher-level ones that you don't have to go to a higher-level framework to get. We do that for you. We have a model of providers from higher-level frameworks. But through one API, you can get things like the type identifier, that is, the uniform type identifier that symbolically describes the resource type.
+
+Likewise, you can get the localized type description or the kind string. You can get the label information and the label color. That's the finder label. You can even get the icon. You can get both the effective icon, which is the one that the finder is displaying, or if you want to know whether the item has a custom icon, you can ask for the custom icon key.
+
+And that's available either if you request it through the core foundation API, you get it back as a CG image, the core graphics image. If you request it through the foundation NSURL API, you get it back as an NS image, assuming you have AppKit linked into your process.
+
+And then the last set on the bottom right is a whole slew of properties for getting at volume capabilities. So we're continuing and pushing even harder on our design point of not assuming too much. If you need to know what volume format you're on in order to know whether a certain capability exists, don't assume that the volume format capabilities are going to remain constant forever.
+
+You're much better off asking, instead of asking for the format and inferring information from the format code, ask the volume for its capabilities. So these properties tell you, does the volume support persistent file IDs? Does it support symlinks? Does it support journaling? Does it support some esoteric things like zero runs in files? Does it have case sensitive names? These are all properties you can get through, values you can get through this API.
+
+Now about enumerating directories. We have enumerators that now return URLs instead of paths. In order to use them most efficiently, we want to be able to, under the covers, get things in bulk from the kernel. And so we can do that most efficiently if we know up front which properties you're going to be accessing against the URLs you're going to be getting back.
+
+So that's called prefetching, and that's a feature of the enumerators that you can give us optionally an array of property keys that you want prefetched up front. And as the enumerator runs under the covers, it's getting all the values for those properties in the most efficient way possible and caching them in the application process so that when you later ask for those properties from the URLs that you get back from the enumerator, we don't do any additional I/O to give you those property values. These enumerators also support deep enumeration for those of you that need that.
+
+In core foundation, I mentioned that's done with a new type called CFURL enumerator. And what we've done in foundation is we already -- NS file manager already has the NS directory enumerator type that returns paths. And we're just making a new factory method for that that gives you an NS directory enumerator which returns URLs, NSURLs instead.
+
+Now, what about FSRefs? I mentioned that URLs are path-based. And there are some things that FSRefs do that are pretty useful. The main thing is that since FSRefs are path-independent, and remember, you track your file by file ID, they're much smaller. It doesn't matter how long the path is.
+
+But also, the file ID doesn't change when the path may change. So, if the user moves a document around or renames it, a path reference to that file becomes invalid and is useless. But an FSRef remains valid and can track that file around on disk. In addition, the 80 byte size means that it scales really well for a few clients who need to hold on to a lot of FSRefs like the finder.
+
+So we realized that we can do the same thing by being clever with our URLs. And so we're introducing today something called file reference URLs, which you can think of as a file URL that behaves just like an FS ref. And in a lot of ways, it's even better because it's smaller than 80 bytes.
+
+But better than that, because it's a URL, we don't need two separate APIs in order to work with either path references or path URLs or reference URLs. We can have a single API that can handle either form of the URL, but you get the semantics that you want depending on your needs. Let me show you a little bit about what those look like.
+
+So imagine I have my presentation on disk and a traditional file URL would look a little bit like this, just a path into my home directory that identifies the file. A file reference URL looks a little different. It has something at the beginning that says .file and that's simply a reserved name in our file system that tells us at the root of the file system that this URL, it's not a valid path, by the way.
+
+This is only valid in URL space, but we prevent it from conflicting in the file system. And it tells us that in the URL, the next item in the next element of the path in the URL is an ID, a device and a file ID pair. But you don't need to worry about this. I just wanted to explain what you see when you look at the URL string because the URL string is what identifies the resource.
+
+But we have the flexibility to interpret file URLs on our platform the way that works for us. And so this is not a format, though, that you ever have to worry about. In fact, please don't try to construct this yourself or parse this string and make sense of it.
+
+We provide very convenient APIs that do everything you need to produce a file. So, how does that work? Well, first of all, we have a lot of APIs that are URL based already. And those people expect to continue returning path-based file URLs, so we'll continue to do that. Your app's not going to see any file reference URLs unless you ask for them.
+
+However, our frameworks will be supporting them so that you can start using them anytime you want in Snow Leopard. And it's mostly transparent because what most people do currently with URLs is when you need to get at the underlying file, you ask for its path, or you say you call CFURL, get file system representation, which gives you back the CPath. And that will all continue to work with file reference URLs. If you call these APIs, you'll get back the standard file system path, not an ID-based path.
+
+But if you use them to say, if you use a file reference URL to get property values, then we don't have to do any conversion. The path to ref conversion or any of that stuff, we can talk directly to the Core OS to get properties from the file ID that's encoded in the reference URL.
+
+One important difference about reference URLs is that they're not persistent. You don't want to save them to disk and expect them to work later on. Like FSRefs, they're valid for the mount lifetime of the volume that you're working with. So if your system is rebooted, whatever file reference URL you may have been holding onto, it's no longer valid. However, they are good globally, so you can send them between processes no problem.
+
+All right, so that's a quick overview of the APIs. I wanted to run through a few code examples. Just to give you a feel for what it looks like, if I want to get values, property values, this is a method called name and icon for URL. It returns a dictionary with just the localized name and the icon of the file that's passed in, the file URL that's passed in.
+
+So in order to do that, we create an array containing the keys that we want, the localized name key and the effective icon key. I spaced this out vertically because if I put it all in line with creating the array on the fly, it would be hard to see.
+
+But we create the array, and then we simply call on the URL itself, we call resource values for keys, we pass in the keys array. And then optionally, we could get back an error if we want. The way the API works in this case is it returns a dictionary, resource values for keys returns a dictionary, or if an error occurs, it returns nil, and then you can check the optional output error.
+
+If I want to set a property, say I want in this example, I want to set the modification date on a file. This method example is called touch URL. It's like the touch command line. It simply calls set resource value and you pass in the value, in this case, NSDate date, which is the current time and date. For key, and the key is NSURL content modification date key, and again, you get back an optional error. This method returns a Boolean for success or failure. If it returns false, then you've got an error result.
+
+If you want to create a file reference URL, and the case where you might want to use this is any time you want to make sure you're tracking a document by its ID so that if you're holding onto it in memory for a long time, the path might change, then it's a good idea to hold onto a file reference URL.
+
+In this example, the set document method is given an arbitrary file URL, and you know you want to assign it to your instance variable, but you don't know what kind of file URL you were given. It may be a file reference URL or it may be a path-based URL. Well, you can simply call on the URL, you call the file reference URL method, and if necessary, it converts it into a reference URL and returns it. And then we see... simply hold onto that in the instance variable.
+
+A quick example of directory enumeration. Say we want to enumerate the directory and we know that right after we finish the enumeration, we're going to be drawing the icons and the display name or localized name of each item in the directory. And so what we do is we make an array with the property keys that we want to prefetch, so the localized name and the effective icon key. And then continuing, we ask NSFileManager for an enumerator that is URL-based.
+
+So that method is enumerator at URL and you pass in the directory URL that you want to enumerate. This is the parallel to enumerator at path. Which is an existing method in NSFileManager. So enumerator at URL, including properties for keys, we pass in our key array. And there's some options that I won't go into, but it includes things like deep enumeration.
+
+And then there's an error handler, which is actually a block, a callback in the form of a block that allows you to handle errors and either continue or not continue. Once you have an enumerator, you can go through it anyway in any of the traditional ways. In this case, we call for URL in enumerator using the fast enumeration protocol.
+
+And we just go through each item one at a time. We get back the URLs in the directory and add them to our object view here. Pretty simple. Although it's one at a time access at the API level, we're doing bulk access when enumerating the directory, talking to the core file system.
+
+Before I finish my section, I wanted to mention and just show real quick some sample code that's available. If I can switch to this machine and get rid of that. The sample is called URL Git Info. It doesn't do a whole lot yet, but we're going to be adding to it as we fill in more of the API. It does this nice sort of simplified version of the Finder Info Window where it gives us a bunch of information, basically fetching property values from using the API. So this is a volume.
+
+It starts out with showing the root, but it gives us the volume name, tells us the localized description, the type identifier is public.volume, and a bunch of other things, the date. The parent directory URL is null, but the volume URL is basically slash itself. And this app just lets you drag in anything. You can drag a file in, and it shows you all of the same information.
+
+Of course, this is a package. The keynotes documents are packages, so the size in this case is zero because it's really a directory. An alias, you can see a couple of things. First of all, this is the music folder's custom icon. We get that back from the API and it's even badged. It has the little alias badge on it. And this is all through one API.
+
+So as I said, we'll be adding to that. I was going to open up the project, but I think So what's the status of the API on the DVD that you got on Monday? Right now we have fetching property values is supported both for NSURL and CFURL. So you can get property values. You can also use file reference URLs so that the methods that convert back and forth between reference URLs and path URLs work properly. And coming soon in upcoming seeds, we'll have setting property values supported and directory enumeration.
+
+So just recapping some of the benefits here, this is really designed to provide the future foundation going forward for framework level access to the file system. It improves efficiency by avoiding all those costly data type conversions. It simplifies our APIs by preferring one data type going forward that works for all different usage models of the file system. And as you adopt the APIs, we hope you'll find them much more convenient. You'll be able to simplify your code and really get every bit of efficiency you can by adopting this model all the way into your application.
+
+Now, what else? What else haven't we covered? Well, I mentioned up at the top persistent file references. And URLs, in addition to file reference URLs being not that great for tracking a file over the long term because your system might get rebooted, even file path URLs aren't that great because file paths change over time. And so, we've reached that point in our show where Keith is going to explain all about persistent file references.
+
+Thank you. Am I on? Okay. As Chris said, I'm going to talk about persistent file references. And as he said, everything you've heard about so far is designed to give you really efficient and fast access to cache properties of files and stuff in memory. However, sometimes that isn't what you need.
+
+Sometimes you have to store away what file in particular you're going to need to use later or keep track of it so that you can come back to it the next time the user opens it. And URLs aren't the best for that. As Chris said, URLs are either path-based or file ID-based. And file IDs aren't valid terribly long.
+
+And paths are usually valid for a while, but there are times paths aren't sufficient. And the reason is for files on your local hard drive, usually the path is the same. But if users have a USB drive or they put stuff on a file server, sometimes even the path to a file can change. And so when you go to use it later, that path is no longer correct.
+
+What do you do? If you're an old-school Carbon person, you're saying, hey, aliases are the answer. And Alias Manager has solved most of those problems for the last 15 years or so. Aliases, you create them with an FS Ref. It gives you back something called an alias handle. Later, you get that alias handle back to the Alias Manager and say, hey, what file did this use to point to?
+
+And it gives you back an FS Ref if it can find the file that it thinks the alias was originally made to. Now, there are a lot of Alias Manager calls. There are more every year because we need to add more stuff. And the API has evolved over time. There also are things that you know in the Finder. You can say, make alias under the File menu.
+
+And that makes a little file on your hard drive that when you double-click on it or when a user picks it in an open or save panel, it kind of follows what the alias was made to. And it acts a lot like symbolic links, but kind of at a higher level with a lot of the benefits we just talked about-- finding and mounting file servers or disk images or USB keys.
+
+That said, aliases aren't perfect. They use FSRefs and they use alias handles, which are both kind of older types, and we've explained why we're not that, you know, why FSRefs aren't doing it for us as well as they used to. Alias handles also, handles are kind of deprecated in the API. They're not necessary anymore, certainly the way they used to be.
+
+Aliases also have a limited set of information in them you can get back without resolving. You can ask an alias what the name of its file was and maybe what kind of volume it was on, but you can't ask it for much beyond that. And as I said before, there are a lot of calls in the alias manager because the API has had to evolve over time.
+
+And so just staring at the header file, it's difficult to know what function to call and what to pass in at some points. The set of rules for how we resolve an alias has changed over time. It's been a little bit more complicated in the past, but it's been a lot easier to solve because it's needed to. Paths are a lot more important in Mac OS than they used to be.
+
+When aliases were first created, the only kind of file server that existed was an AFP file server. And now we have the Internet and we have USB drives. So the rules for how they work have changed and that's caused problems. And lastly, aliases don't mesh very well with everything you've heard about so far.
+
+So we're introducing a new type called bookmarks. And we were going to put up bookmarks in huge letters and do that flashy thing Steve does when it's new. But I didn't know how to do the flashy thing in Keynote. And then Chris Parker gave away our name earlier. So it's not a surprise anymore.
+
+That's it. Bookmarks, I mean, you've heard the name before. You know, in web browsers, you have bookmarks. And logically, a bookmark is kind of a saved URL, something you can come back to later. And they're the same thing in FSEfficiency. If you have a file colon URL, you can make a bookmark from it. And then later, you can say, hey, give me back that original URL. And it'll do what it can to get you back a pointer to the file that you originally had it from.
+
+Bookmarks use standard foundation, core foundation types, like NSStrings and NSNumbers, just like everything else in the FSEfficiency APIs. So they mesh well with the rest of the system. Bookmarks can also store resource properties in the same way that, you know, we said URLs all have resource properties. Bookmarks all have resource properties, and they map directly onto the resource properties that from the original file it was a URL from.
+
+And in Snow Leopard, bookmarks, we expect you're going to use them for file scheme URLs. You can make a bookmark from any URL you have in memory. And, you know, if you have an HTTP URL, and you say, hey, give me a bookmark to this, I'll give you a bookmark. And if you give me the bookmark later, I'll give you back an HTTP URL. But there won't be much in it besides the string of the URL.
+
+Here's what you do to create a bookmark. As we said, you have, for example, a URL in foundation. You'd say bookmark data with options and you'd pass in a bunch of zeros and nulls to get pretty much the default behavior. It will give you back an NSData item. Then you can squirrel that away in whatever place you want to use it in your document or just in memory. At Core Foundation, we have pretty much the same function, the same functionality, CFURL, create bookmark data.
+
+[Transcript missing]
+
+Resolution. This process is called resolution. If you're familiar with the alias manager, it's the same idea. Internally, we'll go through a whole bunch of rules to try to find the file that you made the bookmark to. If the file was on a file server, we may tell the user, hey, you need to give us a password so we can mount this file server.
+
+If it was on a USB key, we may ask the user to insert that USB key back into the computer or mount a disk image for a file that was on a disk image. And that's all code that you don't have to write. We'll do the right thing.
+
+Earlier I said there were properties in bookmarks, just like URLs have resource properties. Bookmarks have the same properties that you can get from an NSURL. They use the same namespace and they have information in NSStrings or NSNumbers. So once you've learned how to get a property from the file system through the FS efficiency APIs on a URL, you know how to get the same property out of a bookmark. It's the same key. It's pretty much exactly the same code.
+
+This includes any temporary properties that you add. So if you want to create a bookmark and kind of squirrel away some information of your own in it, you can create a URL, add a temporary property to that URL with your information, then ask to create a bookmark and ask it to include the value for that property in the bookmark, and it'll create a bookmark with that. Later, you can ask the bookmark what was the value of this key that you guys set.
+
+That is your temporary key value, and it'll return it to you. Not only that, it has to be one of the standard types that the system knows about, like an NSString or an NSNumber or an NSData. and this information is retrieved without needing access to the original item. We don't touch the file system to return properties from bookmarks because the bookmark has pretty much encoded everything into that NSData object that I showed you.
+
+Here's an example of how you create a bookmark with a set of properties. In this particular case, I'm saying, I'd like you to make a bookmark from this URL, which is that URL up front. In the bookmark, I'd like you to include the name of the file, the display name of the file, how big the file is, and what the effective icon is for it, which will be the icon that would show, for example, in the finder for the file.
+
+and when that comes back, you'll have a bookmark. Later, you can ask that bookmark data object for any of those values and it'll give it to you, even if the user has unmounted the disk, even if you save this out and write it back into memory later, even on a different computer if you send this across the network to somewhere else.
+
+Now that said, if you want to ask a bookmark for a property at some time in the future, you need to ensure that you ask to have the bookmark created with that property. We are trying not to include any default types in bookmarks. We want you to tell us what you need so that we don't have to guess and we don't have to make things bigger or slower or less efficient than they would otherwise be.
+
+Here's how you'd get those same properties back from that bookmark. You would call NSURL's resource value for keys. Earlier you saw Chris was calling URL resource values for keys. Here you have a bookmark. You're saying, please return resource values for keys for this bookmark data. You've given me the bookmark data and you've said, I'd like the file name, localized name, and file size back.
+
+And that's going to give you back a dictionary. And you can then just ask the dictionary for each of those keys in it. And again, all these values are returned without accessing the file system, without touching the original item on disk. So one thing that means is... Those values might now be wrong because they were essentially cached at the point in time, you know, they were frozen in the bookmark at the point in time you created it.
+
+However, if what you want to know is here's a file the user might want to locate, what's its icon? Well, you've got an icon to show. You don't have to worry about hoping that the file system is available, that it doesn't take too long to spin up the disk.
+
+Earlier I mentioned alias files as something that exists in the Alias Manager. We have the same idea with bookmarks. We expect to have a bookmark file format. From the point of view of the user, it will probably look exactly like an alias file, which will store all of the information that I've been talking about being in bookmarks, supporting functionality very similar to the alias manager. We expect to have an API to let you create bookmark files on disk so that you can do it in the same way that we in the Finder do it.
+
+You're probably going to find you may need to work with existing aliases and alias files in order to begin converting your code over to use this FS efficiency stuff. And there's public API for all of this. If you have an alias record or an alias handle in your application, well, first you're going to resolve that into an FS ref using one of the tried and true alias manager routines like FS resolve alias with mount flags.
+
+That will give you back an FS ref and then you can create a URL from that FS ref by going through see if URL create with FS ref. If you then needed to convert that into a bookmark, you would do what I just showed you. You would say bookmark with URL. You would ask the URL for its bookmark data.
+
+What's the state of bookmarks in the developer preview you have? Most of the APIs are there. You can create a bookmark given a URL. You can, given a bookmark, resolve it back into a file URL of some kind. And you can ask bookmarks for their resource properties. There are some limitations so far. We're not done, because if we were done, we'd ship it.
+
+So right now bookmarks only resolve to their items by path. We don't have the user has renamed the file, let's go out and find it behavior working yet. We don't have support for automatically mounting file systems or asking the user to put disks in. And we don't have support for every property type in a bookmark. We currently can't put icons in bookmarks. There are a couple other things that haven't been fully tested and vetted yet. And we don't have any of the bookmark file APIs I just talked about present yet. We hope to have them in one of the next upcoming seeds.
+
+So I'll kind of wrap up by saying why you should use these. Bookmarks let you leverage the rest of your adoption of NSURL and CFURL. As I said, they use the same namespace of keys, so once you've learned how to do something in the URL space, you know how to make aliases from it. And they're also extensible in ways that aliases didn't used to be. You can ask to have your own information encoded in them, and we can continue to grow them over time. So with that, I'll ask Chris to come back up.
+
+Thank you, Keith. So just to recap everything from the last hour. We've gone over a bunch of new foundational APIs for getting information out of the file system. We love URLs. Everything is URL-oriented now. So we have APIs for getting and setting properties from file objects and under the covers, they're cached to improve performance. We have efficient directory enumeration with prefetching of properties. And we have the whole bookmark system. Model and API that Keith just went over, providing very efficient resolution and the kind of extensibility that people have been asking for from aliases for a number of years.
+
+So, of course, the message is we want everyone to use URLs. We're really happy with the kind of capability that this is going to give us to simplify our own APIs, use our own APIs internally to, in our own frameworks, improve Snow Leopard performance, even in applications that aren't using these APIs, just by changing the way our frameworks work.
+
+And we invite you all to just take a look at these APIs, see if it helps you simplify your code, and give us feedback because, you know, we're not totally done yet and we still have time to...
+
+[Transcript missing]
+
+Related sessions, I didn't go in, we didn't really have time to mention the additional higher level APIs that are going to be specifically taking advantage of this stuff, but Chris Parker's session this morning on what's new in Cocoa actually covered some of this as well as additional APIs going into NS File Manager for copying files, moving files, things like that.
+
+So if you can catch those slides, you can see all those APIs reviewed. They're also in the release notes for Foundation. This afternoon, I'm sorry, tomorrow is performance in document-centric Cocoa apps where Mark Petrelli is going to be talking about NS Document. And one of the things that NS Document is doing in Snow Leopard is using these APIs to improve performance. We also have the Filesystem Lab coming up this afternoon. In fact, right after this session, I'll be going downstairs. Keith will be downstairs in the lab to answer any more questions.

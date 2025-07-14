@@ -1,0 +1,323 @@
+---
+Title:  Garbage Collection Strategies for Objective-C 2.0
+Year:   2007
+Web:    https://nonstrict.eu/wwdcindex/wwdc2007/218/
+
+[!] This transcript has potential transcription errors.
+---
+
+Welcome to the 3:30 session of the last of the Objective-C technologies presentations. We're going to be talking about garbage collection this afternoon. So I'd like a quick show of hands. How many people were perhaps at the garbage collection talk we gave at last year's WWDC. Okay. But a lot of you haven't. So this is a slightly revised and extended version of that talk.
+
+I am sure that you memorized anything I said last time, but I think there will still be a few things for you to learn this time. I -- I have wizard runtimes on my business card and Bill Bumgarner now takes great pride in saying that he's the wrangler of wizards. So we'll see how well we do today.
+
+So, so this talk we're going to go through sort of the big picture. What is garbage collection for Objective-C and Cocoa. We'll spend a lot of time talking about GC design strategies. It turns out that any time you take a big sub system and rewrite it, re-architect it, you're going to have to rethink a few things. So with garbage collection, you get some really nice benefits. But you have to keep a few things in mind. Especially if you're used to programming in Objective-C without garbage collection.
+
+So if you're just coming to the platform, if you're coming to it from Java or from scripting or from something like that, maybe -- maybe some of the stuff is not going to make a lot of sense because you don't do this stuff. But if you are a C programmer or an Objective-C programmer today, I want to go over some things that you really have to keep in mind that you don't do in a garbage collected environment.
+
+I have a few slides on the last couple of topics. Adding GC capability fearlessly. I have already heard from several of you here at the conference that -- why are we -- why is Apple saying use garbage collection only for new applications. I mean, why can't I do it for my old applications. A few people came down to the labs. And it's quite possible to do that. It's quite possible to upgrade the GC, and I'll tell you how we've done it inside Apple, and how you can, if you think it's appropriate for your application.
+
+We recommend it though, because we sort of know that most of you need to ship on Tiger. And since it's a Leopard only technology, we don't want to frustrate you by saying convert to it because -- that's kind of silly. We'll spend a little bit of time on debugging and tuning. I think most of you are in the still adopting it phase. But I'll tell you that there are ways -- some of the tricks we use to debug and to tune. And then we'll close with a demo. So the big picture.
+
+To tell the store of garbage collection, it's sort of like a story. So we're going to go to the five Ws that you all learned in -- somewhere -- middle school about how to tell stories. So who is garbage collection for? Very simple. Garbage collection is for you. Inside of Apple, we have a lot of Objective-C code, but we also have a lot of capability constraints. So, for example, the preferences panel has to load plug-ins and stuff.
+
+And everything that runs in a garbage collection application has to be garbage collection aware. And so we really can't con overnight preferences over, we can't -- so we go down the list of your applications, it turns out that we -- most of them, automator, many of them have capability constraints such that they can't adopt it internally.
+
+But in truth, we really wanted with Objective-C dot O to give you the developers a new platform to program on that is just easier and simpler. And we will inside Apple adopt it as we can. So -- but this is really a labor of love in some respects for you guys. And we really want you to take advantage, use it, and get your apps to market quicker because of that. So what is it?
+
+Well, last year I talked about a special curry. And I'm going to talk about it again today. So what is a curry? So when I left Iowa a long time ago and -- and found cuisine, one of the cuisines I discovered was Chinese food. And they had this yellow chicken curry. And I go. Curry. Wow, great. I love this stuff. And I went to a Thai restaurant and they had red curries and green curries. And I go -- hmm, curries aren't just curries. Curries are different.
+
+And then I went to, of course, Indian restaurants and just had all kinds of curries. And what I found out very quickly though was that curries are actually a mixture of spices. For me there always has to be a little bit of cayenne in it. But you know, you take cardamom, you take cumin, and you mix them all together and you get a curry. So everybody's curry is a little bit different.
+
+So it turns out that were garbage collectors it's the same kind of story. You probably experienced garbage collectors -- I don't know -- maybe back in your days in school with list or Small Talk system, or if you're using Ruby or Python, you're getting a little taste of garbage collection on the side. Or if you're using Java or over on dot net you get garbage collection. But it turns out they're all like curries. They're all a mixture of different techniques for different circumstances. And so that's exactly what we did for Objective-C.
+
+What we did, we took three key elements. We took the idea of having a conservative collector. We added sort of the 1980s innovation of generational stuff. And then we threw in a little bit of concurrency as well, because we don't have to stop all threads and stuff. And we end up with what we consider to be, you know, the garbage collection that's just right for Cocoa, it's just right for our platform. So let me go into this in a little bit more detail.
+
+So conservative. For those of you not -- sorry. I have a prop here I just have to dig out. For those of you not as well versed in the book on garbage collection, what a conservative collector is, is one that does not move pointers around. You allocate some memory, and it sticks in the spot that you allocated it at. So you can hand it out to C functions and all kinds of other stuff. And it's not going to move underneath you.
+
+This is very good for sub systems like QuickTime that go -- go read, you know, lots of data coming in off the fly and they stick it in buffers and they can just hand it off to Cocoa code and they don't have to copy it all around. In a scheme like Java or dot net, they have very fast what they call bump pointer allocators.
+
+They are super-fast at allocation, and what they don't tell you is that they're more expensive to keep objects. Because they typically have to copy those objects back and forth, you know, different kinds of schemes until they stick around for a long time and they stop moving them so much.
+
+But that copying is very expensive, because you have to, for one thing stop all the other threads while you're doing that. You've got to go update things. It makes the language very restrictive. You just can't have a pointer to an object and go whack at the bits. You know, you have very limited language features to get at your pointers and stuff. So these are too much for Objective-C. Conservative collection is the right model for Objective-C. Because it is a C language, after all. And pointers are our friends and our enemies. So generational, however, is a great innovation.
+
+It allows us or a collector to spend 10 percent of the time recovering 90 percent of the garbage that's available. Now that's -- those are literal numbers. And I'll tell you how you can actually watch that going on in our programs. You can validate that. And if that's not quite the ratio you see, you can tune some stuff a little bit later.
+
+I say mostly concurrent here because well, in the book there are, like, you know, super -- super concurrent things and all kinds of color three-color marking schemes. They sort of work for some applications. They don't work for general purpose programming. But in our scheme, we are concurrent, we are highly concurrent. We have a collector running on a separate thread now. That's different than -- than we had last year at WWDC.
+
+And that allows you to allocate and bump reference counts and all that kind of stuff most of the time. There's a small phase where we do what we know -- what's known as zeroing our weak references, where your threads will kind of jamb up while we get that little critical section done. So that's my only hesitation from saying this is a fully concurrent allocator. It's very concurrent. It's very nice.
+
+A different -- one of the model differences we have is that in Java when your object is done it's sent to finalize message. Well, we do the same thing. But in Java, for example, your object can come back alive. You can hand it out to other things. And so what happens in a Java collector is it sort of has to collect these objects twice in order to actually get the memory back. The second time it finds it, it doesn't send a finalized message and it grabs the memory back. But you know, that memory latency we didn't like. So we decided we're not going to allow objects to resurrect. One you get a finalize, you can't keep that thing alive.
+
+The other modern innovation that we have, is we have what we call a zeroing weak reference system. You can have weak pointers to things. Things that will not keep the reference alive. And when the garbage collector collects it, it will zero that pointer out so you will not have dangling references in your programs. This clearly is a way to improve the quality of your code.
+
+On 32-bit systems we have a 4 gigabyte memory limit. In other words, there's no limit. You can have as much garbage collection memory as you can allocate. On 64-bit systems we decided to put a somewhat artificial limit in there. We decided on 32 gigabytes of 2garbage collecting memory. You still have a mall o key for other stuff and code and all that stuff comes out of other address areas. So we think that's a fair -- a fair limit.
+
+So when can we do garbage collection? Well, we've been working on it internally for quite a while. It was about half done in Tiger. But the simple answer is you can do garbage collection now. I saw folks down in the lab just really playing with the stuff. So go for it.
+
+So, where? It is a Leopard only feature. We need a lot of support in your frameworks. There's a little bit of code that's the garbage collector, and a lot of code that's the frameworks. The frameworks are all garbage collection smart. When you run a program, all code that you -- that you import with bundles and what not have to be GC aware. And so since GC is only available in Leopard, it turns out that we have to build Leopard only applications for this.
+
+It is not required. Objective-C 2.0 does not require garbage collection. It's opted in. If you already have a well understood program and you just need to update to some new Leopard idioms or whatever, go ahead and keep your program retain release aware. That's fine. But if you want to garbage collection, you now have that choice.
+
+There's everywhere Cocoa. All of our Cocoa frameworks are CG capable. When you run a program all objects in that program are collective objects. We do not some of them are retain and release. No, no, no. They're all collected including -- I didn't mention this here, but we have CF style objects also. So if you're worried about that, don't worry. CF objects are NS objects as well.
+
+Last year we did not have a 64-bit implementation available at WWDC. Where 64-bit, 32-bit Intel pow2er PC. GC runs everywhere. Universal. So to augment what I said about Cocoa frameworks we have a lot of libraries that use sort of this CF type ref style. Or Core graphics or whether they're security or, you know, there's tons of two-letter prefixes out there yielding up Core foundation-like objects. And all of these frameworks work fine under garbage collection. You start with Objective-C. You reach out to these other frameworks. They work. I will talk about how you interact with them.
+
+So things it doesn't do. There's a lot of research papers that say, oh, here's how you add garbage collection to C. You replace malloc with the collector and everything -- well, that's what the research paper's about. We did not do that. Malloc still lives, and you can still malloc and free things. You don't want to do that. We want garbage collection to be very fast and efficient. So we want you to choose where you use garbage collection.
+
+Similarly, because C Plus Plus you rewriter allocator all the time, we decided not to go after C Plus Plus head on. You can choose to do that though. You can choose to, you know, override new, put in our allocator and have fun. We have some C language constructs that will help the Compiler help you out with that. It's clearly, you know, this is not tertiary, we're, you know, directory supporting. But it's possible to do.
+
+So, why? Well, retain, release, ao releasee, retain count. That was the strategy I helped come up with many years ago at Next and that was the best that we could do at the time. It was better than new and free, which was very error prone. But the retain counting system with a good compromise. Especially with the auto release pool. It gave you almost garbage collection-like behavior. Especially in a single threaded environment. That was 15 years ago.
+
+Times have changed. 15 years ago -- this is a little bit more like 20. The next box, the next cube retailed for $10,000. It had 8 megabytes of memory and one single processor. So I priced this out the other day for about half the price you get a quad Core Mac pro with a 30 inch cinema display, and et cetera, et cetera. For less money.
+
+So although that's kind of interesting for the pro user, the real story is that for the consumers. Our entry level products, our iBooks -- I'm sorry -- our Mac books are dual core processors running at 2 gigahertz. This is phenomenal stuff. Even that little -- even that little -- that little guy, that mini has a dual core in it. I mean, it's amazing. And these are the -- these are the kinds of machines you folks are writing applications for. They have multiple cores on them. You should be taking advantage of them because there's lots of fun stuff to do with CPU.
+
+But you have to program to it. You know, and here's a typical, like, setter getter pattern. I took a setter getter pattern because it's common enough. And I know that you people don't code setters and getters this way. There's a lock in there because you need it for multithread access. If you want to make your code thread aware, undercontain and release strategies you have to go -- you have to jump through hoops.
+
+You have to put a lock in there, you've got to retain, auto release it from the getter, or the setter's got to lock it down. And I don't each want to mention the threat of exceptions. That first release, that humble release can call out to other releases. Because if that was the last release, it could call arbitrary things. And one of them if it threw an exception would leave that lock locked. It's -- difficult. What you mentally are trying to do when you write the setter getter, that's mentally what you're writing, yeah?
+
+And that's exactly what you get to write with garbage collection. Because we rely on the animosity of the assignment, for one, and two, rely on the thread machine state and scanning the stacks to find out where all the references are. So clearly in this kind of environment you get simpler designs because -- I didn't mention it -- but of course you get to have cycles that get recovered. You get simpler code because you don't have all this locking and stuff, and concerns about things you never thought about. Except when, you know, 10,000 people use your code and find a couple corner cases you didn't test for.
+
+You get safer code under garbage collection, because no more dangling references if your, you know, if you do the new style. And of course you don't get classical memory leaks. I claim this leads to faster delivery. Faster program, easier to design. And another slide -- I'm not sure I put up last year. But we did some studies internally that show that sometimes up to 10 percent of the CPU cost of your program is spent on retain and release.
+
+Because each call to retain and release has to go through a lock. And on modern CPUs, lock don't get faster. They have to coordinate with the other cores and off chip stuff. So locks don't get faster. So better to get away from them all together. And that's what GC helps you to do.
+
+How do you get access to it? It's very simple. You just click a check box. That tells the Compiler to do some search stuff. What does the runtime do? Well, we do a little bit more than that. So imagine this is the heap. Your GC heap of objects. So your heap of objects -- within the heap of objects, your objects, of course, reference each other.
+
+Right? You've got global variables, which might reference, you know, some of those heap objects. You've got locals on your stack. You may have allocated a string. And your stack frame is the only thing that's referencing that string. You might actually have figured out a way to stuff a pointer to an object into some malloc memory. Now I call these externals. The collector doesn't know where you stuck these things. But it does know you stuck them somewhere. But we keep track of the fact that your objects have external references. And so your external references may be the only thing referencing this.
+
+So when its time for a collection -- so what I'm going to talk about is a full collection. This is the 1960's style garba`ge collection. What happens is -- I knew I was going to forget this. Not 1960s. In addition to strong references, I also indicated with white arrows, weak references.
+
+Which I alluded to earlier. Again, a weak reference is a pointer to an object that will not keep it alive. If that's the only, if that's the last reference to an object, a weak reference will not keep it live, and the collector will zero it out. So in this case I have indicated that you could have a global that has a weak reference to an object, and then within objects they can have weak references to each other.
+
+So when it's time to do a collection, the collector starts with the roots. Which are those three things I talked about. Globals, locals on your stack and things with external references. And it identifies them. It puts them into what we call a root set. And then reverse. We go what can I reach from these objects? And so we go through the entire heap figuring out what's reachable. Anything we can't reach, we don't examine. We don't go through. We deem it garbage.
+
+So we pull it aside and well, that would leave some dangling references, wouldn't it? So the first thing we do is zero out the weak references to the things we think of as garbage. So they get zeroed out. A weak reference -- references something that's still alive of course we don't zero it out.
+
+We send finalize to every object in that set of garbage and we send it -- I don't know, probably in memory order. We don't send it to the top of some graph. I mean, this could be a cycle of things are recovered and there is no top. We send finalized to each of the objects from your viewpoint a non deterministic order.
+
+And then we reclaim the memory. I should say at this point that there's two things I am not really going to talk about too much. And that is when we look at things on the stack, when we look at your locals, we never stop all your threads at the same time. We peek at your threads, look through everything they're referencing one at a time.
+
+We don't even stop them the first time. At the very end of GC when we're looked at everything else, we will stop each thread briefly just to make sure we've seen everything on its stack. But otherwise while we're collecting we have other ways of keeping track of graph changes. So -- that was fine.
+
+That was 1960's style. That led to machines that would freeze for seconds at a time while GC occurred. In the '80s when Small Talk came into play, a new style of collection came along called incremental and we love it. So the observation was most objects are temporary. As my friend Dave Unger (assumed spelling) would say, most objects die young.
+
+He was -- he helped put that in Small Talk. So the idea is that you can recover only the most recently allocated garbage much quicker. But only the most recently allocated garbage gets collected. But that's good. The scheme we have is, you know, fairly classic, actually. We keep track of the generational age of each object.
+
+We use something called a write barrier to say, when you're storing pointers from one object into another, if -- you know, we keep track of the destinations for pointers to new objects. So we end up marking a sub set of the entire heap as those potentially pointing to new -- new objects. So when we go through garbage collection we actually only search for new stuff. Because that's the only stuff we want to keep is the new stuff that's reachable. And the stuff that's not reachable among the new is stuff we can reclaim.
+
+Anything that's -- that we did find reachable we promote into an older generation. So we get to reclaim all the memory that all of the new objects -- that is not reachable. So here's just a quick illustration. Again, we start out by -- we start out with this sub sets of all old objects that have been stored into. The way we've been tracking with our write barriers. We take a look at all the same places we looked at before because each of them might be pointing to a reference. But what we do is with that root set we look at just the new objects.
+
+That's the only set of objects we're going to examine, and we only look through them for pointers to other new things. In this diagram there's only one more object that's found. This really works. It turns out that this dramatically limits the recursion. We don't go sweeping through the whole graph. And so we get to pull that stuff off and do the same things we do before. Zero the weak references and reclaim the memory. Again, this recovers 90 percent of the garbage in 10 percent of the effort. It's great.
+
+So that's what the runtime does. It doesn't do it without some cooperation from the language and from the Compiler. So let's talk about that. So GCC tricks. Write barriers. So if you have a class, a mumble class with an I.D., it's got a property, and so you're going to have a setter and getter for it. So you write your setter and getter just like I showed you before.
+
+There's no dealic (Phonetic) necessary, remember. What the Compiler does is when you assign the object it actually substitutes -- rather than just load and store -- it actually substitutes the assignment with a helper routine. LBGC assign in I bar. Now, that's fine. That's a very fast routine. That helps us keep track of the -- the places that we stored things into.
+
+For those weak variables we actually have language construct under weak. You can do this on objects. And you can have a setter and getter just as before. But in this case the Compiler also puts in a read barrier on these. So it goes through a helper routine to do reads as well as writes. So it's a different write barrier as well.
+
+Finally, if you want to extend garbage collection into the C world, you use the (Inaudible) strong attribute. I'll be talking about both of these more later. But you can have a C string. It can be a property. And here I'll actually go ahead and show you. Rather than use malloc you call the collector to get the memory. And in this case because the C string variable was marked strong, the Compiler knows to do the right barrier also. So this is how this all works with objects and with C. So to summarize, strong can be used almost anywhere.
+
+In particular, you know, global variables, instance variables. Fields with structures. You can have a structure that has an object in it. And when you assign the object, you're going to get a right barrier. It can have a strong mark care star (assumed spelling). When you do the assignment, it's going to get a right barrier.
+
+The stack is sort of a special case for us. It's sort of -- everything in it is sort of considered strong. Its conservative. The collector will look through it. And anything that looks like a pointer to an object we will leave to be a pointer, even if it's not reachable. Even if it's just a bit pattern. You know, we'll keep stuff that referenced, seems to be referenced from the stack. There's no write barriers involved in writing to the stack, so it's just as high performance as it is now.
+
+That's about it for strong. For weak -- weak is a little more restricted. This also applies only to garbage collected objects. Clearly the big benefit is we zero the pointer out when the data goes away. It is restricted to instance variables of an object and to globals. And this is -- we need to know when that thing goes away in order to unregister it from the weak reference system.
+
+So you can use weak on C pointers if they're an instance variable. So you can have a weak care star something or other. I will say that they're moderately expensive. They take extra storage and extra CPU to maintain them. So in general, you don't need a lot of weak references. Don't sprinkle them willy nilly. Use them judiciously. They are very good.
+
+So for example, you might have a while In Use singleton. That would be a great place to have a weak global pointing to something. You know, when your last customer of it stops using it, the collector will go ahead and get rid of it. But while it's there you can read it. And if it's there, use it. So I'll talk about globally reachable stuff a little bit later.
+
+Properties. We redesign properties since the last WWDC. And as you heard from Patrick on Wednesday, we made things very orthogonally. We made the -- we made the ownership orthogonal to animosity, orthogonal to the naming and place. The biggest change, two big changes that we did, we separated out the interface specification from implementation.
+
+One of the other things we did, we separated out GC behavior from retain release behavior. And so with properties what you do as you saw in the example before is use the language component. The strong and weak storage specifiers to say that you have a garbage collected property. Atomic behavior is almost free under garbage collection because we're looking at the machine registers and at the stack directly. Under non GC atomic behavior is not free.
+
+Atomic -- as we look forward we think that more and more programs will be GC, and atomic will be free, and that atomic is the way to think about properties. And so we're kind of trying to, you know, ride the wave here a little bit. But under non GC, atomic ends up being expensive, the code synthesized by the runtime. Will do all the right things.
+
+And we've introduced as you've heard from Patrick the non atomic keyword to kind of -- to trump it. To say if you know that you're not going to be using this more multiple threads then you can get rid of that performance issue under non GC. The assign property is sort of our finesse, it's the default.
+
+It says that a -- a delegate -- it's a delegate style. Under non GC we always want the delegates to hold on to their memory you know, because it's an object and you need its delegate around. But we couldn't figure out how to deal with the cycles. So we made all delegates non retained.
+
+Well, under garbage collection delegates now are strong. They will hold on to their helper objects. So. As I said, At Synthesize, generates the collect locking. Code under non GC. We actually steal a built from the slot where you hold that pointer to make -- and that is the lock. And direct access to that instance variable under non GC -- is not encouraged.
+
+Having said that, if you build applications, your applications or frameworks -- if you know they're GC, you can compile them with a dash GC only Compiler flag. And the Compiler will generate more efficient code. It will not call down to a helper thing in many cases. And so you will just get the direct metal that you expect. So keep track of that if you are absolutely building only GC code. We don't have a check box for that, we probably should.
+
+So in summary, strong and weak are used for sealable stuff, properties respect that sealable stuff. And we have the dash FOBJC flag is what you get from that check box in Xcode. GC only gets you faster code. And for debugging, the dash W assign Intersept can be used to help track where all the right barriers get issued in case you're a little untrusting of the Compiler. So let's talk about what you can do. That was sort of what we do for you. This is what you do for yourself. So the big five. When you're designing programs for garbage collection, you have to remember these five things.
+
+All this old stuff, these five methods are literally ignored. They're short circuited in the messenger. You will never see a line of code ever executed in a body of any of these methods. Try it. It won't happen. However, CF retain and CF release, for you savvy toll-free bridge types, are still honored just as they were before. So a CF retain will disable that object from being collected. It will disable the collector for that object.
+
+And so CF retain and CF release will hang on to objects, you know, outside -- will make them inaccessible to the collector. So this is a bit of breaking, you know, or modifying that toll-free bridge story. If you're used to doing CF create strings and then auto release them, well you're going to have to take a look at some of that code. You have to clean it up.
+
+So you cannot store GC pointers just trivially in the malloc memory. Now before you could sort of allocate them. Or you could retain them and then stick them in malloc memory. So that was, you know, I say that was non trivial. That you had to know that it was a retained reference in there So there is a very simple thing you can do under GC to make this happen. I also say void star here.
+
+We're teaching the Compiler exactly where inside objects the pointers are. The pointers are to other objects. If you have a void star pointer, we're going to ignore it. So if you try to stuff an object I.D. into a void star, the Compiler -- not in the Leopard seed you have now, but by of the time we ship that will not keep your pointer alive. Unless it's marked strong. Unless you're deliberately trying to do a GC thing. So you have to be a lot more -- you have to be a little more honest with your declarations in other words to keep GC working.
+
+So the things you store into there, unless it's marked strong, have to be -- the collector needs to be told about that. So that no resurrection thing -- how many people here have like, you know, recoded release to say, if rough count equals one go do some magic stuff.
+
+Well, you don't kind of get to do that. How many of you have written plus Alix to kind of say oh, do I have a cache of objects somewhere. You know, bypass the allocators. Right. So some of these techniques are not techniques that are going to work under garbage collection. You're going to have to find new techniques for some of these things.
+
+The good news is you back pointers, cycles, are now okay. And this dramatically simplify your thinking about certain types of programs. And we think that this will, you know, simplify your design process as well. So under non GC back pointers are non retained. Under GC they generally become strong, but that's generally okay.
+
+The only time that you kind of get in trouble is if you have this cycle or this mess and there's some kind of a global pointer. You know, a pointer to a table that references something. In that case, that global pointer to your cycle is going to keep the whole cycle alive.
+
+So in some cases where you've had back pointers -- especially that are referenced from global table -- that's where you want to use the zero to weak storage. So it will break that cycle and get the things go away that you want to. Finally, the fifth thing. Finalize sort of fits in the place of dealloc, but it's really a completely different beast. I claim it's evil. Necessary, but evil. So let's talk about finalize.
+
+So as I said before, finalize is called in an arbitrary order with respect to other garbage. In a retain release world, if you're the owner of this sub graph, you own -- you get called first, and then you can let go of your children and then you can -- you can specify sort of the ordering often. Not always, and that's a problem. But it's completely random under garbage collection. So when you're in a finalize -- if you run a finalize, you should never ask another object to do something meaningful. Because that other object may already have been finalized and can't do anything meaningful.
+
+However, you know, if you didn't write all the code in your system, some other object might be trying to call you even after your finalize has been done. And so it can be just really a big headache. So the idea is try not to use finalizes. In particular, memory management -- try not to piggyback resource reclaimation with memory management. That's very tempting under a retain release world. But in a garbage collection world, that really just doesn't work.
+
+Don't close file distributors, don't close down your network, don't delete files -- don't -- I mean there's all kinds of things you can try to do in your finalize that are just going to come at an arbitrary time in respect to the rest of your application and it's just not a good idea.
+
+The best thing to do in new applications, of course, is to design a good-bye kiss. Design a close or a stop or something. Such that you know when your object, when people are going to stop using it for things important. Stop playing that movie, you know, stop loading that URL or whatever you're doing.
+
+So bottom line. Avoid finalize. It's very different than dealloc. So let's go through some deallocs for example, though, because you know, we code them a lot, right? So here's a not a typical dealloc. When we went in and looked at the App Kit and the foundation and stuff we saw these huge deallocs and so -- well, you know, they're necessary.
+
+So you have to get rid of instance variables that you own. You have to get rid of your notification center stuff. You have to -- sometimes you have these really complex graphs and you've got to go tell him to let go of you, and then you can let go of him. Because if you let go of him first will they still point it to you. And I call this the dealloc dance. If you're written a complex system you've seen this. Decal o occasion can be really tricky. So you have this little dance step that you do here.
+
+If you've got a core foundation object kind of thing, well -- oh, I forgot to put the "if" check in there. Oh no. Not this one. I have it in the next one. If you have perhaps a weak cache -- maybe you have a very complex object, and you put it in a set or a dictionary such that when the next client comes along you can say, oh do I already have one. And if I do I better hand it out.
+
+Well, that weak cache is a global table and you need to clean yourself out of that, otherwise it will have, you know, a dangling reference. If you've got a CF object, you need to CF release it. If you're got your own malloc memory, you need to get rid of it. So -- and we have seen people to forget to call superdealloc. So much so we put a warning in the Compiler if you don't put a superdealloc in.
+
+But let's just say for grins you copied over dealloc and called it a finalize. That sort of sometimes halfway works. But it's not a good idea. So let's go through this. What do we need in here for our finalize issue for real? So as I said before. The sub graph tear down. You need to trust the collector.
+
+We're going to collect everything that's reachable. So releases do absolutely nothing. We fixed up the notification center such that it zeros out references to it automatically. So that code's not necessary. If the do-hicky object has a pointer to you, then it's dead at the same time you are. You will not be in a finalize method if do-hicky is referencing you. Unless do-hicky is dead as well. So that's sort of an induction case here. So you don't need to clean up do-hicky.
+
+So that leaves us with a much smaller finalized method. So let's take a look at that weak cache. Well, that's how it got constructed. There's a weak settle or a non retained nil, nil argument set out there. And your object got added to it. Well there's a big problem with this. Because if it's a global -- if it's a global variable then the collector might have figured out that this object is dead and then some other thread comes in and looks into that cache and revives it.
+
+But the collector thinks its dead, but it got revived. And you can actually end up in cases where your object, you know, because you revived it when the collector thinks its dead. So the right thing to do here is to use our new weak mapping tables of the so hash table is in fact a weak set. And with that API you don't need to do any clean up in your finalized method. Pretty good.
+
+So now we're down to two things. So let's say you have a CF reference of some kind of Core graphics thing. So again, you have some whacky create something or other. And you've got to release it later on. So actually it turns out that you can CF release it as soon as you allocate it.
+
+When you CF release it, it turns out that we actually don't go and collect the memory. We don't do anything. We let the collector decide when its done. Now some people might look at that code and go -- that's whacky. So -- in fact we've invented a little bit of API. It's called CF make collectable.
+
+But under the covers it actually is doing that CF release. If we're garbage collected, we're doing a CF release if you want. But we recommend using CF make collectable. It kind of makes more semantic sense. But if you do either one of those you clearly don't have to do the CF release in your finalize. And so that makes life simpler. As you saw before, if you have some malloc memory you can convert it over to be garbage collected. It's very simple. One for one substitution. You can get rid of that as well.
+
+Finally, well, we don't need that finalize method, do we? So that simplifies your programming. You don't have to worry about tear down. That's -- that's something you get to eventually and it can cause you headaches. So let me talk a little bit more about some of that API I mentioned.
+
+So in foundation, as of Tiger, actually, we added a finalized method and we added drain to the auto release pool. Drain -- I'll show you what drain does in just a moment. In Leopard we added in a garbage collector object and the weak collection classes to foundation. So the garbage collector object is very simple. I'm only going to talk about the first clump of methods. But a vault collector is how you get a hold of the collector for the few things it knows how to do. Under non GC you return nil.
+
+Okay. So collect needed and collect exhaustively are our ways to let you tell the collector, hey, I know I just finished allocating a lot of stuff. I'm done with this operation. Go collect if you can. I mean, we're not above living to hints. So go ahead and hint us. Collect if needed.
+
+Use it freely. Because we're not just going to go collect unless it's needed. On the other hand, if you really do know that you are really done, you're about ready to go to sleep or something. Collect exhaustively tells us to ring every last little bite out of the system. And we'll go and we'll really crunch and you'll get back stuff.
+
+Disable collector from pointer. Enable collector -- I kind of mentioned those before. That kind of says for this piece of memory don't collect it. I will tell you a little bit more about those. So as I said earlier, CF retain, CF release, you know, we'll really hang on to your object.
+
+Under the tables they're really just doing that. They're really just telling the collector don't do that. Don't, you know -- so CF retain is sort of a quicky way of saying disable the collector for this object. Disable collector takes a void star. So you can use it on arbitrary memory. Whereas obviously CF retain can only be done on -- on objects. The weak pointer classes.
+
+You know, API -- there's too much API in the world. Aren't there enough collections already, you might ask. Well, we thought long and hard about this. NS array, NS set, NS dictionary has very rigorous definitions. There's lot of code that's been built on top of it. They can be turned into property lists, they can be archived, they can be -- there's just lots of stuff that's done to them. And one thing that can't be done to them is you can't store nils in them.
+
+So what would happen in a collector came in and zeroed out some of their elements. Well, arrays would have nulls in them. And sets, you might ask it for its count and then two milliseconds later some stuff would be zeroed out and count wouldn't work any more. I mean, we thought long and hard about it. But we said that, you know, it's just not the same. And even if we tried sub classing them, they wouldn't have the same behaviors of the superclass. So we said we can't do that. We had CF array. CF set, CF dictionary.
+
+And they were a lot more reliable. But they're also very complex already. And they have when I looked at the code what I call an indifferent backing store. You know, these things have to have real memory to stuff your pointers into. But under garbage collection, we need to own that memory. I mean, we need to have a writer barrier whenever you store something into a CF set or whatever. If it's weak we have to not only have a different write barrier, we also have to have a read barrier when you get stuff out.
+
+And if you think about it, if you build a hash table it often has a collision block where you know, you collide on the hash slot. Well, if one of those hash slots goes to zero, well, that kind of breaks your whole hashing, you know, assumptions and stuff. So -- the algorithms change also. And for a lot of these reasons we said we have to have some new stuff.
+
+Well, turns out there already was some stuff laying around in our system kind of unused. And that was NS hash table and NS map table. Now these are really old preceded -- I don't even want to tell you. They're really ugly too. You have the CAPI to create them. You have this set of call back structures. And these are the -- there's three different type of call backs and this is the set of call backs that are predefined for you for the key part of a map table.
+
+There's a different set for the values. And there's a different set for the hash table keys, even though they're exactly the same. So if your use matches what one of those things is, then you're in pretty good shape. If you're not, you have to go create one of these structures yourself.
+
+And you have to override the equal function to do the right thing or the retain function or something. I mean, this is kind of the way CF stuff is organized, except I don't know too many people that really fill those structures out. So here we've got the value callbacks. And they have funky CAPIs also. Three different ways to insert things into a map table.
+
+And look at the bottom two. To enumerate them you kind of have this structure you declare on the stack. And you have to have an explicit end of the enumeration. And I didn't show you the one -- it's very funky stuff. So the plan -- let me back up.
+
+Note the structure part. Type up struct. So these are opaque structures. And we seized on that. And what we did was he said let's turn those structures into objects. So hash table, map table become objects. We preserve all the old API and implementation unchanged because we don't want to touch that stuff.
+
+But we can create objects out of this stuff and make a few little changes. So we upgrade them to objects. Hash table becomes very much like a mutable set. Map table becomes very much like a dictionary. So you have set object for key and stuff. So now you have weak sets and weak dictionaries by a different name. NS hash table and NS map table.
+
+So the old API works on the new tables. And the new API works on the old tables. So you can sort of mix and match. These are hash tables, after all. And they sort of inter operate. The new APIs are geared towards objects. We figured that's most of what you guys are going to be wanting to use.
+
+So we now have three new collection classes. We have hash table, map table, and oh yeah -- we need a raise. So we invented this thing called a pointer array. And unlike any other foundation class it's got an explicit count, and that count includes nulls. So it's the only foundation class that I know of that you can stuff a null into directly and it will stick. So it's not quite an array.
+
+You can, of course, have your objects strongly retained that are non GC, it's retained -- under GC it's simply strong. They can be weak. Zeroing weak under GC or non retained. You can have them be object personality. That's what they are by deaf fault meaning we send a hash message and then an is equal message. But often you know that they're pointers. You can just do pointer equivalent on this stuff, and that works also.
+
+You can copy in the elements as you insert stuff. We found that was kind of useful. That's what dictionaries do to their keys. But we can do it on values on the map tables if you want, or the arrays or the other stuff. And finally, since they're objects they conform to three of the usually protocols, copying, coding for archiving, and the new one, Fast Enumeration.
+
+So let me elaborate a little bit on the zeroing weak behavior. So imagine that these white pointers are all pointers of weak references. So when a collection comes along, of course, they get zeroed out. Well that kind of leaves a problem for the map table case. And they might have, you know, a non-zeroed key in a zero value or a zeroed key in a zero value and -- we put a few more tricks in there such that the key, the corresponding slots in the map table also get cleaned out, so it's a self cleaning table. You have no maintenance of it whatever. If it stops, if it goes to zero then we'll take away all the memory for it, and it recovers very, very nicely.
+
+So let me give you three examples of how we cook these up. So weak keys to strong values is -- we have the three interesting combinations as conveniences. If you want to build a dictionary style you pass in some options. The copy in option for the key. If you want to have point -- pointers for the keys and copy in the values -- just set them up with some options. Very convenient.
+
+But if that were it, I wouldn't be content. I think I told you mostly about this stuff last year at WWDC. Since then we've added some more. It turns out that we can configure these hash tables and map tables with regular void start stuff as well. So we have this sort of euphoria object with lots of really cool options. It's an At Property style set of function pointers.
+
+And so you can use dot syntax to set up them if you have really custom stuff. But for the most part we split the functions into two personalities. There's the personality functions that say what kind of a thing is it. Like a string or an integer, or a structure.
+
+And we have sort of a memory option. What kind of memory do you store that? Is it GC strong memory, is it zeroing and weak, is it malloc memory, is it Mac virtual memory. And so the cross product including copy in leads you to like 35 different configurations that are interested. Out of the bat -- just uses those little -- using the options.
+
+And you can reuse those options directly with map table and hash table to get set them up automatically. So it's very cool. Obviously they work under GC and non GC. And you actually only need these pointer functions object as if you need to override one of those defaults. So -- anyway.
+
+Very simple example. I always have a lot of trouble. If you're trying to scan through ASCII stuff and you need NS strings instead of ASCII strings. So here's how you kind of find an ASCII string. Is it in the table. If it is, great. Hand out -- the NS string equivalent to it.
+
+If I don't have that C string in the table I create an object for it and stick it in there. If I never use that object it gets pulled out of the table automatically. So it's sort of a C string to NS string table that only keeps its values alive as long as the strings are in use. You can set that up, you know, with just some options.
+
+Oh, I showed you the old C API for it. Again, you can use object API to get into that table. Again, C API and the object API work on both types of collections. It just works. The -- Objective-C is built on C. So sometimes you need to use C with garbage collection. So as I illustrated before, it's pretty simple to do. You annotate your pointers with under, under strong. That tells the Compiler to, you know, use write barriers where you can. And you use NS allocate collectible.
+
+Sometimes you have to hand out a malloc-style, block the memory to people. So if you're going to store other pointers into it, we need to know. So tell us using the scanned option. So more specifically, it takes two options. Either tell us you need memory that's going to be scanned and maybe -- it might be needed sort of uncollectable right away.
+
+Let's go into that one in a little bit more detail. So for capability, for inner operable, we have these things called zones in Cocoa. And so every object comes from some zone. It's not really used very much. But it turns out that the collector is a new zone.
+
+So if you just get the zone from an object and do zone malloc on it, you can get memory and then you can free it. And that works. Even though it came from the collector. It's really free. It's really freed. It's really freed. Okay. So if you get some memory from our collector and use it, if you make it -- if you disable it once, you can actually free it right away.
+
+You better know what you're doing. You can actually start out that way as well. You can just allocate some stuff. So this is very useful if you need just a quick and dirty buffer to stuff some pointers into, and then you hand the buffer off to create array or something like that. You absolutely know the lifetime of an object. You can actually free it.
+
+One more thing. If you're dealing with P threads, the QuickTime guys came to us a week or so ago -- no, more than that. About a month ago and go, hmm, our P threads aren't automatically getting registered. Why is that? We go, oh, we have a bug somewhere. So we fixed the bug. But if you're allocating P threads, the collector doesn't know about them.
+
+The collector might find out about them if you do an NS thread self on that P thread. Or if you do an old-style auto release pull (Inaudible) net, but if you're going to be doing Objective-C work on a P thread you need to tell us by using one of those is APIs.
+
+We probably should have our own API but -- if you set up your own P thread and do Objective-C work on it, it has to be known to the collector, and this is how it gets known. So especially if you're passing arguments to that thread. Those arguments have to be known to the collector somehow. Either they are globally accessed through -- visible from a global. Or they have to be, you know, collector disabled.
+
+So we talk just a little bit more about the core foundation style stuff. So again, all core foundation style objects are created sort of collector disabled. You need to match your CF creates with CF make collectibles if you can. We discovered a few -- just a few, maybe three total -- CF style things.
+
+In this case, CG bit map context ref that didn't really want to play the CF collectible game. And so you still have to CF release it in your finalize. But that's the exception. For the most part everything that comes out of a core foundation style API can be CF made collectible, and you don't have to have a finalize to get rid of them.
+
+If you're relying on this sort of toll-free bridging between strings and arrays and dictionaries, you're used to creating them with CF-style syntax and just handing them out as -- as foundation NS objects, you're going to have to do a little bit of work. You'll have to keep -- you're going to have to make sure that that CF collectible is done before you try handing it back out.
+
+So to beat a dead horse. The last CF release on one of these objects merely makes it eligible to be collected. The collector still has to find it. It will still stay alive until the collector finds it unreachable. CF objects or NS objects. The low foundation and core foundation -- the collector -- we have some API in the runtime that talks -- that deals with the collector.
+
+So the runtime is open source. It's under Darwin. You can go take a look at everything. What we have in this header file is the API we use from foundation to give you that higher level stuff. There's some extra stuff we haven't exposed up at the foundation level yet. And so if you have to dig, this would be the place maybe to dig a little bit. The file has stuff that's marked API, and it also has stuff that's marked SPI.
+
+But for an API perspective, there's more options on how to kick off collections. You can set what we call our threshold as to how many bytes have been allocated before we trigger a collection. There's a ratio. How many generations do we do before we do a full. Atomic compare and swap of GC pointers has come up a few times. And so we have some API in there for that. When you do memo moves, we need to now.
+
+And those external references you can manipulate directly. Finally, we kick off -- the App Kit has a hook that kicks off the thread, the dedicated collector thread automatically for you. But if you're a foundation only kind of programmer and you want the thread, the collector thread to run on its own, then you have to do this.
+
+Otherwise we will rely on you to call us with collect if needed and stuff to get the collections done. So you know, if you want to program at a low-level this is the file to do it. And clearly, you can hang yourself with the SPI that we're going to yank out from underneath you if you use those SPI functions. Don't do it.
+
+So how to add GC capability and not get fired. So it turns out that living in both worlds is not all that hard. Frameworks and bundles may need to be GC at some times and non GC at other times. So when you mark -- when you compile things with the dash FOBJC GC, what that means to us is it is also retain release aware.
+
+Because that's -- inside Apple that's the dominant case. When you mark it GC only, it says there's no retain release logic. So if you have -- if you have a GC only framework, say, and a non GC program goes to load it, you will get a runtime error on load. If you have a, you know, so the right combinations we detect at runtime. And we're moving that into link time as well.
+
+So the foundation APIs as I talked about do sensible things under non GC. Allocate collectible default to malloc under non GC. So you can kind of swap them in right now. You can convert all your API use over to these new weak tables and stuff like that. And it could still be a non GC program and only when you compile that last application does it become GC.
+
+So what we've done internally is delete nothing. We kept all that retain release object obviously, because it sometimes gets used. We copied the dealloc into the finalize and then we optimized it away. The NS View finalize -- yeah, finalize method used to be about that long. It's now about that long. And I am still on their case about it.
+
+You align CF create stuff with CF make collectible. As I showed you earlier, you convert your mallocs to NS allocate collectibles. I mean, sometimes if you have to stick an object into somebody else's malloc memory, some void star thing somewhere, CF retain if for the time it has to go there. Or use the disable pointer for collector API.
+
+Convert your set dictionaries and arrays that use no call backs to the weak collection classes. This is more than a recommendation. This is pretty much a requirement because again, the collector could think that something is dead, and if that weak collection -- your weak CF dictionary yields it up again, you're going to have -- you're going to have a resurrected dangling pointer. And it's going to crash just like it did before.
+
+So clearly, object caches don't work. Here's some SPI -- more API -- SPI API you can use. It's a quicky way to find out whether the collector's running. And clearly, you have to debug and tune. So let me talk just a little bit about that. I know it's probably something three months away from you guys. We give you error messages when the runtime detects some funny business.
+
+So we let you break on the point, because it's usually very obvious what's going wrong. So resurrection is when you're in a finalize and you try and store it into something that's alive. Like you try to create a new object enumerator on a dead dictionary. You get a resurrection error. So you get a typical message, you know, in Xcode from the Compiler that says pointer la de da -- break on whatever to debug. Just follow the instructions.
+
+Just break on that and find out where you're being resurrected and you can clean that up. You can sometimes somehow -- I don't know -- sometimes you somehow end up with, you know, a non GC object. So you know, you can find that out by breaking on the appropriate message for that.
+
+If you do a CF make collectible and still have a CF release somewhere else in your code, you can CF release one too many times. That's called an underflow. Break on that. And occasionally you get exceptions thrown. You can break on those. So just stop using finalize methods.
+
+There are some tricks. Malloc stack logs is a fabulous tool. No compacts make it very easy to find out who the last user was. GDB now can be malloc's stack logging back traces directly. You do info malloc on a pointer, and it will show you the entire history that pointer in your program.
+
+If you have stock logging on, as I said before sign intercept helps you find out where the write barriers have been. And the write barriers, if you suspect you haven't gotten them all you can disable generational and just rely on full collections. If your program runs under full collections but not under generational, that means you're missing a write barrier somewhere.
+
+For tuning, you need to get rid of leaks. Leaks occur -- the new kind of leaks are unwanted sub graphs. And they come from global references. And sometimes the stack references dead stuff. So sometimes you can clear the stack yourself or zero out old references, it helps us out. GDB has another two tricks.
+
+It's got GC references. So you give it an address, and it will go run sort of a collection on the side. And tell you everything that references that object. More interesting from a leaks view point is the info GC roots command. And that will go through -- figure out all those roots that I mentioned before and find the shortest path from the root to your object. That's going to tell you what's keeping your object alive.
+
+We will have -- we'll have better higher level tool support for that. So at the moment we have Xray that will tell you what's going on with the collector. You can turn on this environment variable for command line monitoring. You can prod the collector like I said before, using explicit API drain or collect if needed. You can goose the collector and really make it happen using collect exhaustively. And you can adjust the threshholds using API or these environment variables to kind of make collections happen more often.
+
+As a last resort, we actually -- there's other API that let's you turn off the collector temporarily and then turn it back on. Sometimes you can use that. So that's pretty much it for the talk. I do have a demo I'd like to show you. I thought this was really neat let's see if we can -- switch to -- yeah, we can.
+
+So, this is the QT recorder demo app. They're source code available. It's been converted to be compiled and run under 64-bit. With garbage collection. And you can sit here and if you push this button it will actually record this off to some data files. Now I could have an arbitrary piece of code up here.
+
+But in fact I am going show you that it's running under garbage collection. I don't really need that. Let me bring up Xray. And let's attach to the QuickTime Player. At some point -- ah. I know I was going to have to do this. The real magic is if I can remember what it is. I can. Okay. So what you see here -- sorry?
+
+Attached to the wrong thing. That's why I'm not seeing anything. You're right. So much for demos. Okay. Let's start over. Did I quit Xray? Let's quit Xray. Let's just start it over. Garbage collection. Choose that. Let's attach to -- boy! The pressure of an audience! ( Laughter ) >> Ah. We had a GC event! Right now! ( Applause ) >> If I zoomed in what you would see is we actually tell you how many objects got reclaimed, how many bytes got reclaimed. We have some other stuff in works that will actually show you the total heap size and what not.
+
+But we're coming along with Xray, we have a lot of great ideas for it. But this is a 64-bit app runnidng GC capturing video live. So I think that's pretty nifty. I don't know what you think. Back -- I think it's time for Q and A.
+
+( Applause )

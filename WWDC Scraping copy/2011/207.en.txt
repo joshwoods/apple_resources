@@ -1,0 +1,239 @@
+---
+Title:  Userland Device Access
+Year:   2011
+Web:    https://nonstrict.eu/wwdcindex/wwdc2011/207/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Hi. Welcome to our session this afternoon. So my name is Dean Reece and I manage the I/O Kit team. And today I'm going to be talking to you a little bit about UserLand Device Access. Our talk is going to be broken into three sections today. I'll be talking for about the first half of the hour. And I'll be giving you sort of a general survey of how all the user space device access works from a very general level. And then we'll be walking through a pretty wide variety of API types that are available for this use on the system.
+
+And then Thane Norton will come up and walk through a much more detailed example of user space HID device driver. And then after Thane is finished, Ethan Bold is going to come up and present the user space sleep/wake APIs and some new sleep behaviors that you'll be seeing with Lion.
+
+So what you're going to learn from my talk, hopefully, is a little bit about the Mac App Store and how that relates to device drivers. And we'll talk a bit about the benefits and challenges of user-space device software. Getting into the APIs a little bit, we'll look at device matching and how to run a process when a piece of hardware is present, and then how that software goes about finding the devices and talking to them and so on.
+
+And as I said, then we'll walk through a variety of APIs for this. So, the Mac App Store is this great new feature that we have. And of course, as developers you want to be able to deliver your content through the App Store. It's a great opportunity for you. But there are some limitations with respect to device software that you need to be aware of.
+
+First and foremost, we do not allow you to ship kernel extensions through the Mac App Store, nor do we allow you to ship an app that attempts to install the kernel extension. So, that obviously limits you to user space only APIs right there out of the gate. You also don't, you're not allowed to have your app run with privileged execution and the app needs to be self-contained. It has to stay within its app bundle. So, you don't have the opportunity to install plug-ins into other parts of the system.
+
+Also, not a hard restriction, but something to be aware of is App Store apps aren't allowed to operate in the background without express consent from the user. So you can't have the app automatically launch when the user logs in or continue running after the user dismisses it unless the user has agreed to that explicitly.
+
+[Transcript missing]
+
+There's this session that we had yesterday on the App Sandbox and the Mac App Store that you would be interested in going and checking out on iTunes if you think this is a distribution vehicle you're interested in.
+
+Now, developing software for user space has some distinct advantages over kernel-side software development, not the least of which that you have a much broader set of APIs available to you because you've got a whole collection of frameworks available, whereas in the kernel, you only have the kernel.framework. You have much better debugging options available. You get to debug from within the GUI Xcode debugging environment, and there's a richer set of performance tools available for you to help optimize your software.
+
+From the customer's perspective, there's some advantages as well. A fault in your software won't crash the system. Obviously, a critical resource going wrong can cause issues that the user would experience, but it won't necessarily cause their system to panic and immediately require a restart. And depending on exactly what you're doing, you may or may not even require administrative credentials to be able to install or use the APIs, whereas kernel extensions require that for just installing the software in the first place. And as I said earlier, since you can't deliver a kernel extension through the App Store, well, user space development is pretty much the only way to go and still be compatible with the App Store at all.
+
+Now that being said, there are of course some challenges that are different from kernel extension development. First off, not all device types are available from outside of the kernel. Specifically, devices that generate DMA cycles and field direct interrupts generally are not available outside of the kernel. So PCI devices and Thunderbolt devices in particular still will need to be supported through kernel extensions.
+
+But a very wide variety of devices like USB and Bluetooth are available outside. Now, we also have to think about being able to publish devices from outside the kernel because that's one of the things that device drivers typically want to be able to do. They want to be able to publish a new service. And depending on exactly what you're trying to do, you may or may not be able to do that from user space. So we'll get into some more details about that later.
+
+And again, one of the advantages for user space development was that you had a wide variety of APIs available, but it can also be a bit more work because you've got more API spaces to learn and use. And depending on what you're trying to do, you may be bridging multiple API spaces, which generally you don't have as much effort to do inside the kernel.
+
+And there is no out-of-kernel driver stacking model like we have with I/O Kit inside the kernel. Inside the kernel, you can stack kernel extensions in a way that allows you to create a string of drivers that talk to each other in a very discoverable and manageable way. And when you step outside the kernel, you no longer have that mechanism.
+
+[Transcript missing]
+
+So even though we're not going to be talking about kernel side development, you do need to be aware of the IO registry. IO registry is a collection of live driver objects that are running in the kernel, but even though it's kernel resident, it's browsable from user space.
+
+And this is very important because you use this for discovery of devices. Nearly all the devices we're going to talk about today, you will use the registry to get at. And on the right hand side of my slide here, you'll see I've got a dump of one node of the registry.
+
+This happens to be a USB iSight camera that's built into a current iMac. And in particular, I want to draw your attention to the top line there where it says the class. Every node in the registry represents a C++ object inside the kernel, and its class is your first identification as to what that object represents, what other properties may be present, what you can do to talk to it or not talk to it as the case may be.
+
+So in this particular class as a USB device, you'll see we've got a variety of properties here. And two of them in particular that you'll be interested in are the vendor and device ID. No surprise there, these identify a very particular device. In this case, it's our internal EyeSight camera.
+
+Now, if you haven't already seen this, I recommend you run ioreg-l or run the ioregistry explorer application that's available on our developer tools. The properties you see here are all visible to any user space app. There's no administrative permissions required, and you can very easily explore all the devices on your system.
+
+So how do we do this programmatically? Well, if you want to be able to have your software identify and talk to a device, obviously it's not going to be browsing the registry. You're going to have to create something that allows it to be searched programmatically. And we're going to start with a matching dictionary for that. A matching dictionary literally is a dictionary that describes an object you're interested in. And much like the previous slide, we're going to start by looking at the class.
+
+And that narrows it down to a small subset of the objects in the registry that could potentially match the dictionary you're putting together. And within class, the vendor and product ID specify exactly what type of devices you're looking for. And there may be a zero of these on your system, or one, or there may be 50. It depends on what you're looking for. But this matching dictionary is only going to find this type of device. So how do we go about using this matching dictionary?
+
+Let's say you've got a utility software, could be a driver, could be an app. You want it to launch as soon as this device becomes present on a system. Well, we have a new capability in Lion that uses LaunchD to launch when hardware is available. And it's very straightforward.
+
+Basically, you will start off with this new property. It's this new LaunchD property called I/O Kit matching. And within that, you're going to specify the matching dictionary I just showed you how to construct. Well, we have a new capability in Lion that uses LaunchD to launch when hardware is available. And within that, you're going to specify the matching dictionary I just showed you how to construct.
+
+Now there's some more information, of course, on LaunchD. If you look in the man page for launchd.plist, I've been told that the new I/O Kit matching capability has not yet been added to the man page there, but as you can see from my slide here, there's not much to it. So I recommend that you start with the LaunchD man page, and then you can go back and view my slides from iTunes if you need more info on the matching.
+
+Okay, so now you have constructed a matching dictionary. You've created a launchd job. It's launched your application. What do you do? How do you talk to the hardware? Well, your app is going to have to discover it. So we're going to go back to that matching dictionary. And you're going to pass that to IO Service, get matching services. This is going to give you a list of devices on the system that match your dictionary. You're going to iterate through those results. Like I say, it could be zero or more. And once you've Okay.
+
+Identify the one you want, then we'll talk about how to open it in just a second. But you can also become aware of new devices that appear. Let's say you had zero matches when you launched or the device that you were interested in went away. You can become aware that new devices that match your dictionary have been attached to the system by registering for this callback using IO Service Add Matching Notifications.
+
+All right, so now you've either been notified or you have discovered at launch time the objects you're interested in talking to. We're going to go ahead and call IOCreatePlugInterfaceForService, which literally does what it says. It creates a plugin interface for the service object that you've asked about. And that will load into your program a plugin that allows you to communicate through device-specific APIs to that device. Not every node in the registry will be able to do this. The nodes in the registry that you can talk to will return an object here, otherwise this call will fail if the node does not have a user client available for it.
+
+Okay, so that was a very general walkthrough of the procedure for discovering and talking to devices. I'm now going to go through a variety of technology areas and kind of give you a very quick jumping off point. If you're interested in one of these areas, you're going to have to dig deeper than my presentation today. So I'm going to go through them fairly quickly, and you can use the notes in these slides as just sort of a starting point. We're going to go first through the bus level communication protocols, and then we'll look at the higher level service APIs.
+
+So USB is probably the most common way to expand a Mac. It's also one of the richest APIs that we have for user space device access. There are two classes that you can locate in the registry and talk to from user space. A USB device, which represents an entire physical USB object. And then I/O USB interface, which represents a fraction of a USB device, typically. We do allow access to USB devices through the sandbox if you have this device.usb entitlement. So you'll have to ask for that if your app needs to talk directly to USB hardware.
+
+And once a USB device is in use, you're not going to be able to necessarily steal it from the software that's already got it in use. So one of the particular workarounds for this is to create a codeless KEXT. This is not necessarily a great solution, but it does work, and it's the recommended practice right now, where you'll install a kernel extension that has the matching dictionary, which will basically hold off in kernel drivers, thinking that your codeless KEXT is going to be the right driver for this piece of software.
+
+Or excuse me, for this hardware. But in fact, it doesn't have any code in it, so no driver comes along to take over the device in kernel. And that gives your application time to then run and take over from user space. Okay, so Bluetooth is also a great way to expand to Macintosh.
+
+There's a variety of classes available, but you don't go through the registry as I described earlier. You've got a whole Bluetooth framework just for talking to Bluetooth devices. And it allows you to discover the devices. Most of the time talking to Bluetooth is done through services, though. You generally don't talk to the device. You talk to a service that the device vends. And so the SDP service record is sort of the key coin there of exchange for discovering and talking to devices.
+
+One thing to note, if you're doing Bluetooth development, you want to stick to the Objective-C APIs and shy away from the C APIs. Those are the old-style APIs we're not encouraging for new development, so go to look at the Objective-C APIs. We currently do not have any entitlements that would allow application access to Bluetooth devices through Sandbox.
+
+But apps can publish new Bluetooth services, which is kind of interesting. It's a little different than you might expect. The Macintosh itself can actually vend a Bluetooth service to other Bluetooth clients. So you could do Mac to Mac Bluetooth services if you're interested. And in fact, that service will even launch your app when a remote client tries to gain access to it. So it's kind of a neat feature. And also Bluetooth services can often be shared by multiple apps. The details are device specific, but it's not purely mutual exclusion.
+
+Firewire is also a fantastic bus for doing lots of different things on a Mac. There are a variety of classes available. You do wind up going through the registry to locate them. And we've got some very base level classes for Firewire Unit and Firewire Device for talking kind of right at the metal.
+
+And then we've got some higher level classes that you probably wouldn't use because they'll tend to be abstracted by other services in the system like SPP2 will generally be abstracted for you by SCSI tasks. So you can use the same thing for the same user client or stuck. And then AV is usually handled at a higher level as well. And we do not have any sandbox entitlements that will allow you to get to Firewire devices directly.
+
+And SCSI is one of those things that kind of brings to mind giant connectors that look like harmonicas, but SCSI is alive and well in a modern Macintosh in protocol form. The SCSI protocol is still very much alive and well, and is used like for optical drives and a few other devices as well. So you can discover these devices using, as I said previously, the SCSI task user client, and you would find them in the registry. You can talk to them by requesting the plug-in, as I described earlier, but we don't have any sandbox access.
+
+As far as mutual exclusion goes, you generally can't talk to a SCSI protocol device that's in use, with the exception of authoring devices. If you've got an optical drive that has the ability to burn, then you can often open sort of an around connection that will allow you to author to the device, even if there's a blocked storage driver attached above it.
+
+Serial, this is another protocol that's alive and well. Again, we're not really talking RS-232, though it can certainly be. Serial is used for a lot of Bluetooth and USB devices as an underlying protocol. If you have a device that presents as a serial device in the system, you will find the device in the registry, as I described earlier. But you won't use the registry as the communication protocol. Instead, you're going to use our POSIX TTY interface to actually talk to the device. So we have device nodes.
+
+The TTY generally, as Unix tradition, is for inbound connections. And the CU or call-up or call-Unix ports would be for outbound connections. This is very old-school serial stuff, but this is the way it's done. There is currently no sandbox access for serial devices. And apps cannot use an in-use serial device.
+
+Once the device has been opened, it's opened. So if you're going to have a piece of software talking to serial, you should make sure you get an open it first or make sure that all the clients make sure and close it when they're done so it can be shared as needed.
+
+Now audio, audio is a really fantastic example of what you can do from user space on Mac OS X. The core audio APIs are very rich and pretty much put you on an equal footing with what you can do in the kernel. So, everything is done through, all device access is done through HAL, the hardware abstraction layer. And there's the audio output unit, which is a plug-in that you can load into your software and do audio in, audio out. You can create new interfaces.
+
+It's a very rich API space. And you use the audio component APIs to actually load audio units into your software. We do have some limited audio access for sandboxed apps. All the apps can play to the system speaker. But if you have this entitlement, you can also gain access to the microphone.
+
+Now again, going back to the core audio APIs, you can publish a new audio driver plugin, which essentially means that you've created a user space driver for audio. It does require admin privileges to install, but once you've done that, the plugin is available to all the other apps of core audio. And again, it's pretty much on an equal footing to a kernel driver at that point.
+
+And all audio interfaces are shareable by all clients. Everybody can record from the same input stream or play into the same audio stream. So there's no mutual exclusion there. Now for video, we have a new framework in Lion called Core Media. And this is a fantastic framework. It's modeled largely on Core Audio, which has been very successful. And it uses a device abstraction layer called a DAO, much in the same way that audio uses a HAL.
+
+We have an entitlement there, which basically mirrors the microphone entitlement for gaining access to the camera. And as before, you can publish new video interfaces if you install it as an admin. And once it's installed, it's visible to all clients of Core Media. Storage, like serial, is kind of a split personality technology. There's two ways to go about it. We have one set of APIs for discovering and managing the devices and a separate set of APIs for actually talking and passing data through the device.
+
+Storage, like serial, is kind of a split personality technology. There's two ways to go about it. We have one set of APIs for discovering and managing the devices and a separate set of APIs for actually talking and passing data through the device. Now, if you're not interested in managing the actual process and you simply just want to be aware of what volumes are in the system, you can search in the IO registry to discover IO media objects.
+
+Once you've found the device you're interested in talking to, though, you get the BSD device node name for it and talk to it through usual BSD APIs. And the access semantics for that are a little bit more complicated than just mutual exclusion, so I won't go into them here.
+
+We also do not have any sandbox APIs that would allow you to get directly to a storage device. But in general, you wouldn't need to. You would go strictly through the file system. I'll only talk briefly about HID because Thane is going to come up in just a few minutes and walk us through a HID driver. But it's relatively straightforward to use the HID APIs to locate devices on your system, to open them, to communicate with them.
+
+And then once you've done that, you can also post events back to the system using Core Graphics APIs. So there's actually a very rich set of things that you can do from user space with respect to HID. Apps can even seize input devices like joysticks for exclusive use, with the exception of keyboards, which we don't want to because we want to prevent password snooping.
+
+And I'll talk very briefly about image capture. It's a new framework that's in line now. And it allows you to discover printers and scanners, excuse me, cameras and scanners that would be typical file-based image devices. So you can use IC Device Browser to find the devices that are on your system and then you can request that they download their files so that you can process the images that they contain.
+
+ImageKit allows image capture devices to be accessed directly from UI classes, so it's a very high-level integration for GUI apps. So ImageKit is a great set of APIs for doing high-level image capture access. We currently do not allow access to image capture devices from within Sandbox. But apps can publish new image capture devices, and once they're published, they appear as a new service of the Mac that are visible to any client of the image capture framework.
+
+And last, we have printing. We use core printing to actually talk to printers. If you just want to print to an existing printer, core printing is a great API for that. It's very straightforward. And with this security.print entitlement, your App Store app can print. If you want to publish a new printing service on the system, you're going to use the CUPS APIs to create a back-end driver.
+
+And once you've done that, it would appear as a new printer on your system, visible to anybody on the system, and in fact, can even be shared to other Macs. So, of course, it requires an admin privilege to install a new printing device on your Mac, so not available to App Store apps. And with that, I would like to turn the microphone over to Thane Norton to talk to us about HID. Thank you.
+
+Thanks, Dean. Can you guys hear me all right? OK. So my name's Thane Norton. I'm the IOHID team lead. Little bit of a misnomer. I am the IOHID team. And I'm going to be talking to you about how to write a userland driver, an application that acts as a driver. So I'm going to show you how to find and access HID devices. And then once you've got events from a HID device, how to inject those events back into the system as key presses and mouse movement.
+
+So I picked up this new piece of hardware. It looked really cool. Said it had Mac drivers. I was pretty happy with it. It's got lots of buttons, flashing lights, and everything. But the drivers didn't work for me. I haven't run a 32-bit system in a while, so the 32-bit kernel extension didn't work on my system.
+
+And I looked at it and I said, this would make a nice example of a HID device. I mean, it's got lots of buttons. It's got a joystick. There's these LEDs that you can toggle on and off. Love blinking lights. It's got a full color backlight. And it even has an LCD that you can put data out to.
+
+So what's the first step? Well, the first step, since it's a HID device, is you fire up USB Prober, and that will parse the HID descriptor for you and show you what the device looks like. Now, USB Prober dumps out a lot of information. We don't care about most of it here. As Dean showed you, you want the vendor and product ID of the device. Any Logitech G13 will have exactly this vendor ID and exactly this product ID. Any Logitech device will have this vendor ID.
+
+Then we look at the report descriptor. Unfortunately, this device does not break out the buttons and the joystick and everything into their own little pieces. It's one seven-byte packet. So the next step is, what do we do with that packet? Well, if you're lucky, you can get some developer documentation and it'll break down, this is what this bit means and this is what that bit means. But I didn't have that.
+
+I was able to find some open source drivers. They reverse engineered the packet formats, both for reading from the device and writing to the device. And so that's where I got my information from. Now, if it's an input device, you can pretty much just connect to it and start playing with it. And you'll see what data comes into the system. And you can figure out from that which buttons you're pressing.
+
+Lastly, if you have a device that you can't do any of those things with, you can put a packet sniffer on the bus between a system that has a real driver, a functioning driver, and your device and see what the packet format is. Not for the faint of heart, but it is an option.
+
+So I decided to try and write a sample project. It hasn't really hit Apple sample project stage, but if you come talk to me afterwards, I can give you a copy. So the first thing I want to emphasize is whenever you're writing a driver, it's hard enough without a consistent error handling idiom. Make sure that you handle errors the same way so that people don't get surprised. Personally, I like to use the assert macros. They have some nice flow control features, and they're easy to compile out if you don't want them.
+
+And I strongly recommend you take a look at ASL. ASL is the Apple System Logger. It's a one-stop shop for having a log file, putting things out to the system log, and putting things out to standard error with a single call. In my application, I even have it set up so that in the debug build, it goes out to standard error, but in a release build, it only goes out to the system log.
+
+So your first step is you have to find the device. You get an IOHitManager instance. Create your matching dictionary. You can see here that I'm using the toll-free bridging between MS dictionary and CFDictionary. This is the vendor ID and the product ID that we found using USB Prober.
+
+We tell the HID manager that these are the kinds of devices we're looking for, that is to say, the specific device. We register our callback. Schedule the HID Manager with a run loop. The HID Manager can only be scheduled with one run loop, but you can pick whichever one you want.
+
+And then you open the HID Manager. And lastly, check your error. If anything goes wrong and the HID Manager can't open or it can't schedule, that will come out during that open call. And so if you don't at least check the error, you won't know what went wrong.
+
+So your callback gets called. The first thing you do, the very first thing, is you register for a removal callback. I'll explain a little bit more why later, but if you do not do this, you will crash. Then you open the device. In this case, since I don't want to share the device, I'm seizing it. You can see the IOHit option type Seize Device.
+
+If you're talking to a keyboard or device that you might want to share, you just supply zero, and it won't try and seize the device, and anybody can look at the data. Again, check your error state, especially if you're trying to seize the device. Register your value callback.
+
+[Transcript missing]
+
+Now, the device reference does not have to be retained by you because it's retained by the manager. What that means is it's only valid between the time it gets supplied to you in your device callback and when your removal callback returns. If you don't have a removal callback, that device reference can be pulled out from underneath you at any time. So please register for your callback and watch for device removal.
+
+We got data from the device. What do we do now? So we're going to want to generate events. First step, create your CG event source. Once you've got your event source, if you're going to be doing any kind of keyboard events, you want to set your keyboard type.
+
+As anybody who's from a foreign country knows, developers here in the States, they've got their ANSI QWERTY keyboards. All of them work the same. As soon as you go to France, you end up with an ISO AZERTY keyboard, and the keystrokes aren't working properly. This is what prevents you from having that problem.
+
+Now, where did that 46 come from? I went in the registry, and I looked at the HID subinterface ID for the device I was using. If you're recording devices from a user, you can use CGEvent GetSourceKeyboardType to get the keyboard type that you need to supply to recreate the event that you recorded.
+
+So the first two bytes are the joystick. We're going to turn those into mouse movement. So the first thing you need to do to generate mouse movement is to create your position. Now the position is in global coordinates. It's kind of a pain, but it's the way the system works.
+
+So you need to have your current x and y. I get those by creating an event tap and tracking all of the mouse events that come through the system. There's other ways to do it, but that's the one that works for me. Then we create our mouse event.
+
+We posted to the system and released the event. If you don't release it, you're going to eventually run out of memory. So that should be fairly obvious. Now, the only errors that you can check here is whether or not the event was created. If you try and post a null pointer, you're going to crash.
+
+So please check to make sure the event got created. If you want to do something more interesting than just moving the cursor around the screen, you're going to have a little bit more state to manage. When the button goes down, you'll do a left mouse down. There's a similar one for a right mouse down.
+
+All the movement after that is a left mouse drag, and then when the user releases the button, you get a left mouse up. Very similar for write buttons and other mouse buttons are a little more complicated, but it's fairly straightforward. You can figure it out if you want.
+
+So now, the buttons, the parts everybody wanted to know how to use. We're going to turn those into keyboard events. First thing to do for a normal keyboard button is we just create a keyboard event. You want to supply true when the button's going down and false when it's coming up.
+
+Now, you have to supply this magical virtual key code. Where does that virtual key code come from? It has to do with the way the keyboard's laid out and everything, but-- You really want to gather the data from real keyboards. Events.h, you can figure out what a lot of those virtual key codes will be, but your best bet is to sit down with a real keyboard and just record the events and see what you get. As part of my sample, I actually have a command line utility that you can hit buttons and it will generate dictionary entries that you would put in the preference file to be able to generate those keyboard events.
+
+We checked to make sure the event got created, post and release. Now, if you want to do modifier keys, those are a little more complicated. You create a blank event. Then you set its type to a flags changed event. Then you have to take the global modifier state, set the flag that you are changing, set the virtual key code, post and release. Not that hard, but a little more complicated.
+
+So we've got some other keys on here. We're not going to use those to generate events, but we're going to use them to do internal state change. So you can change the keyboard layout or what the screen's displaying. And so we want to reflect that state back to the system.
+
+The first thing I'm going to show you how to do is the backlight color. Very simple. You roll the magical backlight color packet, and then call setReport to send it out to the device. How did I find out this format? I looked at the open source drivers. Same thing for the LEDs. You roll the mystical LED packet, send it out to the device.
+
+It's really straightforward. So when the device gets detached, your callback gets called. You want to close the device. It's already gone. The user's unplugged it. The system went to sleep. The hub got disconnected. It doesn't make any difference. You don't have access to the device anymore, so don't try to talk to it. It won't do you any good. You don't need to unregister anything. That's all taken care of by the close. No more callbacks will get called. Nothing will happen on the run loop.
+
+When the driver quits, you want to call IOHit Manager Close, release the manager reference. Technically, you probably don't have to do those, but it's good form. And that's it. It's really straightforward. In summary, use an IOHit manager to track devices. use the IOHID device references to get data from the devices, send data to the devices, and monitor device state.
+
+Now, one thing you want to keep in mind is that one physical device can publish multiple HID devices. So if you've got a joystick throttle, it may have two HID devices, one for the joystick, one for the throttle, or a keyboard and mouse combo. If you want to control the whole device, you'll have to figure out all the devices that it publishes. Lastly, check your errors. I've encountered a lot of problems with people who write drivers and have a problem and I just put in logging code to see what errors they're getting and say, "Well, you're not opening the device. Of course it's not going to work."
+
+Writing a HID device driver is easy. If you've got a keyboard sitting on your desk that has buttons that don't do anything, You should just go home and attach to it and see what event you're getting back. You might actually be able to do something useful with those buttons. And with that, I'm going to hand it off to Ethan.
+
+Hi, everybody. My name is Ethan Bold. I work on the I/O Kit team with Dean and Thane, and I'm going to talk about sleep and wake today, specifically how you can get involved in sleep/wake from user space and how you can influence it. So the first thing we're going to talk about is two APIs that you can use to listen for sleep-wake notifications and to influence sleep-wake behavior. And then we're going to talk about two new types of sleep in Lion and on new hardware.
+
+So let's start by making sure we're all on the same page. When I say go to sleep, I mean what happens when you close the lid on your MacBook and when you open the lid, you're waking it up. And when we go to sleep, we do that in a very specific order.
+
+We start out by telling applications that we're going to sleep and waiting for them to respond. Then we tell your kernel device drivers that we're going to sleep, where they prepare hardware to be turned off. Then the OS does some platform work and maybe writes a hibernation image.
+
+And finally, the hardware turns off the CPU and turns off power to the system. When we're waking up, we do that in the opposite order. We start by turning on the CPU and the hardware. Then the OS does some platform-level work, maybe restores from a Hibernate image. Then we're going to power on your kernel-level device drivers. And finally, we're going to tell your applications.
+
+So the first thing I want to talk about is API that lets you run code at that application stage. And that API is called IO Register for System Power. You might want to run code at sleep to close down open network connections or close down connections to your device or save any open files. And you might want to reopen those connections on wake from sleep.
+
+The OS does wait for you to acknowledge this sleep notification, so you have to acknowledge by calling IO Allow Power Change after you've handled your sleep notifications. So, let's look at a couple of code samples. Here's how you can register for sleep/wake notifications. You just call ioregister for system power. That's going to populate an IO notification port for you. You can turn that IO notification port into a CFRUN loop source, and you can add that to your CFRUN loop. When you're done handling sleep/wake notifications, you should call IOD Register for system power.
+
+Now you can also get your notifications on a dispatch queue. This code looks much like the last slide. You call ioregister for system power. You call ionotificationport create dispatch source, and then you add that source to a dispatch queue. And when you're done, you call iodregister for system power again. That's how you would sign up and release those notifications. Here's what your code might look like handling those notifications. There are three messages that we'll send you.
+
+for sleep and wake. The first one here is KIO message system has powered on. That's a--that's the message we're going to send you on wake up after we've turned on the hardware and turned on all the devices. You will get to run code at system has powered on time. Note that you do not need to acknowledge this message.
+
+The next message you do have to acknowledge, that's KIO message, system will sleep. You're going to get this message sent out before system sleep. Like I said, you have a chance to save files or close connections. So you can do all that here, but you must call IO allow power change ASIP so that OS X can continue putting your machine to sleep. And the longer you wait to call it, the more awkward the user experience is for the user.
+
+And finally, there's a third message you need to listen to. It is KIO message can system sleep. Historically, this was the API that you would use to prevent a machine from idle sleeping. But we have a better API that we're going to talk about next called Power Assertions for preventing system sleep. So you still need to listen for this can system sleep message and acknowledge it with I/O Allow Power Change. There's really no reason to run code here.
+
+So let's talk about that better alternative for preventing idle sleep. These are power assertions. They're a way for you to inform OS X of what your intentions are. and when you need the system to stay awake. There are two types of assertions you can create. They are KIOPM assertion type, prevent user idle sleep. When you're holding that assertion, OS X will try its best not to idle sleep. And you might hold this assertion if you're doing a long-running calculation or a build or a firmware update or a big download.
+
+The other assertion that you can take is called Prevent User Idle Display Sleep. This lets you keep the display powered on and lit up, so you might hold this assertion if you're showing content to the user or if you need some video feedback to the user. So you take either of these assertions by calling IOPM assertion, create with name.
+
+And like I said, these replace existing API, but one of the best reasons for them, we like them better, is that they're more accountable. If you take an assertion in your code, I can go into terminal and type pmset -g assertions and see who's holding assertions. So it's much easier to see who's keeping your machine awake at any time.
+
+So, quick sample code. Here's how you might create and hold an assertion while you're doing important work. We're calling IOPM assertion create with name, and we're passing in three arguments-- the assertion type, prevent user idle sleep, the initial assertion level, kIOPM assertion level on, and a string identifying our app. And we get back a new assertion. So we're going to hold that assertion while we do work, and when we're done, we will release it by calling IOPM assertion release.
+
+So I mentioned that assertions are cool because we can always see who's holding one by calling pmset -g assertions. I also want to call out a couple of newish command line tools. Caffeinate is a front end for assertions. You can call -- you can just run caffeinate at the command line and it will hold a power assertion for you, either to prevent idle sleep or prevent idle display sleep. Like I said, PMSET-G assertions gives you the current state of assertions on the system. It's a quick way to see who's keeping the machine up. and third, PMSet-G-Log has been around since Snow Leopard.
+
+It'll show you a history of all of the sleeps and wakes that your system did, as well as As well as log any sleep notification delays that went on. So if your app isn't handling IO register for system power messages properly, you would see that in PMset-glog. You'd see a lot of tardy responses for your app.
+
+One last thing about assertions I need to mention is that they are a hint to OS X, and we can't always honor them. And there's always going to be a case where the system needs to go to sleep and we can't stop it. Maybe when you close the lid on your laptop or if you're just out of batteries. So we try to honor the assertions, but we can't always.
+
+So those were the two APIs I wanted to talk about. And next, I'm going to tell you about two new types of sleep in in Lion and on new hardware-- are standby and dark-wake. Standby is about power saving and extending your battery life while your machine's asleep. Dark-wake is about running code and having your computer on, but keeping the screen off so it appears not to be on.
+
+So, first, let's talk about standby. I have to define two terms for you real quick, and those are sleep and hibernate. When I say sleep, I generally mean suspend to RAM, and that means that when you close the lid on your laptop, we're gonna keep your RAM powered, and--and so that when you wake up, you can come right back alive where you were.
+
+That's--that's fast, but it's also expensive for battery life because we have to keep--keep powering that RAM while you're asleep. When I say hibernate, I mean suspend to disk, and that is-- when you close the lid on your laptop, we're gonna take the contents of your RAM and write it to a file on your storage device.
+
+And that is much better for battery life because... Much better for battery life because we don't need to keep your RAM powered while you're asleep, but it's also really slow to get into writing all those megabytes, and it's also really slow to get out of sleep because you might have to read in two or four or eight gigabytes to restore your system memory state.
+
+So, Standby tries to combine those combine those modes by sleeping at first when you close your laptop, and then after about an hour, it quietly wakes up into a dark wake and transfers the contents of RAM into a file on disk. So you're incurring--it costs more battery life for that first hour to stay asleep, but after that, we can extend your sleep time by weeks. This is only supported on the latest MacBook Air models, the ones we released in late 2010, and it's--you'll see it on 10.6.7 today and in Lion. So that's standby.
+
+Next, let's talk about DarkWake. DarkWake is a new feature. It applies to all of our hardware, all of our Lion-supported hardware. DarkWake is just like being awake, except that the screen is off and the audio is suppressed, so the audio won't come on. But the network is on, the hard disk is up, processes are running.
+
+So right now we're using DarkWake to do a few things. First is to handle the attaching and detaching of external devices. When you plug in a USB mouse to your system, it doesn't really need to light up the display and wake up to a full wake. So we're using DarkWake to just quietly wake up and quietly return to sleep without necessarily alerting the user. We're also using DarkWake to keep your network connection live with the outside world when you're asleep.
+
+We wake up every couple of hours to renew your DHCP lease with your DHCP server and to call out to Back to My Mac on Apple servers. Because Back to My Mac announces your computer's presence to the internet, but you have to check into that every couple of hours to refresh your state. And finally, we're using DarkWake for all kinds of sharing, file sharing and printer sharing and iTunes streaming.
+
+There's no reason that your iMac screen has to light up when you're trying to access it as a printer share or file share from another room. or if you're trying to stream content from it to your Apple TV in your living room, there's no reason that the iMac in your bedroom needs to light up. So that is DarkWake.
+
+We aren't exposing DarkWake or Standby in public API in Lion. In fact, if you are a sleep/wake notification client of IORegister for system power, you won't even get notified when we wake up into a DarkWake or when we wake up into a Standby. So you should have to do nothing at all.
+
+You shouldn't have to handle DarkWake or Standby in any special way. So that's all I have. Please remember those two APIs, I/O Register for System Power and I/O PM Assertion Create with Name. And check out both of those in Technical Q&A, QA 1340, for some code samples. Thank you.

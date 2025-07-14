@@ -1,0 +1,263 @@
+---
+Title:  What's New in Metal, Part 1
+Year:   2016
+Web:    https://nonstrict.eu/wwdcindex/wwdc2016/604/
+
+[!] This transcript has potential transcription errors.
+---
+
+Morning, everyone. Thanks.
+
+[ Applause ]
+
+My name is Aaftab Munshi. And my colleagues and I are really excited to share with you the new features in Metal in macOS Sierra and iOS 10. But let's begin by highlighting the sessions we have on Metal this year at WWDC. So yesterday we had two sessions that talked about adopting Metal in your application. And today we have three sessions. So this session and the two sessions that cover the new features in Metal, which is then followed by another session where we'll talk about optimizing your Metal shaders.
+
+All right. So let's look at the features we're going to talk about. So in the second session the features we will be talking about are function or shader specialization and being able to write to resources such as buffers and textures from your fragment and vortex shader, wide color using wide color displays in your application and texture assets, and some new additions we've added to Metal performance shaders, specifically using axillary and [inaudible] networks on the GPU with Metal.
+
+In this session we're going to talk about some of the improvements we have added to Tools, which we think you guys are going to really love. We've also made resource heaps and resource allocations much faster and given you more control. So we'll talk about that resource heaps and memoryless render targets. And I'm going to be talking about tessellation. So let's begin.
+
+All right. So the first thing, let's spend a little bit of time trying to understand why we need tessellation. So we are seeing applications such as games rendering more and more realistic visual content. So what that means is in order to render such content, we need to be able to send detailed amount of geometry to the GPU. That's where we're going to send this input.
+
+That means lots and lots of triangles that have to be processed, which means a large increase in memory bandwidth. It would be really nice if instead we could just describe this geometry that we want to send to the GPU as a lower resolution model, call it a core smash, and then have the GPU generate the high-resolution model. So in fact, that's what tessellation does.
+
+Tessellation is a technique that you can use to amplify and refine the details of your geometric object. We have two important requirements we need to meet. The first is that the high-resolution model, the triangles that are generated do not get stored in graphics memory. We don't want to pay that bandwidth cost. And the second is a method that's used needs to be programmable.
+
+So let's look at an example. So here is a screenshot from GFXBench 4.0, which is a benchmark released by [inaudible]. And one of the key features it focuses on is tessellation. So here's a screenshot of the car that's being rendered without tessellation. You can see those rims. They're very polygonal. You wouldn't drive a car like that, would you?
+
+Even the body panels have cracks in them. And the reason for that is this is the actual geometry that's being sent. So you can see not a lot of triangles, which is great -- it's exactly what we want. What tessellation does is takes that input geometry and produces something like that.
+
+I think this is really cool. So if you look at the wire frame, you can see the GPUs actually generating, now we're rendering lots and lots of triangles, okay? And that's the power of tessellation. All right. So let's look at how tessellation works in Metal. So just like we did with Metal, you know, we wanted to take a clean sheet approach, right?
+
+We wanted to design something that was -- even though there are existing API's that do support tessellation that you may be familiar with, we wanted something that was really simple to graph, you know, easy to use, and we did not want to leave any performance on the table. And we think we have achieved that, and I hope you agree after this presentation.
+
+So tessellation is available in macOS Sierra and on iOS with the A9 processor. All right. So let's -- the things I'm going to talk about is well, how does the Metal graphics pipeline look like for tessellation? How do I render my geometry with tessellation? And then how do I adopt it in my application? So let's begin.
+
+So today when you send primitives to the GPU with Metal, you're sending triangles, lines, or points. With tessellation, you're sending what we call a patch. And put simply, a patch is just a parametric surface that is made up of spline curves. What does that mean? You may have heard of things like Bezier patches or B-spline patches.
+
+So you describe a patch by a set of control-points. So in this figure you see is a B-spline patch. So you have 16 control-points or control vertices. And what tessellation does put simply is allows you to control, okay, how many triangles do I use to render this patch? So you may decide, "You know what?
+
+I don't really want a lot of triangles. I don't care how it looks." So you may decide just four triangles is more than enough and you'll get a polygonal look. Or you decide, "Hey, I really want this looking nice and smooth." That would take a lot more triangles. But you have that control.
+
+So let's start. So the first stage in the graphics pipeline when we're doing tessellation is we call it a tessellation kernel. And what it does is it takes the patch -- we talked about the patch with the control-points as input -- and decides, okay, how much do I need to subdivide this? How many triangles do I want the GPU to generate, right?
+
+This information is captured in what we call as tessellation factors. And I'll talk a little bit about what these factors are a few slides later. And you can also generate additional patch data if you need it in a later stage. The key thing this is a programmable stage, that means you're writing code.
+
+So once you've written [inaudible] tessellation factors, the next stage is called the tessellator. So this is a fixed function stage. So no code to write. But you do net knobs to configure it, okay? So it takes those tessellation factors and breaks the patch up into triangles. And the key thing the tessellator does here is that it does not store that triangle list it generates in graphics memory.
+
+In addition to the triangle list it has generated, for each vertex in the triangle list it will generate what we call a parametric coordinate -- the U and the V value. And it uses this along with the control-points to compute the actual position on the surface. Okay? All right. So the tessellator generates triangles. Today in Metal when you want to render primitives, you send triangles to the GPU.
+
+What is the first thing that happens is a vertex shader is executed, right? Well, here the tessellator's generating triangles. So if you think logically, the next stage would be a vertex shader, and it is. We just call it the post-tessellation vertex shader because it's operating on the triangles that are generated by the tessellator. And so it's going to execute for the vertices of the triangles that the tessellator generated and it's going to output transform positions. So if you're familiar with DirectX, it's this shader plays the same, similar role as the domain shader does in DirectX.
+
+All right. And then the rest of the pipeline remains the same. We have the rasterizer and the fragment shader, right? So you may ask, "Well, so I need to write this compute kernel to generate the tessellation factors. Well, can I use the vertex or fragment shader?" Of course you can.
+
+In fact, you don't even need to write a shader to generate these factors; you may have precomputed them and you can just load them in a buffer and pass that to the tessellator. So you have a lot of control. But if you are generating these factors in the GPU, we recommend that you use a compute kernel. Because guess what? That allows us to run that kernel asynchronously with other draw commands. So netting you a performance win and I think you guys will like that.
+
+Well, actually let's take it a step further. You don't even need to run this kernel every frame. Because guess what? If you have computed the tessellation factors -- let's say you decide, "Hey, objects close to the camera get much more tessellation, objects further away not as much." So once I've computed them, then depending on how the object is moving, I can just apply a scale and the tessellator takes that. So really, the pipeline is really, really simple. We have four stages. So let's compare it with the graphics pipeline without tessellation.
+
+So without tessellation we have three stages -- we have vertex shade, the rasterizer, and the fragment stage. With tessellation we added a new stage, the tessellator. It's fixed function so you don't have to write any shader. And the vertex shader became the post-tessellation vertex shader. We think this is really simple to understand. I hope you agree.
+
+All right. So how do I render my geometry with tessellation? There are four things I'm going to talk about. Okay. Let's look at this post-tessellation or post-tess vertex shader; how is this different from the regular vertex shader? How do I pass my patch inputs? And I told you that the tessellator's configurable. So let's look at how we configure it and then draw patches.
+
+So, well, meet the new shader, same with the old shader. So in fact, you declare a post-tessellation vertex shader with a vertex qualifier. But in addition to that, you also specify this attribute which says, "Hey, it's working on a patch." There are two kinds of patches -- a quad and triangle patch. And you see the number next to that? That number tells you how many control-points this patch is working on.
+
+So if you had a regular vertex shader, you would have passed a vertex ideas input. Now you pass a patchID as input. Remember I told you the tessellator generated a parametric UV coordinate? Well, that's what this position in patch input is. And then if you had a regular vertex shader, you would have passed something as stage in, the patch input we passed at the stage in. Everything else you just bring computations and you're generating a transformed vertex output. And that's actually going to be exactly identical because the next stage with or without tessellation is a rasterizer.
+
+All right. So let's look at patch inputs. So if you had a regular vertex shader, you would have described your vertex input as a struct, okay, in your shader. And if you had decoupled the date type, that means the layout and the buffers where the vertex inputs are coming from do not match the declaration in the shader, then you would have used the MTLVertexDescriptor to describe the layout. Well, for patches there are two inputs. One is the per-patch input. And remember, I told there are one or more control-points?
+
+So we need to specify those as inputs as well. But it looks identical how you specify these. So you use a MTLVertexDescriptor to specify the layout of the patch input data in memory. And as I showed you the slide before, we declared that input as a stage in as well. And you use the attribute index to identify an element as input in the shader with the corresponding declaration in your MTLVertexDescriptor.
+
+Since there can be more than one control-point, we basically have to declare it using a template type. And I'll talk about that in the next slide. So let's look at an example. So here I have my control-point data. It has two elements. So I'm using attributes zero and one.
+
+And my per-patch data, which is attributes two and three. So we combine these two things together and this is my patch input for every patch. So notice that control templated type patch underscore control underscore point. So that's what tells the Metal shading compiler "Hey, this is referring to control-point input." Okay? And remember I told you about this number 16 or whatever the number is? That also tells the Metal shading compiler how many control-points there are. So now we have all information we need to get the patch input. And so we just pass that as stage in.
+
+It's pretty simple, I think. All right. So okay, how do I configure knobs? So there are properties in the MTLRenderPipelineDescriptor you can set. A few examples are you can tell the tessellator the method you want to use to generate the triangles; it's called the partitioning mode. You can also specify a max tessellation level. And we think this is really, really useful because it allows you to control the maximum amount of geometry that the GPU will generate for your tessellated objects.
+
+Remember, the tessellator needs to read these factors. So you need to specify the buffer of where they come from. So use the setTessellationFactorBuffer API to do that. Now, these factors, so they tell how much to subdivide the patches along the edges and on the inside. So we have two kinds of patches. If it's a triangular patch, there are three edges and one inside. If it's a quad, then you have four edges and two insides. So you specify these as half precision floating point values that you pass in.
+
+And then drawing. So today when you're drawing primitives, you're sending triangles to be rendered by the GPU, you're either going to call drawPrimitives or drawIndexPrimitives. You the specify the start vertex, number of vertices. And if your vertex indexes are not continuous, you will pass an index buffer. Well, to draw patches, you call drawPatches or drawIndexedPatches. You specify the start patch, the number of patches. And if you're control-point indexes are not continuous, you specify an index buffer. So it's just a one-to-one mapping.
+
+And then there is the DrawIndirect variants. And what these are is that you do not specify where the start patch and how many patches and other information when you make the draw call, but instead you pass a buffer. And that gets filled out with this information by a command that's running on the GPU, just like you would do for drawPrimitives as well. So really, if you don't know how to use drawPrimitives, then drawPatches just works very similarly. Okay? So we think this is really easy to use. All right? So hold on.
+
+So I've shown you what Metal tessellation is and how to use it. As many of you may be familiar with or already using tessellation in your application using DirectX or OpenGL, you will notice Metal tessellation's a little different. Don't worry. We've designed Metal tessellation so it's incredibly straightforward to move your existing tessellation code to Metal. As an example, for the past few weeks we've been working with Unity. And in an incredibly short period of time they've been able to integrate Metal Tessellation in the engine. And here's what they have to say.
+
+So we're really excited that support for Metal Tessellation, Metal Compute and the ability to write native Metal shaders in Unity's coming later this year. It's incredibly exciting. And we've also been working with Epic to efficiently integrate Metal Tessellation in Unreal Engine 4. And Epic is planning to release their support in UE4 later this year, okay? So we have UE4, we have Unity supporting Metal Tessellation. Well, let me show you tessellation in action in these game engines by demonstrating two commonly used rendering techniques called adaptive tessellation and displacement mapping. All right.
+
+So here we have a simple demo developed by a few Apple engineers using Unreal Engine 4. So let's turn tessellation off, which I have, and get wire frame mode. You can see there are not a lot of triangles being sent to the GPU. This is great. This is exactly what we want. We want to keep the amount of geometry we send to the GPU to be as little as possible. Let's turn tessellation on and see what happens.
+
+You can see now the GPU is generating a lot more triangles. And adaptive tessellation is a technique that allows to control the geometric detail where it matters. So in this example we've decided that objects that are closer to the camera need more detail. So let's draw them with a lot more triangles versus objects further away do not.
+
+So the regions in blue represent regions of lowest amount of tessellation, and the region in red represents the regions with the highest amount of tessellation. I can show you as I move the slider to the right, I can use that to increase my tessellation level and you can see objects closer will become red. Okay? Well, let's turn wire frame mode off.
+
+And if you run -- as we go through this cave, you can see there's a lot more detail, right? If I turn tessellation off, all that detail is gone, it's lost. Turn tessellation on, it looks really amazing. So this is an example of how I can use tessellation to really create rich visual scenes in my application. And I wanted to thank the great folks at Epic for making this happen. So the next demo is displacement mapping running on Unity. So here we have a sphere being rendered. Well, let's look at how many triangles we're using to render the sphere.
+
+Not a lot, right? There are about 3,000 triangles. And what displacement mapping is, is a technique that allows you to displace the geometry to create incredible detail. And it does that by looking up -- using a displacement map, which is a texture. So you look up, you know, from a texture, from this texture and then use that to [inaudible] the vertex position.
+
+Or you may actually do this procedurally if you wanted to. But displacement mapping requires that, you know, you're drawing lots and lots of really, really, really small triangles. Otherwise it doesn't work. It creates artifacts, it just cracks. But that's fine, you know? We can use tessellation. That's what it's here for. Because we still want to send 3,000 triangles, smaller triangles to the GPU and use tessellation to generate that. So let's turn wire frame mode off and let's turn displacement mapping on.
+
+As you can see now incredible detail on the sphere, right? If I turn wire frame mode on, you can see we're generating a lot more triangles and they are really, really small. In fact, let's actually animate the displacement map so you can see the shapes changing and let's zoom in to see detail.
+
+You can see self-shadowing happening. And the reason self-shadowing is happening here is because we're actually changing the geometry, unlike a technique many of you may be familiar with called bump mapping which just creates an illusion of realism. So this is another technique which you can use with tessellation to create incredible detail in your application that you're rendering. And hey, thank you to Unity for this demo.
+
+[ Applause ]
+
+All right. So Metal Tessellation can also be used to accelerate digital content creation tools. As an example OpenSubdiv is an open source library released by Pixar. And it implements high-performance subdivision surfaces. Actually, it has been integrated into a number of third-party digital content creation tools, such as Maya from Autodesk.
+
+And OpenSubdiv uses tessellation to render these subdivision surfaces. Well, we -- Apple -- have added Metal Tessellation into OpenSubdiv. And I'm really excited to announce here that we plan to release these changes to the OpenSubdiv open source project later this summer. Okay. I mean, here's what Pixar has to say.
+
+As you can see, Pixar's really excited to see a native Metal implementation of OpenSubdiv in iOS and macOS. All right. So now you may be asking, "Well, what about me? How do I move my existing tessellation code to Metal?" Well, let me show you how. So we'll take DirectX an as example here, but the same rules apply to OpenGL. So here is what the DirectX graphics pipeline looks like with tessellation.
+
+We have three new stages -- two of them are programmable. They're called the hull and the domain shader. And then we have this tessellator in the middle. Right? So, well, okay. How do I move this to Metal? Notice where the domain shader sits. It sits right after the tessellator. Does it remind you of any other shader I showed you in the Metal pipeline?
+
+Yeah, I think so. Yeah, post-tessellation vertex shader. Because guess what? The domain shader with tessellation really becomes the new vertex shader. And just like you can very easily move your HLSL or GLSL vertex functions to Metal, you can move these domain shaders pretty easily to the post-tessellation vertex shader. The tessellator is exactly the same, no changes. So really, we have this guy, these two shaders, the vertex and hull shader. And we got to make them into a kernel. Okay. Let's look at how we can do that.
+
+So let's look at some -- since we have a vertex shader, that means there's probably a vertex descriptor described at runtime by the application. And that means -- because the data's probably going to be decoupled. So that means I need to declare stage in. But I don't do stage in in a kernel. Right? Well, now you can. We've added support for it.
+
+So just like in a vertex shader you use stage in to say this is my vertex input, you can use stage in to say this my per thread input. And you can specify the actual data layout in a MTLStage inputOutputDescriptor. It behaves identically. It's very similar to a MTLVertexDescriptor. Some of the things you specify are a little different because this is for compute, not for vertex.
+
+And then two things to observe. With tessellation DirectX or OpenGL, the vertex shader executes on the control-point of a patch. And the hull shader has these two functions. One that executes on a control-point and one that executes on a patch. The per-patch hull function is what actually generates your tessellation factors. All right. So the best thing to do? Translate all these three functions to Metal functions. And then we'll write a Metal kernel that will call these functions. But don't worry, we're not going to make function calls.
+
+The Metal compiler will in-line these. Okay? So let's look at how this works. So each thread basically is going to call the control-point function for the vertex and for the hull, right? So let's say there were 16 control-points. So the first thread calls the vertex and control-point hull function, second thread does the same thing, and so on. Right? And any intermittent data that they produce that they want to share, they'll put that in thread group memory, which is this local memory which is high-performance, very low-latency. So we're not going after graphics memory.
+
+And then if there were 16 control-points, there will be 16 threads operating on these. Only one of them need to execute the per-patch hull function. That means you typically have a barrier, and then you will execute -- only one of the thread will execute the hull functions. You have a conditional check saying, "Hey, is my thread in thread group ID0? Then call this thing." And this is the function that will output the tessellation factors to graphics memory.
+
+If you had any additional patch data you wanted to output, you could do so. And if you really, really, really, really wanted to output the control-point data, you can do so. But we find in most case the control-point data is just passed through. It's the nature of the graphics pipeline, and these are the existing API's which requires you to pass them through. But you're just passing them through; don't write it out. You already have them in your buffer, okay?
+
+All right. Let me close. So I hope I have shown you that Metal Tessellation is simple and easy to use. We designed it from the ground up for performance. I've shown you how easy it is to adapt your existing tessellation code to Metal. It's available on iOS and macOS. So now it's your turn.
+
+Show us, you know, use tessellation and create some amazing visuals that you can render in the application. So I want to thank you for your time. I'm going to call my colleague, James, and he's going to talk to you about resource heaps and memoryless render targets. Thank you.
+
+[ Applause ]
+
+All right. Thank you, Aaftab. For the next part of this session I'm excited to introduce two new Metal features available in iOS and tvOS - resource heaps and memoryless render targets. These features enable you to take control of your resource management for greater CPU and memory efficiency. I'll introduce resource heaps first, followed by memoryless render targets.
+
+So resource heaps are a new lower overhead resource management option in Metal. Now, you can already create buffers and textures in Metal, so why do we need another way? Well, creating resources through the existing Metal API with a device is easy and convenient and many developers appreciate the simplicity. On the other hand, as many of your Metal apps render increasingly rich and complex scenes, you asked for finer control over your Metal resources to unlock greater CPU and memory efficiency. That's why we are introducing resource heaps.
+
+Resource heaps enable fast resource creation and binding through resource sub-allocation. The flexibility of resource heaps saves you memory by allowing multiple resources to alias in memory. And finally, the efficiency and flexibility of resource heaps is made possible by you taking control over tracking resource dependencies with explicit command synchronization. Now, let's dive into each one of these features starting with resource sub-allocation.
+
+Before talking about the details of sub-allocation, let's first discuss why device-based resource creation is expensive. Creating an individual resource with a Metal device involves multiple steps: Allocating the memory; preparing the memory for the GPU; clearing the memory for security; and then, finally, creating the Metal object. Each one of these steps takes time and a majority of the time is spent in memory operations. But there are situations when you need to create resources on your performance-critical path without introducing performance hitches. Texture streaming is one example or perhaps you have an image processing app that needs to generate a number of temporary textures to execute a filter.
+
+The cost of binding resources to command encoders can also become a performance issue. Metal must track each unique resource bound to a command encoder to make sure that the GPU can access the memory. And for complex scenes, this cost can add up as well. Resource sub-allocation addresses both of these performance issues.
+
+Remember that the expensive part of resource creation is in the memory operations. With resource heaps you can perform the memory operations ahead of time outside of your game loop. Resource heaps address the binding cost by allowing you to sub-allocate many logical resources from a single heap. By sub-allocating multiple resources from one heap, Metal tracks one memory allocation instead of one per individual resource. This significantly reduces your driver overhead.
+
+Now, let's compare resource creation between the Metal device and the new Metal resource heap. When you create a resource with a device, Metal will allocate and prepare a block of memory and then create the Metal object. So for four resources, Metal will allocate or prepare four blocks of memory.
+
+Now, compare that to the MTLHeap. When you use a MTLHeap for resource creation, you first create the heap object ahead of time. Memory will allocate and prepare a block of memory of the requested size. And if you do this ahead of time outside of your render loop, the expensive part of resource creation is complete. Now, to create four resources out of the MTLHeap, Metal only needs to reserve a piece of the heap's memory and create the resource metadata. This is much faster. Now let's see what happens when we want to release some resources.
+
+When a device-based resource is released, the Metal object is destroyed, but the device will also free the memory resource allocation. On the other hand, when releasing a heap resource, only the object is destroyed. The memory is still owned by the heap. So creating a new resource on the device will incur another expensive memory allocation, whereas the heap can quickly reassign the free memory to another resource. Let me show you how easy it is to sub-allocate Metal resources with Swift.
+
+So like many Metal objects, the Metal resource heap has a corresponding descriptor object. So let's create a heap descriptor and set the size to the amount of memory to back the heap. With the heap descriptor we can ask the device to create us a heap object. Remember, this is the slower operation, so do this ahead of time, like when your app starts or at content loading time. With the constructed heap, we can call its resource creation methods, which should look very familiar since the name and arguments are the same as the device equivalents.
+
+So before moving on to the next topic I'd like to share some best practices for using resource heaps for sub-allocation. Now, the most important tip is to use resource heaps to create resources on your performance-critical path. Creating resources using the device is not designed for your game loop; resource heaps are.
+
+Allocating resources of varying sizes can lead to fragmentation of a heap's memory if the resources have varying lifetimes. So use multiple heaps and bucket resources by size to limit the effects of fragmentation. Now, you may also be wondering how to choose an appropriate heap size. Well, Metal provides two new methods on the Metal device to query the size and alignment of a texture and buffer. Use these queries to help you calculate the heap size that you need.
+
+Okay. Let's move on to the next feature of resource heaps -- Resource aliasing. Resource aliasing allows multiple dynamic resources to occupy the same memory, therefore reducing the total memory footprint of the resources. Dynamic resources have contents that are regenerated each frame and include things like your shadow maps, your G buffer data, or temporary textures used in post-processing. Here we have a heap containing two nonaliasing resources. Compare that to this heap containing the same two resources but now they are aliasing. Now, you can obviously see that the aliasing resources can fit inside a much smaller heap.
+
+Let's apply resource aliasing to this game frame. The shadow map passes render a set of shadow maps -- one for each light in the scene. So here in our heap we have a number of shadow maps. And in the main pass during fragment processing the shaders will sample the shadow maps to determine if each object is in shadow. Now, after the main pass ends, the contents for the shadow maps are completely consumed. They will be regenerated in the next frame.
+
+So after the main pass ends, we execute a post-processing chain that can consist of a number of off-screen render passes, each executing a specific filter like a blur or bloom. These filters will store their contents into textures to pass filter results to the next stages the chain. Now, the key takeaway here is that the contents for the shadow maps and the post-processing textures are never used at the same time. So why not share the memory?
+
+So let me show you how to create these aliasing resource sets with Swift. Now, the first section should look familiar. First we ask the device to create us a heap and we create our three shadow maps. Okay. Now we see a new method, makeAliasable. By calling makeAliasable on a heap resource you are telling the heap to consider that resource's memory to be free. The shadow maps are still active, but their memory is free to be reassigned by the heap to new resources. So now when we create the post-processing textures on the same heap, they can occupy the same memory as the shadow maps.
+
+So now let's talk about some best practices for resource aliasing. To maximize memory reuse for dynamic resources call resource creation methods in the same sequence that their resources are used in a frame. That will allow you to call makeAliasable -- that will allow you to interleave makeAliasable calls when the resource contents have been consumed.
+
+And you want to keep dynamic and static resources in separate heaps. Static resources are generally not aliasable and can end up preventing dynamic resources from aliasing with each other due to fragmentation of the heap's memory. Next I'm going to talk about how to synchronize command access to your heap resources.
+
+So, so far we have discussed fast resource creation with sub-allocation and efficient memory usage with resource aliasing. But remember that resource heaps are fast and flexible because you control the synchronization of heap resources. This is something you do not have to do with device resources. But unlike device resources, Metal won't know when a command modifies the contents of a heap resource like when a render pass stores new contents to a texture.
+
+Metal also doesn't know when you're changing interpretation of the heap's memory from one aliasing set to another. But for correctness, Metal needs know when a command is updating a heap resource so that other commands can safely read the results. This is especially important because the GPU can execute multiple commands in parallel.
+
+So to synchronize access to heap resources, your application will create and manage GPU fences to communicate resource dependencies across commands. Let's take a closer look at how GPU fences work. So a GPU fence is the timestamp. It is a reference point in the GPUs execution timeline. Now, you can encode two actions with fences to synchronize commands.
+
+A command can update a fence to move the timestamp forward when the command is finished. And a command can wait on a fence to wait until the GPU has reached the most recent fence update before executing. Okay. Let's bring back the previous game frame and I will show you how to use fences to synchronize command access to the aliasing heap resources.
+
+So here again is the example frame, a three-part frame, but now we have five boxes because two of the render stages, render passes are split in the vertex and fragment processing steps. So we have a shadow pass, a main pass, and finally a post-processing pass that we will execute with compute.
+
+So Metal commands are submitted in serial order to the command queue. So maybe it's not quite clear yet why we need any synchronization across commands. But GPUs are very parallel machines and can operate on multiple commands in parallel. GPUs in our iOS and tvOS products can execute vertex, fragment, and compute commands all in parallel to maximize GPU utilization.
+
+The GPU can even be working on multiple frames at the same time. All right. So maybe now you spot a problem. Look at these two commands that are highlighted. They are both updating the aliasing and heap resources at the same time. We have to use a fence to fix this. So first let's bring in a fence.
+
+The post-process command will update the fence so that the shadow commands fragment processing stage can wait on the fence. Right? So now the two commands don't execute at the same time anymore. So I'm going to show you how to encode this fence update and fence wait with Swift.
+
+First, we create a fence with a device. This is a new method -- no arguments. Next, let's encode the post-processing compute encoder at the end of the first frame. We first create a computeCommandEncoder and encode the dispatches. But before we end the encoder, we first update the fence so that subsequent commands can wait until this command has finished executing.
+
+So in the next frame we would encode the shadow rendering. So we create a renderCommandEncoder in commandBufB, which represents the command buffer for the next frame. But before drawing the scene, we first encode a fence wait to wait until the post-processing is completed on the GPU. Now, notice this time there are two arguments. There's a second argument called beforeStages.
+
+Render commands execute in two stages -- vertex and fragment. So Metal allows you to specify the particular stage that needs to wait for the fence. In our example only the fragment stage needs to access the heap resources, so we specify the fragment stage. Finally, we can render our shadow maps safely because we know that this command will only execute after the previous frame's post-processing is complete.
+
+Okay. Let me talk about some best practices for command synchronization. So you know that if you use heaps, you have to use fences to synchronize command access. But you are given this control because you know you have more knowledge about how your resources are used and your application will be more CPU-efficient than if Metal were to track all of this for you. For example, textures that are initialized once and never modified don't even need to be tracked. And as another example, resources that are used together can be tracked together with a single fence.
+
+So let me summarize the main ideas of resource heaps. Create resources faster with suballocation. Use your memory budget more efficiently with resource aliasing. And synchronize your heap updates across GPU commands with GPU fences. Okay. Now I'd like to introduce another new feature available in iOS and tvOS: Memoryless render targets. Now, this sounds a little magical, but I will show you how almost every Metal app can use this feature to save a significant amount of memory with a single line of code.
+
+So memoryless render targets are simply textures that do not allocate any system memory for the texture contents. Without any memory backing the texture contents, what remains is the texture's metadata, such as the texture's dimensions and internal texture format. Now obviously this is a huge memory savings, but when can you use a memoryless render target? You can use them for render pass attachments that are not stored. Most Metal apps will have some attachments associated with a store action of don't care or multisample resolve. And the textures used for those render pass attachments can be memoryless.
+
+To make a memoryless render target, you can simply create the texture as you normally would with an additional storage mode flag -- MTLStorageModeMemoryless. That's it. This feature is supported only on iOS and tvOS because it relies on the tile-based rendering architecture of A7 and later GPUs. Let me show you how this feature works.
+
+Here on your right we have two render pass attachment -- a color attachment and a depth attachment. Now, A7 and later GPUs execute render passes one tile at a time, taking advantage of a fast GPU tile storage at the heart of the GPU. The GPU tile storage contains tile-sized representations of your depth, stencil, and color attachments. And this tile storage is completely separate from the texture backing and system memory.
+
+Now, in Metal your load and store actions control how to initialize the GPU tile storage and whether to copy the results from the GPU tile storage back to system memory. If an attachment is not loaded from memory and it is not stored to memory, you can make the texture for that attachment memoryless to eliminate the memory allocation. Next, I'll describe some very common scenarios where you can apply this feature to your app.
+
+Depth attachments are frequently used to enable depth testing in 3-D scenes. But the A7 and later GPUs perform depth testing completely in GPU tile storage one tile at a time. Depth testing does not need to use system memory. So if you don't store the depth texture for use in later passes, make the texture memoryless and save the memory.
+
+Let me show you another opportunity. When executing multisample rendering, again, the A7 and later GPUs perform all the rendering in GPU tile storage. The MSAA color attachment texture is only used if you choose to store the sample data for a later use. But most apps will choose the multisample resolve store action which results directly from the GPU tile storage to the resolve color attachment texture. So in that case make the multisample color attachment texture memoryless and this is a massive memory savings.
+
+As you can see, the savings for adopting this feature are substantial. By making a 1080p depth texture memoryless, your app will save almost 8 megabytes. If you are rendering to the native resolution of a 12.9-inch iPad Pro, the savings for the depth buffer is over 20 megabytes. And the savings for making a four times multisample render target memoryless are even larger, four times larger.
+
+So use memoryless render targets to make the most of your application's memory budget. Use the savings to lower the memory footprint of your game. Or better yet, use the savings to add more beautiful and unique content to your game. Okay. I'd like to invite Jose up to tell you all about the improvements to the Metal Tools.
+
+[ Applause ]
+
+Thank you, James. So outside the great additions to the Metal API we did some great improvements to Metal Developer Tools I want to show you. First we'll talk about what's in Metal System Trace. Than we'll introduce a new feature called GPU Override. And we have some very exciting new features coming to GPU Frame Debugger.
+
+So what is Metal System Trace? In the [inaudible] Metal session we presented this graph showing you Metal working on power in CPU and GPU. Metal System Trace is a set of instruments for visualizing just that, helping you understand the timeline of your Metal applications through the whole graphic pipeline, from the CPU to the GPU, and then on to the display.
+
+Last year at WWDC we introduced Metal System Trace for iOS platform. I highly recommend checking out last year's presentation for a great overview of Metal System Trace. Later in the fall we added support for tvOS. And today we're happy to announce Metal System Trace for macOS to help you squeeze out the last bit of performance on all Metal platforms.
+
+[ Applause ]
+
+We improved Metal System Trace across the board, extending the events that we report. [Inaudible] events, we visualized expensive resource operations to just picking data from system memory to video memory. Like in this case where we can see painting in macOS, which is causing a delay in GPU execution.
+
+Metal System Trace also displays debug groups, which make it easier for you to understand command encoded relations in your trace. On macOS we support tracing multiple GPUs at the same time, which is unbelievable for those use cases where you're distributing work across different GPUs. And on iOS we now display scalar workloads so that you can diagnose when you're introducing latency by rotating or scaling your views.
+
+You can now use a wider range of instruments alongside Metal System Trace such as Time Profiler, File Activity, Allocations, and many more. Even different views such as CPU data, which will show you CPU core time slices. These will help you to correlate Metal events into context, deepening the understanding of how the system is running your application and allowing you to diagnose things such as GPU starvation caused by CPU stall due to a [inaudible] operation.
+
+Metal System Trace captures a wealth of data. So we made it easier for you to interpret and navigate. With the new workload highlighting, you can focus on any command encoder or command buffer as it works through the pipeline. And with with support for keyboard navigation, you can quickly move your selection through your trace.
+
+Finally, I want to introduce Performance Observation. And what Performance Observation does is present you with a comprehensive list of the potential issues we found in your trace from analyzing it. From display surface taking too long to unexpected shader compilations, or high GPU execution times, Performance Observations finds for you the events which you are looking for, which you can navigate straight to them from the Performance Observation list. All these new additions will allow you to tune your Metal applications to run as smoothly as you want them to be. And now for a demonstration of our awesome GPU debugging improvements, let me hand over to my colleague, Alp.
+
+[ Applause ]
+
+Thanks, Jose. I have a number of great features to show you today. So let's dive right in. I have my app running here, cruising over beautiful terrain tessellated to finest details. Wouldn't it be great to see this terrain in wire frame to see triangles individually? The good news is our newest feature, GPU Overrides, gives you ability to modify your Metal rendering right from the debug bar while your app is running. We have a number of different overrides you can mix and match, including wire frame mode. Let's switch to wire frame mode to see how tessellated the terrain is.
+
+Visualizing each triangle you might want to tune your tessellation to fine the balance between performance and visual quality. Normally you'd have to go back and change your code, recompile, and run. But with GPU Overrides, you can experiment with your tessellation scaling right from the Overrides menu. Let's set scaling to 25%.
+
+Now we have far less triangles but lost some of the interesting details. Let's try 75%. I think this looks better. Let's see it without the wire frame. Okay. I like this one. Now, we have less triangles than what we started with but still have all the nice details. And with the performance gains, I can add more cool effects to my scene. So as seen here, GPU Overrides is a great tool to help with initial diagnosis for some of the visual and performance problems in your scene.
+
+Next, let's capture the frame to show you some of the features that will greatly improve your debugging workflow. The frame capture is done and I am looking for the terrain resources to see how we are [inaudible]. Let's switch to all GPU objects in Resource Center where you can see all your textures and buffers.
+
+So we have all of resources here. And going over everything one by one to find terrain resources could take some time. This is where the new filter bar comes to help. You can filter by any properties you see here, such as label, type, size, or details. Since I labeled all my resources, I'll just filter by terrain. And right here I have all the resources used for rendering the terrain.
+
+Now that I found the terrain patches buffer, what I would like to do is to see where I'm actually using it. With a simple drag and drop I can filter function navigator to show me all the calls that's made to terrain patches buffer just like that. In this case, I see where it is calculated using compute and where it says [inaudible] while rendering the terrain.
+
+This filter is really powerful. I can also use any other properties of the bound resources to filter draw calls. For example, if you filter by SRGB, you'll see all the draw calls that are using a texture with SRGB pixel format. This is a natural way of navigating around your frame quickly. Next, let's move to bound GP objects to see how we are using these resources to render the terrain.
+
+In bound mode your resources are grouped under different sections based on the stage of the Metal pipeline they are used in so you know exactly where to look. Looking at the vertex stage, terrain patches is a buffer bound to multiple binding points with different offsets. Let's use our only buffer [inaudible] to inspect the data.
+
+All the vertex data has stayed nicely with the layout except [inaudible] Metal function with patches. So this is using the exact same struct as your post-vertex function. And we have a color data here. It recognizes the word color and visualizes the real color of the value right in there.
+
+Since this is a large buffer that contains different types of data, I have added some debug markers with the new [inaudible] API, which makes it extra easy to find what you are looking for. With the layout menu, you can jump straight to any other available layout you would like to inspect.
+
+Looking at individual buffers is great. What is even better is the new input attribute view which lets you see all your vertex data as your vertex shader sees it. Input attributes collects all the data from your instances, tessellation factor buffers, and your stage in data, then provides you a single view to look at all of it together. In this case we are rendering instances with multiple patches and I can see what data belongs to which patch of an instance. So that was a quick look at some of our newest GPU Frame Debugger features. Let's switch back to slides and wrap up.
+
+[ Applause ]
+
+So you've just seen some of our newest GPU Frame Debugger features. I would like to tell you about two more. With the new Extended Validation mode the GPU Frame Debugger can perform even deeper analysis of your application, providing recommendations [inaudible] the optimal texture usage or storage mode for your resources. You can enable this mode from the Xcode scheme editors.
+
+And the new support for stand-alone Metal Library Projects lets you create Metal libraries to be shared in multiple apps or include multiple of them in a single app just like any other framework or library. So we talked about features that will greatly improve your tool's experience. Now let's summarize what we have seen so far in this session.
+
+We have seen the great additions to Metal API with tessellation, resource heaps and memoryless render targets, then we showed you improved tools, Metal System Trace and GPU Frame Debugger. Be sure to stick around for part two this afternoon where I will talk about function specialization and function resource read-writes, wide color and texture assets, and additions to Metal performance shaders.
+
+For more information about this session, please check the link online. You can catch the video and get links to documentation and sample code. We had great sessions yesterday, which are available online. And this afternoon we have What's New in Metal, Part2, then Advanced Metal Shader Optimization in this room. Thanks for coming, and have a great WWDC.
+
+[ Applause ]

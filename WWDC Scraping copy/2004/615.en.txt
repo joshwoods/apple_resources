@@ -1,0 +1,225 @@
+---
+Title:  Xsan In Depth
+Year:   2004
+Web:    https://nonstrict.eu/wwdcindex/wwdc2004/615/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Hello, everybody. This is the second of our two Xsan sessions, Xsan In Depth. Basically, I'm Greg Vaughan, and I'm going to be talking about a lot of the same material that was in the overview session. How many of you were here for the overview session? Okay, good. I'm going to cover some of the same material, but from a slightly different perspective. I won't have any product prices up here. Instead, a little code samples and hopefully some more technical information.
+
+I'm going to start actually going over some of the same stuff with the different types of file systems, just to separate them out and make it clear, sort of, in terms of file systems, what makes a SAN file system different from other types. I'm going to talk specifically about Xsan and sort of the communication protocols and how it's really working.
+
+I'll go into a bit of depth on the Xsan admin. We'll show a demo of setting up the SAN, some of the other features of the admin. I'll talk about how the volumes work in terms of when you're writing apps, there's some different characteristics both from local volumes and network volumes you need to be aware of. And then finally, I'll talk specifically about some developer APIs that can be used in the applications to make them work better with Xsan, be more Xsan aware.
+
+So starting out with the different file system types. Tom mentioned direct-attached storage, which is basically your traditional local hard drive, just some new fancy names for it. The way in which a local hard drive works is you've got your file system. The drive's presenting just an array of blocks. The job of the file system is to organize that data using the catalog, present a higher-level API up to applications.
+
+So in a typical diagram, you've got basically at the high-level API, you're dealing in terms of files. The application's going to open a file, write to a file, use file offsets. The file system's going to translate that to the blocks on the disk. This is the technology that's been around for decades.
+
+But of course, a block-level device can't be shared by multiple computers because there's no way to keep the catalog in sync between the multiple computers. So this early limitation got solved by the network-attached storage, or the file server. Network-attached storage basically is just taking the exact same file server and putting it into a box. So the underlying technology is exactly the same. The idea here is you're going to take the high-level call, ship it across the network to the server, and the server will perform the action.
+
+So you've got the same diagram. You're making the call at the file system layer. The network file system directly mirrors that call. And on the server, when it makes the call, you're doing the offsets to the disk. This will allow you basically to have the call. You have the volume integrity, but at the price of funneling all the data over the network to the server and all funneling it through the single machine.
+
+The other slight thing about that in dealing with file servers is when you scale them up, you tend to have problems with the different types of requests, especially metadata-intensive requests, doing large directory listings and so forth, causes the server to load catalog blocks. And so, you have to have a lot of data that blocks off, which can interfere with the streaming of data off the hard drive. And conversely, those metadata requests can be blocked behind the large IOs. And when you're dealing with heavy file servers, you see the big latencies and, like, opening up a little directory listing. And those are really hard to overcome, those sort of scalability limitations in file servers.
+
+RAID solves the other part of the problem. You're trying to overcome the limitations of disk speed by combining the multiple drives. In addition to the performance, you're giving the reliability of redundancy between the drives. The important thing about the RAID is that it's happening sort of behind the scenes of the file system. The file system isn't aware of that. The RAID system is presenting the single drive to the file system, and the RAID is mapping the block offsets internally to the multiple drives.
+
+And you've got the different RAID schemes. I always get them confused, especially RAID 0 and RAID 1. But RAID 0, you've got the striping. Mirroring provides the redundancy. And then with RAID 5, you've got both the performance of writing to multiple drives plus the redundant data so that if any one drive fails, it can be rebuilt easily without losing access to your data.
+
+In addition to the underlying RAID, you've got software RAID, which happens at the driver level to distribute your data out to the multiple drives. Once you've done that, then the RAID box will further distribute it out to the individual disks. But the point of all this is that the RAID system is all happening down at the block device.
+
+The file system is still your traditional file system, be it HFS or UFS, that is just dealing with what it sees as a single array of blocks, and it's maintaining the same catalog data as it always would. So it's just doing the same translation down to the disk offset, and then down at the RAID level, that's being distributed out to the multiple disks. So the problem with that is you're still faced with the file server if you want to distribute your data. Even though you've sped up the hard drive, all the data is flowing through the one file server, and that is your big limitation.
+
+So how the SAN file system really works to overcome this is by separating out the notion of the catalog from the data. There's no real reason why the catalog needs to live with the data. Once you've decided a one particular place to store your catalog, you can have a special purpose server that is going to just deal with the catalog and do part of the job of a traditional file system. Basically, update the catalog and figure out where on the drives the data is going to actually live. That way the client file systems can talk to the metadata controller to get the catalog information, but then do the I/O directly to the RAID devices.
+
+So here's your typical Xsan setup. Diagram's a little different than Tom's diagrams, but it's got all the same components. Got your client system. I'm only showing one here. Couple RAID boxes and your controller. Got everything hooked up with the fiber channel and you've got the IP network between the client and the controller. In this particular case, you've got the normal RAID configuration for the example. Because you've got the two controllers, we have the two virtual disks per RAID to a total of four LUNs that we're going to group together to be our Xsan volume.
+
+So the first thing you do is you select one of the LUNs that's going to store your catalog data. You can decide to either dedicate that to storing the catalog data or you can choose to store other data alongside it. The point is, though, you don't want the other data being stored with it to be high-performance data because, again, you'll start to run into the same limitations you have with the file server of the data competing with the catalog information. So even though you might want to store other files there, they should be less accessed files than your more performance-critical ones. So in this example, we've chosen LUN1 to store our metadata.
+
+Basically, in setting up your volume, all you're really doing is configuring the controller. The controller is the only machine that has a real notion of what comprises the volume. So, you tell the controller, basically, what all the LUNs are that compose the volume, and I'll go into a bit of additional information you can give it in terms of how to construct the volume out of these LUNs. But first, to go over our same old example, you've got the client application making the file-level call.
+
+At this stage, rather than shipping the whole call off to a file server, as it would in the normal network-attached storage case, it's just going to make a request to find where the data for this file lives, but keeping the actual data on the client system. The controller's going to read the catalog information out of its private metadata storage on LUN1.
+
+And then reply with the disk offsets back to the client. At this point, once the client has dedicated storage on a particular LUN, it can talk directly to that LUN and stream the data across without worrying about corrupting block offsets. The other thing is, because you've got a collection of LUNs, you're not only telling the client the offset, but you're telling it which LUN the actual data lives on.
+
+But other than that, the client has no notion of the actual sort of file system layout on these LUNs, how they're divided into files, how the catalog data is structured, or any of that. All it knows is, this is the data, this is the area where it wants to write the data the application has given it.
+
+The other thing you can do, as Tom said, is group the LUNs into storage pools, which has an effect very similar to striping in software RAID. The big difference here is even though you're getting the same performance effect of being able to talk to two LUNs, rather than being handled by a driver on the client system, it's the metadata controller that's going to control the access to these two LUNs.
+
+So in this particular case, the client's going to ask for that same file offset, and the controller's going to tell it that part of this file lives on LUN 3 and part of it lives on LUN 4. And the client is just smart enough to know, "Oh, well, if I'm writing to two different LUNs, I can stream the data out simultaneously." So you get the same performance effect that you would in software striping.
+
+The other main job of the controller is to handle the file locking. With the Xsan, because you've got the controller handling the catalog data, you don't need to worry about file system-level corruption. But still, within individual files, you need to worry about data corruption. That's the same as any network file server. And the way that is handled is, at the application level, you need to make locking calls. This works.
+
+It's the exact same locking calls you'd use for NFS or anything else, but it's the controller that needs to keep track of those locks and actually arbitrate between the different clients. So it has that role as well. And then other than that, as I said, the clients are just writing data out wherever the controller asks it to. And to the client applications, they just see it as one big volume, and they don't really know about the LUNs behind it.
+
+The other thing, as mentioned before, is the failover. Basically, how this is going to work is when the clients notice that a controller is down, they actually get together and vote for a backup controller, and you can configure it such that it fails over in a predictable way.
+
+The backup controller comes up, it knows where to read its catalog data from, reads out the catalog data, it's a journaled file system, so it's able to look at the journal and reconstruct the last few transactions, very quickly come up and start running. We're still doing some of the performance benchmarks, but as Tom said, it should just be a few seconds. I think 15 seconds would be sort of the outer limit. The important thing to note is during this time, 15 seconds can be a long time in terms of video streaming, but the clients don't always need to talk to the metadata controller.
+
+Once they've asked the metadata controller and gotten the offsets for their files, they're dealing directly with the RAID box. So if they're streaming a file off the RAID box and the metadata controller fails, it's possible the new one will be up again before they even notice it's gone, before they have a need to actually talk to the metadata controller again, in which case you'll have to wait a little longer for the new one to come up again. have uninterrupted access to the file system, even through a failover.
+
+The other thing the clients need to do is once the controller comes back up, the new controller, of course, doesn't know about the locks the clients have taken out. So when the clients see that the new controller's up, they need to go and tell it about all the locks they have, and the controller will rebuild the lock table.
+
+So in terms of volume configuration, we talked about the various ways that you can group your LUNs together to build up your whole volume. The first thing you're going to need to do is to pick which LUN your metadata is going to be stored on. It's going to be both the catalog information and the journal. Technically, you can configure those to be on different LUNs, but usually there's no reason to do so. So in our admin software, generally, they'll both always be stored on the same LUN.
+
+The other thing you're going to do is decide whether you want to store other data files along with the catalog data. Basically, the catalog data doesn't take much room, so you can either partition your RAID in such a way that you have a very small LUN and make it exclusive for the catalog data, or if you have a larger LUN, you may choose to store other files alongside it.
+
+[Transcript missing]
+
+And like I said, it's not very big. Ten million files will probably only use up about 10 gig of space for a catalog. So you don't need a lot of storage there. But high-performance storage is very important.
+
+So once you've got your metadata controller, the question for the rest of the storage is, how are you going to group it into storage pools? Certainly, if you take all your LUNs and combine them into storage pools, the idea is the client could talk to all the LUNs at once and theoretically get very high performance. There's a few limitations to that. One is you want to make sure all the LUNs have the same characteristics.
+
+Because it's effectively like software striping, when you've combined all these LUNs together, you're really going to get sort of the smallest LUN and the slowest LUN will be the gating factor for the whole storage pool. So you really want to take all your identical LUNs and group them into storage pools.
+
+[Transcript missing]
+
+And the other side effect of that is that you are going to end up then with some storage pools that are faster and other storage pools that are slower.
+
+[Transcript missing]
+
+So now I'll talk a bit about our administration software and how that works and how you set up a SAN using the administration software.
+
+We've tried, certainly as we do in all our products, to consolidate this and sort of make it easy and understandable as possible. Although, certainly a SAN is a complicated thing and there's lots of different aspects. There's always trade-offs then in terms of giving access to functionality versus making it sort of easy and straightforward to use.
+
+So here's just a few slide shots of what a setup looks like. The first step in the setup is to, you've got to define all the machines that are going to be part of your SAN, both the clients and the controllers. It'll find these machines over rendezvous. It actually detects, asks each machine what LUNs it's hooked up to so it can decide which machines are actually on the same fiber channel network.
+
+And then it'll come up. It'll allow you to select these machines and say, yes, these are the machines that I want to be part of my Xsan system. You then enter the serial numbers for those machines. Because you've bought a separate Xsan box for each one, you'll have a separate serial number. You'll have a separate serial number to enter each of those machines. And then you choose whether you want them to be clients or controllers.
+
+And for the controllers, you decide their failover priority. You can actually make them all controllers. If a machine is a backup controller just in standby, even if it's normally used as a client editing system, there's really no problem with that. Unless it actually becomes a controller, just because it's set as a backup controller, there won't be any performance degradation. And the license. The license allows, once you've installed Xsan on a system, you can either make it a client or a controller. It's your choice.
+
+Once you've done that, you need to configure the storage. Basically, this is you decide how many, which volumes you want, what the storage pools in each volume are, and then what LUNs are part of each of those storage pools. And then once you've done that, you basically select the volume and tell the controller to start up on that volume. And as soon as the controllers start up, the volume is available to be mounted on clients.
+
+So at this point, oh actually no, a few other things it does. In addition to setting up the volumes, you can set up certain administrator notifications. You can set up email or pager notifications if storage pools fill up or you have certain failures and users exceed their quotas.
+
+You also can mount and unmount volumes on each of the clients. You can see whether clients currently have the volume mounted. You control when they mount and unmount the volumes. You can do this all from the one centralized place. You can set the user quotas or group quotas. You can view logs on the various systems. And you can create the folders with affinities, as I said before. So now we'll have a demo of the various admin functionality.
+
+Good morning, everyone. You all got your Xsan developer preview CDs, and hopefully you installed it and tried to play with it. But unfortunately, without a SAN, it's not terribly interesting. Now, I have a SAN here set up for your enjoyment, and I'm going to make the lights blink, and I'm going to make everything happy.
+
+The first thing to do when setting up your Xsan system is to determine which computer is going to be your metadata controller. So let's go ahead and set this guy. So we entered the serial number before, because I don't think you want to watch me type in the serial number on all these computers.
+
+We set the role to be controller, and if we had multiple controllers, we could choose the failover priority. Also, since you want to be on a private metadata network, if you have a dual-nick machine or multiple Ethernet cards, you could choose the role to be controller. So you can choose which interface to access the SAN easily right there.
+
+And here's some information about the computer to help choose which machine you want to be the controller. Next, you move on to your LUNs. All you need to do with your LUNs is give them a name. All the information before is defined by your RAID admin configurations. So you can just rename that there. And here's really where the fun part is. You take your storage, and to create your storage, you need to define your first volume.
+
+So we'll go ahead and create volume, and we'll name this WWDC volume. And you can change things like the log size and the max number of connections you want to access to the SAN. Now, the block allocation size is an important field to pay attention to, and it goes in power of 2 from 4K to 512K.
+
+And that is a performance tuning parameter that, depending on your typical IOS size, you may need to tweak. And if you need to know more about any of these values, and you'll see some more coming up, we have help buttons in all of the sheets, and it'll bring up contextual help for every single one of them. single field.
+
+We create our first storage pool, simply the same way. Let's make that pool one. Let's say we want it to be an exclusive metadata and journaling storage pool, so other data won't interfere with that traffic. Stripe breadth is another important performance tuning value. If you have multiple LUNs in your storage pool, this is how many bytes it will write to each LUN before moving on to the next. We don't need to change this here because the metadata pool will only have one LUN.
+
+So now that we've done that, we bring up our little drawer with LUNs, and I have a pre-configured LUN. This is just by naming it. That's all you have to do to configure it. Drag, drop, there's your metadata. And actually, we can come back here and call this MDE so you know it's metadata.
+
+Now we create another storage pool for all of our data. Come in here, we'll call this Video Data. And we want to ensure that no journaling and metadata spills over to interfere with our high-definition video or SD or whatever we happen to have on here. And we can change our strike breadth to 128 blocks.
+
+And this size here, 512K, is how many bytes it writes. And the size here also depends on the block allocation size you define in your volume. And you can change multi-path methods. You can change the size of your data set and permissions and other stuff. And the help will tell you all about that. So let's skip this disk here because it's not the same. Drag all that in. There you go. We've configured a 6.84 terabyte, actually 7.29 terabyte SAN in about a minute. And that's all you need to do.
+
+Okay, so we have a SAN setup before with some files, so we're just going to revert. And you can see here we have the metadata pool. We have a small audio pool because we don't need as much bandwidth for audio. And we have our SD video, our high def, and our post-production. So let's move over here.
+
+Here you can see all of our storage pools and you can see a snapshot of the currently running volume. Each of these will fill up to show you how full each storage pool is to know when you need to grow your storage. In the Logs tab, you can get all the relevant logs on all of the machines on the SAN and you can even filter for certain things.
+
+In the Clients tab, you can mount and unmount. You can mount them all at the same time if you really feel so inclined, or unmount at the same time. And over in Affinities, we can set up all the affinities. And in Quotas, you can create quotas, delete quotas, and it's really simple.
+
+You just go ahead and you drag in users, and this is all LDAP integrated, so if you have a directory server, you'll see all the records there. You can drag in stuff here, set the quota, 10 megabyte soft quota, probably 10 gigabyte soft quota, 20 gig hard quota, and give them 24 hours.
+
+And then go ahead and hit save, and it would send it out. And if you actually had some data in here, the quota status would show how full, how close they are to their soft or hard quota, or if they're even above their soft quota. And that's Xsan Admin.
+
+So basically we've shown you what the admin does. If you're familiar with Mac OS X Server, you'll notice that it looks awfully familiar. And that's because basically we leverage the same technology as we did for the server admin. The main difference is in the server admin, its main goal was to connect to a server and administer that one machine.
+
+Even though you could administer multiple machines from the admin, each was considered to be a sort of separate unit in the UI. The Xsan admin sort of treats the whole SAN as a particular entity. So you saw that when you're administering it, you're administering the entire SAN at the same time. Basically, the server admin agent is going to run on each of the Xsan machines, both controllers and clients. The Xsan admin is going to take control of the entire SAN.
+
+It's going to take care of replicating your configuration files around between the machines. So it's particularly important between the primary controller and backup controllers that they have the same configuration. If the backup controller thought the volumes were arranged differently, that wouldn't be a good idea. So it'll make sure that the configurations are all the same. It'll be able to monitor the status of the machine so you can quickly look up and see which machines are currently active, which ones have volumes mounted. And it'll contact machines as necessary to perform its functions. It's sort of behind the scenes. It establishes connections.
+
+In addition to the admin app, we do provide a set of command line tools. As I said, we try to keep the admin app streamlined, so in certain cases there's additional functionality available in the command line tools that we don't actually surface through the admin. All the tools live in one place inside library file systems. There's an Xsan folder, and inside there, there's a binaries folder. That's also where config files live and other things.
+
+The tools will all be documented. However, if you look at the documentation on the concurrent CD, they aren't there. There are actually man files, though, on the install that you can look at. But we'll try and come up with some better documentation for these. Here's an example of a few of these.
+
+CV Admin is sort of the main tool. It's the one we used a lot when we were still developing the user interface because it does a lot of the same functionalities. It's one of those sort of interactive command line admin tools. You can start and stop the controller and do a lot of the various functions.
+
+CV Affinity is the one that you can use if you want finer control over the affinities. The admin only allows you to set folders and everything in that folder is set. The folder will have a particular affinity. If you want to set affinities on particular files or see what the affinity on a file is currently, you can use the CV Affinity tool.
+
+CVFS Check is the normal FS Check style utility for the Xsan volume. Actually, if you bring up Disk Utility, you'll be able to click on the volume and do a normal verifier repair, and it'll call this tool behind the scenes. But if you want to have scripts or whatever to run it, the tool is available.
+
+The final one is the Defrag tool that was mentioned. So the Defrag tool can be used to defragment your file data. It does have one particular extra utility that can be useful. Sometimes during data flow stuff, you might, for instance, ingest a file into one storage pool because it has particular performance criteria, but then later on you might want to access it using different RAID LUNs so that you can ingest new files.
+
+S&FS Defrag can be used to migrate the storage for a file from one storage pool to another without affecting where it appears in the file. So, again, the Defrag tool can be used to migrate the storage for a file from one storage pool to another without affecting where it appears in the file.
+
+We mentioned the cross-platform setup with the StoreNext file system. Just wanted to quickly go through and sort of show how easy that is. There's two scenarios. Adding the StoreNext clients to the Xsan system. First of all, you're going to set up your Xsan system normally. You're going to get a license for your StoreNext clients. That'll actually get installed on the Xsan controller.
+
+And then you're going to just set up your StoreNext clients the way you would normally do for a StoreNext system. There's basically some information you just need to enter into a couple of config files. The trickier one is when you want to add an Xsan client to a StoreNext file system. Our admin software basically is written to administer the Xsan client.
+
+It's the entire Xsan environment, and so it doesn't really understand a single Xsan client connecting to some other type of SAN file system. So in this case, you're going to need to administer the SAN manually. Luckily, it's fairly easy to do. The main thing is you have to add your serial number manually to the config file. And then there's just a couple other files, mainly the controller addresses to tell it how to contact the controller. So that's all quite straightforward, and it'll be fully documented. in the documentation.
+
+So now I want to talk a bit about sort of how these volumes appear to applications. The first thing that is important is that it is a shared volume. Pretty much, though, in terms of writing and testing applications, it's going to be just like a network file system in that way.
+
+The only issue you may run into is you do find sometimes there are certain apps that, because of performance considerations, aren't used to running on network volumes. I mean, if you've got something that basically ingests high-definition video, there aren't that many file servers that are able to handle that bandwidth.
+
+And so it may not be used to running on a shared file system. So it is important to make sure that the applications are doing file locking. You can also be managed sort of at the user level, but it's better if the application itself does the coordination to make sure another copy isn't going to stomp on your data.
+
+The file system supports the normal calls that would be done through Mac OS X. You have both the file open flags, the shared lock and exclusive lock, as well as the F set lock, F control for doing byte range locking. This is commonly referred to as POSIX locks and BSD locks. Also, the open deny modes in Carbon get translated into these the same way as they would for NFS volume.
+
+The other thing to be aware of, of course, is that these volumes are very large. I mean, X-rayed volumes are already quite large, but the SAN volumes are going to be built up even larger. I mean, multi-terabyte volumes, as you saw, it's really easy to build up these big volumes because there's a tendency to try and consolidate all your storage, even if you've got a bunch of different RAID boxes into one big volume.
+
+So, in writing software, that's an important consideration, that as well as having very big files, if you have these huge volumes, you're going to have, you know, possibly many millions of files on this volume. And so, if you're writing backup software and so forth, you need to be aware that things tend to get grouped into larger volumes than they may have otherwise.
+
+[Transcript missing]
+
+But the file I/O is going to be going directly to the RAID, so in that case it shouldn't be any different than if you had a locally mounted RAID volume.
+
+So now I'm going to talk about a few APIs you can use. Certainly, it's expected that you'll start to have server clusters that'll be using the Xsan, and so server apps may want to take advantage of some of these features. Distributing computing apps and then certainly multimedia apps is a very strong focus.
+
+So, three APIs I'm going to highlight. I'll mention a couple other minor ones, but the extent preloading, the infinities, and then the bandwidth reservation that Tom mentioned earlier. The APIs all use a similar mechanism. They're specific to Xsan volumes. They're going to be accessed through syscontrol, but basically we have some sample code that sort of helps you call it, because the actual glue code is a bit gross. And the other thing to note is that the API is still in flux, so we provide some sample code on the CD, but if you compiled using that sample code, you would need to recompile before the final shipping version comes out. So, it's there.
+
+It's there just to try out the APIs and see how they work, but we'll be seeding final APIs closer to the ship date. And then the last thing is, because these are Xsan-specific APIs, you should use StataFS to determine whether this is an Xsan volume you're talking to. Here's some easy code, basically. Just going to call StataFS on the file, and the FS type name will be unique to Xsan. We actually have a constant in the header that you can compare. against.
+
+So here's an example of the typical sort of lovely SIFS control call. You've got your structure that you're going to pass down into the kernel, and it's going to get filled out and then passed back up. This is an easy call in that it's just getting some version information.
+
+The other thing about this API is you always need an open file descriptor to make the call. Obviously, in version information, you don't really care what's not particular to an individual file. So a common thing to do is to just open up the root directory of the file system and make a call on that. But this particular call will return the same information no matter what file descriptor it's called against, as long as that's for a file on an Xsan volume.
+
+So the load extents call, the key here is when you open a file and start reading and writing it, the file system is going to react to your calls as you make them. In my example, you saw there's the write file system call. The file system needs to go out, ask the metadata controller where this file lives before it can start writing the data out.
+
+But because you have that latency in talking to the metadata controller, you may have a hiccup in terms of the reading and writing. The load extents call can tell this system up front that you're going to be reading or writing these offsets for this particular file and tell it to go ahead and get all that information up front. So when you're actually doing the I/O, you don't have any of the latencies of talking to the controller.
+
+So the affinities, the thing here is often you don't want the layout on the file system to necessarily reflect where things are stored in storage pools. A common example of this is you might have a project folder. That project folder could contain audio files and video files, but as far as the user is concerned, they want all these files grouped together in a single folder.
+
+But as far as the system is concerned, you may want to store the audio files on a different storage pool than the video files. The most efficient way, because configuring that all sort of by hand could be a very complicated thing, applications can take advantage of this because they know what types of files they're saving out and what the characteristics of those files are going to be. So we're going to have a demo of this. I have a demo of this.
+
+Alright, so I'm going to demo Affinity Steering. So I'll open up my demo app. Sorry, I don't have an icon. So we'll create a file called my file, and we're going to put it in the post-production storage pool. So I'm going to go ahead and start that. And you can see it's writing at reasonable speed, so we'll get an initial burst of speed as it fills the RAID cache, but then it will level out.
+
+And if you can see the lights over here, you should see one LUN being pegged. Now, if we start up a second file, say this is our video file, video file.mpeg, and we store that, say, in high def, we start that up, we should be pegging two different LUNs, or two different storage pools. And it should be going much faster, which it is. Now, if you go ahead and look in our volume, it was stored in project files, they're both sitting right next to each other. And that is Affinity Steering. Greg?
+
+So one of the points on that demo was, you know, basically we wanted to show the difference between the storage pools, but we only have one fiber channel connected up to the system and didn't really tune it. So don't take those performance numbers as typical performance numbers, but we just wanted to show the ways in which an application can talk to the different storage.
+
+Basically, how it's going to do that is first it needs to find out what storage pools are available. Early on, we called storage pools stripe groups, so that's still reflected in the API, get SG info. It's going to give you information about the stripe groups, so theoretically an application might be able to do some intelligent figuring out of which stripe group it wants to use. The other thing that's probably more common is to do what we did in the demo app, which is basically just present a pop-up.
+
+So one of the points on that demo was, you know, basically we wanted to show the difference between the storage pools, but we only have one fiber channel connected up to the system and didn't really tune it. to the user to choose which storage pool they want. In the API, it's also going to give you an 8-byte key for that storage pool. That's what you actually use in the setAffinity call.
+
+So, normally, you would open a file, create the file using open, set the affinity on the file, and then start writing it. The other thing you can do, what we did actually in this app, was call allocExtentSpace, which will pre-allocate the space for the file, load the extents into the client, and then allow you to start writing out, and that gives you the highest performance writing.
+
+So the next thing I wanted to talk about is bandwidth reservation. Basically, I mean, Tom described this pretty well. For the people that weren't here, I'll try my little vague thing. Basically, the idea here is that when you're doing a critical operation, you can't necessarily control what other people are going to be accessing the SAN.
+
+So if you've got your ingest station, and it's really critical that you get your high-definition video, you know, streamed onto there without any hiccups, you don't want somebody else coming up and just starting to stream some other file on or off that same storage pool and mess up the bandwidth. So basically, this is a way for applications to guarantee that they're going to get a particular amount of bandwidth. If somebody else launches something... If somebody else launches something where they don't care about the performance, it'll just get scaled back.
+
+If somebody launches an application that's also demanding the critical performance, they'll get an error saying, "Look, this is already in use. This amount of bandwidth has already been reserved, so there isn't enough left for you to do your application." This is basically used for streaming, especially real-time streaming, and it's per storage pool because, as I said earlier, if somebody's writing to one storage pool, it's per storage pool because, as I said earlier, if somebody's writing to one storage pool, it's per storage pool because, as I said earlier, if somebody's writing to one storage pool, it doesn't affect the I/O to another storage pool anyway. So you're reserving bandwidth on a particular storage pool, and people reading or writing other storage pools won't be affected by the reservation.
+
+So we'll have a demo of this. All right, so we're going to use the same application. And say we have a video file and an audio file. And we're going off and writing those to the same storage pool, high def. Now, say we want 120 megabytes per second. And unfortunately, we're sharing it at about 80 or 90 megasecond over the single fiber channel. And go ahead and attempt to reserve bandwidth here.
+
+And that will jump up while the other one goes down. And this is being written to the exact same storage pool. And they're still sitting right next to each other. But one is getting more bandwidth than the other, as much as we had configured it to need. And there you go. That is bandwidth reservation.
+
+So bandwidth reservation is the one feature that only works if applications support it because the application has to tell the system what file it is that they want to reserve bandwidth for and how much bandwidth needs to be reserved. The other thing about it is that it requires additional configuration that we don't support in the admin API. It's pretty simple. Basically, the system, when you configure the volumes, it isn't able to determine what the throughput to your varied storage pools is. It's a very hard thing to determine programmatically.
+
+There's a lot of variables involved. So you just need to run a simple test, run an app like the one we just had, find out what the throughput to your storage pool is, and just enter that field into the configuration file. And then it'll know, basically, how much is able to be reserved off of that. Another important thing you can add is to tell it how much you don't want to be able to be reserved. As you saw, once somebody makes a reservation, the rest of the performance is going to drop way down to allow the person to have that bandwidth.
+
+It's critical that you don't have everybody else drop to zero and have one person reserve the entire bandwidth, because that can lead to dead locks and other problems. So at a minimum, the system leaves one megabyte per second free that other people can at least do very slow I/O to that storage pool. But under certain circumstances, you may actually want to increase that. So there's another field to determine the non-reservable part of the bandwidth.
+
+So the call is basically set real-time I/O. The idea is that you're going to put the storage pool into real-time mode. That means that basically once a client has loaded the extents, normally it's just doing the file I/O. As I said, it usually doesn't even care whether the metadata controller is still around.
+
+It's doing its file I/O. It's happy. But once you've put the storage pool into real-time mode, it goes out and tells all the clients that are using the storage pool that they now need to make requests for I/O. So each client will then ask the controller, say basically, "I want to do I/O to this storage pool."
+
+The controller will give it a token, allowing it to do a particular amount of I/O for a certain time slice, depending on how many clients are asking for I/O. It'll parcel out different amounts of I/O to the different clients, and it'll balance that sort of dynamically as time goes on.
+
+The important thing is that the person who's reserving the bandwidth is, when they make the call, they're going to specify a file descriptor that's going to be used for the performance-critical operation. And that file descriptor, it will not be limited. You'll be able to make reads and writes freely. It's going to be a file descriptor that's going to be used for the performance-critical operation. There's actually another call you can make. If you want to have multiple file descriptors, you can make another call to enable multiple file descriptors to be ungated.
+
+That's basically my session. You saw how Xsan can allow you to configure your LUNs together in a much more flexible way and get the performance to all of them out to various clients. The important points I want to make are that it is a shared file system. That's a very important thing that applications need to be aware of.
+
+And that there are these APIs available to add additional value to applications if you're running on an Xsan system. And then I think we will have Q&A. Oh, well, more information. Basically, these are the documents that are available on the CD. And then I think Tom is going to come back up for Q&A, or Eric.

@@ -1,0 +1,231 @@
+---
+Title:  FireWire in Depth
+Year:   2001
+Web:    https://nonstrict.eu/wwdcindex/wwdc2001/206/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Good afternoon and welcome to the FireWire in Depth session. Yesterday in the FireWire overview session, we reviewed the Macintosh FireWire hardware, as well as demonstrated the FireWire software stack on Mac OS X. Today we'd like to go into more details regarding FireWire driver development for Mac OS X so we can see a lot of exciting FireWire devices for the Macintosh platform. With that said, I'd like to turn it over to Eric Anderson, Engineering Manager for the FireWire Software Development team. Thank you, Greg.
+
+You know this is a USB device, so... I just meant I'm not familiar with it. Okay, yesterday we talked at length about just all things FireWire, that we have it on all of our products, all of the great devices that you guys have made, 1394B, where we're going, and we told you that Mac OS X has lots of good FireWire services.
+
+So today, we're going to talk in-depth about all of those FireWire services on Mac OS X. In particular, the message I want to give all of you is that we are providing the tools you need to develop drivers, applications, plug-ins for FireWire, for Mac OS X, and we'll spend a lot of time going through how that works. In particular, we'll have some in-depth discussion of how driver loading works and how driver matching is done. Of course, it's very important to have your driver in-depth.
+
+You want to have your driver match your device. Otherwise, what's the point? We'll tell you where to find the SDK. It's right there on the slide. It'll be on the slide at the end also. You don't have to scramble to write that down. And we'll talk about source. There's the URL for Darwin. Much of the FireWire family is in open source. We've already started to receive feedback from some of our developers, bug fixes, comments. That's terrific. That's exactly how it's supposed to work. Please keep that up.
+
+Okay, the FireWire API in Mac OS X is very similar to what's in Mac OS 9, because you need to do the same things. It's been changed mechanically to fit within I/O Kit C++, but all the concepts are basically the same. We have asynchronous, isochronous services for sending and receiving packets.
+
+It's based on forming a command and then sending it. It's just done in an I/O Kit way. The isochronous transport, in particular, uses the same DCL mechanism that we used in Mac OS 9. If you have existing DCLs, it should be very easy to adapt them to work with Mac OS X.
+
+We have the same SBP-2 service layer. In fact, it was ported over directly. This makes it easier to write drivers for devices like disks, cameras, printers, scanners that use the SBP-2 protocol. has all the same features, unlimited logical units, unlimited orbs, and it's not tied to storage. It's an all-purpose SBP-2 interface.
+
+Finally, we have something new in Mac OS X because it didn't really apply in Mac OS 9, and that's a user client, more properly known as a device interface. This allows you to talk to your FireWire devices from application space, which is much easier than writing code to go inside the kernel. I'll talk about that later.
+
+Specifically, we have user clients for both SBP-2 and for just plain generic FireWire, and you can use those interchangeably. You can use them both at once. We have an SDK available with extensive sample code. It shows how to write in user space. There's an SBP-2 Cocoa application. There's command line applications. A bunch of good stuff in there.
+
+And significantly, not only is this SDK now available, but it's available for free public download to anybody. You don't need to have access through Apple's developer relations program like was necessary with Mac OS 9 for many years. So we're doing everything we can to get this out and make it available to you. Now let's talk in more detail about what's in there and how it works.
+
+IO FireWire family is the core of FireWire services in Mac OS X. Its job is basically the same as what FireWire support did in Mac OS 9. It's a central point of communication for all things FireWire. If you have multiple devices, multiple drivers, multiple applications, they all want to communicate on a single FireWire bus. The FireWire family's job is to let them all do that at the same time without interfering with each other. So it's a multiplexing point.
+
+In Mac OS X, the FireWire family is implemented as a dynamically loadable kernel extension, also known as a KEXT. It will be loaded whenever there's a FireWire bus that needs this software service. There's three main parts to the core. Iofirewirefamily KEXT is the FireWire services, and there are two hardware drivers for the two kinds of FireWire interface that we have shipped in our products.
+
+AppleLynx KEXT is a driver for the older PCI-Lynx interface that was used in the blue and white G3. AppleFWOHCI KEXT is the driver for the industry standard 1394 open host controller interface that we ship in all of our products today. In Mac OS 9, these two drivers were bundled together into the file FireWireEnabler. In Mac OS X, to fit within the way that I/O Kit loads drivers, they're present as independent KEXTs within the extensions folder.
+
+We have some additional FireWire services that come along as part of the standard installation. IO FireWire DV is the standard device driver for DV cameras, very similar to what we had in Mac OS 9. It's also a KEXT. I'll talk more about this later. It may not really belong in the kernel, but that's where it is now.
+
+I/O FireWire SBP-2 KEXT is the service layer that provides the SBP-2 API. In Mac OS 9, this was simply built in to FireWire support. In Mac OS X, to be consistent with the way that I/O Kit works, it's provided as a separate KEXT, but it will load whenever an SBP-2 device is around and provide you with the API to allow you to talk to that device. Finally, as I mentioned, we have user clients, or device interfaces, for both ordinary FireWire and for SBP-2 in particular, to make all of these services available out in user land to minimize your need to write code in the kernel.
+
+This picture shows where FireWire fits in the grander scheme of Mac OS X. Down at the bottom, you can see that drivers for FireWire exist at the very bottom of the kernel within the I/O Kit framework. That's where I/O FireWire family is located and also the OHCI or LINX drivers, depending on what hardware you have in your system.
+
+The figure shows that above them is the BSD layer, where you find things like the file system. Some kinds of FireWire drivers will go up to that layer. For example, a mass storage driver goes to the file system because it provides a block storage device on which the file system actually implements directories and structures to store your files.
+
+But other kinds of driver may bypass the BSD system, as shown by this path over here to the right. For example, the DV driver goes straight to QuickTime, which is an application-level service, so BSD really isn't involved in the DV driver. Also up on top, I've shown Carbon and Cocoa because these are places that, using the user clients, you can access FireWire services. So you don't need to go down in the very bottom of the kernel. You can write up in application space.
+
+Now I'm going to show in much more detail what elements are in the stack of FireWire services and how they get built up when a device is plugged in, so that you'll find out where your driver exists within all of these layers of software. Everything begins with an IOPCI device. The PCI family will have discovered a FireWire interface of some kind, probably on a PCI card, built-in, or on a CardBus card, and will create an IOPCI device object corresponding to it.
+
+In I/O Kit, the information in that object matches to Apple, in this case we'll use the example of OpenHCI. It matches to Apple FireWire OHCI, which is a subclass of IO FireWire Link. IO FireWire Link has all of the functions that would be needed for any FireWire interface.
+
+Apple FireWire OHCI has specific hardware control for the OpenHCI. It's DMA engine, so it's not a DMA engine. The PCI links, for example, are quite different from PCI links. Those two are loaded as one, as a unit, that will provide the device driver layer service for actually controlling the FireWire hardware.
+
+In response to having those loaded, the next layer up is instantiated. IO FireWire Controller, which is a subclass of IO FireWire Bus, this is where the family exists. All of the family services are provided in this layer, and it's invoked when there's actual hardware for it to provide services for.
+
+Pushing IO FireWire Controller now down to the bottom of the picture will keep building up from where we were. The family will scan the bus looking for devices that we might load drivers for. For every device on the bus that at least has a configuration ROM, will be presenting a session on the FireWire device. This session will be focused on the FireWire device itself.
+
+We will create an I/O FireWire device. This corresponds to a device with a node ID that's out there on the bus that's actually responding to our requests to read the config ROM. I/O FireWire device itself is a subclass of I/O FireWire NUB, which is just a more general object for talking to FireWire devices.
+
+The IO FireWire device layer will scan the config ROM looking for unit directories. In a FireWire device, a unit directory publishes information about what that device does. A disk drive has an SPP2 unit directory that says it speaks the SPP2 protocol. Within there are further details about the fact that it's a disk drive, or a DVD-RAM, or some other kind of device. A DV camcorder has a unit directory that says it speaks the AVC command set. And then there's further information within about exactly what kind of device it is.
+
+The IOFireWire device layer's job is to scan the config ROM, finding hopefully at least one, maybe more, unit directories, and it will create this IOFireWire unit object, which itself is also a subclass of IOFireWireNub. I/O FireWire Unit actually gives us the first hint about what this device really does. So I/O FireWire Unit further scans the config ROM and puts information in the I/O registry that's used to match a driver to this device. pushing IO FireWire Unit down to the bottom. Let me show the example of how things load for a disk drive.
+
+From the unit directory, we learn that the device is SBP-2. It has a spec ID and software version that indicate the SBP-2 protocol. Consequently, the IO FireWire SBP-2 target layer gets loaded. This is the general service layer for an SBP-2 device. It will further scan the configuration ROM to discover SBP-2 logical units within that device. For each logical unit that it finds, it will create IO FireWire SBP-2 LUN, LUN being short for Logical Unit.
+
+Finally, the LUN will match against a particular driver for the actual device that you've plugged in. In the case of a hard drive, Apple provides a standard built-in driver. If you use Mac OS 9 and you remember the API call FWGetLocalFWReferenceIDFromFWReferenceID, you'll love this. will talk about Apple FireWire Mass Storage Drivers, which is a subclass of IO FireWire Serial Bus Protocol Transport. Together, these are Apple's standard driver for mass storage devices. It covers hard drives, magneto-optical, CD-ROM, and various other standard kinds of devices.
+
+This puzzle piece architecture, you probably recognize this from the USB and the storage presentations. The puzzle piece edge that's sticking out the right-hand side of Apple FireWire mass storage drivers indicates that this is a layer that you might want to subclass. If you have your own device that has vendor-unique functionality that makes it better than somebody else's, you don't have to write an entire new driver for your device. You can start with Apple FireWire mass storage drivers, or perhaps just IO FireWire serial bus protocol transport, and subclass the unique functionality of your device at this level.
+
+Suppose your device isn't in the kernel. Suppose you want to communicate to it from user space. If you went to the I/O Kit summary, you've probably heard that we recommend avoiding writing drivers in the kernel if you possibly can. It's much easier to debug things in user space than in the kernel. So we provide a user client, which is a piece of software that can bridge the user kernel gap.
+
+Going back down to IO FireWire Device and IO FireWire Unit, if you want to talk to a device from user space, then IO FireWire User Client will be loaded within the kernel as the driver for a device. This is basically just a bunch of glue that knows how to talk up into application space.
+
+Pushing User Client down to the bottom, now we reach the user kernel boundary. Above here, we have IO FireWire Lib. This is another piece provided by Apple. It's the counterpart to IO FireWire User Client. IO FireWire Lib can be used by a CFPlugin that you provide. The CFPlugin is written in user space and runs in an application context and can talk to IO FireWire Lib to communicate with a FireWire device.
+
+Typically, it would be loaded by an application. As an example, if you have a FireWire scanner, your application might be something like Photoshop. Your CFPlugin might be a plugin for the particular kind of scanner that was found. So this gives you a flexible architecture for dealing with multiple kinds of device, perhaps multiple applications, without rewriting a lot of code over and over again.
+
+It's not shown here on the slide, but if you had some really unique FireWire device that was only ever going to talk to a single application, like maybe some kind of FireWire salad shooter or something, you could connect this up directly to IO FireWire Lib. You don't have to use the plugin architecture, but most people want to write something that's flexible that can talk to multiple applications or multiple devices. Use the plugin architecture for that.
+
+And again, this is the area where you could write software. You could write the application, you could write the plugins, the rest below is provided by Apple. Now let's talk about more details about the individual objects that you saw as we built up the stack. IO FireWire Controller is the heart of the FireWire family.
+
+This is where all the logic exists to manage a FireWire interface. As I mentioned before, a single FireWire interface may support multiple devices, multiple applications, multiple protocols, all going through the same hardware interface. IO FireWire Controller provides the services to actually talk to that hardware to multiplex the different requests. It also provides the bus management services.
+
+So some of the things that are common that have to be shared by all drivers, address space management. Some kinds of FireWire drivers will allocate FireWire address space. That's a range of memory in the Macintosh that can be addressed over FireWire. Drivers for DV and SBP don't need to do this by themselves, typically, but if you design your own protocol or if you're doing a shared memory kind of application, you might allocate some FireWire address space so that other devices on the bus can read and write memory in the Macintosh. That address space is a shared resource, so it's handed out by IO FireWire controller.
+
+Packet transmission and reception all flows through here. When a packet comes into the Macintosh, at this layer we can look at it, figure out who it's for, hand it to one of the appropriate drivers that's loaded on the system. Likewise, when software wants to transmit packets, this is the layer where they get queued up and transmitted one by one on the FireWire bus.
+
+If you want to write a protocol driver, IO FireWire Controller will be the provider for your driver. A protocol driver is software that loads once for each FireWire bus, as opposed to an ordinary FireWire driver which loads once for each instance of your device on the bus. A protocol driver might be used if you're speaking a protocol like TCP/IP or perhaps MLan, where you really just want one driver on the Mac, not several drivers talking to each FireWire bus. And as I mentioned earlier, Apple Lynx and Apple FW-OHCI are subclasses of IO FireWire Controller that know how to talk to the specific DMA controllers in the products that we've shipped.
+
+I mentioned IO FireWire Device, that this is created for any device on the bus where we are able to read at least the bus information block from the config ROM. There will be one of these per device. IO FireWire Device keeps track of the node ID in a device, which may change from time to time due to dynamic reconfiguration of the bus.
+
+IO FireWire Device also discovers the vendor ID, which is in the root directory, and publishes this in the IO registry so that you can use it for driver matching. But the main job for IO FireWire Device is to scan the configuration ROM on the device that it is attached to, looking for unit directories, and when it finds them, publish those unit directories in the IO registry so that driver loading can continue.
+
+I/O FireWire Unit. This is what's created by I/O FireWire device. For each unit directory discovered in the config ROM, there's one I/O FireWire unit. The unit will find and publish the unit spec ID, unit software version, and again, the vendor ID in the I/O registry so that this information can be used for continued driver matching.
+
+An ordinary FireWire device driver in the kernel will have IO FireWire unit as its provider. Both IO FireWire Device and IO FireWire Unit derive from IO FireWire Nub. If you want to find out how these work, you should definitely look in the Nub, which is where a lot of the activity takes place.
+
+Now, what kinds of things do we put in the I/O registry? There are two service planes that FireWire uses. There's the primary I/O Kit service plane. That's what you get by default when you run I/O Registry Explorer. You can find the I/O FireWire controller in there, hanging off of the corresponding PCI node. You can find I/O FireWire device, if you have any devices on your bus. And if you do, you can probably also find I/O FireWire unit.
+
+There's also an IO FireWire plane created by FireWire in the registry. This is where we store some FireWire-specific information about bus topology. And you can find FireWire controller and FireWire device objects in there. Okay, now I'd like to give a demonstration of some of the things that we've included in our software development kit. So if I can have Demo 1 up on the screen.
+
+Thank you. I can't see you all really well, but I'd like to see a show of hands. How many people have downloaded, installed, and used one of our FireWire SDKs for Mac OS X? Can you raise your hands? So most of you haven't, but thank you for everyone who did.
+
+What I'd like to show you now is some of what we have in the SDK. We have spent a lot of time trying to provide a foolproof, straightforward SDK with sample code, with examples, pre-compiled binaries, step-by-step instructions that you just can't fail. Let me show you how easy this is to use. I have a CD here with the FireWire SDK on it. You would probably download this from our website. I'm simply going to drag it into my home directory.
+
+Here it is, ioFireWireSDK7.sith. This is the latest one. Simply double-click on the archive file and it will expand. and now we have a standard Mac OS X installer. For those of you who started with FireWire SDK number one, you may recall some very tedious steps for how to install the software.
+
+If you went through those, you probably learned some useful things about how Unix works and how we store KEXTs. But we've made it quite a bit easier now. You can simply use the installer. Pick a drive on which you'd like to install. Choose a directory within that drive, such as Apple is the local user here. We'll put it in the Documents folder. Select Install, and in just a few seconds, the SDK will be installed, and you'll be ready to go.
+
+There, that was a lot easier than going through that script we used to have. So the SDK is now in my Documents folder as FireWire SDK. Here's some of the things in here. Readme.txt and readme.rtf, these are exactly the same file. Open this one if you're running in Classic or Mac OS 9. Open this one if you're running in Mac OS X.
+
+This has step-by-step instructions for how to walk you through installing, building, running, everything in the SDK. You can't fail if you just follow them line by line. It's very straightforward. We've tried it over and over again. Let me show you some of the highlights of what's in here. Let's start in the Tools folder.
+
+IO Registry Explorer, this is a standard Mac OS X developer tool. It's provided in the standard developer install. We've made a very minor change that makes it a little more convenient to use on FireWire. I'll run this and show you what's changed and also show you how to navigate around and find FireWire objects. Actually, before I do that, I'm going to turn on this FireWire camera so that we have somebody to talk to.
+
+Within the Registry Explorer, you will have to dig a little ways to find FireWire. Registry Explorer is very similar to Display Name Registry for Mac OS 9, except it's organized more like Mac OS X's Finder view that has these rows of columns. Power Mac 3.4 is the actual hardware we're running on.
+
+If we look inside the platform expert, we find various kinds of device. This PCI bus, I just happen to know, has FireWire on it. You might try the other two first if you can't find it. Here's FireWire over here. FireWire at E. And this system, since it's our G4, has an open HCI in it.
+
+Starting here, you may have spotted what we changed in this particular version of Registry Explorer. These numbers that are shown in decimal are also shown in hex. It's a very little thing, but... Here's where it really starts to matter. If you go into IO FireWire controller and look at your node ID, 65473, I don't know if that's right, but FFC1 is clearly node 1 on the FireWire bus. So having hex in here should be helpful to you.
+
+So these are the things that you saw in the stack that built up. Apple FW-OHCI, which is an IO FireWire controller. It has discovered this camera on the bus that created an IO FireWire device. Within the device you can see things like the vendor name, the model because they provided a string in there for us, the node ID.
+
+This device has a unit directory, so IO FireWire unit was created. The user client also gets tacked on at this point. Here in the unit, you can see the unit spec ID, A02D, which specifies the 1394 trade association, and the unit software version, 1001 HEX. This specifies the AVC command set, which is reasonable because this is a DV camcorder. And in fact, we loaded the IO FWDV driver against this device.
+
+So you can see that IO Registry provides information similar to Display Name Registry, and it has the details that you'll need to figure out what we thought of your device, what we thought its unit contained, its vendor was, so that you can find the information to enter in Project Builder for matching your device so that your driver can load correctly against your device.
+
+One of the other tools provided in the SDK is HackTV. This is just a standard QuickTime sample code. It's a little application that will receive video from the camera. There's actually two files provided. HackTVStructure.Sketch is a really simple picture. If you attended our kitchen in Tokyo, I think William drew this on the fly, and so we put this in the SDK.
+
+It just shows the layers of things inside HackTV, how all the parts are working together. Hack TV itself will open up a connection to the camera and display video from it. So here you can see the DVs coming in, just like the iMovie demo that we showed yesterday, except this is running in just a simple standard QuickTime sample code.
+
+CarbonVid Out app is a similar application that can take a DV file and export it back to a camera. And you can watch it play at full 30 frames per second on the screen on the camera. UUID generator is a small tool that you may need to use. You can read about the details when you get to that.
+
+Backing up to the top of the SDK, this directory source contains full source code to the IO FireWire family and IO FireWire SBP-2, including all of the user clients. So you can find out exactly what we did. A few of you have even found bugs and reported those. We're fixing all that. All the other goodies are here in Examples. There's a number of programs, sample code, to show you how to use FireWire on Mac OS X.
+
+Let's start with SBP-2 sample project. Let me show you just how easy it is to compile, build, and run our sample code for SBP-2. This is a Cocoa application. I'll open it up in Project Builder and build it. This application talks to an arbitrary SBP-2 device. To build the application, all you do is click on the hammer in Project Builder, wait a moment while it compiles everything.
+
+You can see there's a fair amount of stuff in here. This application will talk to this FireWire disk drive and will serve as a sample for how to gain access to your device, how to form an orb and send it to your device, how to get data back, and it shows how to do it all in Project Builder with Cocoa as well. It'll take just a moment to build.
+
+Sorry, the question was, do you have Code Warrior sample code? And we don't have any at this time. We'd certainly like to add that, however. If one of you has already figured that out, we'd be happy to throw it in the SDK if you just send it to us. Otherwise, we'll take care of that. Ignore that build warning, and it's done.
+
+We've built the SBP-2 sample, and you can find it here in this directory that was created called build. Here's an application, text, and plug-in. I'm going to skip a few steps. I've already installed these in the system folder so that they'll load. Now, nothing's here because I didn't actually plug in the drive.
+
+So the app has found an SBP-2 device. In fact, it found the IO FireWire SBP-2 LUN object that I told you about earlier, corresponding to the single logical unit that's present in a disk drive. We will select that, and we get a window that allows us to log into the device, which I will do.
+
+The device spins up in response to that, and now that it's spinning, we can press this button to read a block from the device. This simply reads block 0 and dumps it out completely raw in this window. Cocoa makes this really easy to do. Nothing in here was specific to a disk drive except actually the read block zero command. So, you can use this application and code as a starting point for talking to just about any kind of SBP-2 device. There's other things in the SDK.
+
+I'm going to go into the pre-built binaries folder, but all of this is provided as source code as well. FWUtil is a very simple command line program that can read quadlets out of your FireWire device just to show you how to start talking to a device. IO FireWire Lib Demo is similar, except it shows the entire config ROM of your device. FireWire Packet Queue Test can send packets between two Macintosh systems. Notifier provides you with some sample code for how to get notification when things happen on the bus, like a device appearing.
+
+Read Test and Write Test are isochronous sample code that use the DV driver to capture and export DV. It does it right from the command line, as opposed to Hack TV, which does it in a nice GUI application. So let's take a look at some of these. Oops. Trust you can all see this.
+
+So using the terminal, I'm going to run some of the programs that are provided in the pre-built binaries folder. We'll start with FWUtil. This is a really simple program. The device it's talking to, I believe, is this hard drive. Might be the camera. You can use commands similar to what was in Firebug. I'm going to read a quadlet out of the configuration ROM. This particular quadlet is the first 32 bits of the serial number of the device.
+
+Here's the next 32 bits. This looks like it's the disk drive because I--no, this is the camera. 85 is Canon's vendor ID, so we've read the serial number out of this device using this command line tool. Not terribly useful, but all the source code is provided so that you can adapt this into something that your customers would actually use. IO FireWire libdemo I mentioned earlier reads the entire config ROM all at once and dumps it out in hex. It's extremely easy to use.
+
+There you can see, in fact, it's dumped them out for both devices on the FireWire bus, the camera and the disk drive. One of them seems to have a lot of empty space, but all of the data is here. So as you can see, we have a lot of stuff in the SDK.
+
+It's all completely ready to use. It's been pre-compiled, so you can just run it. Building it in Project Builder is just a single click. Some of the command line tools are built by compiling them in Terminal, but there are step-by-step, there being one-step, instructions in the SDK for how to do that.
+
+Okay, that's all the highlights for things in the SDK. Hopefully, what you'll take away from this is that it's all ready to use. We believe you can ship, you can develop drivers, applications, user space code, and ship it to customers for FireWire with what we've got here. Of course, we're working on bringing you more, but we've got quite a bit to offer in this SDK. Okay, let's go back to the slides. I think I went too far.
+
+So I'd like to continue talking about some of the objects that are in Mac OS X's FireWire services that you will be using when you write code for these devices. I-O-F-W-Command is the sort of all-purpose object for sending commands to a FireWire device. It's similar to the FireWire command object in Mac OS 9, except there's, again, mechanical changes to fit within C++ and fit within I-O-Kit.
+
+The IOFW command object provides all of the services you need for making synchronous or asynchronous commands, for handling callbacks when things are finished. It's all handled in a common way through this class. There are a number of derived classes for sending particular kinds of commands to a device. In particular, IOFW Async command handles all of your read, write, and lock operations. IOFW Bus command handles commands that apply to the FireWire bus, such as allocating local address space or other bus resources.
+
+The class IofwIsocChannel corresponds to a channel command object in Mac OS 9. An isochronous channel object exists corresponding to one active isochronous channel on the FireWire bus. The purpose for the existence of the channel is to keep track of the actual resources, the bandwidth and the channel number, across bus resets.
+
+It also serves as a common reference point for everyone who's doing something, sending or receiving, on that isochronous channel. So associated with it are IOFWISOC port class objects. A port corresponds to an actual point of talking or listening on a channel. If a channel is going to do anything interesting, it probably has at least one listening port and exactly one talking port.
+
+You can subclass IOFW-ISOCH port to provide the mechanisms that are specific to your device for starting and stopping communication on a channel. When a channel is started, each of its ports will be called so that it can do port-specific things to start operating on the channel. The transmitter could start a DCL program to send data. The receiver might program registers in a device that cause it to pick up the data and do something useful with it.
+
+Similarly, IOFW local Isoch port is a port on a channel that is corresponding to hardware on the Macintosh. Generally, if you have a channel, you will have one local Isoch port on it, unless you're acting as a manager for two other devices who think they're talking to each other on the bus. A local port corresponds, or has a DCL program attached to it.
+
+This is the same service that we had in Mac OS 9. DCL stands for Data Stream Control Language, and it's an abstract programming language where you build a structure in memory describing on a packet-by-packet basis how you're going to send or receive isochronous data. We take that DCL program and compile it into a DMA program that runs on the kind of hardware that we have in the Mac, whether it's OpenHCI or PCI-Linux. So your driver needs no knowledge. knowledge of the hardware specifics. The DCL programs in Mac OS X use the same opcodes and same structure as Mac OS 9. It should be very easy to adapt an existing DCL to work in Mac OS X.
+
+Okay, more about user clients. Formally, this is called a device interface, but everyone calls it a user client, so I will too. A user client, as I said before, is a layer of software that allows you to talk to FireWire devices from application space. There's many good reasons for doing this.
+
+In order to hook up to your device, you may need to put a stub KEXT in the kernel. This could be as simple as an empty KEXT with a little bit of XML to match your device in order to give you control over your device. For example, if you wanted to talk to a device that also matched against Apple's standard disk driver, you might create a stub KEXT that gets a higher probe score or a tighter match that would enable you to win over our disk driver and then talk to your device from user space.
+
+We provide complete access to the FireWire services in the kernel through the user client. So if your device doesn't have to be in the kernel because of OS-specific reasons, put it in user space. Some drivers simply have to go in the kernel. If you have a mass storage device that's going to mount a file system, that has to be in the kernel.
+
+But if you have some kind of printer, scanner, digital video device, all of those can go up in user space. Isochronous services will be available very soon in the user client. They're not yet in the SDK, but that's our number one thing that we're working on right now. Probably in the next week or two, we will post another SDK with Isochronous services for the user client.
+
+The IO FireWire SBP-2 family I talked about before. It's the service layer. It's ported almost directly from Mac OS 9, so it's very similar in how it works, although it's been cleaned up to fit properly in I/O Kit, so there's no strange legacy Mac OS 9 issues. This layer is used by the Apple FireWire disk driver.
+
+Last year, we had a monolithic demonstration disk driver to show that it could be done, but all of the mass storage layer SBP-2 had been rolled up into one big mess and made a driver. It worked, but it was not sustainable, so we've broken that up into discrete layers.
+
+This is what's in Mac OS X today, and it's what's used by our standard driver. I mentioned before, IO FireWire Serial Bus Protocol. transport KEXT and applefirewiremassstoragedrivers KEXT. That's the Apple software that provides a standard driver. You can subclass that or replace it if you need to provide a driver for your own device.
+
+One particular function of IO FireWire SBP-2 is it knows how to read the config ROM of an SBP-2 device and find SBP-2 specific information to use for driver matching. SBP-2 devices publish a command set, a command set spec ID, logical units, various other information that is specific to SBP-2. You wouldn't find it in a camcorder. So IO FireWire SBP-2 is the layer that digs that out, publishes it in the IO Registry. And then allows I/O Kit to perform more precise device matching using that information.
+
+We have a user client for SBP-2. This gives you all of the SBP-2 services that are available in the kernel and makes them available in user space. If you want to write a driver for FireWire printer, FireWire scanner, FireWire still camera, you'll probably be using the SBP-2 user client in application space.
+
+You can use this by itself, or you can use it in combination with the ordinary FireWire user client. If you have some device that has additional functions outside of SBP-2, you can talk to them with normal FireWire commands using the normal FireWire user client. So you can use one or the other, or both, depending on the needs of your device.
+
+I/O FireWire DV. This is the standard DV device driver that we provide. It provides services very similar to what was in Mac OS 9. It is a device driver for DV cameras. It can transmit and receive frame accurate 30 frames per second DV. It supports normal DV and the new SDL mode that is present in that Canon camera I showed you earlier.
+
+Presently, I/O FireWire DV lives in the kernel. It lives there because we don't have the Isochronous API out in user space yet, so putting it in the kernel worked. We would like to move that out to user space and we're going to try to do that. We certainly recommend if you're developing an Isochronous driver, try to do it in user space.
+
+If you want to use IO FireWire DV, you can access it through QuickTime using the Sequence Grabber, just like you would in Mac OS 9. And there's a lot of sample code in the SDK, as I showed you earlier, that can get you started on how to do that.
+
+Okay, so what do we have that's new? We've actually gotten quite a lot done since last year when we told you about FireWire and Mac OS X for the first time. This year, in the shipping version of Mac OS X, we have full support for OpenHCI. Last year, we were really working best on the blue and white G3 with the old PCI links. Now we fully support all the hardware.
+
+The SBP-2 service layer and the standard Apple Disk Driver are completely new since last year. They're very full-featured. The user client for FireWire and the SBP-2 user client are also all new. We now have a standard DV driver and QuickTime component. As you may have seen yesterday in the intro to FireWire, iMovie is running just fine on Mac OS X. We couldn't show any kind of DV at all last year. FireWire booting.
+
+There's not a whole lot to say here. You can boot from FireWire devices in Mac OS X. Just go into the preferences. pick a FireWire device and boot from it. SDKs. We have published a bunch of FireWire SDKs for Mac OS X already. In a major change from what we were doing on Mac OS 9, we've made these free and completely available. Anyone can download them. Just go to our website.
+
+Here's what we're going to be working on for the future. As I mentioned, the isochronous services in the user client aren't quite done yet. There was no corresponding service in Mac OS 9. This is something new. We're making good progress on it. We expect to have an SDK out within a week or two that you can try.
+
+In particular, we intend to provide a sample code for a DCAM camera device driver. We have more sample code in general, more documentation, we've added HeaderDoc, more tools. We also have a bunch of other tools that we're going to be using. of bug fixes coming in the next SDK.
+
+Here's some general areas that we're going to work on over the next year. 1394.3, also known as the Peer-to-Peer Data Transport. This is a protocol layer that sits on top of SBP-2. This was invented by the printer community. It's suitable for printers and may be useful for other kinds of devices as well. It provides multiple streams or pipes of communication over a single SBP-2 connection.
+
+If you have a device, I don't believe there's any shipping today, but if you have a device that uses this protocol, you could write software for it with the SBP-2 user client. But part of what you invent there would be common to any PPDT device, so we will provide a standard layer to make that even easier to do.
+
+IEEE 12.12.R is a revision to the specification that says how config ROMs are laid out. In particular, it contains a new service called instance directories. This is a slightly different way to describe the functions in your device as opposed to the unit directory that we use today. Many of the consumer electronics vendors felt it would be better to describe a device based on its function rather than based on its protocol, so an instance directory tells you what kind of functions a device has.
+
+We plan to add support for that since devices are starting to appear that have this kind of data in their config ROM. This would give you an alternate way of loading device drivers for a device. The purpose of instance directories is to be a better way to discover functions, so it's natural to make it available for driver matching and loading.
+
+Finally, as I talked about yesterday at the intro section, we're going to be spending a lot of time working on 1394B, or more precisely, our hardware folks are going to be spending a lot of time working on 1394B. Almost nothing changed in software, so we'll make a few little touch-ups and then ship that out to you.
+
+In conclusion, for Mac OS X, we have extensive FireWire services. We believe it's really the equal of what we had in Mac OS 9. Everything is there for you to start writing drivers today. Please pick up the SDK. Here's the URL again that provides information for both the SDK and our mailing list. This is a public mailing list. Anybody can subscribe. The exact details are at this URL.
+
+All we ask is that if you do have confidential information, maybe we've sent you a seed unit or you're working on some new product that nobody knows about, please don't talk about it on the mailing list. You can ask general questions. Sometimes people do ask secret questions, and I remove the secret information and post the response on the mailing list.
+
+The response so far has been quite good. Many of you have been answering each other's questions on the mailing list, which is great. We do what we can to answer questions as well. So if you're not participating, please sign up and please participate in that mailing list. Thank you.
+
+Finally, as I said, much of our source code is open source. It's in Darwin. It's also all provided in our SDK. If you do find a bug or you find something that could be done better, a feature you'd like to add, let us know about it. Use the standard Darwin mechanism to submit your change. We've already picked up and incorporated some changes that you've sent in.
+
+Related sessions here at WWDC. Yesterday there was a very good presentation on storage drivers in I/O Kit. This is information that you'd need if you're writing or subclassing drivers for storage devices on FireWire. If you missed the presentation yesterday, I believe there will be a DVD series available from WWDC so you can catch it there.
+
+Tomorrow at this same time, 2 o'clock, we will have our feedback forum, combined FireWire and USB, that's in room J1 down at the complete opposite end of the convention center from where we were yesterday. That is like open mic night. You can just come and say whatever you want. Tell us what you like, what you don't like, ask questions, it's completely open. We just want your feedback for whether or not we're meeting your needs in Mac OS X. Finally, tomorrow night, starting at 7, back at Apple in the piano bar.
+
+I think it says 6 there. We will have a FireWire and USB plug fest. So there's a big Apple party at the Apple campus tomorrow. Come on by the piano bar, it's in building 4 right out front by the parking lot. That's where we'll be. Bring your FireWire device or your USB device. You can hang out with FireWire engineers. If you do have bugs, we will have all the engineers there with the source code. We'll try to look at things as well as we can between taking big chugs of beer.

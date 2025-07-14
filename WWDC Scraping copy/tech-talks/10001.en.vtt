@@ -1,0 +1,837 @@
+WEBVTT
+
+00:00:01.768 --> 00:00:05.138
+Hi, I'm Lionel Lemarié
+from the GPU software team.
+
+00:00:05.205 --> 00:00:08.175
+In this session, we're going to use
+the Metal Counter API
+
+00:00:08.242 --> 00:00:10.878
+to get precise GPU timings at runtime.
+
+00:00:12.513 --> 00:00:14.715
+We will cover a few topics.
+
+00:00:14.781 --> 00:00:18.318
+We'll start with a quick intro
+of the Metal Counter API.
+
+00:00:19.653 --> 00:00:24.525
+Then we'll take a brief look at the main
+features of a typical live profiling HUD.
+
+00:00:25.759 --> 00:00:30.430
+We'll use the API step-by-step
+to collect the profiling information.
+
+00:00:31.732 --> 00:00:35.636
+And we'll conclude by looking
+at how this data fits into the HUD.
+
+00:00:36.336 --> 00:00:39.473
+So let's start
+with a quick intro of the API.
+
+00:00:40.908 --> 00:00:44.211
+The Metal Counter API is new in iOS 14.
+
+00:00:44.278 --> 00:00:49.049
+It was available in macOS Catalina
+and has been extended in macOS Big Sur.
+
+00:00:49.583 --> 00:00:52.419
+On iOS and macOS with Apple Silicon,
+
+00:00:52.486 --> 00:00:55.422
+it gives you access
+to stage boundary timings.
+
+00:00:55.489 --> 00:01:00.994
+That is, precise start and end times
+for vertex, fragment and compute passes.
+
+00:01:01.461 --> 00:01:06.333
+On Intel and AMD GPUs,
+you can get draw boundary timings,
+
+00:01:06.400 --> 00:01:10.437
+precise GPU timestamps
+even within individual passes.
+
+00:01:12.339 --> 00:01:17.244
+Next, let's do a quick recap of
+the main features of a live profiling HUD.
+
+00:01:18.312 --> 00:01:22.249
+You'd use a live HUD to track
+your app's performance at runtime.
+
+00:01:22.316 --> 00:01:26.553
+It can help you find problem areas
+that need to be investigated off-line
+
+00:01:26.620 --> 00:01:28.255
+in Xcode or Instruments.
+
+00:01:28.956 --> 00:01:31.458
+You can also use them
+to tune your resolution
+
+00:01:31.525 --> 00:01:34.127
+and quality settings per device,
+for instance.
+
+00:01:34.828 --> 00:01:38.565
+As an example, a typical live HUD
+may look something like this.
+
+00:01:39.132 --> 00:01:43.670
+Frame times, as a scrolling line chart,
+to help you catch frame hitches,
+
+00:01:44.338 --> 00:01:48.675
+stats about your memory usage,
+resolution and more
+
+00:01:49.409 --> 00:01:51.745
+and the timeline of CPU events.
+
+00:01:51.812 --> 00:01:54.948
+And today, we'll add GPU events
+to the timeline.
+
+00:01:55.916 --> 00:01:57.918
+Typically, for your CPU markers,
+
+00:01:57.985 --> 00:02:00.721
+you would instrument
+your most important functions
+
+00:02:00.787 --> 00:02:04.691
+using mach_absolute_time
+to get the start and end timestamps.
+
+00:02:05.592 --> 00:02:07.261
+A good start with CPU markers
+
+00:02:07.327 --> 00:02:10.397
+is to put them
+around your command buffer work--
+
+00:02:11.331 --> 00:02:15.769
+a start marker when you create it
+and an end marker when you commit it.
+
+00:02:16.203 --> 00:02:19.706
+That gives you an overview
+of the CPU costs of your rendering.
+
+00:02:21.441 --> 00:02:24.578
+Now we want to add equivalent GPU markers.
+
+00:02:25.045 --> 00:02:29.550
+You may be familiar with the GPU events
+on the Metal System Trace timeline,
+
+00:02:29.616 --> 00:02:31.185
+as we're seeing here.
+
+00:02:31.251 --> 00:02:34.421
+On iOS in this example,
+it shows the different stages
+
+00:02:34.488 --> 00:02:37.324
+of the tile-based deferred
+rendering architecture.
+
+00:02:37.824 --> 00:02:40.928
+Here we see the vertex
+and fragment processing work.
+
+00:02:42.663 --> 00:02:48.101
+To do this, the GPU firmware logs
+the start and end of the vertex stage.
+
+00:02:48.702 --> 00:02:52.139
+Then it logs the start
+and end of the fragment stage.
+
+00:02:52.739 --> 00:02:56.643
+And the Metal System Trace
+displays the stages on the timeline.
+
+00:02:57.177 --> 00:02:58.912
+For immediate mode GPUs,
+
+00:02:58.979 --> 00:03:01.748
+you can log events
+for groups of draw calls.
+
+00:03:02.249 --> 00:03:05.819
+For example, you would log
+the start of rendering object one
+
+00:03:05.886 --> 00:03:07.721
+before all of its draw calls
+
+00:03:07.788 --> 00:03:10.357
+and then log the start
+of rendering object two.
+
+00:03:10.424 --> 00:03:12.726
+And finally, the end of object two.
+
+00:03:13.193 --> 00:03:14.895
+You then have a timeline that shows
+
+00:03:14.962 --> 00:03:18.765
+precisely how long the GPU
+spends rendering each object.
+
+00:03:20.734 --> 00:03:24.137
+Now let's use the Metal Counter API
+to achieve that.
+
+00:03:25.172 --> 00:03:28.842
+We'll start by checking which
+counter sampling modes are available.
+
+00:03:28.909 --> 00:03:32.412
+We need to know whether the GPU
+should record at the stage boundary,
+
+00:03:32.479 --> 00:03:35.015
+for vertex, fragments or compute stages,
+
+00:03:35.082 --> 00:03:38.685
+or if it should record
+at the draw boundary, as we've just seen.
+
+00:03:39.586 --> 00:03:42.956
+We simply use
+the supportsCounterSampling API
+
+00:03:43.023 --> 00:03:47.895
+to check if the current device supports
+stage boundary, for a TBDR GPU,
+
+00:03:47.961 --> 00:03:51.031
+or draw boundary for unlimited mode GPU.
+
+00:03:52.799 --> 00:03:56.737
+Next we check which counter sets
+are available on the device.
+
+00:03:56.803 --> 00:03:59.573
+Counter sets include timestamps,
+
+00:03:59.640 --> 00:04:02.709
+stage utilization and pipeline statistics.
+
+00:04:02.776 --> 00:04:07.481
+For our GPU markers, we need
+the counter set that collects timestamps.
+
+00:04:07.548 --> 00:04:11.485
+So we enumerate all available counter sets
+on the device
+
+00:04:11.552 --> 00:04:13.787
+and choose the one for timestamps.
+
+00:04:14.488 --> 00:04:16.356
+Once you have the right counter set,
+
+00:04:16.423 --> 00:04:19.526
+inspect it to ensure
+that it does have timestamps,
+
+00:04:19.593 --> 00:04:22.262
+as some devices may not support them.
+
+00:04:23.130 --> 00:04:25.199
+We're done with the initial setup.
+
+00:04:25.265 --> 00:04:29.236
+Now let's see what's needed
+at runtime during each frame.
+
+00:04:29.303 --> 00:04:31.238
+There are just four easy steps.
+
+00:04:31.305 --> 00:04:33.674
+First we'll create a sample buffer
+
+00:04:33.740 --> 00:04:38.045
+with a size, storage mode
+and the counter set we just looked up.
+
+00:04:38.111 --> 00:04:41.815
+Then we'll add the sample buffer
+to the pass descriptor.
+
+00:04:41.882 --> 00:04:45.719
+Note that it means that you need
+at least one buffer per pass.
+
+00:04:45.786 --> 00:04:49.489
+Next, if we're using sampling
+at draw boundary,
+
+00:04:49.556 --> 00:04:52.759
+we'll add sampling commands
+at important points.
+
+00:04:52.826 --> 00:04:56.730
+Finally, in the completion handler,
+we'll resolve the counters.
+
+00:04:56.797 --> 00:05:01.502
+And we'll talk about aligning CPU
+and GPU timestamps if needed.
+
+00:05:01.568 --> 00:05:03.904
+Let's check out each step in detail.
+
+00:05:05.739 --> 00:05:09.676
+First, we create a sample buffer
+using a descriptor.
+
+00:05:09.743 --> 00:05:13.080
+We specify the maximum number
+of samples it can hold,
+
+00:05:13.146 --> 00:05:15.282
+so it has the right size.
+
+00:05:15.349 --> 00:05:18.919
+We'll use six samples here,
+but you'll typically use more than that.
+
+00:05:19.887 --> 00:05:21.822
+Then we set the storage mode.
+
+00:05:21.889 --> 00:05:24.157
+Shared mode is great here.
+
+00:05:24.224 --> 00:05:28.662
+It's not a lot of data, and it makes
+accessing the counters extra easy.
+
+00:05:29.396 --> 00:05:33.333
+We specify the counter set to use,
+the one for timestamps.
+
+00:05:33.867 --> 00:05:36.870
+Finally, we create the sample buffer.
+
+00:05:36.937 --> 00:05:40.374
+So far, so good.
+Now we have a buffer for six samples.
+
+00:05:41.141 --> 00:05:44.478
+As an example,
+let's use it in a render encoder.
+
+00:05:45.045 --> 00:05:48.749
+You would do it the same for compute
+and blit encoders.
+
+00:05:49.149 --> 00:05:52.586
+For this,
+you use the sample buffer attachment
+
+00:05:52.653 --> 00:05:54.655
+from the render pass descriptor.
+
+00:05:55.088 --> 00:05:58.659
+If we are using stage boundary,
+this is where we set it up.
+
+00:05:58.725 --> 00:06:02.362
+We specify the start and end
+of the vertex stage.
+
+00:06:02.429 --> 00:06:06.633
+We're putting them at index zero
+and one in the sample buffer.
+
+00:06:06.700 --> 00:06:09.837
+That's how the GPU knows
+where to write each sample
+
+00:06:09.903 --> 00:06:12.673
+and how you know
+where to retrieve them from.
+
+00:06:12.739 --> 00:06:15.342
+Same for the start and end
+of the fragment stage.
+
+00:06:15.943 --> 00:06:18.512
+Finally, we pointed to the sample buffer
+
+00:06:18.579 --> 00:06:21.381
+that we just created
+to store those samples.
+
+00:06:22.649 --> 00:06:24.284
+To sample a draw boundary,
+
+00:06:24.351 --> 00:06:28.422
+you add sample commands
+at key points of your command stream.
+
+00:06:28.989 --> 00:06:34.228
+The first obvious placement for these
+is before and after all draw calls.
+
+00:06:34.294 --> 00:06:39.566
+So after you've created a new encoder,
+you immediately add a sample command.
+
+00:06:39.633 --> 00:06:44.004
+We'll put it at index four, since we've
+already reserved the first four slots
+
+00:06:44.071 --> 00:06:46.073
+for stage boundary samples.
+
+00:06:46.807 --> 00:06:50.277
+After all your draw calls,
+right before ending your encoders,
+
+00:06:50.344 --> 00:06:53.447
+you add a sample command at index five.
+
+00:06:54.314 --> 00:06:56.416
+So the GPU will record a timestamp
+
+00:06:56.483 --> 00:06:59.553
+before and after all the work
+for that encoder.
+
+00:07:00.053 --> 00:07:03.257
+You can add more sample commands
+between groups of draw calls
+
+00:07:03.323 --> 00:07:05.392
+to mark important milestones.
+
+00:07:05.826 --> 00:07:10.531
+Just make sure your sample buffer
+is allocated with enough space in advance.
+
+00:07:11.431 --> 00:07:14.334
+Speaking of which,
+we've allocated a buffer big enough
+
+00:07:14.401 --> 00:07:17.671
+for both stage boundary
+and draw boundary sampling.
+
+00:07:17.738 --> 00:07:21.108
+You can easily optimize it
+by allocating just enough
+
+00:07:21.175 --> 00:07:24.278
+for stage or draw boundary sampling
+in isolation,
+
+00:07:24.344 --> 00:07:26.513
+since they are mutually exclusive.
+
+00:07:28.448 --> 00:07:32.786
+Right. The GPU has been instructed
+to sample timestamp counters
+
+00:07:32.853 --> 00:07:34.855
+at stage or draw boundary.
+
+00:07:35.389 --> 00:07:37.591
+Next, we wait
+for the rendering to complete,
+
+00:07:37.658 --> 00:07:39.826
+and in the handler, we collect the data.
+
+00:07:40.661 --> 00:07:43.730
+Remember that
+we created a sample buffer per encoder.
+
+00:07:43.797 --> 00:07:46.266
+So in the common buffer
+completion handler,
+
+00:07:46.333 --> 00:07:48.969
+we may need to parse
+multiple sample buffers.
+
+00:07:49.937 --> 00:07:52.339
+For each one, we resolve the counters.
+
+00:07:52.406 --> 00:07:56.810
+That translates different specific data
+into the unified Metal struct
+
+00:07:56.877 --> 00:07:59.046
+that's super easy to parse.
+
+00:07:59.112 --> 00:08:03.851
+Simply point to it
+and use the CounterResult struct.
+
+00:08:03.917 --> 00:08:07.387
+As we specified that vertexStart
+should be at index zero,
+
+00:08:07.454 --> 00:08:09.423
+we read it directly from there.
+
+00:08:09.957 --> 00:08:12.926
+Then we'll do the same
+for all other samples.
+
+00:08:13.594 --> 00:08:16.029
+Note that some error checking
+is needed here.
+
+00:08:16.096 --> 00:08:19.633
+It's possible that the GPU failed to fill
+the sample buffer
+
+00:08:19.700 --> 00:08:21.835
+so you need to check that the result step
+
+00:08:21.902 --> 00:08:24.137
+collected the expected number of samples
+
+00:08:24.204 --> 00:08:26.240
+and that each sample is valid.
+
+00:08:27.207 --> 00:08:30.143
+The GPU will use a predefined error value
+
+00:08:30.210 --> 00:08:32.346
+if it can't get a specific timestamp.
+
+00:08:34.081 --> 00:08:36.650
+On iOS and Apple Silicon devices,
+
+00:08:36.717 --> 00:08:39.820
+the GPU timestamps are aligned
+to mach_absolute_time
+
+00:08:39.887 --> 00:08:43.257
+so you can directly compare them
+to CPU timestamps.
+
+00:08:44.157 --> 00:08:48.562
+On Intel and AMD GPUs,
+an extra step is needed.
+
+00:08:48.629 --> 00:08:51.899
+They need to be translated
+from a vendor specific time domain.
+
+00:08:51.965 --> 00:08:55.602
+This is because
+depending on how busy the GPU is,
+
+00:08:55.669 --> 00:08:57.037
+how much power it consumes
+
+00:08:57.104 --> 00:08:59.173
+and how hot it's running,
+
+00:08:59.239 --> 00:09:02.376
+its clock frequency
+is constantly adjusted over time,
+
+00:09:02.442 --> 00:09:04.044
+which affects the timestamps.
+
+00:09:05.546 --> 00:09:10.717
+To address this on immediate mode GPUs,
+you use the sample timestamp's API
+
+00:09:10.784 --> 00:09:15.289
+to query matching CPU
+and GPU timestamps at a given time.
+
+00:09:15.856 --> 00:09:18.792
+You do it at regular intervals
+to avoid drifting
+
+00:09:18.859 --> 00:09:21.728
+and keep precise correlation over time.
+
+00:09:21.795 --> 00:09:25.999
+Then you do a simple linear interpolation
+of the samples collected.
+
+00:09:27.000 --> 00:09:29.803
+As an example,
+you may call sample timestamps
+
+00:09:29.870 --> 00:09:32.573
+inside the common buffer
+completion handler
+
+00:09:32.639 --> 00:09:34.842
+so you get one correlation per frame.
+
+00:09:35.509 --> 00:09:39.646
+Let's say you query
+CPU and GPU timestamps at t0.
+
+00:09:39.713 --> 00:09:43.050
+And then at the next frame,
+you query them at t1.
+
+00:09:43.750 --> 00:09:46.320
+All GPU counters from the sample buffers
+
+00:09:46.386 --> 00:09:49.690
+can now be scaled
+and offset back into CPU domain.
+
+00:09:50.657 --> 00:09:55.229
+And that's all we need. So let's look
+at how it could all be displayed together.
+
+00:09:57.464 --> 00:09:59.433
+We're seeing the CPU markers.
+
+00:09:59.499 --> 00:10:02.169
+We captured them with mach_absolute_time.
+
+00:10:02.236 --> 00:10:05.339
+We're seeing vertex, fragment
+and compute stages
+
+00:10:05.405 --> 00:10:08.876
+all overlapping
+and aligned with CPU activity.
+
+00:10:08.942 --> 00:10:11.378
+You can even collect
+the mach_absolute_time
+
+00:10:11.445 --> 00:10:13.447
+inside the presented handler
+
+00:10:13.514 --> 00:10:17.284
+to align all the markers
+to actual glass-to-glass frames
+
+00:10:17.351 --> 00:10:20.621
+and precisely display all the events
+within each frame.
+
+00:10:21.321 --> 00:10:23.524
+Using this HUD, you get a great view
+
+00:10:23.590 --> 00:10:26.126
+of whether you're CPU or GPU bound,
+
+00:10:26.193 --> 00:10:28.695
+your dependencies and sync points,
+
+00:10:28.762 --> 00:10:31.965
+the breakdown of vertex, fragment
+and compute work
+
+00:10:32.032 --> 00:10:33.767
+and how they affect each other.
+
+00:10:34.434 --> 00:10:37.771
+All of that, live,
+right there inside your app.
+
+00:10:38.505 --> 00:10:41.308
+There are a few things
+you can watch out for.
+
+00:10:41.375 --> 00:10:43.510
+Don't update the HUD too often.
+
+00:10:43.577 --> 00:10:45.312
+Just like an FPS counter,
+
+00:10:45.379 --> 00:10:48.815
+live data can be hard to read
+if it's constantly changing.
+
+00:10:48.882 --> 00:10:51.018
+You can collect the timestamps every frame
+
+00:10:51.084 --> 00:10:55.155
+but only update the markers on-screen
+once per second, for example.
+
+00:10:55.222 --> 00:10:57.424
+It makes it
+significantly easier to follow.
+
+00:10:58.091 --> 00:11:01.628
+Secondly, GPU activity
+depends on its clock rate.
+
+00:11:01.695 --> 00:11:06.633
+Seeing a high GPU occupancy
+does not necessarily mean it is maxed out.
+
+00:11:07.334 --> 00:11:10.070
+As the system only uses
+as much power as needed,
+
+00:11:10.137 --> 00:11:12.673
+it will balance power and performance.
+
+00:11:13.407 --> 00:11:17.778
+As a consequence, you might see the GPU
+being 80% busy in the HUD.
+
+00:11:17.845 --> 00:11:20.747
+But if it is running
+at half the max clock rate,
+
+00:11:20.814 --> 00:11:24.685
+then it would actually be running
+at 40% of the peak performance
+
+00:11:24.751 --> 00:11:26.453
+and have plenty of headroom.
+
+00:11:27.221 --> 00:11:29.189
+And as always, you should handle errors,
+
+00:11:29.256 --> 00:11:32.392
+but you should also watch out
+for inconsistencies.
+
+00:11:32.993 --> 00:11:35.262
+For example, counters can overflow,
+
+00:11:35.329 --> 00:11:38.365
+which would cause a new value
+to be smaller than the previous one
+
+00:11:38.432 --> 00:11:40.734
+and may trigger a negative duration.
+
+00:11:41.435 --> 00:11:45.239
+Or putting your device to sleep
+or hibernate while sampling counters
+
+00:11:45.305 --> 00:11:47.975
+may also cause large outliers.
+
+00:11:48.041 --> 00:11:49.309
+Those are rare events,
+
+00:11:49.376 --> 00:11:53.814
+and you should skip them gracefully
+to avoid glitches in your display or logs.
+
+00:11:54.581 --> 00:11:56.183
+And so to recap,
+
+00:11:56.250 --> 00:11:57.684
+we've just gone through the steps
+
+00:11:57.751 --> 00:12:01.355
+to use the Metal Counter API
+to collect GPU timestamps.
+
+00:12:01.421 --> 00:12:04.925
+To do that, we used
+the device supportsCounterSampling method
+
+00:12:04.992 --> 00:12:08.395
+to find out which sampling modes
+are supported.
+
+00:12:08.462 --> 00:12:13.534
+We enumerated the counter sets
+to find the set with the GPU timestamps.
+
+00:12:13.600 --> 00:12:16.870
+We created a new sample buffer
+using its descriptor
+
+00:12:16.937 --> 00:12:20.007
+and used it in the render command encoder.
+
+00:12:20.073 --> 00:12:23.677
+You will want to do the same
+with a blit and compute encoder too.
+
+00:12:23.744 --> 00:12:28.081
+We added specific sample commands
+before and after all the draws.
+
+00:12:28.148 --> 00:12:31.518
+You can add them between draws,
+dispatches and blits too
+
+00:12:31.585 --> 00:12:32.986
+to get sub past timings.
+
+00:12:33.921 --> 00:12:36.990
+We resolved the counters into CPU memory.
+
+00:12:37.057 --> 00:12:39.927
+And finally, we realigned them if needed.
+
+00:12:40.694 --> 00:12:42.829
+And with that,
+you have all the data needed
+
+00:12:42.896 --> 00:12:47.634
+for a powerful, live GPU profiling HUD
+to display on top of your app.
+
+00:12:48.368 --> 00:12:52.105
+And this API gives you access to more
+than just the GPU timestamps.
+
+00:12:52.172 --> 00:12:54.875
+You can get summarized
+per stage information,
+
+00:12:54.942 --> 00:12:58.679
+which is easier to process if you are not
+drawing the events on the timeline.
+
+00:12:58.745 --> 00:13:01.548
+And importantly, you can get
+some in-depth statistics,
+
+00:13:01.615 --> 00:13:05.319
+such as the number of invocations
+for vertex and fragment shaders
+
+00:13:05.385 --> 00:13:07.421
+and compute kernels and much more.
+
+00:13:08.188 --> 00:13:11.058
+There's enough to explore
+in the Metal Counter API,
+
+00:13:11.124 --> 00:13:13.493
+and it gives you access
+to a lot of information
+
+00:13:13.560 --> 00:13:16.864
+to profile your GPU performance
+at runtime.
+
+00:13:18.265 --> 00:13:19.533
+That's it for this session.
+
+00:13:19.600 --> 00:13:21.001
+Thanks for watching.

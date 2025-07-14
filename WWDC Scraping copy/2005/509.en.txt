@@ -1,0 +1,239 @@
+---
+Title:  Creating Drivers for USB Devices
+Year:   2005
+Web:    https://nonstrict.eu/wwdcindex/wwdc2005/509/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Welcome to our USB session for WWDC. My name is Fernando Urbinia, and I'm part of the USB team here at Apple. This year we decided to do something a little bit different than what we've done in the past. In previous years we've just come and given you slide after slide after slide of dry code and stuff that we've been doing that was exciting for us but maybe not that hands-on for you and in the spirit of the whole WWDC session this year we are going to, for the most part of the presentation today, go through some of our sample code and use the demo machines to show you how to Get at your devices, how to access, how to start some reads, and hopefully this will Before doing that, though, I thought that it would be nice to highlight a couple of the issues that we've had, or the highlights for Tiger.
+
+If you've been with us for the last few years, you probably have seen this diagram, which is part of the Common Class Specification, and it shows what our matching criteria, and in this case for USB devices, is. And this is just the way that we rank drivers, and so if you specify the different fields of the device descriptor in your matching dictionary if you're in user space, or in your personality for kernel extensions, depending on what fields are there, we rank your drivers and we load those drivers, and this hasn't changed at all.
+
+However, with Tiger we have wildcard matching. This has been a request over the years and it sort of never got up in the priority queue in our stuff and finally for Tiger we did it. And what is wildcard matching? Well, some of you developers have a need to support multiple devices from the same vendor.
+
+And the way to do that is if you're in the kernel, you have to create a personality for each device, cut and paste, and you can have a lot of personality depending on how many devices you have. The personalities are probably just the same except for the USB product ID, but it's cut and paste and it's error prone. So, it's not very nice when a new device comes from the same vendor, then you have to go and update your KEXT or if you're in your user space, you have to look, change your code to look for that new product ID.
+
+So, what wildcard matching allows you to do, and it's no big surprise, is that you can specify a wildcard for one or more of those fields. So, when you do use a wildcard, we decrease the probe score so that a driver that fully specifies all the fields will still win in the driver matching than yours that has a wildcard. But it allows you to have it. And we also have what I call the partial wildcard and this is a little bit more esoteric, but it allows a product ID. product ID to have a mask.
+
+For example, at Apple we have divided our product IDs
+
+[Transcript missing]
+
+So again, this is the matching criteria for a device driver. And if you specify the vendor and the product ID, you have a vendor-specific driver. In order to make it wildcard, all you do is create a, instead of putting a number for the product ID in this case, you put a star. Later in the demo I'm going to actually use that and show you how it all works.
+
+One more slide that I wanted to put in was, it's nothing new, but it was a highlight of an issue that affects you as developers, but should not affect your users. And that is the bus topology in USB, especially as related to full-speed devices that are attached to a high-speed hub.
+
+When you have that situation, a full-speed device attached to a high-speed hub, USB works in what is called split transaction mode. That means that the high-speed controller talks to the high-speed hub with the high-speed protocol, and the high-speed hub then goes and translates those high-speed commands into full-speed or low-speed commands. As a user, this should just work. In reality, it just works. However, it's a lot more complicated in terms of the software.
+
+The idea of this slide is that when you have an issue with one of your users, and if they have connected your full or low-speed device into a high-speed hub, you should ask them to... ...connect it to the root hub of the computer, directly to the computer, so that it acts as a full-speed device and there's no translation. And you can isolate things that way, of course. If there is a bug, then you go to bugreporter.apple.com and report it to us, and we try to figure out what's going on.
+
+When running in split transaction mode, One of the things that we did in 10.3.9 and in Tiger is we improved periodic transactions in this mode. Periodic transactions include not only ISOC in and out, but also interrupt transactions. The whole bandwidth allocation for these split transactions has been revamped.
+
+Timing, especially for Isochronos, has changed quite a bit. And in fact, our Apple USB Audio driver had to change in order to satisfy these new timings. And what changed was the fact that the isochronous out transactions would go out in 1039 and in Tiger towards the end of the one millisecond frame. Whereas in the past, it usually went out at the beginning. And you would think that that would matter too much, but especially in audio situations, it did.
+
+If you at some point use the Apple USB audio driver as a source for your own vendor-specific driver, I would encourage you to go and take a look at the source for 1039 or Tiger for that driver and see what changed. Because chances are that your driver won't work as well.
+
+Final point there is that all our machines right now use the NEC controller for high speed, and that controller has two companion OHCI controllers. And that's why I said that when you plug it into the back of the machine, if it's a full or low speed device, you will get it connected directly to an OHCI controller. Interestingly enough, the developer transition systems have an EHCI controller with UHCI companion controllers.
+
+If you remember last year, we talked about having UHCI support in the IOUSBFamily. We've had a lot more work on it over the past year, and at least those systems now have it. It should be transparent. It works. You can always go, if you don't have a transition system, test with a PCI card that has UHCI companion controllers.
+
+Okay, so now we come to the live debugging part of the session. I'm going to use a couple of devices to go through discovering the interfaces, setting up the matching dictionary. Finding the endpoints, getting the properties and reading from the endpoints. Then I'm also, at the end, going to demonstrate, and this is very simple, but I think it's useful to at least some of you, how to do bulk reads, or how to do chain reads, rather, in order to improve the performance of your driver.
+
+One thing to remember is that you can issue however many reads you want. The controller will execute them in order. And this allows you to work in situations where the latency might be high. At the extreme case, we could have a USB network server, like the one from Keyspan, that the USB transaction is actually going over the bus. Or sometimes the workload latency that we've talked about in the past will be high enough that if you only issue one read, then you're going to be starving your device and your performance will not be as high.
+
+The first tool that we use, and I'm hoping that most of you are familiar with it, is the logging version of the IOUSBFamily. What is the logging version? When we are developing before a release, we have all these logs, all these print tabs, essentially, in our family to let us know how things are going, and we use it to debug problems, etc. Once we are close to GM, we strip all those logs out because they take space, they take wired memory, and wired memory in the kernel is very expensive.
+
+So, shortly after a release, be it a software update or a major release, we go and we post the logging version of the IOUSBFamily at that URL over here. And we encourage you to go and download that and install it and run Prober, as we'll see later, to debug not only our stuff, but to learn what we're doing, but also to use USB logs in your code.
+
+One interesting bit is that this is also a way for you to get any new headers that we might have changed since the last major release. Software update, when there's a software update, it only updates the binaries in the system. It doesn't update any headers. So you have no other way to get those headers until there is a release of Xcode that installs all the headers in the system again. Or, in our case, you can download our family package. You could also go for those projects that are open source and build them yourselves and install headers yourself, etc. But that's a little bit more of a pain.
+
+Sometimes USB logs are not enough. I was in the session yesterday for FireWire and that FireWire SDK 20 has the KPrintf stuff. These are essentially printfs from your code that could go out the FireWire bus. Fernando Urbinan I've been using it lately to debug some enumeration issues during startup when we don't have a USB log that we can take a look at. Fernando Urbinan We've also used it in the past to debug sleep/wake issues because sometimes the network drivers go to sleep and they're not available to do too much debugging at that point.
+
+Fernando Urbinan It is very handy if you need to debug something for your device. Fernando Urbinan But it's not a good idea to have a USB log that's not available. Fernando Urbinan So take a look at that SDK and download it. Now I'm going to go through USB Prover. Most of you are probably familiar with it, but I want to still go and show you a little bit about it.
+
+I have a device here. It's a prototype device, and it actually had bad firmware that I contacted the manufacturer. USB Prober has four panes. I'm going to start here with the left mode, the bus probe pane. gives you a listing and decoding of all the descriptors manually. We try to use the least amount of the USB stack in the kernel in order to get at them.
+
+So we don't use any of the properties that are in the IO registry, for example, for the product name. We go and we issue the device request to get that length and then the full device request. And for example, this device you can see right here that we have written that the device did not respond to a request for the first four bytes of a descriptor.
+
+[Transcript missing]
+
+The length of the descriptor is in bytes 3 and 4. And that's all the information we need in order to then issue a request for the full configuration descriptor. This device doesn't respond to it. However, we realize that and then we go ahead and we request the whole thing. The USB Prober will also show you the whole length, or sorry, the whole config descriptor in raw format. And then it goes and decodes all the different descriptors that it encounters.
+
+Some of these descriptors, like the video descriptor and the audio descriptors, the specs are huge and there's a gazillion formats and sometimes We don't, we might have bugs in there. So if you are an audio developer, video developer, and realize that we are not decoding and you're pretty sure, just submit a bug and we will fix it. You get bonus points if you fix the bug by going to Darwin and downloading USB Prover and just send us the diffs.
+
+I like those kind of bugs. I was mentioning earlier about the config descriptor, like in the sense that bytes three and four are where the length byte is. And this reminded me about our transition to Intel-based Macs. We are sort of in a very good position in terms of USB because USB is a little Indian system, just like Intel.
+
+And the Mac is obviously, the PowerPC is big Indian. So we already had to, when dealing with quantities on the USB bus, do the translation and use the byte ordering macros. So, As far as you are concerned, if you are doing device requests and things at the low level USB, you won't have to change anything.
+
+We use the macros that know what architecture we're running on, if it's Little Indian or Big Indian, and we will do the translation when appropriate. Fernando Urbinan The next tab is just the kernel extensions and it shows you USB kernel extensions and this is just the output of KEXTAD from the system.
+
+[Transcript missing]
+
+For example, this USB camera. And you see here that the IOUSB composite driver loaded for the device even though it is not a composite - it is not a composite device, but I have a personality that matches a miscellaneous class device to the composite driver. I didn't change the font for the details so it's hard to read but here you could find the probe score for this driver and of course there's the different interfaces and these are actually video control and video streaming interfaces. We do this all from user space and so there are no kernel extensions matched to it. The final tab is USB logger and this is where the USB logs from the system go.
+
+I have loaded the login version of the IOUSB family in this machine and so I can look at a - - "Level 6, let's do level 5 because it's not as verbose. Start it and then if I unplug the device we'll see all the One thing that I do that might be handy for you and I always tell our testers to do is to go to the bus probe window.
+
+Fernando Urbinan: And uncheck the refresh automatically when you are getting USB logs because when you're doing plugs and unplugs and that checkbox is on, it will automatically try to, when it sees a new device, issue device requests to try to get the information for USB prober. And that might confuse you. It certainly sometimes confuses me when I'm looking at logs and I see stuff that I don't know who's doing it.
+
+Fernando Urbinan: So that's just one handy
+
+[Transcript missing]
+
+So that is what I talked about. One thing that I did not mention is that Level 7 is really, really verbose. And I only use it for a very short amount of time when I want to know a lot of what happened. If you use it for long periods of time, you can overrun the buffer. And then you lose logs, and you don't know what happened.
+
+Sometimes it comes to machine debugging, and if you're doing kernel extensions and you cannot get around that, I won't do it. We tried for like two or three years to do it on stage, and that was a bad idea. Yesterday there was a session by the IO-Kit team that was very useful in terms of doing kernel extensions. I mention it here in case you didn't attend, you can go when the slides come out or the DVD or whatever it is. And if you did not attend, I encourage you to look at it again.
+
+And sometimes you get panics and the only way to know what's going on is to actually debug the panic and figure out where in your code it's bailing out. You can, if you're doing kernel extensions, you won't be able to get away from understanding panics and decoding panics.
+
+Of course, user space, like we've said all along, is a lot better. It's much easier to debug. It's easier on your machine because you don't keep panicking. Symbolic debugging is great. Over the last year, I've been developing the USB Video Class Driver, which is a QuickTime digitizer. It's a lot better than debugging things in the kernel. So in my case, sometimes I have to modify the IOUSB library, and I can build a debug version of it, install it live, step into it from my application, and it's all there. It's a lot better.
+
+In some cases, you still need to use printf's, and in my case, I have this high priority threads running on the callbacks. There's other threads doing other stuff, and so stopping the program just disturbs the flow, and you have to resort to printf's. The new Xcode 2.1, I was on the session yesterday morning, and it allows you to create a breakpoint, print something, and continue so that it actually doesn't stop. And so that's going to be really handy to use.
+
+Finally, like I know if you've lived on the USB list, you've heard it a lot before, is sometimes you just need to know what's going on in the bus. This Q&A that I mentioned there has a little section on the different models of USB bus analyzers. They're all at different price points.
+
+Right here for our demo, I have a CATSI mobile high speed, which is just a PC card that goes into a Windows laptop. But when you can't figure out things, you need to know what's going on in the bus. Did the controller actually put the transaction on the bus?
+
+Was it the right format that you were expecting? Did the device respond to that transaction in the manner that you thought it was? The only way to know the answers to these questions is to look at the bus. Thanks. Okay, now we're going to move to demo two, if you will, please. And...excuse me a second.
+
+[Transcript missing]
+
+This is a little device from one of our developers from Code Mercenaries, and it's the IO Warrior 40. And we're going to use this to do what I mentioned earlier, look at the device, discover the interfaces, and start reading from it. So, of course, since I had it not refresh automatically, I have to go over here. And first of all, I just want to go and show you what the device has. This is just a device descriptor over there. The interesting The configuration descriptor only has one interface. There are two interfaces, both HitClass interfaces.
+
+This first one has an interrupt input endpoint, and the last, the second one, also has another interrupt input endpoint. I'm gonna use this demo monkey assistant that allows me to
+
+[Transcript missing]
+
+I don't like to work in this mode, so I'm going to change the preferences to be condensed, and then I'm going to open the project again.
+
+This is our file. We go here to the main. It's very easy. First thing we're going to do is just look for the device interfaces. And that is right up here. I'm not going to go through every single line and show you one thing, but we know, or I know, from the common class specification that in order to match to a USB interface, you have to specify, if you're doing a vendor-specific dictionary, you have to specify the vendor product ID, B configuration value, and interface number. I have here the vendor ID and the product ID. I'm creating those numbers and setting them in our matching dictionary, but I have not done our configuration value and interface number.
+
+This is the official font, so I don't want to mess with that. Sorry.
+
+[Transcript missing]
+
+I didn't think that was it. But let's go to-- 128. No. Let's see. Did that do it? Let's see, is this any better? I go back to... Is that any better? Okay. Okay, sorry about that. As I said, we have the vendor ID and the product ID matching dictionary. Now, I'm going to add the configuration value and the interface number.
+
+You can see that I am using now the wildcard matching criteria. And I don't have to create a number or anything, I just said the dictionary value with a value of the wildcard character right there. So what this is going to do actually, it's not only going to match to my first interface, but it's also going to match to the second interface that we saw for this device. If we have multiple configurations, then it would match to all the interfaces in every configuration.
+
+Then, once we discover, we set the matching dictionary, we look for any IO services that match that dictionary and get a device iterator. And with a device iterator, we can open the connection to the IOUSB interface object in the kernel. And I'm not going to go through all of that. But once we have that object, we can go and work with that interface.
+
+So we'll go up there and we see that right now it's not doing anything. But the first thing we're going to do is let's do a save. And so all I'm doing here is trying to open that interface. We'll build. Fernando Urbinan: Hello, I'm Fernando Urbinan, and I'm going to show you how to use the IOUSBFamily KEXT.
+
+What it says here, and I'm sorry I couldn't figure out how to make this font bigger. I have some of the assert macros and I'll show you here. It's right here. It requires string. It says if the string is not IO return success, we jump to exit and then we print a string value.
+
+And I have this USB to error string. All this does is a function up here that will take an IO return and actually return a string with the error name. And that is very handy after a while. I don't know what the 2C5 or 2C7 or which one is which. So going back to the run, what it says here is debug assert WWC demo KR equals equals KIO return success exit KIO return exclusive error. Thank you.
+
+Ah, we go to Prober, we can go to the IO registry window, look for our device, which is right here, look at the interface, and we see that the IOUSB HIT driver has matched to it. And that is because it's a HIT device and the kernel driver matches to it before anybody in user space can use it.
+
+Of course, at this point, if this was a real thing, you can use the HIT manager to actually get at the raw data coming from the interrupt pipe and interface to that device using an IOUSB HIT interface instead of an IOUSB interface interface. However, we have had requests in the past, and I think it is an important demo of how you can make a device that is really easy to use. And I think it is an important demo of how you can make a device that is really easy to use. An important demo of how you can prevent a kernel extension from matching to one of your interfaces.
+
+And the solution is to actually create a codeless kernel extension that matches to your device or your interface and uses the IOService class as the driver. The IOService class itself, all it does in its start method is return true. And that is enough to prevent other drivers, especially class drivers like the HIT driver, to match to your device because your vendor-specific codeless extension will have a higher probe score. So, I have a sample of that kernel extension.
+
+And you can see, hopefully, that there is no code. We just have some resources and the product. There's just an Info.plist. I'm not going to go through the whole thing of the info playlist. It's very standard, but the first couple of key values right here are telling I/O Kit that the CFBundle that we're going to use for this driver is actually I/O Kit itself. And that is where the I/O Service class lives. We also tell it that the class to use for our driver, i.e., where the start method is, is I/O Service.
+
+Fernando Urbinan: In this case, our provider class is an interface, and then we have our matching criteria. In this case, again, I'm going to use the wildcard matching criteria to match to all the interfaces in our device. You can see, however-- not however, but you can see that they are not numbers, but strings. Just like in the-- in user space, we use a CFString to pass the value to the matching dictionary, for I/O Kit personalities, we have to specify a string. Of course, if this was an integer, it would not work. So we go ahead, build it.
+
+And I think it built. Yep, it did. Then...
+
+[Transcript missing]
+
+"Directory" It has to have the right permissions. So...
+
+[Transcript missing]
+
+Fernando Urbinan: And we see that at least the top level is indeed root wheel, so I think that it takes. And now, I'm going to load that kernel extension, sudo kextload -v.
+
+[Transcript missing]
+
+Clear and Replug. The reason that I'm unplugging is to give the new driver a chance to compete when I plug in the device. If I didn't unplug, the device or the interface already had a kernel extension attached to it and it wouldn't load the new driver.
+
+At level 5, we do print some information on drivers that are loaded for a particular device or interface. And we can see right here, that we found a driver with a score of 88,000. Fernando Urbinan: And a wildcard value of two. As you recall, we had a wildcard for the configuration value and the interface number. Usually a vendor-specific device at this level has a score of 90,000. We reduced it by 2,000 because there were two wildcards. If we go now to the IO registry, we have the refresh automatically set here and open our Interfaces.
+
+We see that the IOUSB HIT driver is not loaded for it anymore and now it's IO Service. Now if we go back to our previous project where we got the exclusive access error, Fernando Urbinan: So this showed you how we could use a vendor-specific codeless KEXT to prevent a class driver from grabbing your interfaces or your devices. And it comes handy in lots of cases. Especially when you want to deal with the data by yourself and you don't want anybody else to be using it.
+
+Now let's actually go and do something with this data. Let me clean up here a little bit so I can see where I need to go. This is just another version of the same program. Fernando Urbinan: And if we go to work with the interfaces, we see that I actually have the interface open routine here. I don't have the close because now we're going to actually try to do something asynchronously. We're going to try to go ahead and read from the interrupt pipes.
+
+Fernando Urbinan: We have, as you recall, two interrupt in pipes, one for each interface. So we're going to set it up so that we can do that. My iterator is already looking through all the interfaces that match our matching dictionary. Fernando Urbinan: So it's going to call the work for interfaces routine twice, once for each dictionary.
+
+I go back to our demo monkey stuff here. The first thing we need to do, because we need to use the interface number later on, is get our interface number, and these are just calls through the IOUSB library into the interface objects. We then need to get the number of endpoints.
+
+As we saw earlier, this device only has one interrupt endpoint, but if you had more, then you need to know how many so that we can iterate through all of them and get the endpoint that we are interested in. So, we'll show here that we're going to iterate through all the pipes.
+
+The idea to take away here is that there is always by the USB spec a default control endpoint and that has a pipe reference of zero. And that belongs to the actual USB device. Interfaces have endpoints and we create pipes for each of those endpoints. And those are the things that have pipe references higher than zero.
+
+I'm starting at zero here just for, so that we can see how the control endpoint looks. But you would probably just start at one because that's all you need. If you were going to do a control request from you via the IOUSB interface, it's going to ask you for a pipe reference and you're going to specify pipe zero, pipe reference zero. Then while we're inside this loop, we go and we get the pipe properties for each.
+
+pipe And this just gives you all the information for the pipe, the interval, if it's in or out, the max packet size, what type of pipe it is. So once we get that information, we want to actually look for our interrupt in pipe and do a read to it. So what I do here.
+
+is verified that it is indeed an interop in-pipe and then called read from pipe async.
+
+[Transcript missing]
+
+Fernando Urbinan: And since I want to keep reading from this pipe, what I need to do is in my callback, reissue the read. So I need some global data in this case to access when my callback is issued. And so I'll create a handy little structure here that has the pertinent data. Of course, in real life you probably have more to it.
+
+Fernando Urbinan: And it has the interface interface that we need to access the IOUSB library, the number, the pipe reference, etc., etc., and where to put the data. And then I create a global one for each of the interfaces in our device, because I know that we have two interfaces and we're going to be called twice.
+
+Then we go back to our read from PyPageSync and we actually now need to
+
+[Transcript missing]
+
+The read, now this read_py_pay_sync is an IOUSB interface call. And you can look at all the parameters. Essentially, we have the callback function. and a void star that can be our RefCon data and that is just going to be passed into our callback when the read completes. We're almost there. Now we have to go and Go to our asynchronous callback function that is right here and look at the data and then issue the read again.
+
+The callback function will have three parameters. The first one is the void start that was passed in the original call. Then we have an IO return that specifies the error, the result of the callback. And there's another void start that is arg0 here, and that is the number of bytes that were transferred by the USB read.
+
+In some cases, if you're reading, for example, from a bulk pipe or writing to a bulk pipe, you're gonna request 64K of data and the device might only send you 23K. That is perfectly valid. It's a valid transaction on the bus. There was no errors. It is ended by a short packet, but you want that data.
+
+So what we would have in that situation is that the number of bytes transferred here would be 23K, even though you had requested 64K. So that is passed to you by the USB stack. Once we are in the callback, I have a printf that I'm forgetting here. This is this one.
+
+[Transcript missing]
+
+Once we do that, we would re-issue the read. Now, something to note here is that I'm not chaining reads yet. I'm issuing a read, and once that completes, I'm re-issuing that read. So we -- if the device was sending a lot of data, because of the inherent work loop latencies, like I mentioned earlier, we might not be polling that device fast enough. And your performance will suffer. But in this case, it's an I-sync -- or an interrupt device. I forget what the polling interval is, but it doesn't matter. Okay, so let's build and then run it. Oh, yeah, I remembered this last night.
+
+Let's just remove that because there is no exit. So we'll build again. And now let's run it. And see what... Whoa, okay. I'll stop it. I cannot make this bigger, unfortunately, but I'll go through it quickly. It says that, you know, it's just all my printfs from my program. Interface number zero has one endpoint. The endpoint zero actually is a control endpoint. It has the any direction, because control can be host to device or device to host.
+
+A max packet of eight, and the polling interval doesn't matter here. Now, for interface number zero, endpoint one is an interrupt endpoint with a max packet size of four and a 10 millisecond interrupt interval. We then go and discover the other interrupt pin in the second endpoint. And then we have issuing a read pipe for interface zero.
+
+And then, like I said, we're iterating through all the interface. So later on, we show an asynchronous read for interface number one. And my callback function gets called. And the result is return success. It tells us that it was interface zero that we got. And transfer number one. And then we have a callback function.
+
+And the result is return success. It tells us that it was interface zero that we got. And transfer number one. And then we have a callback function. And transfer number one. In this case, we're not chaining read, so that does not change. And bytes transfer was zero. And these are the first four bytes of it. As it turns out, I'm actually not sending any commands to this device to start sending data from interface number one. So that's all it's going to do. And I stopped it.
+
+It demonstrates that we were issuing the reads from both pipes and we were getting the data and reissuing the read and this would have continued on and on and on. So that's a simple example. Now we're going to I'm going to add another device, and actually we're going to use essentially the same code, but this other device is this digital camera that has a USB video class interface. And I know that it is a bulk pipe camera as opposed to an isochronous camera. So let me plug it in.
+
+You know what I'm going to do, actually? I'm going to plug it in through my CATSI. And so at the end of the program, I can actually show you the data coming in through the-- and being decoded by the USB bus analyzer. So the first thing I want to do is make sure that we saw that device. So I go to USB Prober here.
+
+Fernando Urbinan: Do a refresh, and here it is. It's a USB PC camera, and as you can see, it has a bulk input. On highlight-- oh, sorry. Is it there? Now it is. Sorry about that. It works in the other, in Xcode. Okay, so I get now version 4 of my demo program.
+
+The first thing we have to do, I didn't show you before, is that we need to change the vendor and product IDs to the new camera. As an aside, with Xcode 2.0 and native targets, now you have to specify the Info.plist. It opens in just a regular Xcode window editor, or you can open it with the plist editor. I've discovered that you can input a hex number instead of just a decimal number by prefacing it with 0x, and it'll take it and it'll do the right thing. So that's kind of handy.
+
+So again, we now have our vendor and product ID, and we want to not only look for any interrupt in pipes, and I didn't show you, but this device actually has an interrupt in pipe as well. But we also want to look for the bulk in pipe. We come and here where we're looking at, we're iterating through all our endpoints, we're going to go ahead and add the Bulk. That's not where I wanted it.
+
+Let's put it-- Okay, so we're going to look for a pipe that is either an interrupt pipe or a bolt pipe and the direction being USB in. Then, with this device, what we want to do is actually read, issue more than one read
+
+[Transcript missing]
+
+So let me actually go and modify my data structure here.
+
+[Transcript missing]
+
+Let's go back to Work with Interfaces, I believe. You know what? Let me go to the one that I have everything there, because we're running out of time and it'll be a lot easier. Go home. You see I have the checkpoint versions, just in case.
+
+Let's go back to work with interfaces. As you can see, we are looking for the interrupt and the bolt pipe, like I was saying earlier. Now when we go to read pipe async, what we want to do is create data for each of the reads that we're going to issue. And that is my number of concurrent transfers that I'm going to issue at a time. I modify my global to be a two-dimensional array with the interface number and the transfer number. And I remember the transfer number right there.
+
+Calls are the same. The calls to read PipeASync, they need a pointer to the buffer where we're going to put the data, what the max packet size is, etc. So that doesn't change. And because we are in this for loop, we're actually going to issue the call twice.
+
+If we go back to our callback function, as you can see, it looks the same as before. And if I was actually typing, you could see that I wasn't going to change it at all. At the beginning, once we get the callback, we only have to reissue that one read, because we're going to get another callback later on. And that's how we keep the bus primed with our reads. And of course, up here, I Let's modify this to be the two-dimensional array. Let's build this.
+
+[Transcript missing]
+
+Fernando Urbinan: So, you can actually see right here that, and I'm not going to go through all the things, but we discovered the interrupt in endpoint, we discovered the bulk endpoint, and we created two reads at a time. And we can see that we're getting callbacks with 64 bytes, and transfer zero, and then transfer one.
+
+If we could go to the Windows machine just for a second, and we have... This is the Cat C software. We're going to set it up to record, and I'm going to run the program again. Let's make sure that... Okay, it's running. I'll stop. Let's see, let's do a stop but preserve uploaded data. And here you can see, view, zoom out, no, zoom in.
+
+Fernando Urbinan: Let's do one more. Yes, yes, I know I'm running out of time. You can see that 64 bytes at a time, but we were so close. And I can just continue. And you see actually in this case we haven't talked about it, but you see the data toggle actually toggling between zero and one in each transfer. And at some point we're probably going to see Here, that device gave us as much data as it could, and now it's starting to knack the read.
+
+[Transcript missing]
+
+In knowing how to start with USB, and that's why we did this demo like this. Of course, there's the URL where all the information about WWDC is. The related sessions. Tomorrow, we have a kernel extension lab next door where FireWire, USB, I/O Kit people are going to be. There is also a lab for adding HIT support to your applications, and our HIT guru, Rob Yepeza, is going to be there. I encourage you to take advantage of that.
+
+Craig Keithley over here is going to come for the Q&A. He is our evangelist, our technology evangelist. Of course, if you don't know about the USB list at http://list.apple.com, join it. We always read it. Sometimes, depending on our workload, we don't answer as fast as you might want, but we are there, so please use it.

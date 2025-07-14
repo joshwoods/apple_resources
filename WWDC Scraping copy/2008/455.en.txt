@@ -1,0 +1,179 @@
+---
+Title:  Kernel Extension Management
+Year:   2008
+Web:    https://nonstrict.eu/wwdcindex/wwdc2008/455/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Good afternoon. Welcome to the last session of the last day of WWDC. Are your brains full?
+
+[Transcript missing]
+
+The big thing for us is that it's the basis for new features. We have cleaned this up and built it with a mind to the future, and we're going to be talking a little bit about some of the things we're building on top of it. After I've talked about all that, Andrew is going to talk to you about the new linker that has really opened the floodgates to make all of this possible.
+
+So what we're going to cover in general order is the overt changes to the tools and to KEXT management support that you deal with as a developer, the internal changes to the system that hopefully won't affect you too much, the features we have planned coming along, and then the benefits of the new linker. Again, Andrew will cover that. We've been repeating this in every presentation dealing with KEXTs. iPhone does not use loadable KEXTs, so if you came here for that, sorry.
+
+The technology framework we're using is in three general chunks, and then the linker underneath all of that. Userspace KEXTs management is the tool such as kextload, kextd, and the others that you use as a developer and that the system uses. There's also the specification for KEXTs bundles themselves. We're going to go into a few changes there, and then we're going to talk about how the kernel manages KEXTs. And again, Andrew will cover the KEXTs linker itself in detail.
+
+Now, I do want to say this stuff is very much in development right now. We have all of the pieces working. Everything is pretty much feature compatible with Leopard. Your KEXTs should work as they have before. But some of the new features I'm talking about are not here yet. We've laid the groundwork for them, but we haven't implemented them all yet.
+
+And some aspects that were there on Leopard are only partially re-implemented or ported. The caching schemes are in flux right now, for example. And the logging, while improved, is only partial. There are some things that we need to add there yet. So, let's go ahead and get started.
+
+As a brief overview, this is more of a Delta talk. It's not an introduction, but I'll go through some of the basics. A KEXT is a driver for the kernel for hardware devices, or it's a file system or network plug-in. It's packaged as a bundle on disk. If you're not familiar with that, we wrap individual files and resources under a directory that the finder treats as a single file to users. And we use that to organize the data and resources that we use.
+
+For use of KEXTs, what we do is, our job is to load the executable from disk into the running kernel. So what we do is we resolve dependencies on the families that Dean talked about in his earlier talk. We figure out where the KEXT is going to be in the kernel, relocate that, locate its code in the kernel's address space, and then execute the start point of the KEXT. We also handle unloading, as well as things like analyzing, developing, and debugging KEXTs. So you use our tools to generate symbols for debugging.
+
+We've got a tool that will figure out what your library should be that you're going to need to link against, and so on. This is not about the runtime. This is not about writing your KEXT code. It's not about the IOCit. It's not about the kernel calls. That's all handled through the framework. Thank you.
+
+Now, to get into the actual details of things, we've made some changes to user-space KEXT management, and the big one is that we're splitting KEXT load out. If you're not familiar with these tools yet, KEXT load is the tool you use to explicitly load a KEXT. Most I/O Kit KEXTs automatically load as devices appear, and they unload as devices disappear.
+
+But if you want to force a KEXT to load, or if it's a non-Iokit KEXT, KEXT load is the tool you use. And up until SnowLeopard, it has been the single tool for loading a KEXT for both deployment and development purposes. We're going to split those out for SnowLeopard so that we can simplify KEXT load and reduce it down to just the essentials that it needs to do. And to that end, it's going to accept just these basic options. You can still specify a KEXT by bundle ID. You can still list a dependency explicitly on the command line that isn't in the extensions folder. And you can still specify a whole folder of additional KEXTs.
+
+But you won't be able to say, for example, don't load a KEXT by bundle ID. You won't look in the system folder at all, because that's really a developer thing. Of course, all of the basic options for verbose logging and whatnot are going to be there. Right now on SnowLeopard, if you run KEXT load with the additional developer options, it will work as it did on Leopard. But you're going to get a notice saying that it's splitting and that you should use the new tool, which is called KEXT util.
+
+And I'll be talking about that in just a second. Our ultimate goal here is to reduce KEXT load to a very thin wrapper that will just message kexty with the load arguments. And kexty, the ongoing daemon, that the kernel talks to to handle all sorts of things related to KEXTs, will handle the load operation itself by talking to the kernel.
+
+As I mentioned, for developer loading, we're replacing kextload with a new tool called kextutil. And it's basically going to be today's kextload with a few extra new options now. And it's going to be less fussy about those options. If you have ever wanted to generate symbols for your KEXT and groaned as you typed in, you know, dash A with all of the addresses for every library that you don't care about, you're not going to have to do that anymore. You can just say, give me the symbols for this KEXT at this address, and it will just skip generating symbols for all the rest.
+
+Similarly, if you are in a batch or interactive mode, if you've used this tool, kextload would ask you for the load address of every library up to your KEXT. And if you failed to enter that or skipped it, it would just abort. Now it will just make up an address, do the link, and then not write out that file, and it will only give you the files that you want. In general, it's going to be less pedantic about duplicated options, so that if you specify something twice, it won't bomb out, it will just print a warning, and you'll be able to continue with your work.
+
+There are two big new options to mention. We finally have a dash-arch flag, so you can generate symbols across architecture. PPC-R386-X86-64. And Andrew's going to talk about this later, but because the linker layout has changed, if you want to do symbols for an older release of the OS, you'll need to specify the dash-legacy layout flag. We're looking into ways to make that automatic. I will point out that some behavior that you may be used to, especially in interactive mode, is different.
+
+So if you specify interactive mode, the old KEXT load would say, do you want to load the KEXT, do you want to start the KEXT, do you want to send personalities? It's actually going to load them all regardless now. And then it will say, do you want to start the KEXT, because really that's the only part that matters. We are looking into whether that's appropriate, but it's probably going to work out just fine.
+
+Overall, we are updating all of the KEXT tools. We're using the new, more efficient code base to build them. We're adding long options to all of them so that you'll be a little bit less confused over single-letter options that have opposite meanings from tool to tool, which is the case for a few of them.
+
+We're also cleaning up the behavior so that when you run these tools on your KEXT, it won't do a whole bunch of background operations on every other KEXT it encounters and log about all of that. It will just work on your KEXT and log about your KEXT, just the stuff you care about. Of course, we've got support for the 64-bit kernel and KEXTs, and again, operation for a specified architecture with these tools. They're not all ported yet.
+
+Right now we've got these six tools ported. kextload, of course, kextunload, which is a little bit cleaned up. You might want to read the man page of that again because some of the options behave a little bit differently than you thought. kexty is ported, not something you generally deal with.
+
+And kextool, which is the replacement for kextload. kextstat has been updated to work on running on top of both 32- and 64-bit kernels. And the kextlib command is also ported. So that lets you find out what libraries you need to declare. Not yet ported, but hopefully will be there very soon, are the kextfind utility, kextcache, and mkextunpack. As I mentioned earlier, the caching schemes are still being worked out.
+
+Speaking of caching schemes, if you're working with KEXTs on systems from Leopard and prior, the good news is that nothing has changed. You're going to install your KEXTs atomically into the extensions folder, and then we'll notice that, or if you touch the extensions folder, we're going to notice that and just rebuild the caches automatically. The truth, of course, is that everything is changing since Leopard. So if you're doing any touching of the individual cache files, you probably want to move to the new model.
+
+Specifically, we're moving all of the cache files into system library caches where they should have been all along. There's not going to be any more plist cache. Some of you may have run into problems with that getting a little bit out of sync and having to manually delete that.
+
+We're hoping that you're never going to see that again. We're moving to a small cache that's just going to have identifier version and path so that we can look up KEXTs by bundle ID and get to their bundle on disk very quickly. And then we're going to have a separate cache for IOCit personalities. So we're going to have a separate cache for IOCit personalities.
+
+Other changes coming along. And this is the big one. We're going to be talking about it a little bit more in detail as we go along. SnowLeopard KEXT loads are now atomic between the user and kernel space. If you've ever looked into any of the code or have dealt with these problems, the operation of loading a KEXT from user space on Leopard and prior involves many MIG calls down to the kernel for each KEXT in the dependency graph.
+
+We had to allocate the memory in the kernel to get the link address, and then we had to do the link in user space, and then copy the relocated executable down, and then set up all of the relationships between the dependencies, and each of those is a MIG call.
+
+What we're doing now is we're going to be using the MIG call to do the same thing. We're going to roll up that entire load graph into a Mach message, send it down to the kernel, and it's going to do all of that work down in the kernel now.
+
+That said, kextutil is still going to allow for KEXTs not to be started or for personalities not to be sent when you do that developer load operation, so that you'll be able to set up debug points and whatnot for your start routines, and this is particularly important for non-IO kit KEXTs. In addition, there's no more Mach.sim file. The kernel's link state is maintained in kernel memory. We can do everything down in the kernel now, so we don't have to write things out on disk, and we don't have to wonder which kernel we're actually linking against.
+
+Also, the UUID checks, you may have seen warnings about if you've been developing KEXTs and replaced families or your own KEXT. You may have seen warnings saying you can't load because a different UUID is loaded. We actually won't have to do that anymore, because the libraries in the KEXT will also have their link state. We're going to talk about that more. So it will be possible to load against a dependency that's changed on disk. I want to repeat that.
+
+If you update a family on disk, or someone runs a software update, or if you have a KEXT that does that, you used to have to reboot because we lost the executable on disk that we needed to do the link in user land. Since that's all done in the kernel now, we can continue to load KEXTs as long as they're compatible without forcing a reboot. The UUID is still there in KEXTs built with the new tools. We may be using it for other purposes. It does have its uses, but we don't have to do it for this particular purpose.
+
+Now we're going to get into some upcoming features. One of the little ones that I've been hoping to do pretty soon is doing some enhancements to KEXT stats. So you can list additional properties, perhaps including that UUID, so you can verify that the KEXT you're debugging is the one you have on disk and you're working with, and not have to constantly update the version. We might also add the ability to list the OS object classes that your KEXT defines, or that an arbitrary KEXT defines, just to see which classes are where.
+
+In addition, we're hoping to add a C API at long last for KEXT loading and unloading. It will be an RPC to kexty, and it will take care of that communication process. So you will not have to fork and exec KEXT load just to load a KEXT from your application.
+
+We're probably going to have the same authentication requirements for kextload, but we're looking into ways to do that. So your process will have to be running as root or probably an admin user, but we're going to look into how relaxed we can be about that and what sorts of verification we can do.
+
+And then finally, much more tentatively, since we have to talk to another team about this, we're hoping to integrate things with the dev tools more. For example, it really should be possible from GDB to just have it figure out the addresses of the loaded KEXTs, generate the symbols for you, and automatically load them.
+
+We really want this to be possible, so we're going to talk to the dev tools team and see if we can have something added. For now, what you'll do is you'll run kextutil-s and use the addkext command as you currently do. And similarly, what we would like for Xcode is to have it automatically generate your OS bundle libraries declaration so that you don't have to go rooting through headers to figure out which libraries. Now back in Leopard, I introduced the kextlibs command, so you can run that on an arbitrary KEXT.
+
+It ignores the OS bundle libraries property and actually goes and looks in every library for symbols that match your undefined symbols, and it prints a list of those. It tells you which ones occur in multiple KEXTs, and you'll have to make a decision there. But if everything works out and you really don't have any conflicts, you can just run kextlibs-xml, pipe it to pbcopy, and then paste it into your plist. That's what you can do for now.
+
+On to KEXT bundles, the changes to the format, in particular the info dictionaries, we have added one big feature that is actually there in SnowLeopard right now, and that is architecture-specific properties. So if you have to link against different libraries on x86-64 versus i386 or PPC, you'll just tag on the architecture to the end of the property, right here as the example, os-bundle-libraries under bar x86-64. When we're linking your KEXT for that architecture, and we need to look up the os-bundle-libraries property, we will tag on that architecture, look that up, and if it exists, we'll use it. If it doesn't, we'll fall back to the base key and use that.
+
+So that's a technique you may be able to use to make your KEXT more compatible across some releases. As I mentioned, we're going to look up that base key so you can use that for backward compatibility by adding an architecture-specific property for some specific thing that you know will only work on SnowLeopard, and then the base key for the architecture-specific property.
+
+The base key will then be used for Leopard and prior releases. This is good for any top-level property except the CFBundle properties and, of course, for os-kernel resources. That's reserved for system KEXTs. And because this is an addition specific to KEXTs, you will never see this used by CFBundle. This is something we only do internally in our stuff.
+
+Speaking of libraries, for 32-bit KEXTs, things haven't changed too much. OS bundle libraries, for those who don't know, is the list of KEXTs that you need to link against in order to load properly. We haven't really changed those for SnowLeopard. The supported 32-bit KPIs have not changed. We have a new link model that includes every symbol in the kernel, but that's the old link model, and we're still supporting it on SnowLeopard for 32-bit KEXTs. Unsupported KPI has had some symbols removed. They are unsupported, and we have removed some, and we're adding a KPI, com.apple.kpi.private. This has symbols that aren't available for third-party KEXTs, and you really shouldn't use them. Thank you.
+
+and Andrew Myrick are going to be working on the kernel extension. We're going to be enforcing that private ability at some point, so don't use that. In 64-bit land, there has been some KPI cleanup, which you've probably seen if you've been to the earlier talks. More specifically, coms.apple.kernelstar is not there. This is really an old compatibility link model that Andrew will probably talk about a little bit.
+
+It's not there, and in fact, due to a bug in the seed, if you link against them, you're actually going to get a really quick kernel panic. So make sure you update your OS bundle libraries before you port to 64-bit. Also, coms.apple.kpi.unsupported, not there anymore, and coms.apple.kpi.private, not available. If you were here before lunch, you saw Jay Towsley talk about the porting ability for various things, and then there was also session 338, the whole kernel architecture and kernel extension transition.
+
+Another feature that we're looking into adding, not there yet, but we have had some requests for this, so we're going to look into it. Resource files for KEXTs, specifically for things like device firmware. Any large thing that you need to get and download to a device, but then don't need to keep around in kernel memory, this is the target audience for that.
+
+Right now, if you want to do downloadable firmware or similar things, you either have to embed it in your IOCit driver personality, which means it remains resident in kernel-wired memory pretty much forever, or you have to do some rendezvous with a user space process, both of which are kind of painful. So what we're going to do is we're going to support CF Bundle's resource feature, and your KEXT in the kernel will be able to say, get me the resource with this name.
+
+And what we're going to do is either get it immediately at boot time, we'll have some way of marking these with a property, something like OS Bundle required, which you use to specify KEXT needed at boot time. If you do that, you'll name some resources that are needed. The booter will copy them into memory. The mkext format will also include those.
+
+And then they'll be available immediately if you request them by name. Past early boot, those things are going to be flushed from memory to save kernel-wired memory. And if you request them, that request will be routed up to kexty, and that may be synchronous or asynchronous. We're still looking into that. All that said, these are static resource files. These are part of your bundle. They should be read-only. They will be cached, and you shouldn't be using them for configuration. They're not a place to store preferences.
+
+on to the kernel itself. This is where everything really happens. The big news is that kernel is now really properly claiming ownership of KEXTs. It used to be sort of a split duty between the kernel and the user space KEXT framework. Now all KEXTs are going to be linked and loaded inside the kernel.
+
+The user space tools just take the raw executables and plists and whatever else might be needed, build up that dependency graph, and send that down to the kernel in one message. As I mentioned earlier, it's going to be an atomic operation with regard to user space. It's one call.
+
+Library KEXTs maintain some state down in the kernel that allows further links to happen. The relocated executable itself isn't quite enough, so there's going to be a little bit of extra memory we keep, but we're going to put it in pageable memory so that we're not taxing the system. And as I mentioned before, it will now be possible to update a library on disk and still link against the loaded old version because we have that link state. If the new KEXT that you're loading is compatible with that library, then everything will just work.
+
+[Transcript missing]
+
+On to features again. In the kernel, what we're hoping to do is take care of auto-unload, and in particular for this instance, if any of you have ever tried to write a non-IoKit KEXT that uses C++, and particularly uses libcurrent C++, you've probably run into problems. And one of the reasons for that is that the automatic unload mechanism used by I/O Kit is pretty much predicated on the presence of any OS object subclass.
+
+So what we're doing now is we're hoping to make it safer to use libcurrent C++ on SnowLeopard in that when a KEXT gets loaded, we're going to look for subclasses of iOS service rather than OS object, and only if that's the case do we mark the KEXT as eligible for automatic unload.
+
+Also, very few of you have ever probably run into this, but the stop routine for the KEXT, this is not a driver stop function, but this is the stop routine for the KEXT as a whole. We're going to call that now. I/O Kit KEXTs don't have a stop routine, so the automatic unload mechanism for I/O Kit KEXTs would just unload them from memory. We're going to call that stop routine to do a clean shutdown, and then everything should work fine. None of this should affect I/O Kit KEXTs, so if this doesn't apply to you, you can pretty much forget the whole slide.
+
+This is another big one. Internal for now, but this is coming along. We have a class in libkern now called OS KEXT, and this is the new thing that manages loaded copies of KEXT bundles from disk. It reads KEXTs from the booter data or from the mkexts at boot time and builds up an internal database of which KEXTs are available and fields the requests to load, start, stop, and unload at boot time as well as later. It tracks the defined OS object subclasses via OS metaclass.
+
+This all used to be done in OS metaclass, but we're moving the bits of that that are proper into OS KEXT. It also takes care of adding and removing personalities into and out of the IO catalog. Most of this is internal detail that shouldn't affect you. But it's the basis for upcoming new features. It's the bottom slide there. And it provides the services.
+
+to the user space KEXT system and the kernel, as well as to running KEXTs. We're hoping to add some functions to this class and make them available to you so that you can, for example, in your running code, say, my KEXT to do something. And getting the resource file is going to be one of those things.
+
+Also for non-IoK KEXTs, we're looking into actually enabling automatic unload. Rather than preventing it, we want to make it possible to do in a way that makes sense for you so that when your KEXT that is not an Iok KEXT is no longer needed, it can be cleanly unloaded automatically without you having to call KEXT unload in user space.
+
+The way we're going to do this is we're going to have an opt-in ref count on the underlying OS KEXT. So when you call the first retain, your KEXT immediately becomes eligible for automatic unload when that retain count hits zero. Every now and again, there's going to be a sweep of the loaded KEXT, and anything that is eligible and has a zero ref count will be unloaded cleanly.
+
+We're also considering automatic load for KEXTs. We've had some requests from people writing file system plugins and network kernel extensions for some kind of automatic load mechanism, and we're talking to you. If you want to talk more about that, definitely come see us after this session. We don't know that it's gonna happen because the requirements so far have been really vague, but if we can nail down something really concrete that will work across a wide variety of KEXTs, that's what we're gonna do.
+
+Also, the kunk execute thing or facility that some of you may be using is going to be replaced. It's never been properly supported for quite some time, rather. So we're looking into a new mechanism based on OS KEXT that will allow you to request a user space program to be run by an absolute path or a path within your KEXT bundle. So you'll be able to maybe launch a daemon or run some kind of utility or fire up a GUI config tool of some kind. The request will be routed through Kexting, executed in user land.
+
+We're probably going to allow that to be synchronous or asynchronous, depending on what your needs are, but we're still evaluating the security considerations of that, so it's not there yet. We don't have any plans to replace Kunk user notification. If you want to present some kind of user dialogue or alert from the kernel, you'll run the new action request and just have a program that puts that panel up. And we're going to get into the details of the linker now with Andrew. There you go.
+
+Hello, everyone. Hope you're having fun. My name is Andrew Myrick, and I am the KEXT linker engineer. And as a little sidebar before we get started, this started for me a couple of years ago. In the summer of 2006, I was actually a bright-eyed and bushy-tailed intern working for Apple, who thought, hey, need a new KEXT linker. That sure sounds like fun. Well, while fun is only one of many words I would use to describe the kernel linker, I'm very happy to announce that we're bringing a new KEXT linker to SnowLeopard as part of the new KEXT management stack.
+
+So first a little background. What is a KEXT linker? Well, the KEXT linker is the utility in the kernel that takes kernel extensions and binds them into the kernel's address space. Kernel extensions are just binary kernel plug-ins that live in the kernel address space and interact with the core kernel and other kernel extensions. The KEXT linker's job is to resolve references to those kernel functions and interfaces, resolve references to other KEXTs, export the KEXT functions for use by other kernel extensions, and then also provide binary compatibility for kernel extensions written for older OS X systems.
+
+[Transcript missing]
+
+To go a little more into the details of the limitations caused by KLD, well, KLD is pretty heavyweight. It's designed to do a whole slew of things in user space, like link dynamic and static libraries, many things that we don't need in the kernel. As I mentioned, it doesn't clean up its memory. It has to relink all of the KEXT dependencies before it can link an actual KEXT, so it redoes a lot of work. And we have this external Vtable patcher, this external module that takes care of our binary compatibility.
+
+Finally, LD and KLD had conflicting development directions. In the kernel, we want to add certain features for kernel linking that aren't necessarily applicable to user space. And as I already mentioned, LD had a lot of features that we just didn't need in the kernel. Trying to reconcile those diverging directions made it difficult to get all the new things into the kernel that we wanted to add.
+
+So we have KLD and KXLD. One of our biggest goals for KXLD was performance. The old kernel linker had to go back to disk every time it needed to relink because it had to go and fetch all of the dependencies. We wanted to avoid that. We wanted to avoid having to relink old KEXTs at all.
+
+So the way we did this is with something we call a link state object. The link state object is a piece of intermediate link data that tracks all of the symbols and functions that a kernel extension exports. It also keeps track of all of the publicly accessible V tables that are required by its dependent kernel extensions for binary compatibility.
+
+These link state objects are stored in pageable memory so that they don't use any wired kernel resources, and they allow us to link a single KEXT only once. We then cache those link state objects in the kernel as pageable memory away from the rest of the system so that when we need to link a new KEXT, we can pull them up and link very quickly. To illustrate this, let's take a look at how this actually works.
+
+The kernel linker starts out by just taking in a KEXT and adding in all of these pageable link state object files that that KEXT needs to be linked into the kernel. This linker then generates a new link state object, exporting that kext's public functions and V tables, and adds that to the pool of pageable link state objects. It then also exports the relocated KEXT binary, which it then injects and initializes in the kernel's address space, taking care of all of the linking.
+
+So let's talk about what this means. Did we achieve our goal of getting high performance? Well, I can certainly say that the link state object and the algorithms we were able to design around it greatly improved linking performance. First of all, just looking at memory reuse, we were actually able to reuse a lot of memory.
+
+The old linker allocated and freed roughly 90 megabytes on startup, and unoptimized KXLE is already down to 60. We hope to get that down to about 15. But the real performance gains came in actual linking time. ATI Radion X2000 KEXT is a kernel extension that drives the latest graphics cards. The old linker took 210 milliseconds to link that KEXT. KXLE takes only 25 milliseconds.
+
+So what does all this mean for you developers? Well, first of all, to make sure that we link kernel extensions the way we can rely on in the future, we've changed the KEXT memory layout. In the past, kernel extensions were laid out just as they were in their Mako object files, which is just one section, one segment, right after the other.
+
+In the new model, we now separate all of the segments into page-aligned segments as they originally intended, which allows us to implement proper VM protections on those segments. This means we can write protect the text segments, execute protect the data segments, and in general provide better security. We haven't enabled this yet on SnowLeopard, but it will be there in the GM.
+
+Now this means that symbol generation has changed, because the layout of kernel extensions has changed. So to generate symbols for older systems, for Leopard and earlier systems, we've added a flag to kextutil called legacy layout, which will emulate the old kernel extension layout for generating symbols for those older systems.
+
+We're looking at automatically detecting this at runtime based on the kernel's version, but we're not there yet. An important note is that Leopard systems in earlier cannot generate symbols for SnowLeopard systems. It's important to keep in mind, if you need symbols for a SnowLeopard system, use a SnowLeopard system to get those symbols.
+
+Another thing that Nik already mentioned is cross-architecture linking. SnowLeopard can link for any architecture that OS X runs on. PowerPC is even supported, even though the seed doesn't support PowerPC. So if you have a PowerPC system running Leopard earlier, just make sure you use legacy layout to get the right symbol generation. This applies to both symbol generation and when the pre-linked kernel comes along, it'll apply to that too. So any SnowLeopard system, 32-bit or 64-bit, will be able to generate symbols for any other.
+
+So what else are we looking at? Well, we know a lot of you have wanted weak linking. And weak linking is pretty tricky, especially thinking about C++, V tables, how all that works. But we really want to get weak linking in at least for C symbols. We're going to try and do this in as seamless a way as possible as user space does, using existing GCC attributes, specifically the weak import attribute. Add this to our headers, much the way that the availability macros in user space work.
+
+Then when you need to access and find out if a symbol is ready to be used, if it's available at runtime, we'll have a function similar to what's listed up here, OSMetaClassIsWeeklyDefined, which will return null if it doesn't exist, and the symbol's address if it does. We'll also try and add some logic for unresolved weak symbol dereferences so that not only-- so instead of just getting a panic, you'll get a panic that says, this KEXT accessed this symbol, and it wasn't-- it was weakly defined but unresolved.
+
+Specifically, we're really looking for some feedback on what you all want to weak link. So if you have some suggestions, some things that you're really looking for, please contact us afterwards. There will be an email address I'll put up shortly with information of how to get in touch with us about weak linking.
+
+Another feature we're looking to add is better symbol generation, which Nik touched on earlier. We already have cross-architecture, but there are a couple of other features we're looking to add. First is the KeepSims bootarg. Some of you may know that if you set KeepSims equal to 1 as a bootarg, The system will--the kernel will keep its symbols in memory so that the panic that's printed on screen will be symbolicated automatically. And we're looking at storing the KEXT symbols in the system as well so that you won't just get this black hole of functions in the kernel stack trace. You'll actually get all the symbols there as well.
+
+And we're looking at integrating that with GDB so that add KEXT would either grab symbols from the save symbols and keep sims, or just call out to the new kernel extension management library that Nik has worked on to generate those symbols for you. Really, we know that 14 steps to generate and load symbols on a system to debug a kernel extension is a lot, and we're just trying to cut that down.
+
+So for more information, you can talk to Craig Keithley. His contact information is there. There's also the guide, Kernel Extension Programming Topics, available on developer.apple.com. Also, we've requested feedback for a number of things in this talk, and if you have any to give us, you can email kext-feedback@group.apple.com to give us more information.
+
+Some related sessions that hopefully you all got to see, but if you didn't, you can eventually see them through the attendee website, was the 64-bit session, Mac OS X 64-bit Kernel Architecture and Kernel Extension Transition, getting started with the I/O Kit, device drivers in Mac OS X, which is this morning, and also maximizing platform compatibility of I/O Kit drivers, also this morning. So to summarize, we completely reworked KEXT management for SnowLeopard in as binary of compatible ways we possibly could.
+
+Most of the new features that we're bringing are opt-in, and some, like the new speed of the KEXT linker, you'll just get for free. Porting to K64 requires a few changes, and the details are subject to change, but in general, we hope that this all works pretty seamlessly for you all. So thank you very much, and open this up for questions.

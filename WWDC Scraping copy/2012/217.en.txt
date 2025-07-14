@@ -1,0 +1,241 @@
+---
+Title:  Layer-Backed Views: AppKit + Core Animation
+Year:   2012
+Web:    https://nonstrict.eu/wwdcindex/wwdc2012/217/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Hello. Welcome to Layer-Backed Views: AppKit + Core Animation. My name is Corbin Dunn, and I'm an AppKit software engineer. So what are we going to talk about today and what are our expectations? Well, we're going to assume you have some experience with traditional AppKit drawing or maybe have experience with UIKit. You don't necessarily have to have experience with Core Animation, but if you do, a lot of this will be great information and will fill in a lot of holes for you.
+
+So, effectively using layer-backed views. What does using a layer-backed view mean? It means using Core Animation. And you want to use Core Animation in order to get smooth, fast animations. And the reason that they're smooth and fast is the animations aren't going to be done by the CPU, but they're going to offload a lot of the work into the GPU.
+
+By using a layer-backed view, you can utilize all the great things that are already in NSViews, like the hierarchy, events, hit testing, the responder chain, etc. Historically, all of our layer-backed views have worked in AppKit and used traditional DrawRack-based drawing for a long time, since Leopard and 10.5. Now let's jump right in and do a little demo to show how this can improve your application.
+
+So what I have here is just a quick little demo with the frame rate meter from Quartz Debug showing. I'm going to start an animation, and this is not layer-backed. This is just your traditional, regular Cocoa application. Start a few things, get going, and the frame rate's kind of hovering at about 25 frames per second.
+
+And I can turn layers off, and what this does is I just call a setOnce layer in the entire content view, and now the frame rate is pegged at 60, which is what we cap it at. We could even do some more animations like fading views in between, animate sorting, change the heights, and it's still pegged right at 60.
+
+So that shows some of the benefits of adopting layer-backed views. So what are we going to talk about today? We're going to first talk about drawing. We're going to cover traditional AppKit drawing and how it works, how to turn on Core Animation and get layer-backed views. Then we're going to discuss animating, say how it works traditionally inside of AppKit and how it works when you're layer-backed. We're going to talk about contents updating and animating to get efficient animations, and how to do synchronized sub-view animations so that everything works together really well.
+
+We're going to discuss some best practices, such as how to deal with text and get fonts moving right. We're going to discuss focus rings so that focus rings work right in a layer-backed view. And then finally, I'm going to do some more details, tips and tricks at the end.
+
+Let's jump right in and start talking about drawing. The traditional NSView drawing model, it's going to use... Or what I'm going to talk about is first the traditional NSView drawing model, then I'm going to jump into Core Animation, how to actually turn in layer-backed views, and how it works with AppKit. Then I'm going to discuss some differences in set-needs-display, and how we actually do redrawing, and how it's different when it's layer-backed and not layer-backed.
+
+So the traditional NSView drawing model. And to emphasize this is the traditional Cocoa and not necessarily layer-backed, I have this Cocoa icon up in the corner. So let's say you have this cool custom view. It's got a gray background, a custom image drawn in there, and some custom text drawn on it.
+
+How would we draw this with traditional AppKit drawing? Well, you're probably very familiar with implementing DrawRect. You'll do a fill of like a light gray color that you'll set, fill in the background. Then you're going to draw a border on top of that. Then you'll probably use our string drawing API to draw the text, like the word tandem unicycle. Then finally, you'll draw the image on top of it. So you're just drawing one thing on top of the other.
+
+Now, what happens when the window actually needs to be displayed and drawn? Well, at draw time, the window's going to start at the topmost level and find the dirty region that needs to be redrawn and recursively redraw all children. So first, the parent window and its content and frame area will redraw. It's going to enumerate to all the subviews. Draw, say, the blue one and then the red subview.
+
+And each time, it's going to enumerate down to each child subview and draw it on top. So the custom view that we have there would be drawn last in this case. Now what this is basically doing is it's drawing into the window backing store. And what you can really think about doing is drawing into one large image all at once.
+
+So let's take a quick look at a flow chart about how this traditionally works. Your window has a dirty area that needs to be redrawn. It's going to prepare the window context for drawing, so it's going to set up that big image you're going to draw into. Enumerate all the views that are in that dirty region that need to be drawn, and call their drawRect. First on the parent one, and then the drawRect for all the children ones. Now this is just showing how the flow chart works. drawRect doesn't really call the other drawRects, but it's just to emphasize how it works here.
+
+So how does it work when you opt into layers with a layer-backed view inside of a Cocoa application? So I have the little Cocoa or the little Core Animation icon in the corner here to kind of emphasize that this is a Core Animation-based slide. To opt into layer-backed views, you call setOnceLayer on your topmost view.
+
+What's going to happen, all your subviews are going to implicitly get layers. Those views don't actually have setOnceLayer set to yes on them, but they do have a layer implicitly created by AppKit by virtue of the parent having setOnceLayer yes being set. So when it is layer-backed, what it really means is there's a CA layer, a Core Animation layer, that kind of backs all these views. So all these views, each layer is effectively like a little image, and each image is created and filled in with your DROC implementation.
+
+So what happens when a layer needs to draw is the layer has a dirty area. It creates, Core Animation creates, a CGContextRef, which is essentially an image for that entire layer's bound size. Core Animation calls into AppKit using a delegate method, drawLayerInContext, and that delegate method calls your implementation of drawRect.
+
+And whatever you drew in drawRect inside of your bounds for your view is going to be cached into the layer contents. So essentially you're drawing into just that layer's image. What happens when Core Animation actually goes to display everything is it has all those individual layer contents, all those little images, and it's going to composite them together quickly on screen to give you what you finally see.
+
+So back to some traditional Cocoa drawing and how we actually mark views as being dirty. So with traditional NSViews, to mark a view as being dirty, you just call setNeedsDisplay: Yes. This should be hopefully very familiar. So what happens is the window's going to keep track of that dirty region.
+
+Now, the interesting thing, which hopefully you're all familiar with, if you invalidate that parent region, everything in that parent region is going to invalidate, and anything which happens to overlap with it will also be invalidated and redraw. So if you have that orange view underneath, it's going to also redraw. So if you call setNeedsDisplay on the orange one subsequently, it will do the reverse. The parent view that's on top of it will also be redrawn because the window is keeping track of that dirty region.
+
+Now, let's see how it works when it's layer-backed, because it's slightly different. So if you call set-needs-display on that orange view, on a layer-backed view, just that view is going to be marked as dirty, and just that view is going to be redrawn. So that other view, the custom one that's overlapping with it, will not get redrawn.
+
+Now this is important because I found some people will accidentally depend on the validation of sub-views. So you may call set-needs-display on a parent view, and assume it would invalidate the children views along with it. When you're layer-backed, that will not happen. So if you see views not being redrawn, make sure you're actually calling set-needs-display on them.
+
+So what we quickly covered here, we talked about the traditional NSView drawing model. We talked about Core Animation and how to opt into it and kind of how it works and draws with AppKit. And I discussed some differences in set needs display for redrawing a layer-backed view and a non-layer-backed view.
+
+So let's jump right in and talk about animating. So how do we animate traditionally inside of AppKit? Well, we introduced this NSAnimatablePropertyContainer, which is implemented on custom views or our standard views like NSView and NSWindow. And it introduces an animator proxy object. This object is an opaque object which you can treat as the original object. And any message you send to it, which is changing a property value that's animatable, will automatically animate for you. And what's going to happen is that animator proxy is going to start the animation and potentially also drive the animation.
+
+So what it looks like for a practice case, or a use case, is you'll do something like this with a little bit of code. You're going to grab the view frame, let's say it starts out like 100x100, and you want to change that frame to be 300x300 in the animation. So grab the View Animator and call Set Frame on it.
+
+Now at this point, if you read the view's frame back, the value that it's going to have is still be 100x100. It's still going to be that original value that it started out as. And what's going to happen is the proxy's going to call Set Frame again and again and again on your view. Subsequently, your view will redraw on each step of the animation.
+
+So it kind of looks something like this for a traditional AppKit animation. Your view starts out as 100x100. The proxy calls set frame, say, 175x175. You redraw, call set frame again, 250x250, and you redraw. And finally, it calls it at 300x300, the file size, and you redraw the file size. This is all done by AppKit on the main thread, which is non-optimal, so we're going to see how we can make this better.
+
+First of all, let's see how it's done in Core Animation. So this is directly using Core Animation, and it doesn't necessarily have anything to do with AppKit. The Core Animation layers don't need an animator proxy. So if you want to change the frame size, you grab your original frame, say 100 by 100, you set it to be 300 by 300, and you assign that property.
+
+That Core Animation layer property is going to implicitly animate automatically without having to use the animator proxy. And if you read that frame value back in, it's going to be the final value of 300 by 300, even though what you're seeing on screen is going to be the small, original 100 by 100 image. So Core Animation is going to do all that work in a background thread. It's going to do the interpolation from the small image to the large image automatically for you.
+
+And what it's going to do is it's going to stretch the contents of that layer. And the way it's going to stretch depends on various Core Animation layer properties. But it's all done automatically, and you do not get a call for drawRect each time it needs to draw.
+
+So if all these animation-- or all these properties for our CL layer are animatable, AppKit doesn't want them to always animate. So AppKit's going to disable all implicit animations that happen on Core Animation layers. It's going to enable them explicitly when you use the animator proxy object. So when you call ViewAnimatorSetFrame, it's going to implicitly turn on Core Animation layer animations and allow that set frame change to actually animate.
+
+So that was quickly discussing how we start animations and how they work with traditional AppKit and how they work in Core Animation layers. Let's take a look at the layer-contents-redraw policy we introduced in Lion and see how it helps with a layer-backed view. So what this property does is it tells AppKit how the NSView should invalidate the layer and when it should invalidate the layer. It also is a key for how we can actually drive animations. So let's take a look at some of these values. We have the NSViewLayerContentsRedrawDuringViewResize , OnSetNeedsDisplay, BeforeFrameResize, and Never.
+
+All these properties only apply to a layer-backed view, and so if you aren't using layers, it doesn't do anything. So let's take a look at that first one, the RedrawDuringViewResize. This is the default value inside of AppKit, and we're going to recommend that you don't use it because it's going to call SetNeedsDisplay each time the frame changes.
+
+Now, it's the default value because it's the most compatible with how AppKit animations have traditionally worked. So if you have your view frame size, again, going from 100x100 to 300x300, and you use the ViewAnimator to change it to 300x300, if you read in that frame size, it's still at 100x100, and the proxy is going to call SetFrame for you.
+
+So again, looking at that previous slide that we looked at, even though you have a layer-backed view, this animation is going to be driven by AppKit, in the main thread, because we assume you need to draw on each SetFrame call. We don't know if you can properly stretch your contents, so that is why it's the default value.
+
+A better value to use is the OnSetNeedsDisplay value for the layer content's redraw policy. So let's take a look at why this is better. And what does this property mean? Well, it means you have to actually call SetNeedsDisplay on the layer to tell us when to redraw. We're not going to do it when SetFrame is called. So that means whenever your frame changes, you actually have to explicitly call SetNeedsDisplay on the layer. It's not the default value, so we require you to go ahead and set it.
+
+So if you do set this value, what's going to happen is if you have a layer-backed view, like this single image here, your frame starts out by 100x100, you change the frame size to be 300x300, and set it using the Animator Proxy. If you read that value back in from the view, just like when it's a strict layer, your value is going to be the final size of 300x300, and Core Animation is going to drive that animation in the background thread, and you will not get a draw-rec call on each step of the animation, but it's very fast and efficient.
+
+So why isn't that the default value? Well, the reason why is because what if you have a custom view like this one that really needed to redraw each step of the animation? So if drawX is not being called, what's going to happen is the contents are going to be stretched. So you're stretching the text and you're stretching the image, which actually is going to be displayed there, and it's going to not look good. The image will probably be blurry and the text will probably be blurry.
+
+So, what is the solution to that so you can use Onset Needs Display to get fast animations driven by Core Animation? You can composite your view with subviews in order to actually make it work correctly. So your background could just be a view which draws a light gray with a dark gray border fill. And then you can composite it made of subviews, so you could drop in an NSTextField for your actual text area, and an NSImageView for your image there. Or you can just use the AutoResizingMask or AutoLayout to actually control your position of where these views are located.
+
+Then at runtime, what happens when the animation happens, it's going to be smooth, it's going to be driven by Core Animation inside the background thread. The text is not going to stretch because it's just going to move the layer around from one position to another, because in this case we didn't even want to change the text size. And the ImageView is going to properly stretch and know how to redraw itself or stretch, and will look perfectly fine.
+
+Now another option for the layer contents redraw policy, we have the NSViewLayerContentsRedrawBeforeViewResize . So what this means is it's going to invalidate the view and the layer right before the animation starts. And it's going to let you redraw at the final size of the animation. It's going to use that as the contents for the animation as it happens. In Core Animation, we use that for driving the animation on the background thread. This means the contents are going to look crisp at the end of the animation, but might look a little bad at the start. So let me emphasize and show how that works.
+
+So if you're using this Before View Resize option, and you're changing from 100x100 to 300x300, as soon as you make that animator call before the animator even starts animating, your view is going to instantly see itself at the final size of, say, 300x300, and redraw once right there.
+
+Then that's going to be the contents for your layer stretched down. Since it's stretched down, your contents might look a little down-sampled. It might not look perfect or quite good. But during the animation, it's going to be fast and smooth, and at the end of the animation, it will look correct and perfect. So this is a good option to use in some cases where you know that you can redraw once, and it will look fine.
+
+Next, we have the NSView Layer Contents Redraw Never option. So what is this good for? Well, what it means is whenever you call setNeedsDisplayYes on your view, the view is not going to do anything. It's not going to invalidate the layer or touch it at all. So this is good in some very limited and useful cases, or some limited cases.
+
+One particular place that's very useful is for a layer-hosted view, which begs the question, "What's the difference between layer-backing and layer-hosting?" Layer-backing is what we're talking about in this talk, and that's when AppKit's going to create and manage a layer for you that's essentially behind the view. You don't really have to do anything with it.
+
+It's going to own most of the properties on the layer, and you don't have explicit control over it. Layer hosting is you as a developer say create a custom CA layer subclass called MyCustomLayer, and you call setLayer in that view. We're going to host that layer inside of the view for you. We're going to keep a hands-off approach and not touch things on it.
+
+So that was discussing animating, and in particular using the Layer Contents Redraw policy to get fast, smooth animations. Let's talk about contents updating. So you have these fast animations. It's great, but you have lots of memory now, because on screen you have a ton of these layers that all have the same exact contents. They all have a green background. They all have the same image. So how can we actually make memory better? Or use less memory? The way to use less memory is to not use drawRact.
+
+Now, how can you not use DrawEct? Well, the way you can do it is by directly using Core Animation properties to represent your user interface. Now, CA Layer has some properties like background color and border color that you can explicitly set to control how your layer looks. You can also directly set the layer's contents to be a particular image that you have. And you can use that same layer contents, that same image, in multiple views that have the actual same look and share it everywhere. You can also take a small image and have it stretch properly.
+
+Let's take a look at how that works by just a regular CA layer and how you set properties. If you have a typical CA layer, you can do things like set the background color to be white, border color to be 2 pixels wide or 2 points wide, and red. And you get these intrinsic properties that are set, and they're very cheap to set. Interesting thing that's new to Mountain Lion is we now have methods on NSColor to convert from the NSColor to a CGColorRef because Core Animation layers utilize CGColorRefs.
+
+In addition to setting intrinsic properties like the border and background color, you can also set the contents explicitly to be, say, an image that you have, and just have it stretch to be the contents of the layer. Let's take a look at the traditional layer updating again and how it works.
+
+So again, your layer needs to draw, recreate an image, or Core Animation creates an image to have you draw into, the CGContextRef. And then it calls drawRack to fill in the layer contents. Now in Mountain Lion, we added a new step here to more efficiently update things. We added a new API in NSView called WantsUpdateLayer.
+
+If you say no to WantsUpdateLayer, it's going to retrieve the traditional AppKit drawing of filling in the layer contents with drawRack. If you say yes, then AppKit's going to use a different Core Animation delegate method called DisplayLayer to fill in the contents. And what it's going to do is it's going to call a new method in AppKit called UpdateLayer for you to explicitly update the layer however you want.
+
+So let's take a look at implementing this. You override wantsUpdateLayer, and you say yes. Your updateLayer implementation is going to just directly set those Core Animation properties. So you could just directly say, hey, the background color is white and the border color is red. You can also directly set your layer contents. So you just directly set the layer contents to be whatever image you already happen to have.
+
+Now, why is this better and why does it save memory? Well, now you have that same image, which is actually shared in multiple locations. So instead of having DrawRect drawing into an individual image for each one, we're utilizing the same image in multiple locations. In addition, those backgrounds actually aren't even drawing anymore. It's just setting a Core Animation property to say it's gonna be light gray. So it's very efficient and cheap for memory in order to do this.
+
+So that's cool, but what if you want to do some more complex things, such as you want to create a button like this, which has a background that needs to be stretched with like a nine-part image? So how do we do that and have it actually get it so that when your button is animated and resized, it animates and resides smoothly and correctly and is done by Core Animation and background thread?
+
+What you're going to do is you're going to make your view have several sub-views to represent each piece. You'll have a background view area that's just the background of the button. And you have this background nine-part image which you want to stretch properly. And normally you'd use NSImageDrawing to just draw it and fill it in. Instead of that, you want to share this image with all buttons that you happen to have in your application.
+
+And the way you're going to do it is you're going to implement this new Mountain Lion method, update layer, set the contents directly to that image that you already have, And the thing to note here is that image is smaller than your actual view's size. And you want Core Animation to stretch it properly. You want to take that middle pixel line and repeat it.
+
+Core Animation has a great property called the Content Center that tells it how to properly stretch. And so what we're doing here is, in this example, I'm saying, take that middle pixel and use that as the stretching portion. So the end caps are left exactly as they are, and just the middle portion is stretched. I highly recommend looking at the CA Layer header and the Core Animation documentation to see how this property works to fully understand it.
+
+So how do you do something like add the text field there? Normally you would just draw it. Well now you're going to override layout, and inside of layout you're going to probably alloc-init a text field and store it in Ivar. If you didn't have it, you'll create it. If you already have your text field, then what you're going to do is just update the frame for it. And then you call super layout.
+
+Now, if you're familiar with Auto Layout, this method layout was introduced for Auto Layout on Lion. And this method is called if you're using Auto Layout, or what we did in Mountain Lion is if you aren't using Auto Layout, but you are using layer-backed view, we will call Layout for you so you can opt into using this new technology without having to necessarily adopt Auto Layout.
+
+Now how do you deal with multiple states? Well, you're going to do what you typically did in drawing, which is switch based on something like your press state, except you're going to just set different layer contents based on if you're pressed or not. So that's pretty easy. And then the way to actually invalidate yourself is the same way you'd do it before. Say in your mouse down, you just call setNeedDisplay: yes, and that will trigger us to call updateLayer again lazily, only when it needs to be. and you can actually update your state for your button background to be a press state.
+
+Now, how do you update the title? Well, if you have the title as a separate text field, then it's really easy. You're just going to forward to the text field the setting of the title. And the NSTextField is going to know how to actually draw itself and redraw itself properly and efficiently.
+
+You're going to call setNeedLayout on yourself. You're not going to call setNeedDisplay on yourself because you as a button don't need to draw when your title changes anymore. But you need to layout because your title might have gone from big to small and you need another call to layout to actually layout your text position in the right location.
+
+So that was discussing animating and how to actually break up your view into subviews and get efficient animations that way. Let's talk about how to synchronize subview animations. So consider this: you're using the new Layer Contents Redraw policy that we introduced in Lion, and you want to animate a parent view's frame size which has a child view inside of it.
+
+Now you're going to use the animator proxy to change that parent view's frame size to be small, from being small to, say, being large, like 500 by 500. Now, if you recall what I said earlier, that view's going to instantly think it's at the final size before the animation starts. So if your view does something like layout inside a set frame, it's going to put that child view at the final location.
+
+And so when the animation starts, you'll probably see something like this. That view's out in the middle of space. and the actual other view is going to only be the thing that animates. So how do we synchronize those subviews' animations together? What we really want is something that looks like this. Animates together synchronized.
+
+First, let's discuss the NSAnimationContext, which applies to layer-backed or non-layer-backed views. What this context does is allows you to group animations together. You can group animations and change the duration, the timing, and some other properties that happen for that particular group of animations. Why is this important? Because in Mountain Lion we introduced a new property called AllowsImplicitAnimations. This property controls those implicit layer animations.
+
+What happens is this property defaults to No. When it's set to Yes on the animation context, all view or layer properties will implicitly animate without having to use the animator proxy. So this allows nested animations to happen. You can call SetFrame on the parent view using the animator, and the children will implicitly animate without having to be using the animator proxy. Now, if you're familiar with UIKit, this is very similar to UIView's SetAnimationsEnabled property. And of course, this only applies to layer-backed views, so it does not work or do anything for non-layer-backed cases.
+
+So how does it work? Well, you actually don't have to ever set this. If you're using the animator proxy, it'll be set for you automatically and you don't have to do anything. So when you call the animator, it's implicitly going to say, "Hey, animation context, let's say it allows implicit animations to be yes." Then change your frame and then set it back to no.
+
+So what's cool about this is in your frame change, if you do any layout that changes subview frames, they're going to implicitly animate along with that parent view, which is generally what you want. And in the end, it gives you that view where the child view, the little blue one, will animate synchronized with the parent view.
+
+So that was discussing animating, and I was talking about how to actually do synchronized sub-view animations with Apparent View. Let's move on and talk about some best practices, and in particular, text and font smoothing and how to deal with it. First of all, LCD font smoothing, what is it? Well, it's also known as subpixel anti-aliasing. It is actually different than anti-aliasing, which is separate.
+
+And you can kind of see it in this close-up shot here of the word "button." The LCD font smoothing on an LCD display will, when we render text, will make it look better to read by changing the colors adjacent to the text. So next to the letters "b" and "button," you can see a blue area on the right and a little yellow area kind of on the left of the text. And that's what LCD font smoothing is.
+
+In order for LCD font smoothing to work, we actually have to draw the text into something that's opaque. The text needs something to composite with in order to do font smoothing. In other words, it needs to know the colors that are by the letters in order for it to do font smoothing.
+
+Now, with normal AppKit drawing, this all works great because, as I showed at the start, you're going to draw your background first, and then you explicitly draw the text on top of it, so when the text is drawn, it has something to composite with and do LCD font smoothing.
+
+When you have a layer-backed view, that may not be the case. So you might have a separate layer for your background, and that separate opaque layer is separate from the text. So pretend that word "tandem" is in its own layer, and "pretend" it has a non-opaque background layer. So in other words, that white area is actually transparent. So the text there, when it's drawn, wouldn't have anything to do font-smoothing with when it's drawn into that layer.
+
+So this presents a problem. If you draw text into something that's transparent, it's going to not look right. In particular, it's going to look a little bowler than it should. And again in this screenshot, pretend the white area is transparent. It's just hard to represent in slides. So if we turn off font smoothing, we discovered, hey, the text actually looks better because, well, it's still got anti-aliasing. So let me go back to the previous slide really quick. So here, notice how the text looks bold? If we turn off font smoothing, it looks a little bit smoother and better to the eye.
+
+So what AppKit is going to do is it's going to automatically turn off font smoothing for your view when it does drawing, and it's going to automatically turn it off if you say "No" to "Is Opaque." So if you don't have an opaque view, then we'll just turn it off so it looks better without font smoothing. If your view says "Yes" to "Is Opaque," we leave font smoothing on so that you get that great-looking text.
+
+Of course, what if you have a view that says "no to being is-opaque" because, say, it's drawing a round background, but you really are drawing text into an opaque area in that view? So you know you can do LCD font smoothing. What you can do as a developer is manually turn it on.
+
+And the way you turn it on is you grab the current context as a CG Context Ref using Inits Graphic Context, Current Context, Graphics Port. Explicitly use the CGContextSetShouldSmoothFonts to true to turn it actually on explicitly. And then you can go ahead and draw your text and you'll get LCD font smoothing.
+
+So, that's great, you can control it, but what if you really just want to use a text field and have it have a background that's transparent? Well, the great thing that we did in Mountain Lion is text fields automatically implement LCD font smoothing, even if they're in a transparent layer.
+
+So this is really cool and great. It means you can just drop a text field down, the text field can have a background that's transparent, and it's going to properly do font smoothing. We did all the work in AppKit magically to make it work automatically with Core Animation, so you don't have to worry about it if you're using text fields.
+
+So there's a caveat with this is we still need a layer-backed view in the hierarchy that is opaque. So if you just set do set wants layer on a text field and it doesn't have any parents which are layer-backed, then it won't work. But that's generally not the case. Usually you have more than one layer-backed area. So it works great if at least one ancestor layer is opaque.
+
+So that was discussing some best practices with text, in particular how to get fonts moving and how it should work with layer-backed views. Let's talk about focus rings. So this is typical Cocoa drawing of how you actually deal with focus rings and how you draw them. So your typical draw implementation will do all your typical normal drawing of drawing the text and image first. And then you'll probably check, see if you are the window's first responder. So if the self.windowFirstResponder is yourself, you'll probably do something like NSSetFocusRingStyle to be NSFocusRingOnly, saying that whatever's going to be drawn is just going to be a focus ring.
+
+And then you'll do a fill, and whatever you fill or drew isn't going to draw what you drew, but instead draw the focus ring around that area. So this will just draw the focus ring around the whole view that we had there. But notice the focus ring is actually drawing outside the bounds of your view.
+
+That's important because if you do that same type of code in a layer-backed view, well, it's going to clip that focus ring outside of your view's bounds, and it's going to look wrong. Let me go back again so you can see. See how it's blurry around the edge with the focus ring? And now the focus ring is clipped. So how do you solve that with a layer-backed view?
+
+Well, what we did is, in Lion, we introduced a new API to solve this. We introduced three new methods: drawFocusRingMaskBounds, drawFocusRingMask, and noteFocusRingMaskChanged. So let me tell you how those methods work and how to utilize them. The Focus Ring Mask Bounds: This is where you should return the enclosing shape for your focus ring. And in general, 99% of the time, it's just your bounds for your view, even if you might draw the focus ring as a subset of your bounds.
+
+This is only called in your view if it is the first responder, so you don't have to worry about checking to see if your view is the first responder anymore. We'll automatically do it only when you are. If you don't want to have the focus ring, even though you are the first responder, just return an empty rect, and we won't draw the focus ring or call you back to draw it at all.
+
+So inside a Draw Focus Ring mask, you'll override and implement this method to actually draw your focus ring. So if you have some crazy shape, like a Bezier path that you create, you can go ahead and fill that shape and the focus ring will appear around it. You could also do things like I showed before where you just fill the bounds of your view. You don't have to set any focus ring styles or anything. It's automatically set up for you correctly. All you need to draw here is your area that you want the focus ring to appear around.
+
+Now, what if your focus ring changes inside of you? What do you need to do? You need to let AppKit know that that area changed. And the way you let it know is by calling NoteFocusRingMaskChanged. AppKit will then invalidate the focus ring and call you back to draw it again, if you are the first responder.
+
+So how does this work when it's layer-backed, and why is this better? Well, now that we have the focus ring drawing separate from the view drawing, we can draw the focus ring into a separate layer from where your actual view is and just composite the two together. So the focus ring will be placed on top of your view when you're layer-backed.
+
+So that was great. That's dealing with how to fix and solve focus rings when you have a layer-backed view. The other thing that's important to mention is that inside of AppKit, we updated AppKit to properly use this API in Mountain Lion, so all focus rings for all our standard controls should draw correctly. So let's talk about some more details, tips and tricks for layer-backed views.
+
+So, when you have a layer-backed and a layer-hosted view, what properties do we manage inside of AppKit? There's quite a few properties that we implicitly manage that you probably don't want to change explicitly. And I'm going to quickly tell you them: geometry-flipped, bounds, frame. And if you're familiar with Core Animation, frame is really an implied property that's created from the position and bounds of a layer.
+
+The anchor point, transform, shadow, meaning all the shadow properties like the color, offset, opacity, and radius. The hidden property, the filters, and the compositing filter. All those properties we have always controlled in AppKit, but new to Mountain Lion is the fact that we control geometry-flipped. We've always recommended you to not actually change it, but if you do change it and you're linking on Mountain Lion, you're going to have some problems.
+
+So, prior to Mountain Lion, layer coordinates were not equal to view coordinates. And AppKit would try and control the position of a layer by changing the anchor point. So depending on if your view said "yes" to being isFlipped, the anchor point might be or . And for you to convert from one coordinate system to the other, you had to use convertPointToLayer or convertPointFromLayer to go back and forth.
+
+In our implementation, AppKit would look at the isFlipped property and do some math and coordinate transforms to get everything to be correct. We didn't recommend that you would change the geometry flip property back for Mountain Lion, but you could, and you could kind of get away with it. Now, in Mountain Lion and above, we made it so layer coordinates are exactly equal to view coordinates.
+
+This helps a lot with actually creating and placing views and layers and makes things a lot simpler. AppKit no longer changes the anchor point. It's going to always be at . And the way it's going to make this work is by managing this geometry flip property. You don't have to do anything to get this. It just works when you link on Mountain Lion.
+
+But it's important to understand how Geometry Flip works because it might affect your application if you were expecting it to not be changed. So this is just a regular CA layer that I have showing here. And Geometry Flipped is set to "no," the default, and the anchor point is set to "00," and we're at the bottom left there of that view-- or, sorry, layer.
+
+If the only thing you change is geometry flipped, your coordinate system for your view is going to-- or sorry, your layer is going to change and flip, but also all your sub-layers are going to also flip too. Now, that might cause trouble for inside of AppKit. So it looks like-- let's see how we actually solve this inside AppKit by managing geometry flipped so that your view coordinates are equal to your layer coordinates.
+
+If a view says yes to isFlipped, we're going to make the backing layer's geometry flip property be yes. But if you recall before, that's going to flip all the children layers. And so what we're going to do is, for the children layers, dependent on the superlayer or the superview, we're going to flip its geometry flipped value also in order to get things to look right.
+
+So this is really kind of confusing. And the bottom line is, you don't have to manage geometry flipped, and you probably shouldn't change it. But if you're linking a Mountain Lion and your views are appearing upside down for some reason, it might be because of this. So that's one reason, or one thing to look into if you're having trouble.
+
+Now, how to support high resolution and our new Retina display with layer-backed views? Well, the best way is just to use layer-backed views and to not create your own CA layer hierarchies. By utilizing layer-backed views, you get all the great things that we have in NSView, like hit testing, tracking, mouse events, the responder chain. In addition, we automatically do high resolution support.
+
+So, if you use an image which has two representations, a low-res and a high-res representation, and set as your layer's contents, we will automatically go ahead and update things for you on your layer-backed view when the resolution changes. So, for instance, you move your view from a 1x display to a 2x display, everything will work automatically.
+
+But if you must use CA layer directly, we introduced a new delegate method called LayerShouldInheritContentScaleFromWindow. And this is in Lion now. And what you can do here is you can go ahead and update your layer's contents explicitly for layers that we don't know about in AppKit to update their contents, their content scale properties, and make it look properly for high resolution. We have a whole talk about this, which I'll reference later.
+
+Now, before I said, well, don't use draw-rect, and we really want you to use update-layer. Well, that's not the case, and there are still some cases where it's really easy or good to use draw-rect. For instance, if you have a view which is small, then its layer contents will be small.
+
+And if that view's frame never changes, or in particular the size never changes, then it doesn't matter if you use draw-rect, because it's never going to need to stretch the contents, and it'll probably always look right. And you can just set the layer contents redraw policy and get everything to animate correctly. So, if you have a small button or a small custom view, it's still great to use draw-rect.
+
+In addition, you might want to implement draw-rect because you want to support 10.7 and 10.8. So you want to have a layer-backed application review and you want to opt-in to update layer when you're on Mountain Lion, but still use draw-rect when you aren't on Mountain Lion, and so you can implement both to support both.
+
+In addition, in order to actually do printing, we still utilize DrawRect. So if you have a view that has to print, then you're going to need to implement DrawRect. And of course, all the standard AppKit controls are going to still implement DrawRect, so all of them will still print properly, so it can still print text, images, etc. correctly.
+
+So, for traditional Cocoa drawing, we had this thing called NSCell. And NSCell won't work properly with layer-backed views if you have a control which was dependent on cells. So, for instance, if you have a cell-based table view, all those individual cells will not get an individual layer when you're making the view layer-backed. The whole table will become layer-backed.
+
+So, what we're encouraging you to do is for efficiency, you should be using a view-based table view. And if you aren't familiar with view-based table views, I highly recommend looking at the talk that I gave last year on introduction from basics to advance on view-based table views. When you do have a view-based table view, all those individual views there will each individually be layer-backed, and you can do fast, smooth animations. So, the demo that I gave at the start was all using a view-based table view.
+
+In addition, some other legacy cell-based controls are NSMatrix, so we recommend not using NSMatrix. Instead, just use regular views. It should be really simple to create an array of views. The nice thing about Matrix is radio buttons would all work together. If you check one radio button, it will uncheck the others.
+
+Take a look at the AppKit release notes. We have a way of now having the radio buttons interact together automatically when you're using a regular NSButton without utilizing NSMatrix. You could also consider using Collection View, which is another way of getting a group of views together that's managed automatically. If you're using NSForm, which was also cell-based, instead just use text fields. You can have a label and a text field really easily.
+
+Now, how do you deal with subclassing standard AppKit controls? So most of our AppKit controls now implement "WantsUpdate" layer and say "Yes." So we took the time in AppKit and Mountain Lion to adopt all this technology so all our standard controls use a small image and just properly stretch the layer contents. This is great for memory efficiency, allows fast, smooth animations. And how do you actually go ahead and take advantage in subclassing and customize our custom views?
+
+Well, what we need to do is, if you override anything that was drawing, such you override draw-rect, cell draw with frame, draw interior with frame and view, we're going to have to say no to wants update layer for that standard AppKit control. And the reason why is we don't know what you're going to do in your drawing implementation, so we can't go ahead and try and create it with a subview.
+
+So what you want to do if you want to extend a standard AppKit control is you're going to have to override wants update layer and say yes. You can add additional subviews to represent your user interface inside of layout that adds whatever type of things you want to our custom views.
+
+You can also use our standard position methods. So if you have a cell-based control, you could subclass in a cell, don't override the draw methods, but do override things like title-rec for bounds, image-rec for bounds, and those will create or control the position of the actual image and title view that we actually add to our custom controls ourselves.
+
+So, in conclusion, what's the most important thing to take away from this? We want you to use the Layer Contents Redraw policy of NSViewLayerContentsRedrawOnSetNeedsDis play. Again, it's not the default value, so you must explicitly set it when you have a custom view. We want you to use subviews whenever possible, so recomposite your view using multiple subviews for efficiency.
+
+Use the new Mountain Lion API, WantsUpdateLayer and UpdateLayer to directly set the layer contents and content center property. Share your image contents among multiple layers or multiple views that have the same UI representation. Use NSTextField to automatically get proper font smoothing. Avoid manual text drawing if possible. Use the AnimatorProxy to start animations. Use the NewProperty on the AnimationContext to allow implicit animations to be explicitly started. Use the LionFocusRingDrawing API to get focus rings to draw and look properly.
+
+So for more information, contact Jake, our UI Frameworks evangelist, and his email is up there. Documentation. I highly recommend reading through the Core Animation Programming Guide to get familiar with how that works. You can ask questions on the Apple Developer Forums. I'm frequently on there and can sometimes give you a hand. Some related sessions: Advanced Tips and Tricks for High Resolution OS X and Mission Friday at 10:15. Go check that out. That's it. Thank you very much.

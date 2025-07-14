@@ -1,0 +1,227 @@
+---
+Title:  Mac OS X: Music and MIDI
+Year:   2000
+Web:    https://nonstrict.eu/wwdcindex/wwdc2000/175/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Hello. I'd like to thank you all for coming this afternoon. This is a very exciting session to be involved in. And it's actually one of three sessions to do with Mac OS X support for audio and MIDI. This session will cover both the MIDI support the we're providing in OS X-- and it's the first time in a number of years that Apple has made a serious commitment in this area. And as I said, it's very exciting to be involved in this project. There's two more sessions on Friday. They're late in the afternoon, starting at 3:30, covering both the I/O Kit area of audio support, audio device support, and the user application interface to audio devices.
+
+I'd encourage you to go to that. And then after those sessions on Friday, there'll actually be a party that we'll give you some more details on later. So without any further ado, I'd like to introduce Doug White, who will be talking about the MIDI services on OS X. Thank you.
+
+Good afternoon. I'm Doug Wyatt. I'm a software engineer in the Core Audio Group, and I'm here to tell you about the new MIDI system services on Mac OS X. Before coming to Apple, I worked at AppCode Systems for about 12 years, working on MIDI applications like many of you. And I was the author of OMS there.
+
+So here's what I'm going to talk about today. I'm going to talk a little about the history and the goals of our new system services, the history of MIDI on the Macintosh, because that will help you understand our goals. I'll go over some of the key concepts in the MIDI API. We'll look at some of the functions in it. I'll talk a little about the performance challenges of getting MIDI working on a multitasking, modern operating system like OS X. And I'll tell you about the availability of the new MIDI system services.
+
+So going back to the mid-1980s, the first Macintosh MIDI interfaces connected directly to the serial hardware and developers would write to the serial ports directly because it was most efficient, and I don't think the serial drivers supported external clock in those days. And that was fine and good for a while, until the late '80s we started to see multiport MIDI interfaces, like Mark of the Unicorn's MIDI Timepiece. We started to see sound cards, like Digidesign's Mac Proteus and SampleCell. And there started--there became a need for system software for applications to deal with these different kinds of hardware in a hardware-independent way.
+
+So in 1989, we saw Apple's MIDI Manager, which was the first attempt to solve this problem. Unfortunately, MIDI Manager had some performance problems, and it got kind of unwieldy when you tried to use it in large studio environments. Opcode's OMS, which came out in 1990, addressed some of these limitations of MIDI Manager.
+
+And in the course of a few years, it became a de facto standard. Most programs on the Macintosh are now supported on OS 9. People making MIDI hardware tend to write OMS drivers for their hardware, and it's the way -- it's the only way that a lot of these applications and hardware are talking to each other now.
+
+But because OMS was controlled by a competitor, and now that it isn't being supported anymore, as far as I can tell -- well, it continues to work on OS 9, but it's not being developed any further, and the prospects for it to work well on OS 10 are not good. So that combined with the fact that developers have been sort of chipping away at MIDI compatibility with the problem of SUFs, Wiresense, and so on, we see a need for Apple to provide a single set of MIDI system services for OS X.
+
+So that's our main goal on OS X, to provide a single standard so that everyone's hardware and software can play together nicely again. So in support of that goal, we want to focus just on those basic MIDI I/O services, and doing those basic MIDI I/O services with highly accurate timing, meaning low latencies and low jitter. Also, we want to make the MIDI services open source so that you, as developers, can see what we're doing, help us fix things if we're not doing them right, and not have to be afraid of repeats of the fates of MIDI Manager and OMS.
+
+So looking at the MIDI system services in the big picture of the rest of the OS, they're layered above the I/O Kit in the kernel. I/O Kit is where we see drivers for talking to hardware. We have a concept of MIDI drivers. Applications can talk to the MIDI services, which in turn talk to MIDI drivers. For higher-level applications of MIDI, like just playing MIDI files, you can use the QuickTime MusicDevice APIs, and Chris Rogers will be telling you a bit about that in the second half of the So here are the main pieces of the new MIDI services.
+
+We have a driver model for MIDI drivers. Applications can share access to hardware, meaning that multiple MIDI applications can send simultaneously to the same device, and a MIDI device can send MIDI into the computer and multiple applications can all receive it. We timestamp all the MIDI input. We schedule all MIDI output in advance for applications that want to do that. And all that scheduling is done using the most accurate timing hardware on the computer, the host clock as returned by uptime.
+
+The MIDI services provide a small central repository of information about the MIDI hardware that's present. They don't try to replicate the full functionality that you see in OMS and FreeMIDI, where the user with 15 synthesizers can enter information about all that. When I say there's a repository of device information, that's just about the actual MIDI interfaces and cards that are present.
+
+We don't, at least for now, become concerned about the devices that are attached externally to MIDI interfaces. And the MIDI services provide some basic inter-process communication. So if you have a small MIDI utility, maybe it transposes or arpeggiates or something, you can use the MIDI services to create an application like this. like that.
+
+So now I'd like to get into some of the objects and functions in the MIDI API. First, there's the MIDI client. And for those of you who've used MIDI Manager in OMS, this is a familiar concept. The first thing you typically do is create a MIDI client object. And that's done with MIDI client create.
+
+After creating your client, then you can create MIDI port objects. This is also similar to MIDI Manager and OMS. MIDI ports are objects through which your program can send and receive MIDI messages, and they're created at startup. So here we see MIDI input port create and MIDI output port create. which create input and output ports, obviously. The my_readproc parameter that's passed to my_midi_input_port_create is a procedure through which that port will -- let me rephrase that -- that procedure will get called when MIDI comes into your program through that port.
+
+All of the MIDI I/O functions use the structure MIDI Packet List when sending and receiving MIDI. It's simply a list of MIDI packet structures. It can be any length for now. And those MIDI packet structures are themselves variable length structures. A MIDI packet contains one or more simultaneous MIDI events.
+
+With one exception, if you have a system-exclusive message, it has to be in its own MIDI packet, and the reason for that is just to make our own internal parsing simpler. And for similar reasons, running status is not allowed inside a MIDI packet. But otherwise, the data array portion of the MIDI packet is a little MIDI stream directed at one device. and MIDI packets are time-stamped, and I'll talk a bit about that later.
+
+So dealing with variable-length structures like MIDI packet and MIDI packet list can be a little annoying, so we've provided a few simple helper functions. There's nextMIDIPacket, which you can use when dealing with the MIDI packet list. You can get a pointer to the first packet in the packet list, then use nextMIDIPacket to advance to the next one, and so on. When sending MIDI, you can use MIDI packet list init and MIDI packet list add to dynamically build up a MIDI packet list. And here's an example of using them.
+
+Here, I'm creating a buffer of 1k bytes on the stack. I'm casting it to a MIDI packet list. I call MIDI packet list init on it to initialize it. And then I'm adding a simple MIDI note on event to it with MIDI packet list add. And if this were a more complex example, then I could go adding more events to be played at different times and build up a MIDI packet list.
+
+When MIDI packet list add returns null, then I know that it's become full and it's time to send it. And I can call MIDI packet list init and start calling MIDI packet list add on it again. Okay, now that we've looked at the structures representing MIDI data itself, here are the objects that represent MIDI sources and destinations in the system.
+
+The lowest-level object is a MIDI endpoint, which is a simple MIDI source or destination, and a single 16-channel MIDI stream. So your program can have one simple view of the system as an array of sources and destinations. And here's an example of finding all the destinations in the system and sending a MIDI packet to each one.
+
+MIDI Get Number of Destinations and MIDI Get Destination are used to walk through all the destinations. And then MIDI Send takes as its first argument an output port, which you created at startup, the destination, which was just returned from MIDI Get Destination, and then a MIDI packet list. So in this example, we're sending the same MIDI packet list to all of the destinations.
+
+Similarly, here's an example of how to find and receive all the MIDI sources in the system. Find and open input connections to all of the MIDI sources in the system. We call MIDI_GET_NUMBER_OF_SOURCES and MIDI_GET_SOURCE to walk through all of the sources. And then we call MIDI_PORT_CONNECT_SOURCE to establish a connection from that MIDI source to your program's input port.
+
+Now the reason we ask you to create such connections explicitly, and this concept is familiar to those of you who've used OMS, is so that if you've got a bunch of MIDI sources sending stuff into the computer, we only incur the overhead of delivering that MIDI to your application when it's from a source that your application cares about listening to.
+
+And if you remember, when we created that input port at the beginning of the program, we passed myReadProc, and it gets called when that MIDI comes in. A note about the ReadProc. The MIDI library creates a thread on your program's behalf to receive that data. So similarly to the way on Mac OS 9, for those of you who've done MIDI programming there before, your MIDI would come in at interrupt level and you'd have to be careful about critical regions and not accessing memory. On OS X, you need to be aware that your read proc is called from a separate thread, and you may have synchronization issues with any data you access from that thread. And also be aware it's a high-priority thread. Don't do too much work there.
+
+Okay, so those are MIDI sources and destinations. The next higher-level object in the MIDI API is MIDI Entity, which is a logical subcomponent of a device which groups together some number of endpoints. For example, you might have a USB device which has a general MIDI synthesizer in it and a pair of MIDI ports. That device can be thought of as having two entities: the synthesizer and the pair of MIDI jacks.
+
+An eight-port MIDI interface with eight ins and eight outs might be thought of as having eight entities, each of them with a source and a destination endpoint. The reason we have this concept of an entity is so that if your program wants to communicate in a bidirectional manner with some piece of hardware out there, you have a way of associating the sources and destinations. You know, which ones constitute a pair.
+
+The next level up in the MIDI API is a MIDI device, which represents an actual physical device, like a MIDI interface, a card, something that sits on FireWire. It's something that's controlled by a driver. The driver for that device will have located it and registered it with the system. And so this diagram here illustrates how MIDI devices contain entities which contain endpoints.
+
+And so here's a quick look at the functions you would use to walk through the system and locate the devices and entities that are present. MIDI GetNumberOfDevices and MIDI GetDevice will iterate through the devices, and MIDI GetNumberOfEntities and MIDI GetEntity will walk through the entities that are associated with the device.
+
+Okay, now we've looked at devices, entities, and endpoints. There's a set of calls to find out information about those devices, entities, and endpoints, and we call these attributes "properties." The property system is extensible, meaning that anyone can make up a property to attach to their device, but we've defined a few simple ones, like its name, its manufacturer name, its model number, the MIDI channels that it's listening on, if someone knows that.
+
+So the system is extensible. Properties can be inherited, which means that if you ask, for example, an endpoint, "What is your manufacturer name?" we'll probably end up with the device's manufacturer name, because the driver/writer will probably have just said, "Here's my device. I'm the ABC Corporation, and here's my D4 device." And, you know, he's just attached that to the device, but the entity will inherit that property from the device. And as I said, for now, properties are most likely only going to be set by drivers.
+
+Here's a simple example of obtaining a property of an object. We use the MIDI object getStringProperty call, pass the constant kMIDIPROPERTY name, and we get back a CFString, which is the name. We can convert it to a C string, print it, and then release the CFStringRef that we got back. CFStringRef is part of core foundation, which you can read about in our documentation.
+
+Okay, the highest-level object in the MIDI API is the MIDI setup, which represents a saved or saveable state of the system. It's essentially just a list of the devices the drivers locate, the MIDI interfaces and cards that are present. But we do have facilities there for keeping track of some other details, like which driver's device owns the serial port, which device does the user prefer for playing back general MIDI files, or whatever.
+
+Here are some examples of how your program can manipulate MIDI setups. Those of you who've used OMS might be afraid of the term "setup" because there was that OMS setup program that not everyone liked. But we don't have any user interface involved here, although at worst I could envision a dialog where the user has to authorize serial ports to be searched.
+
+But in any case, I don't think we're going to have any user interface here. MIDI setup create simply tells the system to go interrogate all the drivers, find out what hardware is present, make a MIDI setup containing all those devices, and return it. Then you would almost always call MIDI setup install after calling MIDI setup create, which just tells the system, "Here's the MIDI setup. Make that the current state until someone else tells you otherwise."
+
+MIDI Setup Get Current returns a reference to the current MIDI setup. And then there's MIDI Setup To Data and MIDI Setup From Data, which allow you to convert a MIDI setup object to and from a textual representation, which is in XML, and can be saved to a file.
+
+Okay, so that's a tour of some of the objects to which you send and receive MIDI. Now I'd like to talk about some of the issues of timing when sending MIDI and receiving it. Your programs will probably want to schedule MIDI output a little bit in advance, and you can do that by using timestamps. The timestamps in the MIDI packets we looked at earlier use the host clock time as returned by uptime.
+
+We suggest that you don't schedule events too far in advance. If you schedule a whole five-minute MIDI file to be played, it'll play and you won't have any way to tell it to stop unless the user quits your program probably. So we suggest that you use a number, say, 100 milliseconds or so, as a guideline of how far in advance to schedule.
+
+That's a short enough period of time to be relatively responsive if the user says stop, but it's also far enough in advance so that if you're talking to a piece of hardware that's got some latency in talking to it, we can still have timing accuracy in sending events to that device. An important thing here about -- whoops -- pushing buttons here.
+
+An important thing about scheduling MIDI output is that we have support for devices, for pieces of hardware that are capable of doing their own scheduling and sending of MIDI. A driver may attach a property to its device that says, "I want to schedule events for this device some number of milliseconds in advance." So you as an application writer should check that property and see if the driver writer has attached that property to the device and respect it. So if the driver is saying, "I want my MIDI 5 milliseconds in advance, please," then you as an application writer can get the best timing from the system by making sure that your MIDI events get sent 5 milliseconds in advance or more.
+
+We have a few timing issues on incoming MIDI. We timestamp it with the host clock as soon as possible. And to schedule your own tasks, there's a lot of different ways to do this in Mac OS X. There's a number of APIs, but we're recommending that you use the calls in multiprocessing.h, which is part of Carbon Core.
+
+Those of you who are writing MIDI drivers for your own MIDI hardware, MIDI drivers are packaged as CFPlugins, which are a little bit intimidating at first glimpse. When I first looked at it, I said, "This looks like COM. I'm scared." But it's not that bad. We have some example drivers that you can build on, and it makes it pretty easy. Usually, you won't need a kernel extension, and this is true if you're writing a driver for a USB, FireWire, or serial MIDI driver. If you're writing a PCI card driver, then you will need a kernel extension.
+
+But usually, for USB, in my example drivers, I'm just a USB user client. And these terms are familiar to those of you who've seen the I/O Kit sessions. And for those of you writing drivers, I recommend you go find out more about I/O Kit if you haven't already.
+
+The driver programming interface from the MIDI side of things is pretty simple. There's just a few calls to implement. There's one to locate your hardware. There are calls to start and stop communicating with your hardware. There's a call to send some MIDI events to your hardware. And when you receive incoming MIDI events, then there's a way you can call back into the MIDI system to have those MIDI events delivered.
+
+I just wanted to make a quick note here about how having looked at the source code for USB drivers on OS 9 and written one on OS X, it's an order of magnitude easier, at least I thought so, on OS X to write a USB driver, and that was very encouraging.
+
+Okay, here's a diagram that shows the pieces of the MIDI implementation. At the top we see your client applications in green. We supply a MIDI framework, which is a client-side dynamic library. That library communicates with the MIDI server process. And the reason we have that server process is so that incoming MIDI from some piece of hardware can be efficiently distributed to multiple applications. Below the MIDI server, we see that it loads and controls the MIDI driver plug-ins, and those driver plug-ins communicate with I/O Kit.
+
+Now, you'll notice in the diagram the horizontal gray lines. Those indicate address space boundaries, or different processes. So we have the kernel and the MIDI server and your client applications' address spaces. Which brings us to one of the main performance issues in dealing with MIDI, which is moving data between different protected address spaces. Now, we've got some pretty good and fast mechanisms for doing it, but nonetheless, it's still important to be aware of that, and there are some things you can do in your program to squeeze extra performance out of the system.
+
+When possible, do schedule your output a few milliseconds in advance and look at that property of the driver to see if it wants to get data a little bit ahead of time. And this will especially enable you to send multiple MIDI events that happen close together in time with a single call to MIDI send.
+
+So instead of sending one MIDI event at a time, if you package up just even a few milliseconds of data at a time with calls to MIDI send, that will help the system be a bit more efficient. And we do have--I should mention--I just wanted to say we have a dependency on the Core OS's scheduling mechanism. And things are good there, but they're getting better.
+
+Okay, to show you that MIDI is actually up and running on OS X to some extent, I've got a demo set up here. At the bottom you see I've got a MIDI keyboard and sound module. I've got a MIDI interface, that blue thing, and that connects to the computer via USB. Over on the right there we see the various layers of software through which MIDI messages travel when I run these programs.
+
+Okay, first I've got a simple program which just plays a series of MIDI notes at very regular intervals using the scheduler built into the MIDI server. And hopefully we'll hear that they're very nice and regular.
+
+[Transcript missing]
+
+That's pretty good and regular sounding, I think. I've got another program here.
+
+So here I've just got a keyboard playing its own internal sounds. Now I'm going to play-- I'm going to run a program that will take the MIDI from the keyboard, send it to the USB interface, to the computer, through the whole stack of software, back down to the interface, and out to the sound module.
+
+So when I play the keyboard along-- When I play the keyboard, I should be hearing its sound as long as-- as well as one in the sound module. And we shouldn't be hearing any delays or variations in that delay. That sounds pretty good too, I think. I don't think the latencies are excessive or anything. I've got a MIDI file I really like here, so I'm going to play a little bit of that.
+
+Thanks, MIDI Bing Play. I've got one more little MIDI file I'd like to play for you. This time I'm also going to play along with it a little bit using MIDI Through. I'm not showing you what I'm actually doing here because it's ugly. I'm just running terminal-based programs on OS X. Which means I have to remember what to type.
+
+MIDI is real on Mac OS X. So the next thing you're probably wondering is how can I start to make my applications work with MIDI on OS X? The MIDI services are not part of Developer Preview 4. They've just been coming together in the last couple of weeks. But we are just about ready to start seeding. So please write to Dan Brown, who's here in the front row. And we've given you an easy-to-remember email address, audio@apple.com.
+
+We are still holding out the possibility of tweaking the APIs a little bit based on your feedback and our own release process, but we're basically in a mode of optimizing, stabilizing, and getting ready to release it as part of the Mac OS X public beta this summer. And I want to remind you that it is open source. So I hope I've given you a good introduction to MIDI on Mac OS X, and I'm really looking forward to seeing your applications that use it. Thank you.
+
+Doug, I'd like to bring Chris Rogers out now. Chris has been working with Apple for about a year and has been doing quite a lot of work on the QuickTime Music Architecture, and he's also going to be discussing some of the higher-level audio services that we're providing to applications developers in general.
+
+Hi, good afternoon. As Bill said, my name is Chris Rogers, and I'm happy to be here to talk to you today about music services available on OS X. The topics that we'll be covering today are new synthesizer replacing the current QuickTime Music Architecture synthesizer. It's a DLS software synthesizer, and we'll be discussing that in some detail. We'll talk about the audio unit and MusicDevice component architecture, how to actually hook these guys together in different configurations, and what that means will become clear later on. The sequencing services, and the Downloadable Sounds toolbox. So let's get on with it.
+
+OK. So where do music services fit in with the rest of the Core Audio system? The music services are higher level services that sit both on top of the MIDI server, the rest of the MIDI services that Doug just presented, and also the audio I/O devices. And Jeff Moore will be discussing this in great detail in a later talk on Friday. I really encourage you to go to that.
+
+That would be the Core Audio multi-channel and beyond presentation at 2:00 on Friday. And both of those systems actually sit on top of I/O Kit. And you may be interested in how to implement audio drivers. And there will be a talk also on Friday about audio family I/O Kit drivers. So the music services--.
+
+are available to all clients, and also the MIDI server and the audio/IO devices are directly accessible by the client. So depending on the level of access that you require, very low-level control, you may just want to go right down to the MIDI server and the IO devices, or higher-level control, you can talk to the MIDI services.
+
+We're dedicated to supporting open standards. That includes MIDI, of course, standard MIDI files, RMID files. RMID files are standard MIDI files with a DLS section in the file. DLS stands for Downloadable Sounds. And that's a sample bank format where people can include their own custom samples, sound effects. High-quality sample, 16-bit stereo, if you want. And also, we're incorporating some of the ideas included in MPEG-4 Structured Audio. We're not going as far as implementing SAIL or anything like that, for those who know what MPEG-4 is about, but we've incorporated some of the better ideas in MPEG-4.
+
+The DLS SoftSynth, this is a synthesizer, software synthesizer that's been completely rewritten from scratch to replace the synthesizer currently in QTMA. It, among other things, it's got a much better reverb, several different types, basically just sounds smoother. And what's even better is the reverb isn't hard-coded into the synth, it's It's implemented in a modular way so that third parties can slip in their own reverb and other effects. We'll see how that works in a little bit.
+
+What else is in the SoftSynth? It has much tighter scheduling of notes so that you don't get this kind of slop that you might have seen on other synthesizers. Scheduling is sample accurate. It is a downloadable soundsynth and it allows for easy importation of high-quality third-party sample banks. So you don't necessarily have to be stuck with cheap 8-bit sound set. You can load in not only general MIDI sound sets, but arbitrary sample banks for your own custom music. It's a very general sample-based synthesizer.
+
+Envelopes are exponential as per the downloadable sounds specification. There's a two-pole resonant filter in there. Unlimited key ranges, velocity ranges, and layers. The layers let you actually stack multiple samples. When you hit the same key, you can have individual panning and modulation parameters on each one, so you can get nice, fat, rich pads that way. And also, DLS provides for much more flexible modulation routing possibilities than the old QTMA synth.
+
+Okay, now we're going to talk about audio units. Now, what is an audio unit? We're going to see in the next couple of slides what that really means. At its most abstract level, it's kind of a box that deals with audio in some way. It would take in n audio streams and output m audio streams. And the number of inputs and outputs can be variable. In fact, you may have an audio unit that has no inputs or no outputs.
+
+And in at least one case, there may be an audio unit that has no inputs and no outputs. And you may think, well, what would that be? And that would be maybe an audio unit that... represents an external MIDI device, and we'll see how that can wrap up a MIDI endpoint through the MIDI services that Doug spoke about earlier. There are other types of audio units that have no inputs. An audio unit that's representing a hardware input device would only have outputs, and vice versa. A hardware output device would have only inputs, and DSP processors would typically have both inputs and outputs for processing audio.
+
+Some examples of DSP processing modules would be reverb, chorus, delay, ring modulator, parametric EQ. Put a stereo mixer in there. It's not really, probably shouldn't really belong in that category, but stereo mixer would be an audio unit that takes in multiple inputs and mixes according to volume and pan information to stereo output. Another type of audio unit would be format converters for sample rate conversion, bit depth conversion, this type of thing. And also codecs, like MP3 coders and decoders.
+
+Another type of audio unit is one which, at high level, abstracts the notion of a hardware input device. That would be layered on top of the Audio I/O Device APIs that Jeff will be talking about on Friday. Another audio source would be a software synthesizer. This is an audio unit which is called the MusicDevice, which supports some additional APIs over the audio unit.
+
+An audio destination, that's another type of audio unit. And that could, at a high level, abstract the notion of a hardware output device. And that would be implemented in terms of the low-level audio I/O APIs. And also a file. You could have an audio unit which just writes its output directly to a file. So this just gives you kind of a flavor of what the range of behavior that an audio unit can, can exhibit.
+
+Okay, so these individual auto units, they're kind of interesting on their own, but they get even more interesting when you're able to hook them together. In arbitrary configurations, it was our goal to have an architecture that lets developers connect these modules up in arbitrary ways, not just in linear chains like the current sound manager can do, and not just some kind of a monolithic mixer architecture with fixed send returns. But we're going for a fully modular approach where these audio units can be connected in pretty sophisticated ways to create all kinds of different interesting high-level software.
+
+The connections between these audio units is represented by an AU graph object. And there's a whole set of APIs for dealing with AU graphs. I'm not going to go over too many specific APIs in my talk, because there are so many of them, and I'm covering so many different topics, actually.
+
+With the AU graph, in essence, it represents a set of audio units and their connections. Like I said, there's a simple API to create and connect them together, and APIs for actually persisting the state of the graph so that you could save the state to a file or to memory, and then reconstruct the graph based on that.
+
+Let's look a little bit at the client API of the Audio Unit. Audio Units have properties, and you can get at those properties with Audio Unit GetProperties, SetProperty, and HasProperty. Properties are keyed by ID, and an ID is really just an integer. That's all it is. Some of our IDs are predefined, and others can be defined by particular implementers of audio units, so third parties can define their own custom properties.
+
+Some examples of properties would be a name, number of inputs, so the client, if the client is interested in how many inputs and what kind of data format these inputs take, the client would call getProperty with the appropriate ID. Data is passed by void star and length, so arbitrary data could be passed back and forth between the client and audio unit, and third parties can pass custom data back and forth in this way.
+
+[Transcript missing]
+
+Some examples of parameters are channel gain and pan for a stereo mixer, filter cut-off frequency, or for that matter, resonance in a low-pass filter, delay time for a chorus delay effect, and there are many others.
+
+One of the most important things you want to do with these audio units is actually get access to the rendered audio coming out of one of the audio output streams. And the Audio Unit Render call is used for this. The client passes in timestamping information for when the audio buffer is to be presented in the audio stream. The audio is also rendered for a specific output. So if an audio unit has, say, four different outputs, Audio Unit Render would be called four times, once for each output.
+
+In the internal implementation of an audio unit, in order to do signal processing, like say a low-pass filter, how does the audio unit actually read its input in order to do the processing and then pass the results back to the client who calls Audio Unit Render? Well, the audio unit actually reads its input by calling Audio Unit Render on another audio unit, which provides its input. And the audio unit knows which one that is, which is its source, because a connection has been established for it ahead of time.
+
+Okay. I'm going to talk about the two-phase schedule render model. On the bottom of this diagram, you'll see there's a timeline. Time is progressing from left to right. And this is representing an audio stream for a particular output of an audio unit. And we see that the audio stream is divided into, well in this diagram, there's three different time slices. But conceptually, you can imagine an audio stream being divided up into many different small time slices for which processing occurs. So first of all, for each time slice, events are scheduled.
+
+Time, very specific. Timestamping information is provided for these events. And secondly, the audio is rendered for each of the outputs. So, for instance, in the first phase, if this is a software synthesizer, all note events which apply for this given time slice are scheduled, and then the audio is rendered.
+
+The MusicDevice is actually an audio unit which extends upon the audio unit APIs with additional APIs that are specific to synthesis. And the MusicDevice also replaces the note allocator and music component that currently exist in QuickTime Music Architecture. What kind of additional APIs does the MusicDevice support? Mainly, the APIs center around scheduling notes, when notes start and when notes stop.
+
+The first protocol that's used is just the MIDI protocol, which everybody's familiar with. And all music devices would be expected to support this protocol. The second protocol is an extended protocol, which allows for variable argument node instantiation. What does that mean, really? In the MIDI protocol, There's only two bits of information which are provided for a note on event. That is a note number and a velocity. So which note on the keyboard is it, and how hard did you hit it?
+
+But, That may be insufficient for certain types of more complex instruments. And there may be certain interesting applications where more information could be provided for a note instantiation. For instance, where to position a note in 3D space. So additional information can be provided in this variable argument, note instantiation. Another example would be in a physical modeling synthesizer of a drum.
+
+For anybody who's actually played a hand drum, they know how subtle changes in the position and how hard you hit it and how flat your palm is. Or if you hit it with the tip of your fingers, it makes very subtle changes in the resonances that come out of the drum. The sound completely changes and the character of the tone. So this type of information could be passed in the variable argument note instantiation. instantiation. This extended protocol also supports more than 16 MIDI channels and more than 128 controller messages.
+
+Music sequencing services. We're moving on to a different topic here. This represents a whole other set of APIs, which, once again, I'm not able to go through in detail because there are so many of them, and I only have limited time to talk. But essentially, this is a set of APIs for constructing and editing multitrack sequences, whether they're MIDI sequences or using this extended protocol.
+
+There's also a runtime for the real-time playback of these sequences, and that's otherwise known as a sequencer. The events themselves can be, like I said, MIDI events. They can be in the extended format, and there can also be user events, which have user-defined data in them. And that's up to the developer to decide how to use. The events actually address audio units and music devices and external MIDI gear through MIDI endpoints and directly through a music device encapsulation.
+
+So what can we do with these sequences? I've already shown previously a slide where there are these audio units connected together in arbitrary configurations. And here we have three audio units. So, you know, we have one and two feeding into the third one. And off to the side here we see a sequence that has three tracks. And events from track one are addressing audio unit one. Track two is addressing number two. And track three is addressing audio unit number three.
+
+The yellow, the thick yellow arrows represent the flow of audio through the system. And these blue lines, these thin blue lines represent control information, scheduling information being supplied to the audio units. And if you remember back to the render schedule diagram that I had a few slides earlier, you'll see that the sequence is actually providing the schedule part of this, and the render part is actually being pulled through by the audio units themselves. Thank you.
+
+Here are some features that the sequencing services provide. Just basic cut, copy, paste, merge, replace, as you would expect in a sequencer application. Once again, this does not supply any user interface. This is just the low-level engine which will perform this editing. So you just slap a UI on top of this and you're ready to go.
+
+Tracks. Oh yeah, also, these edits can be done live while the sequence is playing, so there's no difficulty there. Each track in a sequence can have attributes like mute, solo, and looping attributes. So you can have and I will be joined by a track which is actually looping over and over again on the same events. And the loop time is of course completely configurable.
+
+The sequencing services could be used as a core sequencing engine for a sequencing application. So one of the most difficult things in a sequencing application is to write this sequencing engine. Not that writing user interface code is easy, but at least this much work is done, so this is an opportunity for developers to leverage our technology here.
+
+The scheduling uses units of beats in floating-point formats. There's an implicit tempo map in the sequence, and the sequence format is persistent. It can be saved either as a standard MIDI file format or a new data format in QuickTime, which we're in the process of defining. And we welcome your input there as well.
+
+Okay, now I'm going to show you a demonstration using these sequencing services. It's actually a simple little C program I wrote. It's just one or two pages long. And it's just basically calling into these sequencing APIs. It's not meant to be a musical composition. Just kind of a basic run-through of what the sequencer can do.
+
+What you're going to hear is a cycling through of general MIDI percussion, and after a while you'll hear a resonant filter come in, with the filter sweeping through, back and forth, and on top of that you'll hear and I implemented this by actually connecting the DLS SoftSynth, which is an audio unit, I created a resonant filter, and following the resonant filter, I put an amplitude modulator audio unit. And then I created a sequence
+
+[Transcript missing]
+
+I realize it's kind of echo-y in this place, so please bear with me. Hope you can get the gist of what I'm doing.
+
+This is just a simple example. It's a C program, one or two pages of code, something I slapped together pretty quick. Didn't have any user interface available to me to author anything more interesting, but you can imagine if you had a more complicated setup of audio units representing a number of different kinds of processing units, reverbs and delays and so on, you could get quite a lot more interesting set of effects. You gotta kinda wait until we have more of a library of audio units built up. Let's see. Where did I leave my little remote?
+
+Okay, now we're going to move on to talking about the Downloadable Sounds toolbox. Once again, this represents a whole set of APIs which I don't have time to go over individually, but I can talk about at a broad level. Downloadable Sounds is both a sample bank data format and it's a sample-based synth model. The toolbox provides for reading and writing DLS Level 2 files and creating arbitrary DLS instruments.
+
+It could be used as a foundation for a really nice custom instrument editor application so that users can drag in their own samples, apply envelopes and LFOs, and panning and layering and so on. So this is a really good opportunity for third parties. This format also replaces QuickTime Music Architecture Atomic Instruments format.
+
+At the top level, the DLS toolbox uses a number of objects in its APIs. The DLS collection is at the top. The collection references a number of instruments. Instruments represent -- reference a number of regions. And the collection also references the wave data as DLS wave objects. A DLS collection contains a set of instruments, as I said.
+
+It references the WAVE data, and it also includes text-based information. It could include copyright information, the name of the collection, author, comments, any kind of tagged text that a user wants to put in there. An instrument is assigned to a particular MIDI bank and program member, and contains a set of regions. and also some articulation parameters: low frequency oscillators, envelopes, etc.
+
+and also contains text information like the collection does. DLS region actually references the sample data that's going to be played and contains the loop points and defines where in the key range, where on the keyboard the sample will play and in what velocity range. And like I said, these regions can be stacked for layering. And also, these regions can contain articulation information like envelopes and LFOs, which would override those found in the instrument. and text information. The DLS Wave object contains the actual sample data and the sample format for that data.
+
+And the DLS articulations object. That's what actually contains the LFOs, the envelopes, the reverb send level, and all the other modulation information panning. And these objects can be attached to the DLS regions or the DLS instruments as we saw. And there's a simple set of APIs for accessing and setting the relevant information in each one of these objects and connecting them together. And it's really a lot easier to use this API than to try to create a DLS collection by doing a low-level byte munging, believe me.
+
+Backwards compatibility. I want to say that we are supporting the old QuickTime Music Architecture components. They have been reimplemented. The Node Allocator and the Music component, the old software synth, have been reimplemented on top of all of this new technology, but we are deprecating the APIs for these components.
+
+They continue to work, but we are really encouraging developers to move over to the new Audio Unit Music Device APIs and the Sequencing Service APIs. I would want to wrap up my presentation here, and I guess we can move on to Q&A session with Bill. Thanks for giving me time, and I hope you'll all find a use for Music Services.
+
+Just before we actually get started on the Q&A, I'd like to say that the synthesizer that's in QuickTime on the OS X disks that you have on DP4 is actually the new synthesizer. We haven't publicized the APIs yet as we're still actually going through review stages for those APIs.
+
+But the sample set that's on the DP4 CD is an 8-bit sample set. It's the same sample set that the current QTMA engine uses. But the actual synthesizer, synthesis engine itself is the new MusicDevice components that Chris has been talking about today. And that'll be available for seeding a little bit later as Doug discussed in his talk as well. If you send email to audio@apple.com, you'll get a link to the audio. You'll be able to get access to seeding information. We'll be setting up seeding lists.

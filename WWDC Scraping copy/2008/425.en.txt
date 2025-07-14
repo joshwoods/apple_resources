@@ -1,0 +1,267 @@
+---
+Title:  Performance in Document-Centric Cocoa Applications
+Year:   2008
+Web:    https://nonstrict.eu/wwdcindex/wwdc2008/425/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Good afternoon, everyone. Welcome to session 425, Performance in Document-Centric Cocoa Applications. My name is Mark Piccirelli. I'm an engineer in the Cocoa Frameworks group. Today I'm going to talk about how to make NS document-based applications faster. I'm going to talk about what we're doing to Cocoa in Snow Leopard, and I'm going to talk about what you can do to your applications to respond and to take advantage of what we're The four big topics I'm going to cover are concurrent document opening, having more than one document open at once using multiple threads.
+
+NSURL is the one true representation of file locations and the performance implications of that. NSFileWrapper improvements and how to use them. And I'm going to finish up with something that applies to every kind of application, but it's particularly easy to adopt in NSDocument-based applications. Sudden termination, so your application doesn't slow down system shutdown.
+
+First off, concurrent document opening. As you might have heard in some of the sessions that have already taken place, we're making a big effort to take advantage of multiple cores in Snow Leopard. And document opening is a pretty obvious candidate for this because this is something big and blocky and to have it happen on each document being open gets its own core basically. It's pretty easy to accomplish this. It's pretty easy to accomplish.
+
+And the results, the first one is responsiveness. Why block the UI if a document takes a long time while you're trying to do other stuff? And also the total time. When you're opening up a big batch of documents, if you can spread out the work, the user will end up waiting less.
+
+So the first bit of new API I'm talking about today is a new class method on NSDocument called Can Concurrently Read Documents of Type? And the default implementation returns no, but you can override it in your NSDocument subclasses to return yes. And we pass in the type name, so if you have implementation limitations that prevent you from taking advantage of this in some corner cases, you can still take advantage of it in the cases that really matter.
+
+So we let you know what the NSDocument is going to be asked to do if it says yes. And when you turn this on, your document reading code must be thread-safe. So if you have shared caches or something like that that are accessed by multiple NSDocuments, you have to make sure that's thread-safe. Though that's not that common, really. I think we're discovering that opening a document is mostly a pretty self-contained blob of objects that gets created during that process.
+
+So what happens when you return yes from that method? Well, NSDocumentController, which is what's in charge of controlling the opening of documents, creates multiple NSOperations and puts them in a concurrent NSOperation queue. Each one of these operations will execute on a non-main thread. And which thread, you're not supposed to care. All you know is that it's not the main thread. So NSOperation takes care of this management of threads for you.
+
+And what ends up being done by the concurrent operations that we're talking about? Well, it starts off with NSDocumentController sending itself MakeDocumentWithContentsOfUrl of type, and that allocates an NSDocument instance and sends it in it with contents of URL of type error. And typically that boils down to an indication of read from URL of type error. So the document is allocated and initialized, which implies reading in a concurrent NS operation.
+
+So what's still done on the main thread in this scenario? We don't try to do absolutely everything on these background threads. I'm sorry, background operations. You're not supposed to care about the threads so much. But what's still done on the main thread is after documents have been read, that's when NSDocument gets sent make window controllers to build up its user interface and show windows. We still do that on the main thread.
+
+And that's okay because document reading is the part that we really want to make concurrent. It's the unbounded part. If the document is very long, that can take a long time. Setting up the UI is pretty much a constant operation, typically. And also we're doing that way because window ordering has to be deterministic.
+
+We have to do some stuff to make sure that windows don't pop up in random order because some documents open up faster than others. And we're still exploring it. Maybe someday we'll do more in the concurrent operations to get more performance. So today, let me show you a demo.
+
+of concurrent document opening and text edit. So I have a version of text edit that we've enabled this switch on, concurrently opening documents. And we just added a simple file menu here to control what it's doing. I'll just pick a big blob of text edit documents. And this is the non-concurrent case.
+
+and we'll open them up. And it's pretty quick, but wait, it's not done. The spinning pizza of death. It was all blocked up for a minute there. So that's not really that good. We can do better than that. So close all those. and just turn on this little switch. And again, that just controls what our subclass-- our NSDocument subclasses can concurrently read documents of types Override does. And open up the same batch.
+
+[Transcript missing]
+
+So opening documents concurrently is a pretty easy performance win most of the time. So I want you to check this out. There are other ways to speed up document opening, by the way, including the concept of incremental reading, which Doug Davidson presented just an hour and a half ago in Polishing Your Cocoa Applications.
+
+So next thing to talk about is NSURLs everywhere. This is something we introduced in Cocoa What's New, and there was a file system efficiency session yesterday where this was discussed. But let's discuss it some more. Our goal is that we're trying to eliminate needless I.O. in Snow Leopard. And we have to admit Cocoa has some room for improvement in this area. So things like redundant lookup of file attributes, and especially the killer is conversion of paths to FSRefs and back.
+
+If you saw Chris Lin talking yesterday in his session, you know, he had some measurements of opening something in preview. And it was like 10 conversions of paths to FSRefs and four from FSRefs to paths, or maybe it was the other way around. But it was the same path and the same FSRef over and over again. So we want to deal with that issue. And some of you might be wondering, you know, if you're old Carbon hands and you know that, you know, things like FSRefs aren't really exposed in the Cocoa API, you're wondering, Cocoa uses this?
+
+And we do. You're not supposed to notice this, but we use it for, except the effects of it, we use it for NS document file tracking. So when the user moves or renames a document and then switches back to the application, we update the window title and the icon and stuff like that. And also we use it to take advantage of the functionality that are in frameworks below us, like core services.
+
+And what we're ending up doing in Snow Leopard is using NSURLs everywhere. So no more paths, no more FSRFs. NSURL is the one type that we use for locating files. And this is just a continuation of a direction that we've been taking for a very long time now. We've always been moving toward NSURLs.
+
+Our APIs, you know, the lower level stuff like attributed string and data and dictionary, and even higher level stuff like path control, have been dealing in NSURLs for a while now. Even in classes that only handle file URLs. Even when, you know, we're not taking advantage of the fact that a URL can point to stuff that's out on the web somewhere, it's still, you know, the good, simple type to use. And especially NSDocument and Document Controller, we started using it in Tiger when we published a bunch of stuff. We've used a bunch of new methods and deprecated a bunch of old path-taking methods.
+
+So now that we're standardizing on NSURL, we can do new things that solve old performance problems like attribute caching. Here's a little AppKit secret for you. AppKit, for a couple of releases now, has internally been doing a bunch of caching of attributes of files, things like getting their names and their icons and their modification dates and stuff like that. So that horror show that Chris Lynn showed you yesterday with just tons of FS users would open a document. That's after optimizing this stuff.
+
+And, you know, putting performance tricks into AppKit. So, but where this falls short is that it's internal. And, you know, we don't even use it pervasively in our own frameworks. And the worst part is it's not open to use. So, you know, when your code is pinging at a file, it can't, you know, get the values that are already in some cache somewhere.
+
+So what we're doing new in Snow Leopard is we're adding a bunch of new API to NSURL for getting and setting what we call resource values. URLs locate resources, and resource values are the values of the attributes of those resources. So a couple of the methods look like getResourceValueForKeyError, or a batched version of that, resourceValuesForKeysError. And of course, there are setters, too.
+
+There's a big list of keys that are supported. You can look at them in the public header on your WWDC seed for Snow Leopard. It's in Foundation NSURL. Some of these are pretty primitive things like getting the name, but some of them have more logic there, like getting the localized name, which takes into account file system localization that we do, file name localization that we do, and also whether or not the file name extension is hidden and stuff like that. There's even a key for getting the type identifier, the uniform type identifier. That's something that's computed. That's not actually stored in any file system. There are about 40 of these keys. I'm just showing you four of them here on this slide. Have a look at that.
+
+What I want you to know while you're writing your own code is that if you go straight to the Darwin APIs, you're missing out on this NSURL level caching that we're doing. We want to funnel everything through NSURL for getting at this kind of stuff. You should, too. We'll all be using the same cache and reducing the amount of I.O. and hitting the disk or hitting the network server or whatever that happens. So this is all discussed in very great detail yesterday in session 375, Using File System APIs Efficiently.
+
+So we're standardizing on NSURL, totally standardizing and adding features, and as a result, we can focus and make more use of NSURL now in Cocoa. So NSDocument and DocumentController have been using it since Tiger when we deprecated a bunch of path-based APIs. Very nice bit of foresight on our part. I'm glad we made that choice. Otherwise, we'd have a bunch of stuff to redo right now.
+
+But that deprecation of those old path-based APIs, which not only were path-based, but had not very good error handling, they didn't deal in the NSError mechanism that we added, those have been deprecated for a while now. So if you haven't updated your application, now is probably a pretty good time. And also, we're adding NSURL-based API to things like NSBundle and NSFileManager and NSFileWrapper that I'll spend some time talking about. And we have plans to do this to more classes by the time we ship.
+
+So what this means, if you've written Cocoa apps and you found yourself for some reason or other having to go to the lower level core services API because you had to do something that required FSRefs, you're not going to have to do that anymore. So FSRefs can go away now. And good, because the cost of conversion between them and paths was a performance problem. And just a conceptual problem.
+
+You know, you're doing Cocoa programming and you find that there's something that's supported by Mac OS X and it's not in Cocoa. You've got to read a whole other set of documentation and stuff like that. And then you have to write code that converts between these different types. This is the impedance mismatch that we talk about. So that's going to go away.
+
+Some of you might be wondering about aliases. If you think about FSRefs, you very often also think about aliases, which in a sense are the persistent representation of FSRefs with a lot of policy and stuff built in. Another little AppKit secret is that we have been going out of our way to resolve them at all the right times in AppKit.
+
+So like when you pick an alias file in the open panel, we resolve it before we return it from the public NS Open Panel API that gives you a path, or a URL now. But if you wanted to do more with that, you had specific needs, you wanted to take advantage of the features of aliases, which have always been very useful, you've had to go to core services to do more with them. And that was sort of a drag.
+
+But now NSURL has support for a replacement for that called bookmarks, which have a bunch of new features and are easier to work with. So that was also-- we've also discussed in yesterday's Using File System APIs Efficiently session. And I highly recommend your having gone to that session. It was pretty good. But it'll be up on iTunes U also for after the show.
+
+So I tell you that FSRFs are going away, and for old Carbon hands or people who had to dig into them just in Cocoa apps, you might protest, but FSRFs were good for some things, and they were good for some things. NSURLs as a replacement for it. NSURLs for files are just fancy paths, the path with file colon slash slash and local host, I think, at the front of it. And FSRFs did something big that paths can't. They can point to the same file even when the user moves or renames it. And that's pretty useful, like I said. And this document takes advantage of this to do good user interface for the user.
+
+So the answer to that is yes, that was a good functionality, and we are preserving that by putting it into NSURL. There's going to be a new kind of file URL. It still uses the file colon scheme. And the paths that you see in these URLs start with file, and the rest of it is just mumbo jumbo.
+
+Chris put it on a slide yesterday, and you will see these while you're debugging, but you're not supposed to pick these apart or, God forbid, try and build one by hand. We have API to do that. And we call them file reference URLs in contrast with the file path URLs that we've all been working with all this time.
+
+Both kinds work in all the same places. IsFileURL returns yes for both, and the path method works for both. And you can convert between them using the file reference URL and file path URL. These are messages that you send to an NSURL to get one of the right kind. But most of the time, you don't care which kind you're working with. Everywhere that takes an NSURL and an NSFileWrapper and an NSFileManager and an NSDocument and all the rest, they're supposed to just deal with both kinds. kinds.
+
+This new kind of URL for FSRF-like behavior, NSDocument is going to switch over to that for its document tracking behavior. And NSFileWrapper, too. I'm going to be talking about NSFileWrapper. One of the features we're adding in Snow Leopard is giving you explicit control over whether or not files and file packages are read in lazily or not. Because, you know, usually that's a good thing to do.
+
+And if you don't use, if you just use the default options, you don't use NSFileWrapper reading immediate, that's what you get, lazy reading of the file. So if you create a file wrapper from a great big directory hierarchy, it's not going to, you know, open thousands of files all at once. It's going to wait until you actually try and walk that.
+
+So, and the way we make that work, you know, conceptually NSFileWrapper doesn't even have a URL property and we're not adding one. But internally, it's using file reference URLs, just like NSDocument. So that it can find the file when it's time to read it lazily, even if it's been moved or renamed.
+
+So, fast saving with NS File Wrapper. Some documents are just large, and we have to deal with this performance issue that's caused by things like, you know, images, sounds, and movies and so on that are attached to documents. And, you know, just attachments in general, like TextEdit's rich text support lets you drag anything into a TextEdit document, and it's supposed to just hold on to it.
+
+And the way we want you to take care of this is the same way that we take care of it in general, is using file packages, which are just directories that the user sees as files. You know, things like the finder and the open and save panels are smart enough to sense that this is a file package, even though it's really a directory, and just show it to the user as a file.
+
+And NSURL, by the way, has a resource value key for finding whether or not a file is a package and should be presented as a single thing. The benefit of this big illusion of directories that are presented as files is that inside you get to use the file system, which is a pretty sophisticated bit of functionality. So instead of having to flatten everything out when you save files, you just create little individual files.
+
+So for example, Sketch, we're updating Sketch to use file packages as its file format. And, you know, in the finder, there's this, in the contextual menu, there's this thing, show package contents, which I hope is just for developers. I hope users never have a reason to poke around in here.
+
+But if you do this to a Sketch document now, in Snow Leopard, you'll see inside there's a property list, contents.plist, that has the properties of all the graphics in the document, and a page setup file that's a flattening of the NS print info associated with the document. And then a whole bunch of other files, like text.rtf, text2.rtf, text3.rtf.
+
+You know, each one of those is one of the text objects in this particular document. And we have some great stuff here. And what I'm thinking to do about this, it's easy to get carried away with this. You know, if each one of these little RTF things is so tiny, it's not, maybe not worth making a separate file if it can just be put in the property list.
+
+So there's probably a cutoff somewhere there that we have to figure out. But in this example, what's most important is that there's a great big image there. It's a TIFF file, and it's pretty big. It's a quarter of a gigabyte. So what we want to figure out is how we can avoid rewriting that, you know, 246 megabytes every time. we save the document.
+
+So, and you know, many applications use file packages. TextEdit uses it for rich text documents with attachments, and Xcode uses it for the Xcode project files. And Keynote Pages and Numbers use them. This is just their standard file format. And a bunch of other applications, like some of the Omni applications.
+
+So that's file packages. That's what I want to make sure that you know to use when you have great big documents with lots of attachments and stuff like that. And furthermore, if you're using file packages, I want you to use the NSFileWrapper class to get at them. It's been in AppKit since before Mac OS 10.0. It's kind of a well-kept secret. Sometimes when I talk to people about it, they're like, oh, I had no idea that you had that in the AppKit.
+
+And I have no idea why people miss it. It's not that long of a list of classes, and it's kind of in the middle. So, for example, our text system uses it in public API. So you can ask an NSTextStorage for, you know, the NSFileWrapper that represents, actually attributed string, for the file wrapper that represents the RTFD, the RTF with attachments.
+
+What's cool, by the way, one of the things about this file wrapper is that it composes well. By that I mean it's easy to have file wrappers that have other file wrappers inside of them. That's its natural way of operating. So when you're building up a file package for a document to save, it's pretty easy to ask different parts of code, "Give me the file wrapper for that stuff and the file wrapper for that stuff," and bundle them up and put them in the overarching file wrapper.
+
+So it also has a pretty simple API. It's good for, as well as accessing file packages, just flat files. So because there's always a hierarchy of these things, at some point there's going to be leafs, and they're going to be flat files. And to get the data out of one of them, you just invoke regular file contents. And you can also get the file attributes for a file out of it. And that returns a dictionary of the same sort that NS File Manager returns in its APIs that deal in file attributes.
+
+And you can get the icon, too. TextEdit uses this when you drag attachments into a document. This is where TextEdit is getting the icon that shows up. And then also, when there's a hierarchy, to get the nested directories, you invoke the file wrappers method, and that returns a dictionary that's keyed by a file name.
+
+is the class to use to access file packages. I want more people to start using it, so I want to make sure everybody knows about it. And NSDocument, for instance, already has API to take advantage of it. And we're making big improvements to it in Snow Leopard. I'll talk about some of them. And going forward, NSFileWrapper is a class where we're going to put a lot of our knowledge about how to do things efficiently when you're dealing with, you know, hierarchies of files that result from using this file package scheme.
+
+So actually using NSFileWrapper, before I talk about that and how you use it to save documents fast, let me first say that document writing has to be safe. So the NSDocument method that's sort of at the top level of this operation of writing documents is called WriteSafelyToURLOfTypeForSaveOperationEr ror. That's so explicit to put in a method name like that, so it must be important.
+
+And what we mean by safely, by the way, is first of all is reliability. So if the user kicks the plug out of their computer while something is being saved or the application crashes, it happens, the rule is that the user must be left with either the old revision of the document, their saving failed, or the new revision, it succeeded, no matter what happens. It's not acceptable to leave the user with no revision of their document, just destroyed everything, and it's also not acceptable to leave the user with a file package that has no revision of their document.
+
+So that's the rule. So the rule is that the user must be left with either the old revision of the document, their saving failed, or the new revision, it succeeded, no matter what happens. some stuff from the old document and some stuff from the new document all mushed together, and that they have to pick apart because their power went out while they were saving.
+
+So, and the other issue that has to be considered, and it's a big deal, is privacy. The document can't contain things that the user thinks they've deleted. So, you know, if the computer loses power and, you know, the user reboots, and they're like, oh, good, it did save my document, and they don't open it, and they just email it to somebody, and then it turns out that all this salary information that they thought they'd, you know, deleted before they, you know, emailed it, oh, it looks like it's gone.
+
+It looks like it was in the document after all, and somebody picks it apart. So, that's a big deal. And by the way, that's why, you know, there's this issue that comes up in some AppKit apps about what happens with revision control information that different systems like CVS and SVN, you know, drop in file packages.
+
+So, you know, we've talked about this a lot, and we talked about it a little bit more yesterday after this question came up in Q&A and Cocoa What's New. And we're pretty sure we've decided that we're going to have to do a lot of work on this. We're never going to do anything to preserve, you know, these turd files that get left in file packages. We're never going to do that by default.
+
+So, we might make it easier for your application to do it, but it'll definitely be a switch that you have to flip. So, because we do not want to contribute to this problem at all, and we don't want to set you up, you know, trick you into making what very often is a mistake of, you know, leading stuff like that that should not be preserved in the file package.
+
+So I was talking about saving documents safely. Going back to how do we do it fast, well, we take advantage of the fact that most files in a file package don't change between saves. And you know, because we're using the file system, we can just basically leave those files alone and save stuff around them. But that's not exactly what we do because of the privacy issue.
+
+So, yeah, big attachments shouldn't be written to disk each time the user saves, but there's another thing we can do. Just save the changes, and this is particularly important for auto-saving. If you've turned on auto-saving in your application, and we wish everyone would because it's a pretty good feature and it adds reliability to things, the speed of saving is particularly important because the user is just typing along or dragging graphics around.
+
+And when the whole application hangs, you know, hangs because it's in the middle of saving, that's a pretty bad UI. So, and, you know, this is particularly pronounced on things like network file systems where there's a lot of latency involved. So, that's where this issue really becomes prominent.
+
+So we want to improve the situation, and we're doing it by improving File Wrapper. And the first thing that we're doing is just modernizing NS File Wrapper in Snow Leopard, updating it to use NSURLs, because we want to use NSURLs everywhere, and also to use NSError, because we want all applications to do good error handling and presentation all the time. So its new initializer looks like this, in it with URL, options, error.
+
+And the options are kind of interesting. You can, you know, take control over whether or not it ever maps, memory maps files in, and also whether or not it reads stuff immediately or lazy. And if you look in the header, appkit, nsfilewrapper.h, there's copious comments helping you choose which options you want to use.
+
+There's also new functionality in Snow Leopard for NS File Wrapper for this fast-saving business. Instead of just a method that takes a URL and some options and an error to write, we have an additional parameter, original contents URL. That allows us to use hard links whenever possible. So instead of writing out entire files, when you're saving a document and the old revision is still there on disk and you're saving a new revision, just create the directory that's the file package and populate it with hard links to the unchanged files in the old revision and then save changed files around those hard links. And so that's what this NS File Wrapper method does if you point it to the old revision of a document that you're saving.
+
+This really does work on pretty much all the file systems that we care about. HFS+ and AFP and NFS. I tried it with the Windows server and I think we have some work to do there. But in general it's supposed to work. NTFS supports hard links and the network protocols are supposed to support them too.
+
+So the way you take advantage of this fast saving that NS File Wrapper offers in the context of an NS Document-based application is you override the NS Document methods that are already there. They've been there since Tiger. Read from File Wrapper of type error and File Wrapper of type error.
+
+And the one thing that you'll have to know to do is to keep the child file wrappers around and keep reusing them because they get updated with the information that NS File Wrapper needs to do this hard linking trick. So I'll show you what I mean by that in the context of Sketch.
+
+So in the NSDocument class, it has a method named file wrapper of type. This is the one I just recommended you override. And what it does-- for this particular file format, we're calling it Sketch3. Hopefully, we'll add a bunch of other features to justify the version number bump. But what it does is this method is supposed to return an NSFile wrapper, and what the implementation does, excuse me for a minute, please.
+
+What this method does is it creates a file wrapper and the way it does it is by invoking a class method on an SKT graphic because very conveniently this file wrapper business is also good for using as a pasteboard format. So we're using this for two purposes. So we put in one place, the common place, which is the SKT graphic class itself. So NSDocument creates a file wrapper and also we have to save the page setup for a sketch document. So we just archive the NSPrintInfo associated with the document and add that to the file wrapper too using the file name page setup and then return that.
+
+So what it looks like when we build that file wrapper, We pass it the array of graphics to use. And when saving a document, it's all just all the graphics in the document. We create a file wrapper to hold the attachments. And each subclass of SKT graphic will add stuff to this if it has attachments. And then we create an array of properties, an array of property list dictionaries for each graphic. And as we're doing that, we let the graphics add stuff to this attachment file wrapper.
+
+And then when we're done, we serialize the property list and put this in an outer file wrapper right next to this attachments directory file wrapper. So that happens here, where we put contents.plist. and attachments in the same file wrapper and return it. So each SKT graphics subclass has an override of a method called persistent properties, and if I could put commas and method names, I would. Persistent properties, comma, adding to attachments.
+
+And let's just look at one of them, SKT Text. What it's doing is, if it's not already holding onto an NSFile wrapper, and it should hold onto them in between saves to make this hard link trick work. If it's not already, you know, if this IVAR is not already set to something non-nil, It'll create the file wrapper, and it decides what type it is. Is it RTFD or is it RTF, depending on whether or not this in turn has attachments within it.
+
+And then when it creates it, it just uses the NS Attributed String API, file wrapper from range, and then a bunch of other stuff. Oh, and by the way, let me call this out. This is in very poor taste. This method will return an error, and we don't do anything with it. So don't do anything like that. And as a matter of fact, if I check this into Snow Leopard sample code, I'll probably go back to my office and my 30-inch cinema display will be replaced with a 15-inch CRT that hums. We're quite serious about error presentations.
+
+So yes, and so it builds this, you know, this SKT text, for example, builds this property list and returns it. And while it's doing that, it adds its attachment to the attachments file wrapper that was passed in. So, and SKT image does this too. It puts the attached image into a file wrapper. So let me show you to you running. And first, let me show you what it looks like when we're not doing hard links.
+
+So let me open this document that has, you know, a quarter gigabyte image, not huge, but, you know, still pretty big. So saving it, there's always this big pause. And there's always this spinning pizza death. So, and during auto-saving, this is completely unacceptable. So, So how I turn this on, so how do I make that delay go away? Well, is by turning on this feature.
+
+And this is why you come to WWDC is to learn things that aren't even in the release notes. NS Document only uses these-- right now in the seed-- only uses these new NS File Wrapper methods if you set this user default. So let's uncomment out the code that does that. And of course, when we ship, this is what NS Document will just do by default.
+
+So we open the same document. And every time we save, it's just instantaneous. Because all it's doing -- yes. Because all it's doing is every time it's just creating a new directory and writing some small files in it and the big files, it, yes, I moved this purple circle so you can see that it really did save. So, and it's for the big files, it's just making hard links. So, yep, slides.
+
+slides please. So that was that. And by the way, that code I showed you, fooling around with the file wrappers and stuff like that, that works fine on Leopard. It just gets faster on Snow Leopard. So fast saving with NSFileWrapper. File packages are often the way to go. If you have big documents, figure out how you can split your stuff up into multiple files so most of the time they just sit there on disk and they get hard linked to and they're not rewritten over and over again. That avoids a lot of work.
+
+So NSFileWrapper is the AppKit class that supports this. And I want to make sure everybody knows about it. Tell all your friends because for some reason just nobody's ever heard of this class before. Or I think maybe people see it and don't realize this is what it's for because the name doesn't exactly match NSFile package. So and to let you know about some future work that we're doing in this area, one thing I did not talk about is, well, what I showed you that little contents.plist file in the context of a sketch document.
+
+That file getting big would be hundreds of kilobytes, which is no big deal at all. But if you're working on a core data application, for instance, and your contents file is actually a SQLite file that ends up with millions of rows in it and gets to be a gigabyte and then there's giant attachments stored next to that. And you can't do the hard link trick because it's the SQLite file that's actually changing. That is something we're definitely investigating, trying to figure out how to make it work. And I think that's something that we're going to be working on.
+
+[Transcript missing]
+
+And what we're doing to fix this and let everybody contribute to the fix is in Snow Leopard we're adding a way for apps to say when they can and cannot be safely killed.
+
+[Transcript missing]
+
+So we want you to adopt this, this new mechanism. And what you're trying to accomplish when you adopt this is, number one, you want to turn on the mechanism in your application.
+
+And then you want to disable and re-enable it as the app runs. So first you turn on sudden termination, and it's on for the lifetime of your application. But you disable it during times when, if the application were killed at that moment, user data would be lost. And by user data, we mean pretty much anything the user would notice is gone, including, you know, user preferences and stuff like that.
+
+So while you're doing this, you don't want to disable sudden termination too much because that would make your application more likely to not be killable when it really counts. So there's no point in adopting the feature, and the first thing you do after launching the app is to disable sudden termination.
+
+You also don't want to disable sudden termination too little because that would make your application at risk of losing users' data. So you have to be careful. I'll show you a bunch of stuff about how to be careful. and how we can get these performance benefits without causing reliability issues.
+
+So the first thing to do is to just turn on the feature. And we've made it super convenient. You just add an entry to your Info.plist. NS supports sudden termination and true or yes or whatever. And this is interesting because this is one of those things in the Info.plist that nothing outside of your application reads. Like Launch Services doesn't look at this. Just NS application, while the application is being launched, reads it and enables sudden termination.
+
+And the way it does that is by sending the very first message to NSProcessInfo about this stuff. It's called enable sudden termination. And that's the only time you'll ever be invoking that method by itself. So because usually you'll be invoking disable sudden termination on the shared NSProcessInfo instance method and then invoking enable sudden termination.
+
+And you'll be doing these in pairs and invocations increment and decrement a counter. And when the counter is zero, the process is killable. And that means anything in the operating system outside of the process might kill it. In Snow Leopard, that means log in window at log out time, but you're really not supposed to make that happen.
+
+So you're really not supposed to make assumptions about what might be killing your application or when. You said it's clean, it's killable. And you can't complain if something kills it. And you typically invoke these in pairs. So it's a lot like reference counting, actually, disabling increment something and enabling decrement something.
+
+So, and you know, of course, we don't want you to have to scatter invocations in these methods all over your code. That would be terrible. So Cocoa disables and enables it automatically in several places. The first one is the biggest one, and this means you don't have to worry about this all over the place. NS Application disables sudden termination around invocations of send event.
+
+So an NS Application pulls an event off the UI queue to handle a mouse move or a key down or whatever. NS Application will disable send event around the handling of that. So that means that, you know, anything that happens that's not deferred until after, you know, the event handling is done is just safe. Most of the time, applications are not actually handling events, by the way. Most of the time, the application will be clean.
+
+We also do this in NSDocument, and that's what you're here to hear about is NSDocument. NSDocument disables it for all unsaved changes. Unsaved changes are a form of deferred work that have to mark the app as dirty until they're actually saved. And for your information about the implementation, we do this in UpdateChangeCount, which is interesting because if you're overriding UpdateChangeCount to defeat it and stuff like that, or adding strange invocations of it, you might run into some stuff.
+
+So this is a pretty interesting method. It's public, but whenever you're overriding it or invoking it, there's virtually always something better to do. So I'm writing this up and putting it in the release notes that come out with the next seed, whenever that is. You just don't need that, because mostly NSUndoManager has disable undo registration and enable undo registration. And I bet that fixes whatever problem you're using UpdateChangeCount to fix.
+
+We also disable sudden termination in NSUserDefaults. UserDefaults are data too. So when something in your system sends, in your application sends set object for key to UserDefaults, or you use the equivalent CFPreferences API, sudden termination is disabled because it would be bad if the app were killed before that stuff was written out. So, and when UserDefaults are synchronized, NSUserDefaults will re-enable sudden termination after that stuff is written out to disk.
+
+And here's a tricky one. So there's a method on NSObject called performSelectorWithObjectAfterDelay and a super popular AppKit, I guess I'll call it technique. That'll be most polite. When you want to make sure that something, some bit of work does not happen in the current event loop, you want it to happen in the next event loop, it's very popular to invoke this method with a delay of zero.
+
+And because that's a form of deferred work, you know, send event is going to return. We figured, eh, for this case, people are always working around something anyway when they use this. For this case, for delay of zero, we'll disable sudden termination. And also because the delay is so short, right? It's not zero, but it's, you know, when the event loop is next gone through. So, but we don't want to get carried away with this.
+
+You know, if you have, you know, something with a delay of 10, we don't know whether or not sudden termination should be a good idea. So, we just do this for a delay of zero. So, people don't have to update a lot of code. And by the way, not 0.1 seconds or 0.001.
+
+You know, those numbers in source code, you know, they mean guessing, basically. So, I don't know, a very short time. So, we're updating the documentation to let people know what a delay of zero means. Doesn't mean before perform selector with object returns. It means right after it returns and after you return.
+
+And in general, you only care about this if not doing the work would lose data. There are a bunch of things where you just don't have to worry if deferred work is not done because it's stuff like animating or whatever. If you start an animation and the user logs out, the animation doesn't get done, you know, big deal. They said log out. Do it quick.
+
+So that's where Cocoa disables sudden termination for you. Where else should it be disabled? The rule is any time important work is being deferred. If it's not being deferred, if it's done right away before your method, which is probably invoked indirectly by NSApplicationSendEvent, if it's done before that returns, there's no problem because we disabled it around invocations of SendEvent.
+
+But if you use a timer or perform selector after delay with a delay of longer than zero, or you spawn a thread or whatever, or create an operation and put into a queue, you will probably have to disable sudden termination. So you think, oh my god, how am I going to track down all the places in my application where I do that?
+
+And as you're upgrading to this, the trick is to, well, first write an application that does not have big bugs where it throws out, you know, throws away data when it's quit. And once you've done that, made an application that doesn't have big bugs, you'll find that you've scattered some code about your application that makes sure that things get done when the application terminates. So does your application terminate properly now? Yes?
+
+Okay, then we have a few easy places to look for termination time code. And that code points to the changes to make. That's not where you disable and enable sudden termination. For example, you know, application will terminate. Don't bother enabling sudden termination there. It's too late. So, but let me show you some of these places where to look.
+
+So, the app delegates, application should terminate, and as I just mentioned, application will terminate. So if you've written an app that works at quitting time today, you'll have code in these places to make that reliable. Also, overrides Venice application to make it reliable. So, let's look at the application terminate. Some people put their stuff there instead of the application delegate methods. And when we're doing this to Cocoa Apps, we found a case we had to deal with in Calculator where it's quit method, it's quit menu item is not actually set up to the terminate action.
+
+It's set, you know, that everybody else uses. It's set up to like, you know, some private terminate method that does a bunch of work and then calls in this application terminate. And that bunch of work, if you want that to get done, you've got to do it. And that bunch of work, if you want that to get done, you're going to have to disable sudden termination because that stuff isn't going to be calling anymore.
+
+And also, AppKit, I don't know if you know this, I didn't know it until I started working on this stuff, NSApplicationTerminate closes every window on the way down, which is a pretty big part of this performance problem I'm talking about, with a lot of deallocating of memory when it's all just going to go away anyway. So you should look at some of this stuff.
+
+If you override NSWindowClose or some of the stuff it calls, like NSViewDeallocation and stuff like that, if you're writing stuff to disk in your NSViewDeallocation method, you have some work to do before you can adopt this. But there are other design issues that perhaps you should tackle on the way. And also some of the delegate methods for NSWindow, those get called at termination time.
+
+And there's some other ones. So things like @exit and this crazy thing called the CXA @exit handler. So you can register for when your process is being exit, you know, one more callback. And also module finalizers, which are these things. You can specify on individual functions and also called C destructors. And if you don't know what these are, don't learn now because we don't want you to use them anyway.
+
+Also, C++ destructors, and not all C++ destructors, oh God, just ones for statically constructed objects, which we kind of have been discouraging anyway, at least the ones that happen, you know, cause C++ objects to be created at launch time because that's not lazy enough anyway for good launch time performance. And all the same in the frameworks you link against. So if a framework is not sudden termination safe and your application links against it, maybe you're not in such a hurry to adopt it.
+
+But in general, this is not that rough to make a framework sudden termination safe, to just follow all the same rules. And so, of course, we're doing that to all the frameworks that are part of Mac OS X. You know, hunting down the add exit handlers and go, does that really have to be done when the process exits or could it be done earlier or does it have to be done at all?
+
+Or if it really does have to be done, maybe it should disable sudden termination so that it does happen at quitting time, except we don't want people to do it. to do that because that'll just disable the feature. So we are taking care of this in Apple's framework.
+
+And we've been working on this for, you know, a few months, and so far it hasn't been that rough. So... What you're going to be doing when you find all these places that deal with things that happen at application termination time is, in general, you're going to make your app a little less lazy.
+
+Laziness is something that we suggest a lot as a performance technique. Don't do work until it has to be done, but it can be over-applied. It can just move the performance problem to just later in the application's execution, like termination time. Here are some examples of making your app a little less lazy. And this is something that TextEdit actually did. It didn't put values that the user changed in the preferences pane into user defaults right away.
+
+We are going to change it to put values in user defaults right away. Right now it puts them in IVARs in a controller class. But as things are changing user defaults, just put the values right into user defaults because it's cheap. And also, NSUserDefaults will set a timer. Right now in Snow Leopard it's 15 seconds. And after 15 seconds, it will write the values of the user's preferences to disk.
+
+And it's a nice little bit of coalescing. A whole bunch of preferences change. And then 15 seconds later they get written out to disk. There wasn't a whole lot of redundant hitting of the disk and stuff like that. It does the right thing for performance as the app is running and also marking it as clean and dirty at the right times.
+
+So when you're coalescing for performance, for example, there's a bunch of stuff that has to be written to disk. Each time the user makes a change with the UI, but of course you don't want to hit the disk for every keystroke, so you're saving stuff up. Go ahead and do that. Save that up, but don't save it too long. Do it on the order of seconds. That's enough to get the performance benefit that really counts.
+
+And by the way, this coalescing for performance, not hitting the disk for every little event, this still counts as deferred work, so you have to disable sudden termination when you start coalescing and re-enable it when stuff actually ends up on disk. And by the way, be as lazy as you want for things that don't need to disable sudden termination. So if you're doing something in the background and it's just helping decide what ends up in a window, go ahead and do that lazy. That doesn't affect what's going to be written to disk or sent off to a network server or whatever.
+
+So, sudden termination. The summary is that applications, ours, yours, everyone's, can avoid contributing to shutdown delays, which are just unacceptable. You know, the Macintosh is supposed to be like a simple appliance. When you hit off, it should just turn off. Shouldn't think about turning off, possibly contemplating considering the, you know, ramifications of turning off. And so, we're tackling this issue.
+
+And you do have to know your own code to do it properly. You have to look around for things that are done at application termination time. But when you've done that, you'll find often it's not that difficult, especially for NSDocument-based apps. Because the main thing that happens in those is that the user edits stuff, and it will get saved to disk later. And, you know, NSDocument takes care of disabling sudden termination during that. And we already have lots of experience with this at Apple. We've been working on it for a few months and doing it to everything. You know, the applications that are in the application.
+
+You know, some of them still need more work, but some of them were just so easy, and they're just killable. And we're also doing this, by the way, just talking about NSApplications today. But we're also doing this to agents and demons in the system. They use a different system, something lower level than NSProcessInfo, that actually NSProcessInfo stuff will be built on top of. But agents and demons, like every process, is going to be killable. So when the user shuts down, just blech, everything's going to disappear. So. So.
+
+So check it out in the Foundation Release Notes. Foundation Release Notes also, by the way, include some debugging tip or two. So you're like, how do I know I'm getting this right? There is an incantation you can type into GDB that will let you know whether or not the app is actually killable or not at that moment. And as far as testing this going forward, it's like, who's going to test what their application does at logout time? Nobody.
+
+So. What we've done to AppKit, and this is actually in the Snow Leopard seed, is in applications that are killable at the time that the user quits them by choosing the quit menu item in the file menu, apps just kill themselves. So you can get a good idea and make sure that, you know, so while you're debugging, you'll see stuff missing if you're not properly disabling sudden termination. So. And we have a whole bunch of other debugging tricks up our sleeve that we're going to put into this stuff to help people. you know, make stuff that's reliable and fast.
+
+So, there are several ways to make document-based applications faster. Concurrent document opening, which I showed you. Taking advantage of all the improvements to NSURL that we're doing in Snow Leopard. Taking advantage of NSFileWrapper improvements in Snow Leopard. And also, the sudden termination mechanism that we want everybody to use.
+
+So, please adopt all of these. For more information, email Derek Horn. He's our evangelist, Derek at Apple.com. Documentation, always read our release notes. We put so much good info in the release notes. So I like reading the release notes of other people in my own group. They're so good.
+
+And I think, and I don't know where you find them on the seed, but I think you do it by typing it into the search field in Xcode, AppKit release notes. And also our header file comments, especially things like NS file wrapper and NS document, there's a lot of information there.
+
+It all ends up in the documentation, but it shows up in the headers first. Related sessions have all already happened. They were awesome. So on Wednesday morning, there was What's New in Cocoa. On Wednesday afternoon, there was Using File System APIs Efficiently. And in this room, right before this, was Polishing Your Cocoa Applications.

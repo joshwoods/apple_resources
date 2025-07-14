@@ -1,0 +1,160 @@
+---
+Title:  Low Energy, High Performance: Compression and Accelerate
+Year:   2015
+Web:    https://nonstrict.eu/wwdcindex/wwdc2015/712/
+
+[!] This transcript has potential transcription errors.
+---
+
+[Eric Bainville]
+Good morning.
+
+[ Applause ]
+
+Welcome to the vector numerics group session. My name is Eric Bienville and I'm with the vector numerics group. Our group is providing the accelerate framework which you already know and some libraries in the system. In the accelerate framework, you will find the image which is a collection of hundreds of functions for image manipulation. You will also find vDSP inside accelerate which is for signal processing and three layers of linear algebra libraries.
+
+Outside of accelerate, we also maintain the Math library, LibM, and the string functions. Last year we also introduced SIMD which is a set of headers and functions providing vector types directly mapping to CPU vector units near SSC and AVX. Today we present you three new additions to these functions. The first one, compression, is a library for data compression; then Steve will present addition to the SIMD library, and finally Luke will present sparse BLAS, linear algebra for sparse matrices. Let's start with compression.
+
+What is that? Compression is a new library providing a unified and simple API for lossless data compression. Why would you need such a thing where if you already try to use compression in your app, you first have to pick a compression somewhere, read the manual, write the code, test it. If it doesn't work, you need to pick another one, write the code again. That's a lot of trouble.
+
+And also sometimes, well, actually usually you would have to include the compression curve inside your app which is a maintenance nightmare. So the idea is to provide a wrapper to common compression algorithms and their unified API and also with some benefits like optimized code and easy switch between algorithms. Let's start with the algorithms we put inside.
+
+When we speak about compression algorithms there are two metrics to consider. The first one is obviously compression ratio. That is the ratio between raw data size and the compressed payload size, and then we are interested in the encoding speed and the decoding speed. So to select algorithm, we put them in one single graph.
+
+This graph, so on the X axis you have the compression ratio, and on the Y axis, the encoding speed. And in the middle there is a reference, reference compressor. So all of the algorithms are compared to this reference. So if you are on the right, you compress better, if you are on top, you compress faster, and that's it. So let's put some algorithms inside here.
+
+The center one is zlib. That's the most used. And so what did we do? We chose the best compression, this one, right, this one, LZMA, and the fastest one LZ4. You will see the gray line is to show how it becomes more and more harder when you want more compression.
+
+So more compression means slower and less compression means faster, exponentially so. And if you look at that closely, there is a first point here which is above zlib, that means faster and a bit to the right, that means compresses better that's LZFSE that's a new compressor we're introducing today and a good alternative to zlib. I will talk about that later. These are the four compressors we put in the compression library. And the decode looks like that so that's the same thing, if you compress more, you will need more time to decompress also.
+
+And our four compressors are at the same position here. So these are the four algorithms we selected to put in the compression library. LZMA for high compression, but it's low. LZ4 for very fast compression, but it doesn't compress that much, and in the middle you have zlib and LZFSE for balance between compression ratio and speed. So I'm matching different use cases like for software distribution you want to use LZMA because you will compress once on the server and ship that so you want the shipping part to be as small as possible.
+
+And then what did we do? We optimized some of them for Apple hardware. What does that mean? Like that. So, for example, we optimized zlib decoder, and the performance of the zlib decoder we provide is compression is almost 1.6X faster than the normal zlib. And the same goes with the LZ4. So that's another benefit. And you will also benefit from security of data and performance update without having to change your code. Let me talk briefly about LZFSE, our new compressor. Why would would you need a new compressor? First, its fun.
+
+And then, so why are we optimizing zlib? We came to the conclusion in the entropy part of the zlib, it is a bottle neck and there is not much we can do to solve that except replacing it with something else. So that's what we did. We took the new technology called finer state entropy and replaced the part of zlib with that.
+
+And the good news is that LZFSE is able to map better on modern CPU architecture, much better. And the design goal of that was, match the zlib compression ratio and make this thing as fast as we can. So let me show you numbers about that. That's compression ratio. So by design it's the same thing.
+
+This is energy efficiency, both encode and decode, LZFSE. As you can see we are 2-point something times faster for encode and 2.5 times faster for decode, not faster, more efficient. What does that mean? Suppose you have a full battery charge and nothing is compressing. With zlib you will compress, let's say, 5 terabytes of data before the battery is empty. With LZFSE you would be able to compress 12 terabytes with data with the same battery charge. That's what energy efficiency means. Actually speed is not bad either, because we can reach 2-point something times faster for encoding and three times faster for decoding with the same compression ratio.
+
+So that was about LZFSE. Now, let me show you to use this API. There are two APIs. There is a buffer API to use when you have all of the data at once in one single buffer. And there is streaming API to use when receive the data in PCs.
+
+So buffer API is quite simple. It's like a super mem copy thing, you give it a buffer and the number of bytes inside, destination buffer and the capacity of it, and you just give it also which algorithms it needs to use. Here it says LZFSE. You see that switching between compressors is changing this constant, you don't have any code to rewrite.
+
+The new code is compression encode buffer function, and it will return the number of bytes put in the destination buffer of 0 if something went wrong or there was not enough room in the destination buffer. Decoding, that is the same story. So you will pass a buffer containing compressed payload and a buffer to receive the decoded data.
+
+The difference here is it will return the number of bytes put in the output buffer and if something fails actually it will fill up the buffer. So it will just truncate the output. Now, let me show you the stream API, which is a little more complex. Because you will need to have some state between the calls.
+
+So we will call the library multiple times with new pieces of raw data to compress. It's like a candy factory. You send sugar inside and get candies at the output. So you will have the stream object to initialize and then cause a process function many times and at the end you will have to call a function to free the resources used by the stream object.
+
+So let me show you in detail with code. So first, we initialize the stream object, you say okay, I want to encode, I want to use LZFSE, initialize. Then you will have to call process. Before calling process usually in other compression libraries, you will have to tell it where are the bytes to compress and where to put the output. And then you call process, and it will, as the consumer, input or fill out the output and it will update these fields for you.
+
+Then at the end, you need to tell it, okay, I'm done, no more sugar, finalize. And after that, you are not allowed to send more data to compress, but you may need to call it several times to empty the pipes and get the output. And at that point it will return end, and which means in the end, and you will need to call compression stream destroy to free the resources. So encode. Decode is actually a bit simpler. You need the same initialization code. This time that's with decode instead of encode.
+
+Then you send the data and it will figure out by itself if it's the end of the stream or not. So at some point it will return end, which means you got all of the data, and you need to destroy again. And that's it. We are done with compression.
+
+So let me wrap up, that's a new library providing a simplified and unified API on top of several compressors. LZMA, LZ4, zlib, and LZFSE, which is to be preferred over zlib. And LZFSE which is our new high performance compressor. Thank you and let me call Steve, who will tell us about improvements to the SIMD library. Thank you.
+
+[ Applause ]
+
+[Steve Canon]
+Thanks, Eric. My name is Steve Canon. I'm an engineer on the vector numerics group with Eric, and today I will talk about SIMD, which is a library for two dimensional, three dimensional, and four dimensional vector math. We introduced SIMD last year in Yosemite, and iOS 8 and it works in C, Objective-C, and C++ and it closely mirrors the Metal shading language.
+
+That means it's really easy to write code that will run on the GPU in Metal and use the same data structures and the same code on the CPU using SIMD. It closely hews to the tradition after shading languages and the way they work with vectors and matrices. So what's new this year is that we have support for Swift as well.
+
+[ Applause ]
+
+So everything from here on in the talk or in my piece of the talk is going to be Swift, all of the examples are Swift. For the most part, everything is about exactly the same in C, Objective-C and C++. If you want to see in depth the story for those languages check out last year's video session and there are a few things where there are important differences I will call out explicitly in the talk, but all of the examples will be Swift.
+
+Why did we need to introduce a new vector library? There were a bunch of vector libraries on the platform and I have worked on a bunch of them, so why do we add a new one? I will show you examples of a few things that were a little bit inconvenient with other vector libraries and how they are much nicer using SIMD.
+
+BLAS is a great vector library. It's part of the accelerate. It's one the first things I worked on. Here is an example of multiplying a vector by a scaler and adding it to another vector in BLAS. So we create two Swift arrays. Those will be our vectors. We can call this C BLAS Saxpy function, which will multiply X by 2 and add to Y and store the result in Y.
+
+There is a bunch of other information we need to pass because this is an API that takes raw coiners, it doesn't know anything about lengths or strides; we need to provide that information. There is also inefficiency that comes from making an explicit call to do this work. We will look at GLKit, which is another great library, I love GLKit. It has explicit vector types, so you don't just have to use raw arrays, but the functions are very verbose. You have to call it GLK vector 3 multiply scaler to do your arithmetic and that's too wordy. Here is what it looks like using SIMD.
+
+This is a lot nicer, right? You write down the arithmetic you want to do and it works, you don't need to call functions. Life is nice. So this is really nice. What else can you do? We have vectors of floats, doubles, and 32 bit integers of lengths 2, 3, and 4.
+
+In C, Objective-C and C++ there are other vector types available, for now we have the subset in Swift, and the reason we chose this subset is it's what you have to use most often to interoperate with other libraries for the Metal programs you are going to write when you want to use model I/O, when you want to do graphics stuff, these are the types you want to have available.
+
+What can do you with these types? You can create them, first off. We have a bunch of initializers that do nice things, you can create the zero vector, you can explicitly specify the elements of the vector, you can have a vector with all of the components equal. There are lots of nice initializers.
+
+You can do arithmetic. You have element-wise arithmetic, the operators just work. So if I multiply two vectors I get a new vector, each element of which, the value in that element, is the result of multiplying the corresponding elements of the input vectors. Divide, same thing, I can multiply by a scaler. I can do a dot product, cross product, et cetera. I already showed you one example. I will show you another simple example right now. This is a reflect function that I might use in graphics frequently.
+
+It takes 1 vector X and it reflects X through the plain perpendicular to the normal vector N, and to write this we write down the mathematical expression. Write X minus twice the dot product of X and N times N, but you shouldn't actually have to write this function, right? It should be available to you already.
+
+And it is. We have a bunch of geometry, shader, and math functions available. So we have dot product, cross product, reflect, refract, distances, et cetera, all of the stuff you want to use. If you have written shader programs before, you have used these functions a lot. This is just a standard stuff you would use in Metal or open CL or GLSL or whatever your favorite shader language is, and we also have a variety of math functions available from accelerate for the float 4 type so you can use V sign F, VCosf, do Math functions with these types. We have matrices as well as vectors.
+
+Matrix types are float N by N, and double N by M. So N is the number of columns and M is the number of rows, if you are a mathematician, this is weird. If you are a graphics programmer, this is natural. So you guys will feel right at home. N and M can be two, three, or four, they don't need to be square matrixes so, for instance, a float 2 by 3 is a matrix with two columns and three rows.
+
+Again, we have a variety of initializers for you, so you can create a zero matrix, you can create the identity matrix, you can create a diagonal matrix, by specifying the elements of the diagonal if you want, all the elements if you want, either as an array of arrays or as an array of vectors.
+
+All sorts of nice things. And I will show you a little arithmetic example using matrices as well. Let's create a matrix with 2s on the diagonal. This is a matrix where when you multiply it will scale a vector by 2. Let's modify the last column to put some values there. This is a transformation matrix that scales vectors by 2 and applies an offset as well, it translates them. We can apply this to a vector of all 1s.
+
+And we can also undo the transform by using the inverse property of our matrix to get the inverse transformation to get back to the original vector. When you want to interoperate between languages, you might have Objective-C API like model I/O APIs that you want to call. The Swift vector types are layout compatible with the Objective-C vector types. What I mean by that is they, have exactly the same representation in memory, and the compiler knows that they are the same.
+
+So you don't need to do anything to convert a Swift vector type into an Objective-C vector type or an Objective-C vector type into a Swift vector type. So here I have an Objective-C API that returns a vector, a SIMD vector, and I can use it immediately in Swift. For matrices I have to initialize a Swift matrix from the Objective-C matrix that I get.
+
+It's a really cheap operation, basically a copy because the layout is the same, but I do need to call the initializer. When I want to pass Swift types to Objective-C, the story is exactly the same. I can pass the vectors for matrices I use the C matrix property to get an Objective-C matrix that I can pass to my Objective-C API.
+
+So that's SIMD. SIMD is great for when you want to work with small vectors and matrixes. Sometimes you want to work with bigger vectors and matrixes too. So I will talk to you about LAPACK, BLAS, and linear algebra. This is the fun part of the talk; we have a break from the math nerdery. So LAPACK and BLAS are industry standard math libraries.
+
+These are some of the oldest APIs on the platform actually, which means they are a little bit cryptic looking but there is tons of documentation for them online because they have been around for 40 years, and a lot of times you might have some code from a library that you get that depends on having these available, just link against accelerate, it works fine.
+
+It's pretty easy to use. Linear algebra is a new interface we introduced last year that has much simpler APIs for doing the most common linear algebra operations. So this is exactly the same operation on the last slide, it's solving a linear system and rather than calling a cryptic function with eight parameters, you call LA solve and you give it the vector and matrix you want to solve for.
+
+So that's very nice. The past few years we have done a little talk about LINPACK and how fast we can do linear algebra. The LINPACK benchmark says how fast can you solve a system of linear equations? It's exactly the operation we saw in that last slide. And historically, there have been three different variations on this benchmark. It started out as how fast can you solve a 100 by 100 system? But as computers became more powerful and faster, it wasn't possible to actually show how fast you were anymore with such a small problem. So it became a 1,000 by 1,000 system.
+
+And today when people talk about LINPACK, they actually mean no holds barred. You get to pick however big a matrix you need to show off how fast you are. When you see supercomputer rankings, they are talking about ratings that are millions by millions when they give you LINPACK scores. You just pick whatever makes you fastest. So I was reading the internet a few weeks ago and saw someone talking about now amazingly fast their iPad Air 2 was. It got 1.8 gigaflops on LINPACK, which sounds pretty impressive.
+
+It's 1.8 billion floating-point operations per second. I know that this number is low. So someone had written a simple C language routine to solve it and just taken whatever the compiler gave them and that was what the LINPACK score was. So I looked around a little bit more. I found someone who had carefully optimized their LINPACK routines; they had written vector code, they had cache tiled, they had done multithreading, and they got 5.6 gigaflops LINPACK.
+
+It's three times faster, nice improvement, but rather than doing all of that work, you could just call accelerate instead. I showed you that D get RS and LA solve function a few slides ago. You can write one line of code and if you do that, you get 25 gigaflops.
+
+[ Applause ]
+
+So this is what we really want to do. And this is what we want to make easy for you guys. We want to make it so you can write one line of code rather than having to hand optimize everything, and get great energy usage and great performance without needing to do a lot of work. So now I'm going to hand you over to Luke, who will tell you about what you can do when your matrixes are even bigger [applause].
+
+[Luke Chang]
+Thank you, Steve, my name's Luke Chang. I'm an engineer on the vector numerics group. I'm here today to talk about Sparse BLAS. BLAS stands for basic linear algebra solve programs. And sparse BLAS is BLAS for sparse matrices. It's a new library in iOS 9 and OS X.11. It's designed with simple API and good performance. It supports both single and double precision.
+
+Why do we need sparse BLAS? Can I use a dense BLAS on the sparse matrix that I already know how it works. Yes, it can given that the dimension of your matrix is not large, but using Sparse BLAS is better in so many ways. In order to demonstrate that, let me show you a typical Sparse matrix. This is a typical matrix from a machine learning. It has more than a million rows and 200,000 columns. That gives us more than 300 billion entries. However, the density of the matrix is just 0.05%.
+
+Here is a picture to visualize the sparse matrix. The darker the blue, the higher the density. As you can see there is a lot of area in this picture that is white. They are just zeros. We don't want to waste memory on those zeros. If you were to store this sparse matrix in a regular matrix format so that you can use the regular dense BLAS, assuming just single precision point numbers it takes more than one terabyte of memory, which is unfeasible. You don't want to do that on your phone, on your iPad.
+
+So it saves memory, besides sparse BLAS is also energy efficient and faster. We measure sparse BLAS performance on a MacBook Pro, 13 inch at density 0.5%, sparse BLAS is more than 18 times more energy efficient than dense BLAS. Performance is 15 times faster. As the density goes down, performance goes up.
+
+At 0.05%, which is the density we saw in the previous matrix, both energy efficiency and performance are more than 100 times better than using a regular dense BLAS. So now you see there are many compelling reasons to use sparse BLAS. It saves memory, it's energy efficient, faster. What are available in sparse BLAS? We have products, triangular solves, we can calculate norm, L1, L2, L infinity norms, et cetera. We encounter trace, which is the sum of diagonal. It can permute rows and columns, add new values a matrix and extract rows and columns from a matrix.
+
+Before I talk about the operations, let's see how we store a sparse vector. Like I said before, we don't want to waste memory on the zero values, so we store in the non-zero values like this. And then we need to know where those non-zero values come from, so we store the indices of non-zero values. Lastly we need to know how many we stored so that's the number of non-zero values. Those are the three things we need to store a sparse vector.
+
+In order to make the conversion from regular dense vector to a sparse vector, Sparse BLAS provides utility functions to help you with the conversion. If you want to convert from dense to sparse, you call pack. The other way around you call unpack. If you just want to know the non-zero count, you can call get vector non-zero count.
+
+Now, we can look at a sparse matrix. How do we store it? We can view the sparse matrix as a collection of rows, or a collection of columns. So we have compressed sparse row, compressed sparse columns, or we just forget about rows and columns. Those are messy. I want to see the matrix as a list of non-zero values, so for each non-zero value we store the column index and row index. There are many other more storage formats, and each one of them has its own pros and cons. And there might be a best storage format for a particular operation you want to do.
+
+We decided to make things easier for you. We defined a sparse matrix data type. It is opaque pointer, so if you want to use it, you have to first create it using the create function, and you can operate on it; after you are done, you have to destroy it.
+
+The benefit of doing this is that we manage the memory for you. You don't have to worry about allocating new memory when you are trying to add new values to the matrix, or resize the buffer, or freeing the buffer at the end. We will do that. Even better, we will pick the best storage format. For example, if you insert a bunch of rows into the sparse matrix, we will store it as sparse row.
+
+And we will store it as sparse columns when you insert a bunch of columns, and if you want to do a particular operation and there is a best storage format, we will convert it to that format automatically. So lastly, this enables us to hide dimension details in our API, that makes our API cleaner. When you call a sparse function, you don't have passing the dimension of the sparse matrix every time. So here is an example.
+
+First, you create a sparse matrix. And then you can insert a value to a sparse matrix. Or you can insert sparse vectors as rows or as columns. Then you commit the changes to the sparse matrix. I will talk about commit function in the next slide in more detail. After you are done, you call destroy. Okay. Why do we need a commit function?
+
+Data insertion is expensive because we store values in a compressed format. Every time you want to add a value to a compressed storage that involves data movement, even more memory allocation, that is expensive. So we want to delay all of the data insertion so we can do them in batch.
+
+Good news is, even you forget to call the commit function, the commit function will be triggered automatically when you do an operation on the matrix. Now, you may ask, then why do I need a commit function? If you want to control the performance of your code, you will want to use the commit function explicitly. Let's say you want to get your sparse matrix ready during the startup time of your app, so your app can respond to the user input as quickly as possible. Then you add the commit function into your startup code. That will do the trick.
+
+All right. So in the interest of time, I will only talk about two most common operations in sparse BLAS. The first is product, C equals A times B. We support vector inner product, vector outer product, matrix vector products and matrix-matrix products. What are the types for A, B, C?
+
+For inner product, A is sparse, B is either sparse or dense, C is a single value. For outer product, A is dense, B is sparse, and the result C is a sparse matrix. For matrix vector and matrix-matrix product, A is sparse, B is dense, C is dense. It's very rare you need a product of two sparse matrices so it's not supported.
+
+Here is the function prototype of matrix product. The naming convention of sparse function is, we start with sparse underscore followed by the operation we want to do, in this case is matrix multiply. Dense means B and C are dense, float is the data type. And you will return success or an error code. The argument of this function is just like regular BLAS. You specify the order of B and C, column major or row major. You say you want to transpose on A or not, number of columns of B and C. The rest is just like BLAS.
+
+The next operation is triangular solve. You solve the triangular system of equations, so T has to be an upper or lower triangular matrix. We support both dense and, dense vector or matrix for B, one note to keep in mind that upper or lower triangular property must be set before you do data insertion. Here is the code to highlight that. Set matrix property is called before you do any data insertion. After data insertion, you can call triangular solve, and the argument, again, is just like BLAS.
+
+In summary, sparse BLAS we design it with simple API, it has a wide range of operations, and it has good performance. Okay. Now it's time to wrap up our session. We talked about three new libraries today, compression with our own new compressor LZFSE. Now, you can use SIMD on Swift, and there is a sparse BLAS library.
+
+They share the same design goals. They are fast, energy efficient, and easy to use. We encourage you to give them a try and let us know what you think. We would love to hear from you. We take developer requests and feedback very seriously. In fact, there are many features we add to accelerate framework based on developer requests, your requests. So if you see something missing that you want to use, please file a feature request.
+
+For more information, we have online documentation for vDSP and compression. If you want to know more about other parts of accelerate, you can check out the video of our previous WWDC sessions. We also have simple code for compression vDSP. You can join the discussion in the forum or any general inquiries, Paul Dembo is our evangelist. Here are the related sessions we talk about model I/0, Metal, Swift, in our talk you can check out the videos of these sessions if you want to learn more. That's it. Thank you for coming. We look forward to seeing you in the Lab. Thank you very much!
+
+[ Applause ]

@@ -1,0 +1,267 @@
+---
+Title:  Finding Bugs Using Xcode Runtime Tools
+Year:   2017
+Web:    https://nonstrict.eu/wwdcindex/wwdc2017/406/
+
+[!] This transcript has potential transcription errors.
+---
+
+Hi everyone. Hi, and welcome to finding bugs using Xcode Runtime tools. My name is Kuba, I am an engineer on the program, another system inside developer tools. And today we will be talking about finding bugs at the program runtime and the tools for that. So, let's jump in.
+
+Xcode already has several ways of telling you that you have some bug in your program. For example, with compiler errors. Compiler warnings. Analyzer warnings. Or test failures. Last year in Xcode 8 we have added a whole new category called Runtime Issues. Those issues are found at the program runtime by several different tools.
+
+When you run and debug your applications as you are used to, these tools find and detect bugs at runtime and they display them in the Runtime Issues Navigator in Xcode. If you are not actively watching this navigator, Xcode also indicates that it found some runtime issue by showing this purple warning icon.
+
+You can click any of these issues in the Navigator and the editor will tell you which line of code contains the bug. The source of this bug can vary because different tools report different types of bugs but all these tools that we're going to talk today in this session, you can find in the diagnostic step in the scheme editor.
+
+And in Xcode 9, it now contains some new features. So, you'll see that it now has address sanitizer, threat sanitizer, undefined behavior sanitizer and also main thread checker. So, these tools, which all find bugs at program runtime, are what we're going to talk today in this session. So, first I will introduce main thread checker, a completely new tool in Xcode 9.
+
+Then I will talk about address sanitizer and thread sanitizer and the improvement that we have made to these tools this year. We will introduce another completely new tool, undefined behavior sanitizer. And finally we will provide tips and best practices, how you should be using those tools effectively. So, let's jump in.
+
+The main thread checker is a completely new tool in Xcode 9 and it detects violations of some commonly used APIs. And specifically it focuses on UI updates and multithreading. Some APIs require that you only use them from the main thread. For example, that's the case for many APIs from the AppKit and UIKit frameworks.
+
+And they are used by most graphical macOS and iOS applications. And I assume that if you are using those frameworks, you already know about this restriction that you have to call those APIs from the main thread. And that's easy to do. We just make sure that we will call those APIs on the main thread only.
+
+But there are tasks that you don't want to be executed on the main thread, like file downloads where you need to wait for some data or image processing, which usually involves some, like, heavy computations. So, these tasks need to be moved off the main thread so that the UI is still responsive and your user interaction is not blocked in your app.
+
+However, these tasks also need to trigger UI updates. And if those UI updates involve calling AppKit or UI kit APIs, that update needs to happen from the main thread. And it's very easy to make a mistake, to accidently call this UI update from the wrong thread. And it can have serious consequences such as missed UI updates where the UI just does not update at all or other visual defects. But even more serious things like data corruptions or crashes. So, to avoid this problem we need to make sure that this UI update only happens from the main thread. So, with that, I'd like to introduce Main Thread Checker and show it to you right now.
+
+So, what I have here is a very simple application which downloads some data from the internet. It's actually downloading a file from this long URL which is present on the developer.apple.com website. It's some sample code that Apple has published in 2013. And it's a zip file. It's several megabytes large and it will serve as an example file if you want to download. To download this file, I'm using a class called URLSession that's provided by Foundation and it's a very convenient way of downloading files.
+
+The UI of my application is very simple. Let's take a look. It contains a single button and a progress bar. So, I have actually implemented the progress callback of URLSession. And from this callback I am updating the value on this progress bar. So, let's run the application and see if it shows the progress of the download as it's supposed to. Let me now click the button to start the download. And you might see that something's not quite right, because the progress bar is just stuck at the beginning. And now it has for some reason jumped straight to the end.
+
+So, now I might be wondering that there's some bug in my application or URLSession may not be working correctly. So, the best thing about this feature is that I don't need to guess what wrong - Xcode has already found the problem. If we take a look back into Xcode, we'll see that it's informing us that it has found a Runtime issue.
+
+Let me click this Runtime issue to get some details, and you'll see that the navigator has now switched to the Runtime Issues navigator. And it's informing me that I'm calling some UI API from a background thread. I'll click this issue to go to the code which contains the invalid API code. And in this case we can see that we are actually setting a new value on the progress indicator from a background thread and that has to be done only from the main thread.
+
+So, that's a bit unexpected because I'm not trying to run this code on a background thread. I'm actually not doing any threading in my code at all. So, the real problem is that I actually made a mistake when I was grading my URLSession class, sorry, object. On this line, where I'm creating the URLSession, I'm supposed to specify which view should be used for the callbacks for both the progress and download finished callback. Instead of providing a queue, I just said nil. That means I don't care. And URLSession will probably involve those callbacks from a background queue.
+
+So, now we know why these callbacks are called from a background thread. To fix this, I could either use GCD and dispatch the UIUpdates back to the main thread. Or in this simple case I could just ask URLSession to directly call my callbacks on the main queue. So, let's do that instead.
+
+I'll just ask it to call my callbacks on the main queue and let's run the application one more time to see if that fixed our problem. If I click the button this time, we'll see that the progress bar now animates smoothly and it indicates the progress of our download.
+
+[ Applause ]
+
+Sorry, I need to switch back to my slide. There we go. So, we've seen an example of how Main Thread Checker helps us find and fix a bug where we're calling some API from the wrong thread. Notice, that I didn't need to turn these two on because it's actually enabled by default whenever you are using the Xcode debugger.
+
+But if you want to find this code in Xcode, you'll see that it's available in the diagnostic step again and you'll notice that now in Xcode 9 we have this checkbox called Main Thread Checker. So, this is the place where you can turn the two on or off.
+
+If you want to make the debugger stop on a violation of this rule, you can use the pause on issues checkbox and with that, the debugger will stop when it detects an issue and you can inspect your current program state and to figure out what went wrong. Now, let's talk about some common mistakes that leap to the bugs that Main Thread Checker detects. So, as you saw in the demo, networking callbacks is one place where we, is a place which often happens from the main threads, sorry, from the background thread. So, you need to be careful and you need to dispatch your UIUpdates back to the main threads.
+
+Another common place for mistakes is when you are creating and destroying NSView or UIView objects. This also needs to happen only from the main thread. If you are writing libraries or frameworks and you are providing some asynchronous API. You should be very careful when designing those APIs. Let's take a look.
+
+Let's say that we want to have an API that performs some long and heavy computation. So, it does that in an asynchronous fashion. Here the caller of the API needs to provide a closure to the API and the closure will be used as a completion handler. So, when the task is completed, you, the API will call the provided closure. However, in this code sample, it's not obvious which queue or thread will be used for this closure. And it can easily lead to a mistake where some code is executed from the wrong thread.
+
+Good APIs let or even force their users to specify which view should be used for the completion handle. So, if you read this code example, it's obvious that the closure will be called on the provided queue and you don't even need to read the documentation for the API to learn that. So, as I said, Main Thread Checker detects violations of API threading rules.
+
+It supports AppKit, UIKit and WebKit which are three very commonly used frameworks and they all have the same main thread only requirement on a lot of their APIs. The tool supports both Swift and C languages. And in contrast to the other tools that we are going to talk about today, it does not require recompilation.
+
+So, you can even use it on existing binaries. The best part is that is actually enabled by default. So, you don't need to do anything to start getting these warnings from the tool. It's actually enabled whenever you're using the Xcode debugger. So, that was Main Thread Checker, a completely new tool in Xcode 9.
+
+[ Applause ]
+
+Now let's talk about another large source of problems - memory issues. And let's talk about Address Sanitizer, which finds those issues. Address Sanitizer has been introduced in Xcode 7, two years ago. And it's proven to be a great tool because it finds security-critical issues. For example, use after free bugs and buffer overflows.
+
+It's also very helpful when trying to diagnose hard to reproduce crashes. Because it often makes those crashes deterministic and it finds memory corruptions when they actually happen and not some time later when the corruption affects some unrelated code. If you'd like to know about how this tool works and which exact bugs can it find, I recommend that you watch a WWDC from two years ago called advanced debugging and Address Sanitizer. In that session, we have introduced the tool and we have also talked about how it works under the hood.
+
+Address Sanitizer is also integrated into Xcode UI and into Debugger. Let's take a look. If you want to use Address Sanitizer, all you have to do is again go to the scheme editor and you'll find that there's a checkbox called Address Sanitizer which can be used to enable this tool.
+
+In Xcode 9 we have added another checkbox that turns on an optional check of use of stack after return, and I will describe this feature later. But you can also notice that we have now added compatibility with Malloc Scribble. So, you can enable both of these tools at the same time. You can then run and debug your application as you are used to.
+
+And if your program doesn't have any memory issues and if it's not touching any memory that it's not supposed to, then good. Address Sanitizer will not interrupt your work flow. But if it finds a problem, it will stop the program and it will describe what the issue is. So, in this case we are accidently using some deallocated memory. And that's a serious bug.
+
+And when Address Sanitizer finds this bug, it will also display some additional information about that memory that we're accessing. And we'll get not just its address but we'll also get some description of it. How large the heap region is and which byte out of it are we accessing. And we also get the allocation and deallocation backtrace of how that memory was allocated. So, this is super useful information when you're dealing with use after free bugs, because this really helps to diagnose them, right?
+
+So, we've seen what Address Sanitizer is but now let's talk about some new features that we have added this year. It now detects two new classes of bugs. Use after scope and use after return. And it's also now compatible with Malloc Scribble. Let's take a look at some examples.
+
+In this code sample, let's say we have a variable that is defined inside the body of an if statement. We take a pointer to this variable and then later outside that if statement, we are using that pointer to save a new value. So, this is any value because we are, the pointer is no longer valid here. And address sanitizer is now able to detect and describe the issue for you.
+
+Another type of bug happens when you're returning, when you're using a pointer out, after returning from a function. So, in this case the function returns a pointer to its local variable which means that once the function returns, that pointer is no longer valid. And if we try to use it, we are again accessing garbage memory and the Address Sanitizer is able to detect that and describe that issue for you. However, this check is not enabled by default and because it has some extra overhead and you have to opt into it. To do so, you can use that extra checkbox in the scheme editor that I mentioned and showed earlier.
+
+Now, if your projects are written in Swift, you might be wondering why should I care about Address Sanitizer? Swift is a much safer language but the reality is that a lot of projects are still mixed and they have bugs written in C and Objective C. And for those parts that are written in C and Objective C, address sanitizer is still a very effective tool and it will find memory issues in that, in these parts of your project.
+
+Some of you might also be using unsafe pointer types which, as their name suggests, are not memory safe and you have to be careful when using those. So, let's take code as an example. In this code, I have a string, Hello, World. And I am trying to convert it into a C-style string using unsafe windows. So what I'll do is that I will call this API called with C string and it will create an unsafe pointer for me.
+
+And this will provide this unsafe pointer to me in this closure that I am passing through it. If I store this pointer outside of the closure, I am violating the rules of the C string. And that means that when I try to use this leak unsafe pointer later, I am again accessing invalid memory. And Address Sanitizer is able to detect invalid uses of unsafe pointers like this, even in Swift code.
+
+To fix this, we need to make sure that we only use that provided unsafe pointer within the closure that we are passing with C string. So, if we move the code into the closure like this, that fixes the problem. And in this case, we can simplify the code even further and just remove that local variable completely.
+
+It is generally a good idea never to store unsafe pointers into local variables or properties. So, if you are using unsafe pointers in your Swift projects, I definitely will recommend that you turn Address Sanitizer on in your projects just to make sure that you are not accidently using unsafe pointers wrong.
+
+So we've seen how Address Sanitizer helps you find and fix bugs. But it can also be a very helpful tool for general debugging as well. Because have, if you, when you are debugging your projects, have you ever wondered where was this memory allocated? Well, I have some good news for you. If you are running with Address Sanitizer, it's actually enabled to tell you the allocation backtraces of any memory that you ask it.
+
+And it can also provide the deallocation backtraces for memory that's already deallocated. And furthermore, it can show you which bytes of memory are valid and invalid. So, let's take a look. This time we are not investigating a crash. This is just a regular debugging session where I'm stepping over the lines in a function.
+
+I can control click any variable in the variable view. And if that variable is a pointer, I can select view memory of. Normally this would just give me the view of, into the bytes of that memory object. But if you are running with Address Sanitizer enabled, you can expand the memory item in that navigator and it will display the allocation and deallocation backtrace for that memory.
+
+You can also notice that some of the bytes in this memory view are grey and some are displayed in black. The greyed-out bytes indicate invalid memory and, or as we say, poisoned memory. Which means that your application must not be accessing those bytes and if it does so, that is a bug. And Address Sanitizer will find it and detect it.
+
+You can also access the information about the allocation and deallocation of memory objects in the [inaudible] text console. We can use this command called memory history and pass it any expression that evaluates to a pointer. So, let's use the pointer value directly in this example and the text console will print out to allocation and deallocation backtraces in text output. So, I hope that I have convinced you that Address Sanitizer is great tool and that it's useful for both C languages and also Swift.
+
+And that it helps with memory corruptions and crashes. But also that it's a very useful tool for general debugging as well. But now let's talk, let's take a look at another large source of crashes and mysterious memory corruptions, which is multithreading. And let's talk about Thread Sanitizer which detects those issues.
+
+So, as I said, Thread Sanitizer is able to find multithreading issues. For example, data races. However, these issues, multithreading issues, are usually very sensitive to timing. Which means that they are very hard to reproduce. So, Thread Sanitizer is not only able to find races where the two memory accesses actually collide, but it can also find races that did not manifest during that particular program run.
+
+Even if the racing memory accesses happened at different times but there's no synchronization between them, that is still a race. And Thread Sanitizer is able to find it. That's because the next time you run your application, the timing will be different and it might be just right to trigger a memory corruption.
+
+So, Thread Sanitizer is able to find races even when they do not manifest. The tool works on 64-bit macOS and 64-bit simulators. And if you want to learn more about the underlying technology, I recommend that you watch a WWDC from last year called Thread Sanitizer and static analysis.
+
+So, I mentioned data races. But let's see what they are. Any shared data, any mutable data that is shared between multiple threads needs access synchronization. If you are missing synchronization on your shared mutable variables, that means you have data races. And data races are undefined behavior. And in presence of data races, our programs can have memory corruptions and crashes and all of these problems apply to C languages but also to SWF code as well. So, let's take a look at an example in Swift.
+
+So, in this case we have a class called event log which just has a simple function called log that prints out some text message to the output. But it also tracks which was the last event source that called that log. And it saves that information into a stored property called last event stores which is an optional and at the beginning it's nil but as soon as someone calls log, it will be perfectly will be populated with that particular log source.
+
+And now let's say that we have two threads which are both trying to call that log at the same time. Let's say that thread one is our networking subsystem and it's logging that some download has finished. While the second thread, which represents our database subsystem, is logging that query is completed. That is a data race. Because we're accessing the same memory location at the same time. And Thread Sanitizer will warn about this.
+
+So, to fix this we need to introduce synchronization. And the easiest way to do that is by using a serial dispatch queue. Now, because this queue is serial, it will only execute one work item at a time. So, if we wrap the body of the log function into queue.asynch, this will provide the correct synchronization.
+
+And note that I am using asynch here because we don't need to wait for the result of this function to complete. Because this function does not provide any results so it doesn't make sense to wait for it. So, this not only fixes that race but it also improves [inaudible] because now whoever calls log will no longer need to wait for this printing to finish.
+
+And this way this whole class is now thread safe and we can use, we can call log from multiple threads. Dispatch queues, which are provided by Grand Central Dispatch or GCD for short, are readily available in Swift and they should be your first choice of synchronization. Even though there's other mechanisms of providing synchronization, GCD is very lightweight and it's very easy to use from Swift.
+
+A good idea is to associate your data with serial dispatch queues. And only accessing the data from those queues, which will guarantee that you're only using your data in a synchronized way. And if you'd like to learn more about how to use concurrency with GCD, I recommend that you watch another WWDC from last year called concurrent programming with GCD and Swift 3.
+
+But now let's take a look at some new features that we have added to Thread Sanitizer in Xcode 9. It's now able to detect races on collections and also a whole new class of bugs that is specific to Swift code. Previously Thread Sanitizer was only able to find races on the raw memory accesses like we saw in the previous example where we were just directly accessing some stored property.
+
+But synchronization is often needed even for larger data structures. For example, collections. Consider this code example where in Objective C we are using an instance of an NS mutable dictionary. And two threads are using the same instance. Let's say thread one is looking up a value in the dictionary while the second thread is trying to write into it. So, it is a problem and newly in Xcode 9 we are now able to detect this race.
+
+Races in collection are a very common mistake. So, in Xcode 9 we are now able to detect them in both Objective C and Swift. Note that this requires that you are using macOS, High Sierra and iOS 11. But we are able to detect races on NS mutable array and NS mutable dictionary and also on Swift array and Swift dictionary. And with that, I'd like to show you how this works in practice.
+
+So, I was able to get the source code of a very old version of the WWDC app before it adopted Swift code. So, this version that I have is still completely written in Objective C, as you can tell from this copyright header. It was mostly written in 2011. So, because it was written several years ago, it's using some outdated concepts like an explicit threat for synchronization instead of GCD. But I'd like to show you that thread sanitizer works just fine even with other synchronization mechanisms.
+
+So, this file that I'm showing to you is implementing a class called WWDC URLConnection, which serves as a base class for all networking done from this application. And what I did is that I have planted a multithreading bug in this code. And let's see if the Thread Sanitizer can find this bug. So, first let me make sure that I have Thread Sanitizer enabled by going to product scheme, edit scheme. Which brings out, brings the scheme editor. And you'll see that I have Thread Sanitizer enabled. So, let's now run this app in the simulator.
+
+And as soon as the app launches in the simulator, it will already initiate several network connections. So, it should already exercise this file that I'm showing you. And you can notice that Xcode is already reporting a race in the issue navigator. So, this issue is reporting that we have a race. So, let me click it so we can get to the line of code that contains this race. So, in this case we see that we are adding some object into a mutable array.
+
+The purpose of this code is to maintain a list of active, currently active connections. So, we are tracking that for debugging purposes. So, as soon as we're creating some new URL connection, we will add it to this list. But this can happen from any thread. Any thread can create a new URL connection.
+
+And if we take a look at the details of the issue one more time in the navigator, we will see that that is the case. Because there's thread three trying to call add object. And thread five, also trying to call add object into the same mutable array. And if we take a look at the callers of that API, we will see that they all both point to the same line of code. So, that is a problem. We are accessing this mutable array from multiple threads without any synchronization.
+
+And to fix it, I can actually fix it very easily. Because I have noticed that the code right after this line is already doing some synchronization. It's using this API called perform block that dispatches some work onto a specific thread. In this case, it's called connection thread. So, which is an explicit thread that is used for synchronization. And since it's a single thread, it will provide synchronization exactly with the work serially simply because it's a single thread and there's no [inaudible] going on.
+
+So, to fix this I can just move this call to add object into that synchronized block like this and that should fix our race. Because now we will also only be accessing the active connection array within the synchronized block which is only executed serially. So, now let's run the app in the simulator one more time to see if that fixes our race. And again, once the app launches, it already triggers several network connections. So now when it's up and running we'll see that Xcode is no longer reporting any Runtime issues.
+
+[ Applause ]
+
+So, you've seen how Thread Sanitizer finds a race in Objective C code. What about Swift? The same detection works in Swift code as well. So, in this case if we have an array of strings and we have two threads, let's say one thread is looking up the value from this array while some other thread is writing to it. We'll detect this race and Thread Sanitizer will find this.
+
+Fixing this again can involve using a serial dispatch queue and then making sure that the only access that array within some synchronized blocks. So, in this case thread one, we'll be using queue.synch which is necessary in this case because we need the output value from this computation to continue.
+
+We need that lookup in the dictionary to give us an answer. So, we need to wait for the result. So, I'm using queue.synch here. But for the second thread, I can use queue.asynch because that block is not providing any output so we don't need to wait for it to finish.
+
+So, you might have noticed that in the previous example I did not call the problem a data race. Instead, the warning said it's a Swift access race. Swift access races are violations of a more general rule which applies to all structs, not just arrays and dictionaries but all structs. Even the ones that you define. So, this is a new rule that is now present in Swift 4.
+
+And part of it states that mutating methods on structs require that you have exclusive access to the whole struct. This does not apply to classes because classes don't have mutating methods. And any methods on a class can change any property and it only needs to have exclusive access to the properties that the method changes.
+
+So, this new rule that's applied to structs is now being even enforced by the compiler, both statically at compile time and dynamically at run time. But this enforcement mostly applies to single-threaded violations. And Thread Sanitizer is here to help you with the multithreaded cases. And if you'd like to learn more about these new rules in Swift 4, I recommend that you watch the What's New in Swift session. And explicitly a session that was called Exclusive Access to Memory which describes what the new rules are. And it also talks about what is enforced. But let's take a look at one more example.
+
+Let's say that a friend has asked me to write some software for his spaceship. So, we'll have this struct which describes the location of this spaceship. So, it will have some stored properties to describe the coordinates in both space and time of course. And will have some methods on this struct as well. Because the spaceship can teleport to a different planet. It can also fly to a different city on the same planet. And of course it can travel in time.
+
+And since these methods are changing the coordinates, they need to be mutating methods. And that also means that the rules that I just mentioned apply to these methods. So, if you have two threads, which are both trying to change the location of our spaceship. Let's say thread one is trying to teleport it to a different planet while the second thread is trying to move it in time. That is a Swift access race.
+
+And notice that it doesn't matter which stored properties are these functions, these methods accessing or changing. Even if teleport only changes X, Y and Z while the other method only changes time, it's still a Swift access race. The rules simply state that you need to have exclusive access to the whole object when you are calling a mutating function, sorry, to the whole struct.
+
+It's also important to understand that if we try to fix this problem by introducing some synchronization into that struct. Let's say that we will try to use a dispatch queue inside of that struct and protecting the bodies of the mutating functions inside them, that's not enough. That's not a correct fix and it's still a violation and still a Swift access race. Because we need to have that exclusive access to the struct in order to call that mutating function. And it's not enough to try to introduce the synchronization inside that function.
+
+The correct fix is to move the synchronization to the caller of those mutating methods. So, let's say that we have a class that describes the whole spaceship. And it's a good idea to use a class here because this spaceship has some identity. It doesn't make sense to make copies of it. So, in this case the spaceship can protect the location stored property with a queue. And if we make sure that the methods are only accessing that struct within synchronized blocks such as queue.synch here. That will make the whole class thread safe.
+
+So, we've learned that you need to synchronize access to your shared mutable variable. And you can use GCD for that task and it's often as simple as just associating your data with some serial queue and then only accessing the data from that queue. Thread Sanitizer is an amazing tool that helps find you the places where you are missing the synchronization. Which is, you know, a problem that is very easy to make. And with that, I'm very excited to tell you that we're, this year, introducing another sanitizer to help you catch even more types of bugs. And here's Verdant to tell you about it.
+
+[ Applause ]
+
+It's all yours.
+
+All right. Hello. My name is Verdant and I work on compilers. And I'm really happy to tell you that this year in Xcode 9 we're releasing a new tool, Undefined Behavior Sanitizer. And I'm sure it's going to help you catch lots more bugs. Okay. What is Undefined Behavior Sanitizer?
+
+Well, just like the other Runtime tools you've seen so far in this talk, it's a Runtime bug finder. Now, as the name suggests, Undefined Behavior Sanitizer detects undefined behavior for you. But so does Address Sanitizer and so does a Thread Sanitizer. What's special about Undefined Behavior Sanitizer is that it specializes in checking unsafe constructs in the C language family.
+
+It's compatible with other Runtime tools. It works on all of our devices and platforms. And if you're interested in learning more about undefined behavior, I highly recommend that you check out tomorrow morning's talk about understanding undefined behavior, 9 am. That talk will go over what undefined behavior is. Why it exists. And how it can affect your applications. Now, I've got some good news for you.
+
+Undefined Behavior Sanitizer can detect over 15 different kinds of new issues. Now, this is going to be great for productivity but for this talk, just to give you a taste for what Undefined Behavior Sanitizer can actually catch and how it works, we're just going to focus on three issues. Integer overflow, alignment violations and the nonnull return value violation.
+
+Let's start with integer overflow. Integer overflow occurs when you've got an arithmetic expression and its result is too big to fit in a variable. Now, if this sort of bug occurs in an indexing expression, such as, like, if you're indexing into a buffer or in an expression used to compute the size of the buffer, it can actually be a serious security hole and it can be exploited.
+
+Integer overflow can also just sometimes lead to surprising results. Like, for example there additions you can perform that, well, take a look. If you've got int max and you add 1 to it, you actually don't get a number that's bigger than what you started out with, which can be really confusing.
+
+Now, not all kinds of integer overflow are undefined behavior. In fact, some kinds of overflow actually have defined semantics, which is unsigned integer overflow. However, unsigned integer overflow can still be really surprising. So, we really recommend that you opt into this check. I'll show you how to do that at the tail end of this topic.
+
+But with that, let's go ahead and jump into a demo. All right, now what I've got up here is a function that all of us have probably written really often. It's an average function. So, it takes in an array of integers and a length. It sets up an accumulator. It iterates through your array, adds everything up and divides. So, it should give you an average. Now, we're interested in writing a test for this so that we know that it behaves correctly.
+
+So, here we go. Let's take a look at the test that we've got. Test nonnegative average. The test is really simple. So, we're going to create an array of 10,000 integers. We're going to populate the array with pseudo random nonnegative integers and just check, just do a simple sanity check. Just check that the average that we get back is also nonnegative. That's this assertion right here.
+
+All right, so let's go ahead and run our test. Let's go up to here. Hit play. Build succeeded. And nothing really happened. We just finished running our program, the assertion passed. Everything seems great. Now, let's just change one small thing. And this is going to illustrate why undefined behavior and integer overflow in particular can be really tricky. Let's change the array length from 10,000 to 10,0001. Save it. Go back. And run our program. Uh oh. Insertion5 failure.
+
+Now, this is really confusing. So, you know, I've got non-negative integers. I wrote a really sort of straightforward function that sums them up. But all of a sudden I'm getting this weird failure, this really basic test that it isn't passing. Undefined Behavior Sanitizer can be really useful in these situations and clarify what the actual issue is. So, we're going to turn it on just like Kuba has shown you. We go into the scheme editor next to it, the diagnostics tab.
+
+Click the right check box. And we're good to go. We can hit run again, rebuild but Undefined Behavior Sanitizer turned on. And here we are. So, Undefined Behavior Sanitizer has zoomed in on the exact cause of the issue for us and it's done so in a relatively drama-free way.
+
+It tells us what happened. Assigned integer overflow. And it tells us the values involved in the overflow. As we can see, they're gigantic. There's no way that these two values or the sum of them can fit inside of a 32-bit integer. And what ended up happening was that whatever garbled result we got ended up being, you know, in two complement representation a negative number.
+
+So, you can fix this problem in a couple different ways. The two I would recommend is to either use a different algorithm for computing your average or if you're in a pinch, just constrain the set of inputs into your average function so that you don't end up with this problem.
+
+All right. So, with that said, let's go back to the slides. I hope that you've seen that Undefined Behavior Sanitizer can make it really easy for you to find the source of tricky issues that cause weird failures at Runtime. All right. With that out of the way, let's talk about the second kind of issue that we're going to focus on. And those are memory alignment violations. Now, every type in C has a size but it also has a required alignment.
+
+A memory alignment violation occurs in your program when there is an unaligned load or store to a piece of memory. Now, this can actually be a really subtle bug to find. And there's a good chance that you may never even see it during your day to day development. I'm assuming most of you develop your apps in frameworks and the debug configuration in Xcode.
+
+And when you're ready to finally ship your app, you'll, you know, ship it in the release configuration. The problem is because the compiler really expects you to not violate alignment assumptions, the optimizer can often do things with your code which cause your program to crash at Runtime in the release configuration when these optimizations are enabled.
+
+Undefined Behavior Sanitizer can help you catch these issues even in the debug configuration ahead of time so you don't end up with hard to debug failures later down the road. Now, this type of failure is especially common in code that deals with serializing or deserializing data from persistent storage. So, let's take a closer look at an example that does exactly that.
+
+Okay, so in this example, I'm interested in writing a custom network protocol for a chat application that I'm developing. And one really basic thing that I've got in my network protocol is a definition of a packet structure. The packet structure contains three things. A magic field to identify the protocol that we're speaking in.
+
+A payload length that tells you how long the message inside of the packet is. And the payload itself. For the purposes of this example, I'm just going to assume that int is a four-byte integer. Okay, now with that out of the way, we've got two things that we need to focus on in order to make custom network protocol work for us. Sender and a receiver. We'll get to the sender first. Now, the sender's got a network buffer. This is where it's going to assemble its packets, get them all ready. Get your payload ready. And then shoot them down the network so that the receiver can get it.
+
+Now, for illustrative purposes, I've broken up the memory inside of our network buffer into four-byte chunks and hopefully you'll see why soon. Okay, now I really miss Kuba already just because, you know, he's been offstage for so long. So, the first message that I want to send to Kuba is Hey Kuba. So, in order to do that I'm going to start with a magic value.
+
+Next I'm going to specify the length of my message. It's got nine characters in it. So, there we go. Finally I'm going to specify my message itself which is Hey Kuba. Now we're ready to take a look at what the receiver does. It's going to take a pointer to the network byte stream's buffer and cast it to a pointer to a packet structure.
+
+Then it's going to look inside the packet, figure out what the magic field is, make sure it's the correct values so that we're speaking the right protocol. And then look at the payload. All right, so that's the first packet out of the way. No issues so far. Let's send another. The second message is going to be how's it going? So, we'll do the same thing.
+
+Toss in a magic value, the same one as before. Toss down the length of the message, 15 characters, and then the message itself. Switching back over to the receiver end, we're going to see that the problem manifests here. This time we're looking at index 17 into the network byte stream.
+
+And as soon as we look at the magic value inside of that packet structure, we get a memory alignment violation. Now, as you can see here, the magic field of the second packet isn't aligned to a four-byte boundary. So, dereferencing it directly from the network byte stream is an alignment violation, something that undefined behavior sanitizer can very precisely diagnose for you.
+
+How do you fix this? Well, we're going to talk about two different ways to do it. The first is to use the packed attribute in your network packet structure definition or any structure that you've got that you're serializing. Okay, so let's take a look at how this works.
+
+You add the packed attribute and that changes all of the field alignments inside of your structure from whatever they were originally to one byte aligned. That's the lowest possible alignment that you can have which means that any subsequent load or store from that field is always going to be aligned.
+
+Aha, so you may be thinking to yourself this sounds super convenient. I'm just going to toss packed on everything. Well, you've got to be careful. So, using the packed attribute can actually change the layout of your structure. In many cases, it can remove padding that the compiler has automatically inserted into your structure and it can also degrade your app's performance. Now, if you find that you're not in a situation where packed attribute would work for you, there is another option.
+
+You can use the mem copy function to perform an unaligned copy from the network byte stream or wherever you're deserializing from. Into a aligned variable which can either be in the stack or the heap. This mem copy is safe and the compiler in many instances can optimize it so that it's just as fast as the unaligned access, the original unaligned access would've been.
+
+So, that's alignment violation detection with Undefined Behavior Sanitizer. Let's move on and talk about the third kind of bug. The nonnull return value violation. This kind of issue occurs when you've got a function whose return value is annotated with the nonnull attribute. Annotation, excuse me. However, the function breaks the contract imposed by the nonnull annotation and returns a nil value anyway.
+
+Now, this can cause crashes if you're using Objective C APIs which, you know, violate the return value annotation from SWF code. And it can also cause other problems if you're using Objective C APIs which rely on nullability connection correctness more stringently. That's why we recommend that you opt into this check if your application makes use of nullability annotations.
+
+Let's take a look at an example of the return value, the nonnull return value violation. Okay, so in this example I'm a budding astronomer and I've got a model of the solar system. The first thing that I'm interested in modelling are the moons in my solar system. So, here we go.
+
+We've got planet earth and the biggest moon on earth is the moon so let's stick that in. We've got Mars and we're going to sort these lists by diameter in decreasing order. So, Phobos is the largest moon of Mars. Amos is the second largest. Great, but, uh oh.
+
+It looks like we've got an entry that snuck in here which shouldn't be around anymore. So, this is embarrassing. Better get rid of it. All right, that's a lot better. Okay. So, I got rid of some legacy code from my example. Now my list is looking better. Let's move on. Okay, so what I'm really interested in figuring out are, is, I want a list of the biggest moons for all of the planets in the solar system.
+
+So, I'm going to do that by constructing an NS mutable array and then adding the biggest moons for each planet that I've looked up. Now, the problem here is that I've looked up the biggest moons for Pluto and that's not an entry in the NS dictionary I set up. So, I get back nil. Undefined Behavior Sanitizer can diagnose this issue for you.
+
+Okay, so that's a look at what kinds of issues Undefined Behavior Sanitizer can find for you and how the tool works. I want to wrap up the section of the talk by showing you how you can enable the opt-in check set I mentioned. This is the project build settings editor. Here's where you can go to turn on unsigned integer overflow detection and also your nullability annotation checks. So, that's Undefined Behavior Sanitizer, new in Xcode 9.
+
+[ Applause ]
+
+We've taken a look at a lot of different Runtime tools in Xcode, some new, some improved. But it's worth taking a step back and thinking about software quality itself. How do you use these Runtime tools effectively? There's two main parts to it. You've got to exercise more code with these tools turned on and you've got to use these tools together. Let's take a look.
+
+Runtime tools can only catch bugs for you when you run the code that contains the bugs. Maybe the [inaudible] is not the best way but you've got to actually run the line of code that contains the issue for, in order to get any sort of useful diagnostic about the bug. All right?
+
+So, in order to exercise as much code as possible and find as many issues as possible, we really recommend that you use Runtime tools for daily development. We also recommend that you turn these tools on at least once before every software release so that you can avoid spreading bugs and possibly security vulnerabilities to your users.
+
+Using continuous integration can make using Runtime tools much easier and it can also really simplify the process of exercising as much code as possible with these tools turned on. It can ensure that these bugs, that bugs in your program are caught as quickly as possible as soon as you check in code.
+
+And it can also help you track code coverage in your application so you can see exactly how much code is being exercised every time your CI runs. If you'd like to learn more about how continuous integration and code coverage work in Xcode, I recommend that you check out the WWDC 2015 talk about that.
+
+The second component to using Runtime tools effectively is to use them together. The more of these tools you turn on, the more issues you can find. There's one exception. So, Address Sanitizer and Thread Sanitizer are not mutually compatible. You won't be able to turn these two on together but the rest of the tools you can. And as we've seen already, all of these tools can be turned on by going into the scheme editor in Xcode and clicking at the diagnostics tab.
+
+Now, you may be wondering, This sounds like a lot of overhead, right? I'm here to tell you that that's not really true, in my experience at least. So, we've got some numbers for you about the execution and memory overheads of these tools. And what I've found that, at least in my own experience, I'm able to turn multiple Runtime tools on simultaneously while debugging the entire Xcode app and the UI still feels responsive.
+
+Hopefully this information can help you make the best decisions about which tools to turn on in your local setups versus in continuous integration. But I hope that the takeaway here for you is that all of these tools re incredibly valuable. They all catch different sets of bugs for you and they're all really worth turning on in some form or the other.
+
+So, to wrap it up. Xcode 9 is going to help you catch more critical bugs in your apps and programs than ever before with new and improved Runtime Tools. I really hope that you use them early and often to save time while debugging and to keep your users safe. And with that, I hope that you go out and squash some bugs. If you want to find some more information about this talk, we've got a website set up for you with a lot of helpful links.
+
+There are also some related sessions coming up. So, what's new in SWF. Debugging with Xcode 9. There's a talk about DCD. And there's also a talk about what's new in LDM for those of you who are interested in the underlying sanitizer technology that powers Runtime tools. So, with that, thank you for coming. I hope you have a great conference.
+
+[ Applause ]

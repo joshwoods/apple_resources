@@ -1,0 +1,341 @@
+---
+Title:  OpenGL: Integrated Graphics 2
+Year:   2002
+Web:    https://nonstrict.eu/wwdcindex/wwdc2002/506/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Hello everyone, thank you very much for coming, or thank you very much for sticking around. Welcome to session 506, OpenGL Integrated Graphics 2. This section takes the discussion of OpenGL as a fundamental layer for graphics and imaging for Mac OS X to the next level. In Jaguar, OpenGL is indeed the fundamental part of accelerating graphics and imaging.
+
+And in this session, we'll discuss techniques on how to integrate QuickTime, OpenGL, and Quartz to achieve unprecedented results and creative possibilities. So to present session 506, Integrated Graphics 2, I would like to welcome to the stage OpenGL engineer Ken Dyke. Hello everyone, thank you very much for coming, or thank you for sticking around. Welcome to session 506, OpenGL Integrated Graphics 2. This session takes the discussion of OpenGL as a fundamental layer for graphics and imaging for Mac OS X to the next level. engineer Ken Dyke. Thanks, Sergio.
+
+All right. Come on. That's me. I'm not really a mad scientist, but it looks cool on your business cards. So today we're going to talk about integrating 2D content with OpenGL in a little bit more detail than Jeff Stahl just talked about in the previous session. We're going to go over things like how to get really high-performance QuickTime video in, how to pull in things like DV, how to pull in Quartz 2D content into OpenGL with as little overhead as possible.
+
+I'm going to go over doing compositing with OpenGL a little bit. This is just to sort of give you guys a feel for the kinds of stuff we're doing in Quartz Xtreme, but to show you guys how to do it in your own applications. And then finally I want to go over just a couple of little examples of doing image processing effects with GL once you've got your content into the system.
+
+So, as far as 2D content in the system goes, we've basically got two different things. We've got Quartz, sort of new, high-performance, anti-aliased, really nice-looking 2D system in OS X. And then we've got QuickTime. Now, probably for the most of you, QuickTime is probably going to be the most important thing if you're doing compositing work for film or even potentially game effects.
+
+So let's just jump right in. So, sample code already. So if you want to pull stuff in from Quartz, the trick you want to do is basically create an off-screen sort of rendering context in Quartz. And the way you do this is with CG bitmap context create, and you pass in, for example, up here, where your data is going to live, how wide is it, how high is it, you know, number of bits per sample, bytes per row, all that type of junk you'd normally want.
+
+And then the other trick you want to do is you want to use, similar to what Jeff showed in the last session, you want to, like, Quartz is going to do that in ARGB format. So to get ARGB out of OpenGL, you use GO BGRA and GO unsigned in 888 reversed.
+
+Don't blame me for the wacky naming scheme the ARB came up with on this. And the other thing that's really important in a minute is that CG content is always rendered pre-multiplied. And Peter can yell at me if that's wrong, but I believe that's the case. And that's really important for when you're doing blending, and I'll get into that in a minute as well, as to what the difference is.
+
+So, just a real quick demo of doing Quartz 2D, and I will apologize, it's not as flashy as some of the stuff yesterday. In fact, it's pretty non-flashy. Oops, I forgot to recompile it. So here's a partial arc. Not real interesting, but it'll get more interesting in a minute when I combine this with some other content. So I just want to show you the code real quick for, again, what this looks like in full for setting this up. Oh, no.
+
+Stop that. I don't want to release notes either. I know all about the new project builder. So I'll cover this application in a little bit more detail later on in the session, but basically it's just a big compositing lab thing. So what I've got here As you can see, I set up all this internal information in the application, such as, you know, again, bytes per row.
+
+And you can see that I'm actually padding it out in this case, because for some of the stuff I'm going to talk about in a little bit, OpenGL likes this particular case to be 32-byte aligned. And I allocate the memory for it, set some OpenGL parameters that I'll use later on in the app, and then I just do the CG bitmap context create right here. Pretty straightforward.
+
+Apologize for the formatting. And then I've got a really simple case of drawing something with it. In this case, I'm basically just clearing the entire context out so that it starts on a clear background, and then I'm just adding a simple art. And, for example, I can go in and change this, because I thought I had compiled it earlier, and get a full circle in here. So let's do this on the fly real quick.
+
+If I was really studly, I would try and do something more interesting with CG than draw an arc, but I ran out of time. So we can go and add that layer back in. And now we get a full, nice, anti-alias circle. So this is basically getting turned into a texture that you can then drag around, and it's got nice anti-alias edges on it and everything. That's pretty cool, but again, it'll be a little bit more interesting in just a few minutes. Can I go back to the slides, please?
+
+So, I'm going to spend a lot of time talking about QuickTime because this is where I probably spent the longest amount of time trying to get, you know, I wanted to do high-performance stuff with QuickTime and there's all this really cool stuff you can do with it, but there's a lot of issues I ran into with getting the performance through the system. Normally, OpenGL tends to make a lot of copies and we just can't do that.
+
+You know, if you're doing standard definition video in YUV format, 720, 480, 30 frames per second or so, that's about 20 megabytes per second. That's not too bad. You know, even with some data copies, we've got the bandwidth in the system and we can deal with that. However, if you're doing high-definition video, you know, like 1920 by 1024 or whatever, that's like 120 megabytes per second.
+
+That's a lot of data to get through the machine. And you're not going to, like, be able to pull this off if you're using a CPU to copy this data around all the time. So, we want to get on the fast path in OpenGL. You know, what's the fastest path we can do?
+
+You know, and we also have to get rid of all the CPU copies. You know, we don't want to be touching the pixels. Or at least, as much as we can get away with. If you're using DV or Sorensen or MPEG, obviously the CPU is going to have to decompress the data. But once it's there and it's in its buffer, we don't want to touch it anymore.
+
+So, one of the first things we're going to do is use the GL Apple Client Storage extension in OpenGL. Now what this does in a nutshell is it lets, instead of OpenGL immediately making a copy of your data when you give it the pointer for the GL Text Image 2D call, it lets OpenGL just remember that pointer and always refer to your data instead.
+
+This saves memory, it saves OpenGL from having to make a copy of it, and generally is going to get you pretty good performance. Now the only downside is, is obviously you have to keep the data around. But if you're going to be using QuickTime and you're going to be using a GL world with it, you're going to have that data buffer around for the life of the movie you're trying to play back.
+
+The top line here shows you how you enable client storage in the system. It's really simple. It's just a PixelStore I call. And the interesting thing about this that I'll mention is it's sort of sticky. If you turn it on, every text image call you make from that point on, client storage is automatically enabled. So if you've got some textures that you want it on and some textures that you want it off, make sure you keep track of which way you set that last time.
+
+From there on out, the rest of the calls are exactly like you'd specify any other image in OpenGL. It's just geobind_texture, geotexture_2d, give it the name you want, and then call geotext_image_2d to pass in the data. Now, for those of you familiar with OpenGL, you can't use client storage as best as I can remember with the default texture in OpenGL. Bob can correct me if I'm wrong on that. But I believe you have to use other texture objects other than default to be able to set client storage. Just something to point out in case you're trying to use a single texture and it's not working for you.
+
+So the other new extension for Jaguar is GeoAppleTextureRange. Now this is very similar to the vertex array range stuff that we're going to cover in some of the OpenGL sessions. So what this does is it sort of gives a hint to the lower level drivers in OpenGL as how to best store the texture data.
+
+This is basically just a new enum type to glTextParameterI. Now this is called after you've created the texture. So after you've bound to it and you've passed in the image, you want to call glTextParameterI. And I'll have an example of that here in just a second. Now, there's three different hints basically to this call. The first one is you want to tell the driver just keep your own private copy of whatever texture data that you've gotten from the upper level of OpenGL.
+
+So normally this is how OpenGL works by default. Normally in the non-client storage case, what'll happen is you'll call glTextImage, OpenGL Engine will make a copy of the data, and then later on when the driver needs to like get it in video memory, it needs to put it into a hardware specific format so it makes another copy of it, and then that can actually be used to DMA the texture up into the system.
+
+Texture storage hint, oops, the old name of it, sorry, texture range lets you change how that works. So again, private is how the driver normally does it. So for what we want to use today, this isn't particularly interesting. The one thing I'll mention though is that this extension doesn't have any issues with making changes to the texture. You can do it anytime you want, and you'll never have to worry about synchronizing with it because there's an extra copy involved.
+
+So, shared basically tells the OpenGL low-level drivers to tell the hardware to try and share whatever copy directly they're getting from OpenGL Engine. Now, if you're using client storage in this, this is effectively like having the hardware do direct AGP texturing right from your memory. So every single time you draw a polygon with it, the hardware is going to pull the bits across the AGP bus. Now, in some cases, this can be really useful if you're making lots of little minute changes and you're not drawing a lot.
+
+But there are some bandwidth concerns to worry about, because, again, the bits are going to cross the bus every single time the hardware needs to fetch textiles from it. So this can be kind of slow with really large images that you're repeatedly drawing with. Again, this basically forces AGP or PCI texturing. This does work on the PCI Radeon and the Rage 128s.
+
+This also lowers VRAM. Obviously, if the texture is only ever going to live in your memory buffer in the system, we're not going to copy it into video memory, which will leave more room. So if you're on a PowerBook, there may be some cases where you know you're going to be low on video memory, but you can now force the system to keep all of its textures in AGP space and not upload everything to video memory.
+
+Now in this case, there is some synchronization issues involved, but as long as you're not using client storage, OpenGL can deal with all the synchronization stuff for you. But there can be cases where OpenGL will need to go synchronous internally. It'll just sort of been hidden from you.
+
+Now the last mode basically tells the driver to tell the hardware directly access the data that OpenGL does, but anytime we've told you to dirty it, pull it up into video memory and keep a cache of it there. Now this is basically the same exact mechanism that the Windows Server uses right now to get window backing stores into video memory and sort of leave them there.
+
+So we'll only upload pieces of the backing store whenever they change in the window. This is, you know, sort of the best of both worlds. We get direct access to our texture data, but it leaves, gets to stick around in video memory for cases where we know we're going to use it quite a bit.
+
+And it's also useful for the QuickTime case. So this again uses a very high-speed DMA texture upload path. It's about four to five hundred megabytes per second of bandwidth. The CPU doesn't have to deal with it at all. Obviously it uses more VRAMs since we're now again caching stuff up there.
+
+So if you're going to repaint from this image more than you're going to do, this is pretty much exactly what we want to use. Because, you know, again, it's going to get cached. And like the AGP case, there's some synchronization issues that you have to watch out for. And we'll get into that just a little bit later.
+
+So, I guess right now, actually. So if you're using either extension alone, either client storage that Jeff talked about, or you're only using the texture range extension, you kind of don't have to worry about synchronization. Internally, we can hide most of that for you. But If you try and use both at the same time, it gets a little bit tricky, because now you can envision this case where you've passed some data to the hardware and you want to start drawing from it, and that can start initiating a DMA from it.
+
+But the hardware is now accessing your buffer directly. There's no intermediate copy anywhere to sort of buffer changes that you're making to the data from what the hardware sees. So if you get in there, you know, and start drawing a frame and call GL swap and then start partying on the bits, it's pretty likely that you're going to start modifying data in system memory before it's been pulled out, and you'll get all kinds of weird tearing or decompression artifacts on the screen. But this is really not what we want to do. And there's a lot of gory details behind this, but without doing--spending 15 minutes on diagrams, I won't bore you with it, but trust me on this.
+
+So there's a couple of different ways you can deal with the synchronization issue. One, you can do the real brute force, hit it over the head with a really large sledgehammer and just call geofinish anytime you've done a swap. This makes sure that OpenGL has completed everything in the system and it's just done. Now you can go and touch the data all you want. You know, this is not very optimal because your app can't run asynchronous to the GL pipeline now, so you're going to have pretty major performance problems.
+
+Another way to do it is you can use the new, in Jaguar, fence operators to basically set a fence. Anytime you've drawn something with a particular texture, you can set a fence. And then later on, when you need to modify that texture, you can wait for that particular--you can wait for that fence to complete and then modify the texture data before you're going to pull it through OpenGL.
+
+Now there is a performance cost with using set fence, though, that's a little bit of a drag in this case. If you're doing lots of different layers with different textures and you fence on each one, there is an expense involved. So you want to try and avoid that.
+
+The other thing you can do that's also new in Jaguar that's part of the fence stuff is you can wait--you can just wait on a particular texture to be done without having to have set a fence on it ahead of time. So this lets you wait for, for example, access to a vertex array to be completed.
+
+Or in our case, we want to wait for any hardware accesses to that texture to be done before we go in and modify the data. So an example of making that call, we'd call geofinish object, pass in geofinish object, pass in gl_texture, and then probably provide the name of the texture that we want to wait for.
+
+So now we know how to deal with the synchronization issue from OpenGL. How do we deal with synchronization from QuickTime? Well, this is tricky, and it took me a long time to figure this stuff out, so I get to share all this with you guys. So the stuff Jeff demonstrated before that used the movie completion procs, that stuff's pretty cool, but you can only really use it if you're not trying to use all these high-speed extensions. And the reason for this is you're only going to get the call after QuickTime has gone in and modified all the data.
+
+Well, this is the same problem I mentioned before, where if you start--QuickTime goes in and just starts partying on the bits before the stuff's made it to the screen, you're going to see half-decompressed frames into OpenGL, which is not what you really want to do. So we need to know before and after QuickTime modifies the data. We need to know before so that QuickTime--so we can basically pause and say, "Hey, wait, hold off QuickTime.
+
+"Don't decompress." We don't decompress the frame until we know the hardware's done with the last one. Then we need to know when it's done compressing the frame so we can tell GL, "Hey, the data's dirty. "Next time we draw with it, you need to upload it." So the solution.
+
+If you write a custom transfer codec in QuickTime, which is not non-trivial, I'll grant that, you can get access to the sort of lock bits/unlock bits calls. This lets you know any time the image compression manager is going to start to touch a buffer before, you know, back up a second. You can tell before and after the ICM is basically going to decompress an image into your buffer.
+
+So, and the other sort of cool benefit about using a custom transfer codec is we get to advertise exactly which pixel formats we can support via texturing. So we can say, I know how to do T2VUI or YUVS or ARGB or any of the other pixel formats that there's QuickTime equivalents for. We can advertise exactly just those formats.
+
+And the sort of nice thing about this is if there's some funky movie that comes along in a strange format, the ICM can try and match up what it has transfer codecs for to the transfer codec. or what its codecs know about to something that we can use. So part of the trickiness with those, how do we get QuickTime to use our custom transfer codec? There isn't any way you can sort of force it in the system directly. So there's sort of a backhanded thing you can do, though.
+
+If you create a GWorld with a custom pixel format that the ICM doesn't know anything about, and then make your transfer codec say, "I know how to talk to that format," you can basically perform the Jedi mind trick on the ICM and get it to use your custom pixel format.
+
+So in my case, in the example code, we basically create this OGLX made-up pixel format. It doesn't mean anything. It doesn't have any real pixel data there. It's just a special, you know, four-character code that the ICM is gonna have to try and match up with some codec. And the other trick we do is we can use that base pointer in Qt New GWorld from Pointer to point to anything we want.
+
+It doesn't even have to point to pixels in this case. In my case, I'm just sort of treating it as a void star. So, here's a real simple block diagram of the solution. Say we've got DV input, for example, and we want to pull that and get it all the way out to OpenGL as fast as possible.
+
+So, what you end up with is the DV is basically going to decompress into my custom transfer codec, and then sort of via this custom GWorld magic that I'll get into in a minute, you can basically connect that to what I have in my example application, a sort of layer object, which is used for compositing stuff. Now that my transfer codec can communicate with the layer object, the layer object can deal with telling OpenGL, "Hey, the texture data's been dirtied by QuickTime. Redraw everything," what have you.
+
+So, some more details on this transfer codec that I wrote. This one basically just advertises two VUI and YUVS formats. These are the two most common things you're going to see for MPEG, Sorenson, I believe, DV formats. You're going to use one of these two formats. The implementation of this was pretty straightforward. There's not a lot of code in this transfer codec because it's not touching the data, it's not decompressing anything.
+
+Its main functionality was just to get access to the lock and unlock bits codec calls. And then what I'm doing in my case is that the transfer codec is sort of written, it's basically written in this case in Objective-C. It's still basically a C, you know, interface to QuickTime, but on the back end it basically is treating the base pointer that it's getting when I attach the, let me back up here for a second.
+
+Sorry, I'm trying to think of the best way to explain this. So I end up creating this custom GWorld, for example. It's got whatever format I make up, OGLX. I call QT new GWorld, give it that pointer. Then later I can do set movie GWorld and get it attached to that.
+
+That's going to cause my OpenGL transfer codec to get attached to that. Now the codec is basically going to be able to see that GWorld that it gets attached to, and it's going to see there's this pointer there for where the data is supposed to be. In this case, my transfer codec knows that this OGLX thing really doesn't point to pixel data. So that pointer in my case is really just an Objective-C object ID. I can show you in the sample code what that looks like in a little bit.
+
+So that was for YUV data. What about RGB? Well, as it turns out, the ICM, if I try advertising RAW directly, is something that my format, my transfer codec supports, the ICM believes it more, knows too much about RAW and will just try and hit my buffers directly, which is, again, not what I want.
+
+So what I had to do here, and again, this is in the sample code that we're going to give to you guys, I had to basically use another transfer codec to sort of stack on top of the one I already had. So in this case, I make up, in my original YUV codec, I make up this OGLR format, which is OGLRAW, if you will, and then advertise that this new codec here for RGB knows how to go from RAW to that format. So now the ICM doesn't have a choice.
+
+It basically has to use this My Custom RGB Transfer Codec, which then talks to my sort of, you know, my custom codec. So I can just go to my special OpenGL YUV codec and then I can connect everything to OpenGL. And again, this is also a really tiny little bit of code. It was just, like I said, a little trick to get the ICM to do what you want. So, just to give you guys a real quick example of doing some of this stuff, I'm going to start this guy back up again.
+
+Let me get rid of Project Builder here for a minute. So just as a real simple movie, this is a, I believe this one's a DV clip playing through the system. So you can see the fish all swim around nice and smooth. This is 720 by 480. Now the sort of beauty of this though is, where's the CPU monitor?
+
+Can anybody see it? Is it hiding somewhere? Let's see. There we go. You can see the CPU is sort of barely working at all. You know, we're playing full frame rate video through this and the CPU is just going, "Yeah, whatever." And you know, this is kind of cool since it's through OpenGL, I can just do whatever I want to it. You know, I can just size it around, make it really big, accidentally drag it into the dock, make myself look stupid.
+
+So this, you know, just a real simple example. So, you know, we've got some CPU headroom here, so we can also drag in a photo JPEG clip that's also running. And I can resize it, do this type of stuff. And you can again see the CPU is doing, you know, a little bit more work. So, well, maybe we can drag in some more images. Now these guys are just thumbnails, for example, here. And, well, where did they go? Oh, I know why that didn't work. We'll do this a different way. Let's see.
+
+Let me know if you see... My drag-and-drop support wasn't complete for all these little guys, so now I can pull in a bunch more little movies.
+
+[Transcript missing]
+
+You know, and OpenGL just sits there and takes it, so that's pretty cool. You know, we can probably drag it down in the dirt. And I think what we'll end up with first is we'll probably get disk limited before we actually get CPU limited.
+
+Yeah, so it's stuttering now, but it's basically because the disk is going, "Hey, hey, you're trying to pull off, like, too many 6 megabyte per second streams, and I can't deal with this anymore." So if I had a RAID or something like that, it would probably work. So anyway, so now I've killed my demo. We'll start them back up in a minute.
+
+Go back to the slides, please. So, now I want to spend quite a bit more time talking about OpenGL blending, because this kind of gets complicated. So, as you've seen from Quartz Extreme, we can do all of the blending effects that the windowing system uses through standard OpenGL.
+
+Now, OpenGL's blending is not particularly complicated. It's really just got one formula that it uses all the time. It's just source color times source function plus destination color times destination function. So, the two of them that I'm going to demonstrate today, for example, right here are using just your source alpha to perform the blending operation.
+
+So in the first example here where I'm using-- the first argument to this is basically, what do I want the source function to be, and the second argument is what the destination function is going to be. So if you can sort of imagine in your head what's going to happen when this is all put together, you're going to have sort of source destination color times your source alpha, and then it's going to be the destination color times one minus the source alpha.
+
+So as an example, if your source alpha is zero, you're going to take nothing of the source image and add that to the full brightness of the destination image. You'll only see the destination. You know, the opposite of that is if your source alpha is one, you're going to see all of the source and none of the destination. If it's 50/50, if your alpha's 50, you get, you know, 50/50.
+
+The second example on here is if you're dealing with pre-multiplied alpha, like core graphics content or some TIFF image data off disk. In this case, the source color times source alpha was already performed in the image. So in this case, we don't want OpenGL to do that multiply again, 'cause we'll get the wrong results. So we just want to tell OpenGL, just take source color as is. It's already pre-multiplied. But for the destination, you still need to perform the destination times one minus source alpha.
+
+So that's using standard OpenGL blending at the end of the pipeline, but there's some other tricks you can do to do blending as well. If you've got an... Oh, let me back up for a second. That's really useful if your source image already has alpha in it, like if it's an RGBA image premultiplied or not.
+
+If you've got cases where... Your source image data, like if it's YUV, for example, doesn't have an inline alpha channel. You know, if it's YUV 422, there's no place for an alpha channel. What are you going to do? Well, there's a couple of solutions to this. This is one of them.
+
+For multi-texture blending, you can basically use a second texture unit to sort of bring in the alpha in an out-of-line fashion. So you can have your--a separate alpha mask, for example, and you can multiply that alpha mask in sort of a second texture unit times your source image data.
+
+There's some benefits to doing this. One, you can get a fill rate advantage out of doing it. Most of the hardware's going to do much better if you pull in your source image, alpha, all at once, do all the calculations on it, and just hit the frame buffer once.
+
+It also may be easier to combine with different effects. If you're trying to, like, do some of the stuff I'm gonna get into later in the talk, it can be really tricky if you're trying to, you know, bring in your alpha in a different way if you don't get the sort of, you know, the, the, the, the Final result on what you were trying to do with your layer: combine all together at once.
+
+So, and this is another case where you may actually have source pre-multiplied data that you're also trying to apply an extra mask to. So you actually may still want to use this in cases where you do have pre-multiplied source data. And what's important here is to set the internal format for your alpha mask to the correct value. If you're non-pre-multiplied, say for example on texture unit 0, does anybody here not understand multi-texture by the way?
+
+Okay, good. Just want to make sure. So if you're on texture unit 0, and you've got like an YUV texture data, and you've got alpha in the second channel, and what's your alpha mask? If you're not pre-multiplied, you can basically just tell OpenGL, "Hey, treat that second texture as alpha." So the only thing that's going to happen is this passes through the pipeline if you're using modulate, is for GL alpha textures, the RGB is basically just 1, 1, 1. It's just treated as 1.0, so nothing happens. And... Sorry.
+
+But the alpha channel basically will get multiplied times the alpha value in your YUV data. In this case, that's just going to be a 1.0. So the end result is you'll basically have the new alpha mask replacing the alpha channel. So in the bottom of the pipeline, you can basically have the results of your YUV data ending up in RGB and your alpha mask in the alpha channel. Now, if your source data is pre-multiplied, you need to do the alpha--you sort of also need to do the mask or alpha multiply in the texture unit itself.
+
+I'll get into that and show some demos in a second of why that is. So in this case, what you want to do in your alpha mask is not use an alpha texture, but you want to treat it as intensity. And the nice thing about this is it replicates the alpha value all the way across the alpha red, green, blue channels.
+
+So that now if you're modulating a second texture with an alpha mask times your alpha value, you're going to be able to do the same thing. So that's the first thing. So now, if you're modulating a second texture with an alpha mask times your alpha value, you're going to be able to do the same thing.
+
+So that's the first thing. alpha mask times your first RGB texture, the multiply there happens right there in the texture unit. So at the bottom of the texture pipe, you still basically have pre-multiplied alpha data. Your alpha channel contains the new, you know, alpha mask times the alpha data in your pre-multiplied data, plus we've done an additional pre-multiplied alpha in a, in a sense, in the other channels.
+
+That's one way of doing blending with multi-texturing. And here's the diagram that I should have had up a minute ago. So if you start out with like an RGBA image or just an RGB image, and you've got an alpha mask in a different channel, you can basically pull off an effect like this, where in the end, you basically-- at the bottom of the texture pipe, you'll end up with just the alpha mask, or the original sort of source color data, but it's been all clipped out, nice soft edges and everything, if you've got anti-aliased masks. And at the bottom of the texture pipe, we'll just see this masked texture value already.
+
+So, another way you can do alpha blending is to use the destination alpha channel in your OpenGL buffer. So, One of the cool things that Jeff talked about in the previous session with the mask operations is there's also an alpha mask. So one of the things you can do is "Write like one layer in there, you know, like a background or what have you. And then you can turn off the red, green, blue channels so you don't want to touch that anymore. And then you can draw an alpha mask any way you want into that destination buffer.
+
+So you can use custom geometry, you could draw a cube, you could draw a text, you could draw a circle, square, you know, whatever kind of polygonal stuff you want to do into the destination, but it doesn't show up visible to the user. It really only ends up into the destination alpha. And just to give you guys a diagram of what that looks like, so say I start out with that same similar background again. First step, just draw it into the destination. It shows up there, you've got red, green, blue, all enabled.
+
+The second stage, You want to draw in with the alpha mask. Now, in this case, I'm just drawing it here for visualization, but I'll show you guys in the demo a second what this really looks like. So in the second pass, you can imagine we're drawing that alpha mask lettering just in the destination, but that you can't actually see it. Pretend it's not there, but it did go into the destination alpha channel.
+
+Now I can bring in another stage that draws in there, but blends using that destination alpha. So now I've basically sort of done a three-step process. I've drawn the destination in, then I've drawn my mask, and now I can basically paint through that mask with whatever source material I want.
+
+So I can do, you know, use multi-texturing to do some really wacky, wild effect, but still do some custom rendering for the alpha mask. So I'll show you guys an example of some of the blending stuff here. I'll spend a little bit of time on this. Pull up my magic demo that disappeared.
+
+Let me get my project builder here for a second. So for example, if I just bring in a simple background image like you guys have probably seen before. So this image, as it stands, is just a standard straight plate, not particularly interesting, but we can kind of do some blending effects. Let me bring actually another, what can I bring in on top of this?
+
+Actually, let me try that one more time. Do this in two passes. So we can start out with like a background plate like this. Okay. And then we want to bring in, for example, a foreground plate. So, we need to get rid of that black background. Now, as it turns out, this image already has alpha data in it and it happens to be premultiplied.
+
+So, I'll pull up my magical little inspector here that has all my blending controls in it. Probably way more than I need for this demo. So here I can do things like turn that layer, the top one, on and off, so you can see what it looks like without it. I can just turn off the different channels, sort of do the same type of stuff that Jeff was doing in the last. You can see red, green, blue, alpha.
+
+And I can also enable blending. Now, right now, with blending turned on, I'm just using 1 and 0, which basically means you're only going to see the source and none of the destination. I can flip these around. Well, now you get black-- not particularly interesting. and I can make the destination here be one. So now I only see the destination, similar to the example I gave before. I can do, I can add them both in. So now they add on top of each other. Also, maybe not useful.
+
+However, I can also blend using source color also, but that's not what I want. However, this image I know happens to be premultiplied, so in the example I gave before, I want one for the source and I want one minus source alpha for the destination. And now I get the images nicely blended on top of each other.
+
+You can see the edges in here are nice and soft. I can drag it around. It's all sort of anti-aliased. "I'm going to zoom in here, and I don't know if you can see as I move it around, but it kind of fades. You can kind of see that it's got a nice soft edge on it."
+
+Now, if I didn't--hadn't known that this image was pre-multiplied, I may have just tried to use source alpha. And what you'll see is what happens is that, like, these edges went dark. Did you guys see that in there? Yes, no? Let me just switch it back in here.
+
+See, the edges are almost too dark. It doesn't look quite right. And, you know, there's this sort of obvious border. And what's happening here is the source color data was a ri- has already been multiplied by alpha. So you don't want to multiply it times alpha again. It's gonna darken it too much. So it's something to watch out for if you realize that your edges aren't working quite correctly.
+
+Now, let's see, what's another fun demo here? So, okay, so one of the other things I talked about was the destination alpha blending. So, for example, let me start off with just a, let me redo, quit this and start again with another. A couple of backgrounds here. So say, for example, I've got these are two original movies again, you know, one on top of the other. I can do all the same blending effects in real time.
+
+Now, in this case, neither of these images are pre-multiplied alpha. They've got just YUV data. There's no alpha channel there. But I can still use blending to sort of fade between them. And the way I can do that, if I set up source alpha... 1- source alpha again, enable blending. Well, there's no alpha channel there. It's not particularly interesting.
+
+But since I'm running everything through OpenGL, I can basically modulate OpenGL's primary color times either one of those layers. So for example, I can colorize it red, green, blue, you know, sort of purple-ize it. Now this is just doing a simple multiply. However, the other thing I can do is I can also change the alpha value that's being fed to GL, and I can sort of cleanly white between these two. Okay, so if, you know, it's 50/50 in this case, you know, 3% here.
+
+Whatever. Okay? Nice fade, you know, see this type of stuff on TV all the time. Usually with much more expensive equipment. You can do all kinds of fun stuff, like... Let's see if I... Okay, let me show you the destination alpha blend, and then do one of my Ken's Infamous on the fly demo things again quick.
+
+So I can--let me turn off this layer for a second and just enable a polygon. So in that same layer that I've got that top one, one of the things I can do before I draw the sort of sports thing is just draw a simple polygon. In this case, it's just a simple diamond, not particularly interesting.
+
+And as you can see from what my slide looked like, it's the same thing, where I've basically drawn some kind of mask into the destination. Now, in this case, I've got red, green, and blue turned on, so it's obviously splatting all over the image. This isn't exactly what we want.
+
+However, I can basically turn on red-- turn off red, green, and blue. Now that mask is still there. It's just in the destination alpha channel, so you can't see it, though. So if I turn on my frontmost layer again, it's all blended here. But now I can use the destination alpha Where'd it go?
+
+Oh. To punch through with just that particular shape. Now, I can also use blending on the polygon itself as well. So I can turn on blending, and of course it just turned off because I've got it set to zero. So let me use source alpha. Again. One minus source alpha here.
+
+So now I can take that shape and I can also apply a fade to it as well. So I can just fade out on that one particular diamond. So you can, you know, you can sort of see how you can stack up these layers multiple times to achieve different kinds of video effects. Now obviously you could animate this diamond to do some sort of animated cut from one type of video to another. So, you know, you can sort of build your own little switcher here if you wanted to.
+
+Now, one thing I forgot to demo a minute ago-- let me see if I can get my little camera on here-- was pulling in... Live DV content. So I can take--add another layer in here. "If I get lucky, I want to just add it to the background. All right. Let me get him out of here. So, there's my arm. Not real interesting.
+
+But this is an example just of using DV content through... I'm going to avoid you guys so we don't have to worry about having you guys sign anything. So, pointed at me. Hi. So, anyway, so this is just pulling live DV. This is basically using the same technique I was doing. So this is using a sequence grabber hooked up to my same YUV transfer codec that I had before. It was amazingly little code as it turned out to get QuickTime to do this for me.
+
+So, again, I can basically pull in... Like I said, this is not a particularly interesting image here, and Ken will kill me if I drop this camera. But, you know, I can still do all this live compositing stuff, but now I can do it with live video as well. You know, same sort of thing. And I can still scale these layers down.
+
+I can take the video layer and scale it down, do whatever I want. You know, move these guys around. And it all just works. And you can see the CPU, yeah, it's doing some more work because it's pulling two 6-megabyte-per-second streams. Off-disk and pulling from FireWire, whatever rate it needs to for DV.
+
+But, you know, this machine, dual 1 gigahertz, GeForce 4, it can handle it, you know. I think that's pretty cool. I used to do video stuff on my Amiga long ago, and you can never do this stuff. Not in real time anymore. So, kill the DV stream here.
+
+I knew the demo gods were going to get me eventually. All right, well, let me kick this thing in the head. briefly. That's what I get for messing with FireWire. I'll blame the FireWire guys. That'll make me feel better. It really was an OpenGL. So let me just, this will probably throw my, throw me off just a little bit here.
+
+So we'll come back to some of the more compositing stuff in a minute once the machine comes back to life. So now I want to get into image effects stuff just a little bit. Now, as you saw in that previous demo, I can do really simple color scaling effects using OpenGL. You know, just basically take the primary color and modulate that or multiply it against whatever data is coming through the pipeline. So I could colorize it red, green, blue, red and green, yellow it, or use it to modify the source alpha value. So that's pretty powerful.
+
+As the example shows here, the thing you really want to do is you just call before you're going to render your polygon, you just call geocolor 4f, give it the red, green, blue, alpha that you want. And make sure you set up the modulate texture environment mode. And this will apply this entire layer. Now you could obviously do, we just keep it on the slides until the, I'll tell you guys when to kick it back, where to go.
+
+Thanks. This will apply to the whole layer. Now, you could obviously do this on a per-vertex thing, or you could also dice up the image into little rectangles and do sort of colorized, wavy effects on the image if you wanted to. So you don't have to do it just on the whole layer. You know, whatever granularity you want to break the image up to, you can do it that way.
+
+Another really cool thing, though, you can do with OpenGL, and I'll demo this in a minute, is sort of perspective warping effects. Now, there's a paper a guy wrote, and I think, and I learned from the QuickTime guys yesterday that QuickTime actually has a function to do this for you, and it'll give you the right matrix, to warp basically one quadrilateral to any other quadrilateral.
+
+And the sort of cool part about this is you can sort of modify the perspective of an image and, or basically undo a perspective that's already there. You know, if you've got something that was shot, like, up at a building at an angle, you can basically make it look like you were standing, you know, infinitely far away and the building was straight up.
+
+The sort of cool thing about this is that the OpenGL handles all the homogeneous coordinate stuff for you, and because it's doing the divide per pixel and right perspective correct texture mapping, you know, you get really nice results out of it, and it just doesn't cost you a lot performance-wise.
+
+and now we can get to the how we did that magical keynote color keying stuff. So I'm going to spend a little bit of time in talking about this because it's kind of complicated. This sort of simplifies it, but I'm trying to spend some time explaining it. So with the GeForce 4 titanium and I believe eventually the ATI Radion 8500 with pixel shaders, you can do dependent 3D texture reads. You know, what this basically means is you can create a three-dimensional texture. In my case, I think I'm using like 32 by 32 by 32. It doesn't have to be large because all the intermediate points will be filtered.
+
+And you can basically use that three-dimensional lookup table, or use that three-dimensional table, ehh, three-dimensional texture as a lookup table. And you can think of any kind of function you can apply to a red, green, blue input value. You can get a red, green, blue alpha value out of. This is like it says up here. You know, red prime, green prime, blue prime, alpha prime is F of RGB.
+
+You can do a lot with this. You can make all your video look antique, for example, if you feed in the right kind of matrix. You can do color sync correction as another example. You know, take a color sync profile, throw it into the texture, and, you know, color correct your image. You can combine it. You can basically take your, take an RGB value, apply some, something to it, apply more to it, and put all that and the results of that into a table. And with enough texture, you can do a lot with this.
+
+With enough texture units, you could actually put them in separate tables if you wanted. So you could have, you know, one, one texture unit that basically does sepia, and then you can convert sepia to black and white. Probably not useful. But you could, you know, swap color channels around, do anything you want.
+
+Now, in our case, what we did for the keynote demo, we can thank Peter for coming up with this idea, was, well, why can't we just take anything that's green and basically sort of turn it into transparent? Pull out the, pull out the green screen background. So that's what we did. Ralph Bruner, he's really good at image processing stuff, sat down and came out with the formula that we wanted to use for this.
+
+Basically, could build up a table that we could adjust and pull pretty much any color we want out of, out of anything and just, like, sort of alpha blend it out. In our case, we wanted to take just that sort of green tinged stuff and pull it right out of the image. Now, the way this works is... In the texture shader stuff in NVIDIA's hardware, basically, the way this works is, on texture unit zero, you'd have, for example, your source image data that just feeds through RGB.
+
+Or you could even use, you know, two texture units, you know, alpha and a mask, and then feed that into a next texture stage. What happens in the stage where you're using sort of this dependent texture read stuff is the incoming red, green, blue from the previous texture stage end up being turned into the S, T, and R coordinates.
+
+So that's sort of how the table lookup happens. So rather than just being able to take those colors and blend them with, like, texture combiners, the regular OpenGL blending path, you can basically use those to just pass it, you know, as a lookup. So the S, the incoming red goes to the S, so that's sort of the X coordinate in the texture.
+
+The T, red value coming in basically goes to the T coordinate, so that gives you the Y value. And then the blue basically ends up the Z value in this three-dimensional texture. So any RGB can get anywhere in this big color cube. And you get, you know, as I said, you get a four component result out of that.
+
+So, spend some time giving you guys a demo of like throwing all this stuff together now. So we'll go over the image warping stuff here now. I'll embarrass myself and... Oh, alright. Someone want to come up here and tell me what the login is? Thank you, Jeff. Nobody told me.
+
+No, see, denied. Okay, thank you, Jeff. I don't normally type on QWERTY, so I probably wouldn't have gotten it right anyway. I'm going to find a little guy and pull him up here and stay away from the FireWire camera. FireWire bad. Well, FireWire good, but FireWire bad today. Okay. So, let's start out and do... First I'll do a silly example. So, of course, every... No, it's not what I want. Everything has now been completely forgotten, obviously. Ugh. Mail. I'm doing good here.
+
+: Let's get to a real view. I can navigate quickly. Green screen. Okay. Back to semi-normal here. So, you know, we were talking about using color effects before. So, for example, again, I'll just bring in, just to go over that real quick, if I've got my background image in here, bring up my magical hidden control panel.
+
+I can basically, again, take anything I want in here and colorize it. I can make it yellow, whatever. This whole thing is written in Cocoa. It's really simple to just take an NSColor well and basically get a color out of it. Obviously, if we want to do these, I'll work two. "I spend all day playing with this stuff. Now obviously here you can see the interesting thing is that this opacity isn't doing anything anymore. And this is because I don't have blending on. Even if I turn it on here, it still doesn't do anything.
+
+So you really have to make sure if you're going to do this that you set up your Set up your blending modes properly. So I can do, again, source alpha and one minus source alpha. Now I can blend it out. Now we can sort of fake pre-multiplied alpha in this case, just to give you guys a better idea what the math looks like. So one of the things my app can do is I can tell it, you You can pre-multiply the alpha. Now you see it just got dark, sort of that similar effect to what I actually did in here.
+
+Let me show you. Remember that thing I showed you before where if you had the SELRS alpha set wrong, it got too dark? Well, what's happening here is that I can pre-multiply the alpha by the geocolor4f parameter. So I can effectively kind of do that multiply with that part of the texture stage instead of doing the pre-multiply with the blender. So if I set this back to 1, I basically-- I can now do the same exact-- well, hey, turn this off.
+
+I can do the blending effect here, even though my source blend factor is 1. So there are some cases where if you're dealing with pre-multiplied alpha and you want to additionally fade it, you'll have to take your alpha value and pre-multiply it times the red, green, blue values that you're passing into the geocolor4f call. Otherwise the math won't work out right.
+
+So that was that colorizing thing. So the other cool little thing, though, was that perspective warp thing I was talking about. So I can kind of take these guys and do fun, really silly stuff and make the math fall apart and do strange things. So the cool part is you don't, you know, you can really make it look like you're standing way on end with this thing.
+
+You know, it just sits there with this thing and just sits there and takes it. Now there are slightly more useful things you can do with this, and I'll get into it here in a second. So let me... Well, let's see. Let's play around here for a second. So let's see if we can just take something. I've never tried this before.
+
+: So this is that background removal thing that we used in the keynote. I've got a little bit more control over here. I get to actually pick the color and play with it more. So I can turn this on, and right now, you know, removing black isn't going to do anything. There isn't much black in this image.
+
+But I can go in here and pick, for example, a different color. So let's see if we can get this blue out of here, for example. So, blue's gone. I can just take it out. Okay. Or, you know, I can pick any color. I can just sit here and play around with this whole thing and go, "Well, pick the color that you don't want to show up." You know, if you don't want any red, you don't like green. You know, obviously blue in this case is the one you would probably want to get rid of. So if we can... What an angle on these flat panels up here.
+
+So let's see, actually to make this more interesting, let me start this over real quick. Pull in. A background first. So if I throw this photo JPEG on here again, then throw this guy on top, We can again go over here and get rid of this blue, and we should be able to just see the fish sort of swimming on top of this other background.
+
+So we want that color. Oh, oh. So what's wrong? Anybody know? Got to turn on blending. So, source alpha. One minus source alpha. Oh, look at the JPEG artifacts. But you can see I've sort of got this fish, you know, now I've pulled out the blue background of the fish and I've sort of got the fish swimming around. And we can go ahead and adjust it, you know.
+
+- I'm going to pick how much of it we want to take out. You probably want to take out just as little as possible to get the effect you want. Obviously, I can take out enough blue that the bottom begins to bleed out. You can also play around with adjusting this.
+
+[Transcript missing]
+
+"It's not useful, but anyway. But now let me start this over one more time."
+
+As we showed before, I want to build up the whole thing that was done in the Keynote. Now, for the Keynote they pulled in, they had like made up that whole background all at once so they didn't have to spend time doing this, but I thought it would be useful to show you guys this stuff again. So here we've got one static background image layer that's pulled in. And then we've got this guy again, so we want to pull in
+
+[Transcript missing]
+
+So we've got the background there. Now I can bring in, for example, the people.
+
+Oops, I just did something stupid there, but that's okay. Three. Thank you, Peter. So, now I've got this in here again, and because I threw the garbage mat on the other image, I'm hosed and have to start all over. So, I'm going to cheat and just use this full background image. So I don't have to do that first stage over again.
+
+So, That's everything altogether. That's what the real background is supposed to look like. So, again, I can bring the people over here, and you guys all saw this in the keynote, hopefully, and we can go in and do so the same thing again, so that they'll have a little more control over it. So I can go in here and pick this background again. And I just get to go in and pick the green I want to get rid of.
+
+He's gone. Of course, I have to try blending again. In this case, it's... I don't think it's supposed to be pre-multiplied. So no, we've got the guys walking around. And we can do the other blending effect. Now, this garbage mat thing, which I probably should have spent a little bit of time on earlier, is actually using multi-texture. So what's happening is we're doing, if I take this image here, let me just actually pull it up. So this is just the alpha garbage mat we're going to use to get rid of these people.
+
+So, what happens when I drag it on top of this layer is I've done the color correction and background removal, and then I've taken another texture stage, the last texture stage, and multiplied the alpha mask through it as well. So now I've gotten rid of the background and done, you know, gotten rid of all the extra stuff and done the color removal all in one basic, all in one pass.
+
+Now we can also go in and do this sort of color correction thing, and I can find, oh, that color, and we kind of want to make that more like this color. I can go in and sort of tweak that out. Or, in this case, it's probably fading it more than anything else. Now, I'm going to turn some of this stuff off here for just a second.
+
+Actually, I want to go turn off blending for just a second. No, that's not it. Now, you can see that these guys need to be scaled down, right? Even if I scale them down, I can't quite get that, you know, the angle sort of wrong on this. So, but with the perspective correction stuff, I can kind of go in here and... Sort of match them up to where they're more... the angle they're supposed to be to match this scene.
+
+Now they look like they're just supposed to be there. You can obviously, you know, make it completely screwy. But, you know, the trick is to play with it a little bit and get it just where you want it. So there's that. And obviously we had the train again. And we can do the same sort of thing there. Go in. Get rid of the green. Make sure we turn on blending.
+
+And again, we've got that one last people there. And the other green is just sort of tricky to get rid of. And unfortunately, I'm going to run out of time here to show you guys how to get rid of the other green. So again, I can do the same sort of people movie, people mat, get rid of all the other stuff, make sure I turn on blending.
+
+"I'm going to put this down here. See, obviously in the keynote they didn't have to do all this junk, but this gives you guys a better idea of what's going on. So I'm not going to do the color correction thing on these guys, but I can do the perspective correction. So, you know, I can sort of get the angle up and I can basically change the different corners of it."
+
+It takes a little bit of practice to get them just right. But now I can sort of make them look--they're a little bit tilted. But now I can sort of make them look more like they're supposed to be in the image, like they were supposed to have been there, for example. So the other sort of cool thing we can do with the dependent texture, you just throw a color matrix on this. So I can take these guys off, so change their brightness.
+
+"If I want to change the effect, change the saturation, I can make them black and white. I can't even change their hue, which isn't useful if you don't have saturation. So you can also do other kinds of color correction. This is another example of using dependent texture reads is to use a color matrix for this." So anyway, so that's sort of the demo of rolling all of this different stuff together all at once.
+
+So just to give you guys a real quick overview of this whole application that we're probably going to turn into sample code, so you guys all know how to do all this stuff. I don't want you guys to have to go through all the QuickTime junk I went through. QuickTime's cool.
+
+But it can take some getting used to. Unfortunately, I know some of the guys I'm recognizing back here, and Tim and Jean-Marie help me a lot with all this stuff. So thanks to these QuickTime guys in the back. So the whole compositor lab is Cocoa-based. There's basically a really simple class hierarchy.
+
+There's one controller object which sort of drives the whole thing. There's a composite GL view, which is doing all of the GL side of the rendering for everything. That deals with drawing the layers bottom to top, deals with what texture modes are supposed to be turned on, how to use the texture shader stuff to do color removal, all this other stuff.
+
+And then the master of everything is this layer object. It does the actual drawing, has a lot of the layer setup code, sets up the texturing, sets up how to do all the client storage stuff, how to pull everything through pretty quickly. And then from that I've got different subclasses. So there's one for pulling in stuff from a QuickTime movie.
+
+As you saw, there's one for pulling stuff in from a simple DV capture stream. There's one for pulling in from Quartz 2D. And then finally there's one that'll pull in stuff just from an NSImage that's dragged in. And the code for all the subclasses is actually really small.
+
+So everything in this whole thing is driven by layers. The layers just get told, you know, they get the callbacks from QuickTime that says, hey, I'm dirty, and they tell the view system, hey, you need to redraw at some point. The movies are just in play mode. I'm not doing the stuff that's been done before with the set movie time to set each frame. The movies are just playing at full performance, which is really what you want to do, because otherwise you're not going to get the full streaming thing.
+
+So just a real quick summary, since I've got about 20 seconds left. So hopefully you guys saw that OpenGL is really good at doing this type of video and graphics integration stuff. You can get really, you know, pretty cool effects without using a lot of CPU time. You get to leverage all of the stuff QuickTime knows how to do, pulling in live video and what have you. And you get really good compositing effects.
+
+You get, you know, all the blending you can ever imagine. You know, plenty of layers is not an issue. If you saw the Quartz Extreme demo yesterday, you can just stack layer and layer and layer and layer on top of stuff, and it just sits there and takes it.
+
+And, you know, the texture shader stuff is just a sort of simple example of things you can do with this, okay? Future hardware, there's going to be so much more you can do on the per-pixel level that the sooner you guys get the stuff into OpenGL, the more you're going to be able to take advantage of that hardware when it comes. And trust me, there's some really cool stuff coming. So if at all possible, get on OpenGL, because, you know, once you're on this path, you'll be able to do some pretty amazing stuff stuff with it.
+
+So, roadmap real quick. If you weren't there, graphics and imaging overview gave you a real quick run-through of all the GNI technologies, including some of this stuff. Exploring the Quartz compositor is yesterday, where we went over Quartz Extreme in general. Graphics programmability was also yesterday, so I hope you guys didn't miss that one. OpenGL integrated graphics was just before this, so Jeff sort of gave the high-level overview of this stuff. This was me.
+
+So the color sync one you really won't want to miss because I think they're also going to show a demo of doing the color sync style stuff with the same type of code I was doing. So you guys can see how to use real color sync profiles to pull off all this type of work. For you guys doing game stuff, obviously the game sessions are going to be pretty useful.
+
+And Tomorrow we've got other advanced 3D effects, as Jeff talked about. That's going to be incredibly useful as well if you guys want to apply some of the other OpenGL techniques to this stuff. The performance and optimization session will also go into some of the texture, high-speed texture paths and go into the performance of that path a little bit more.
+
+And you won't want to miss the graphics and imaging performance tuning session if you're trying to do Quartz 2D stuff, for example, and putting that into OpenGL. I'm sure those guys will have good tips for you. And the feedback forum is really useful to us as well. Give us feedback on what else you guys need. If there's other sample code we can provide, that would be great. So, I'd like to bring Sergio back up for a Q&A.

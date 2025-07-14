@@ -1,0 +1,173 @@
+---
+Title:  Metal for Ray Tracing Acceleration
+Year:   2018
+Web:    https://nonstrict.eu/wwdcindex/wwdc2018/606/
+
+[!] This transcript has potential transcription errors.
+---
+
+Hi, everybody. My name is Sean James and I'm a GPU Software Engineer. Today, I'm going to talk about Ray Tracing. So, you may have seen our Ray Tracing demo in the State of the Union and want to learn more. Or you may be interested in using Ray Tracing in your own apps. Today, I'll talk about how you can use Ray Tracing in your applications and how you can accelerate it on the GPU using METAL. Specifically, using METAL Performance Shaders. METAL Performance Shaders is a collection of GPU Compute Primitives optimized for all of our iOS and macOS devices.
+
+MPS includes support for image processing, linear algebra, and machine learning. We've talk extensively about these topics in previous sessions. This year, we've also added support for training. And there's an entire session about this topic tomorrow. For today, I'll talk about the new support we've added this year for Ray Tracing. So first, what is Ray Tracing?
+
+Ray Tracing applications are based on following the paths that Rays take as they interact with the scene. Rays can model light, sound, or other forms of energy. So, Ray Tracing has applications in rendering, audio, and physics simulation. But rays can, also, represent more abstract concepts, like whether or not one point is visible from another. So, Ray Tracing also has applications in collision detection, artificial intelligence, and pathfinding. For today, though, I'll focus on rendering as an example of how you can use Ray Tracing in your applications.
+
+So, you may be familiar with the rasterization pipeline. The rasterizer works by projecting one triangle at a time onto the screen and shading the corresponding pixels. This can be implemented very quickly in GPU hardware, which makes this the method of choice for games and other real time applications. But the rasterization model makes it difficult to simulate certain physical behaviors of light.
+
+One example is reflections. With the rasterizer, reflections are, typically, implemented using approximations, such as cube maps and screen space reflections. But with the Ray Tracer we can compute accurate reflections, directly. Another example is shadows. With the rasterizer, shadows are typically implemented using shadow maps. But these can be tricky to implement without suffering from aliasing and resolution issues. Furthermore, soft shadow mapping techniques tend to produce uniformly soft shadows. With the Ray Tracer we can directly compute whether or not a point if in shadow. So, we can produce clean shadows, including realistic transitions from hard to soft shadows as the distance between objects increases.
+
+One final example is global elimination. This simulates light bouncing of off surfaces in the scene. Global elimination can be very difficult to model with the rasterizer. But it's actually modeled quite naturally with the Ray Tracer. In fact, many games and real time applications that include a global elimination component, actually, precompute it using a Ray Tracer and store the result into textures. Which are then mapped back onto the geometry at run time.
+
+Of course, there are many other effects that we can simulate with the Ray Tracer, such as ambient occlusion, refraction, and area light sources. As well as camera effects, such as depth of field and motion blur. This makes Ray Tracing the method of choice for photorealistic offline rendering applications. The tradeoff is that Ray Tracing is significantly more computationally expensive than rasterization because we're doing so much more work to simulate these effects. So, let's first take a closer look at how rendering works with the Ray Tracer, and then we'll see how we can accelerate is with METAL.
+
+So, we use an algorithm called Path Tracing. In the real world, photons are emitted from light sources and they bounce around until they enter the camera or your eye. But most of those photons actually never make it to the camera. So, this would be very inefficient to simulate. Fortunately, due to properties of light we can, actually, work backwards, starting from the camera.
+
+We start by casting primary rays from the camera into the scene. We then compute shading at the intersection points. Shading consists of figuring out how much light is arriving at the shading point and what fraction of that light is reflected back towards the camera. There are, actually, two sources of light, which we'll handle separately.
+
+The first source is direct light. This is light that arrives directly at the shading point from the light source. We can easily compute how much light is arriving directly and what fraction of that light is reflected back towards the camera. All we need to do is check that the shading point is not, actually, in shadow, before adding the lighting to the image. To do this, we can cast additional shadow rays from the shading point towards the light source. If the shadow ray doesn't make it all the way to the light source, then the original shading point was in shadow. So, we shouldn't add the lighting to the image.
+
+The other source of light is indirect light. This is light that bounces off of other surfaces in the scene before reaching the shading point. To collect indirect light, we can cast secondary rays in random directions from the shading point. We then, repeat the shading process at the secondary intersection points.
+
+We'll first compute how much light is arriving directly at the second intersection point and what fraction of that light is reflected back towards the previous intersection point. And, ultimately, back into the camera. We'll also need to cast another shadow ray from the secondary intersection point. And we can repeat this process however many times we'd like to simulate light bouncing around the scene.
+
+Now, in order to get these nice soft shadow and bounced lighting effects we, actually, need to cast many shadow and secondary rays per point along the path. This means that the number of rays, actually, grows exponentially with the number of bounces. To avoid this exponential growth we'll, instead, choose just one shadow ray and one secondary ray direction at each bounce. This will result in a noisy image but we can average the results together over multiple frames. Each frame will, also, generate its own set of primary rays, so this, also, gives us the opportunity to implement camera effects such as depth of field and motion blur.
+
+So, let's translate this all into a diagram. First, we'll generate primary rays. Then, we'll find the intersections with the scene. Then, we'll compute shading at the intersection points. And remember, that this is an iterative process, which will generate additional shadow and secondary rays, which will be intersected with the scene, again. And finally, we'll write the shaded color into our image.
+
+So, this is describing a rendering application. But a significant fraction of the time is, actually, spent on ray triangle intersection testing. This means that the performance of the intersector has a huge impact on the overall rendering performance, even though, it has nothing to do with the actual lighting and shading. This core intersection problem is, also, common to all Ray Tracing applications.
+
+So, we decided to solve this core intersection problem for you, so that you can start with a high performance intersector and just focus on the details of you app. So, this year, we're introducing the MPSRayIntersector API. This is an API which accelerates ray triangle intersection testing on the GPU on all of our macOS and iOS devices.
+
+We wanted to make it easy to integrate his into existing apps, so we simply take in rays through a METAL buffer. MPS will find the closest intersection along each ray and return the results in another METAL buffer. All you need to do is provide a METAL command buffer at the point in your application where you'd like to perform intersection testing. And we'll encode all of the intersection work into the command buffer for you. So, let's take a closer look at the problem that we're trying to solve.
+
+Oh. Okay. So, 3D models are, usually, represented as arrays of triangles. What we need to do is search through those triangles and figure out which ones intersect each ray. And furthermore, we need to figure out which intersection point is closest to the ray's origin. And the simplest way to do this would be to just loop through all the triangles and check for intersection with the ray. But for anything but the smallest scenes, this would be far too slow. So instead, we built a data structure that we call an Acceleration Structure. The acceleration structure works by recursively dividing the scene into groups of triangles that are located nearby in space.
+
+When you want to intersect a ray with a scene, we intersect the ray with the bounding boxes in the tree. If a ray misses a bounding box, then we can skip the entire subtree. In the end, we're left with just a fraction of the triangles that we actually need to check for intersection with the ray.
+
+So, this is the main way that we speed up ray triangle intersection. Of course, this is a simplified example. In a real scene the acceleration structure can be quite a bit more complicated. We can see from this visualization that the acceleration structure is adapting to the complexity of the geometry. This means that we spend most of our time searching for intersections only in areas of high geometric complexity, which is what we want.
+
+Now, I'm describing this to give you an intuition for what the acceleration structure is and how it works. But you, actually, don't need to worry about this, too much, because MPS will take care of all of this for you. Remember that we'll model our scene using triangles. And those triangles will themselves be represented by vertices in a vertex buffer. All you need to do is call MPS to build an acceleration structure from your vertex buffer.
+
+When you're ready to search for intersections, you simply provide this acceleration structure back to the intersector. So, let's see how we can use this to build a real application. We'll break this app into three stages. First, we'll generate primary rays, find the intersections with the scene, and compute shading. This will be equivalent to what we could have done with the rasterizer, but we'll take it further in the next steps. So next, we'll add shadows. MPS has special support for shadow rays, which can make this application even faster.
+
+And finally, we'll simulate light bouncing around the scene using secondary rays. This would be very difficult to do with the rasterizer, but we'll see that it's, actually, a straightforward extension with Ray Tracing. So, let's start with primary rays. There are five things that we need to do. First, we'll create a ray triangle intersector. Then, we'll create an acceleration structure from our vertex buffer.
+
+Next, we'll generate primary rays and write them into our ray buffer. We'll then, find the intersections between those rays and the scene, using the intersector. And finally, we'll use the intersection results to compute shading. So, let's start with the intersector. The MPSRayIntersector class coordinates all of the ray triangle intersection testing. All we need to do to create one is provide the METAL device that we want to use for intersection testing.
+
+Next, we'll create the acceleration structure. This is represented by the MPSTriangleAccelerationStructure class. Again, all we need to do to create one is provide the same METAL device we used to create the intersector. We then, attach our vertexBuffer and specify the triangleCount. And finally, we build the acceleration structure. We only need to do this once. And then, we can reuse the acceleration structure as many times as we'd like.
+
+So next, we'll generate primary rays and write them into our ray buffer. To do this, we'll launch a two-dimensional compute kernel with one thread per pixel. Each thread will write this ray struct into the ray buffer. We can think about our output image as floating on a plane in front of the camera. Primary rays are emitted from the camera, so we'll simply set the origin to the camera position. To compute the direction, we'll find the direction from the camera position through the corresponding pixel on the image plan.
+
+Now that we have our primary rays, we'll use the intersector to find the intersections of the scene. The encodeIntersection call will tie together everything we've created, so far. First, remember that we'll encode into a METAL command buffer. We, actually, have a couple of options for what type of intersection search we'd like to do. In this case, we'll just use nearest, which will find the closest intersection along each ray.
+
+We'll then, provide the ray buffer, which contains the primary rays we just created, as well as an intersection buffer, which will contain the intersection results. We, also, need to provide the rayCount, which in this case, is just the image width times the image height. And finally, we'll provide our accelerationStructure. MPS will find the closest intersection along each ray and return the results in the intersection buffer. So, all that's left is to use the intersection data to compute shading.
+
+To do this, we'll launch another compute kernel. We can apply lighting and textures similar to the way that we would in a fragment shader. Most of the standard texture and math functions that are available in a fragment shader are, also, available in a compute kernel. But shading, typically, depends on both the intersection point and vertex attributes, such as colors and normals. In a fragment shader the GPU would interpolate these for us. But we'll need to interpolate them ourselves based on the intersection data. So, let's first look at how we can compute the intersection point. Remember that a ray is defined by its origin and direction.
+
+This is the intersection struct returned to us by the intersector. The distance field will tell us how far we would need to go in the ray direction to get from the ray origin to the intersection point. And this distance will be negative if the ray doesn't intersect anything.
+
+The primitiveIndex tells us which triangle we hit. And the last field is what we'll use to interpolate vertex attributes. This field contains the first barycentric coordinates called U and V. And these correspond to the location of the intersection point relative to the vertices of the triangle. There are, actually, three barycentric coordinates, but they add up to one. So, we can compute the third coordinate W by subtracting the first two from one.
+
+If we have a vertex attribute defined at each vertex of our triangle, then the interpolated vertex attribute is just the sum of the attributes at each vertex weighted by the barycentric coordinates. For example, if we have a color defined at each vertex, then the interpolated color is just the weighted sum of the colors at each vertex.
+
+So, at this point we've created a ray intersector and an acceleration structure. We then, generated primary rays and found the intersections with the scene. We computed shading at the intersection points, and then wrote the shaded color into our image. So, let's take a look at the image. We can see the geometry represented by the acceleration structure, as well as the interpolated vertex colors and lighting we just computed. Now that we have an image on screen we're ready to add some additional effects. So, we'll start by adding shadows to our image.
+
+To do this, we need to check if the light can actually reach the shading point before adding it to the image. To do this we can cast additional shadow rays from the intersection points towards the light source. If a shadow ray doesn't make it all the way to the light source, then the original shaded point wasn't shadow. So, we shouldn't add its color to the image.
+
+We'll modify our shading kernel to write out additional shadow rays into another METAL buffer. We'll then, find the intersections with the scene, again. And then, we'll launch one final kernel which will conditionally write the shaded color into the image based on whether or not the shadow rays intersect at anything. So, let's start with the changes to the shading kernel. Now, shadow rays are a little different than primary rays. First, we need to provide a maximum intersection distance so that our shadow rays don't overshoot the light source.
+
+We also don't need to know which triangle we hit or what the barycentric coordinates were. So, there are some optimizations we can do. And finally, remember that we can't write the shaded color into the image until we know whether or not the original shading point was in shadow. So, we need a way to pass the color from the shading kernel through the intersector, all the way into the final kernel, which will update the image. To do this, we can customize our ray struct.
+
+So, first we have several options for what data we actually provide to the intersector. In this case, we'll use a data type which includes minimum and maximum distance fields. MPS will ignore any intersections outside of this range, which will prevent our shadow rays from overshooting the light source.
+
+Second, if you have application-specific data associated with your rays you can append that data at the end of the ray struct and provide a rayStride. MPS will skip past this data when reading from your ray buffer. In this case, we'll add the shade of color to the end of the ray, so that we can propagate it from the shading kernel through to the final kernel. We configure these options on the ray intersector. First, we'll set the rayDataType to match our struct type. Then, we'll set a rayStride to skip past the color at the end of the struct.
+
+Next, we'll run the shadow rays through the intersector. This was our original call to the intersector. Remember that shadow rays are only checking for visibility between the original shading point and the light source. So, there are two optimizations we can do. First, just like we can customize the rayDataType, we can also customize the intersection data type or what data is returned to us by the intersector. In this case, we only need to know if the distance is positive or negative, indicating a hit or a miss. So, we can set the intersection data type to just distance. This will save some memory bandwidth reading from and writing to the intersection buffer.
+
+Second, because we don't, actually, need to know which triangle we hit, we can end the intersection search as soon as we hit any triangle. This is, typically, much faster than searching for the closest intersection. MPS has a special mode for this, which we can turn on by passing the any intersectionType instead of nearest.
+
+Finally, we can launch our last kernel, which will add the color to the image. Each thread will read in one shadow ray and the corresponding intersection data. If the intersection distance was positive, then the original intersection point was in shadow. So, there's nothing more to do. Otherwise, the intersection point wasn't in shadow. So, we should read in the ray color and write it into the output image. And that's all we need to do to add shadows to our image.
+
+We can see that each shaded point is now checking whether or not the light source is visible before adding the lighting to the image. Because we're using a ray tracer we can, also, randomly sample the surface of the light source, which gives us these nice soft shadows. So last, we'll look at secondary rays. Remember that secondary rays simulate light bouncing around the scene. All we need to do to add secondary rays is move all of our kernels into a loop. In each iteration we'll choose a new random direction to continue they ray's path.
+
+So, modify the shading kernel to produce the rays for the next iteration. Once we finish updating our image we can simply loop back to the first intersection test. And we can repeat this loop however many times we want rays to bounce. So, let's look at the changes to the shading kernel.
+
+In each iteration we'll move the ray origin to the intersection point. We'll then, choose a random direction to continue the path. And finally, we'll multiply the ray color by the interpolated vertex color. This will cause the light to take on the color of whatever surface it bounces off of.
+
+In a more advanced application, this would be a much more complicated calculation. But by choosing the random ray directions, carefully, we can actually get the rest of the math to cancel out. And this works even though we're working backwards from the camera as long as we're careful to tint the direct lighting by the ray color at each intersection point.
+
+So, that's all we need to do for secondary rays. So, we can see that light has started to bounce off of the walls and onto the sides of the boxes and ceiling. So, that's it for our example app. We started by getting an image on screen with primary rays and shading.
+
+Then, we added shadows. And finally, we simulated light bouncing around the scene with secondary rays. So, let's switch to the demo and take a look at this running live. So, here's the application we just wrote up and running on the 12.9-inch iPad Pro. We've, actually, extended this application to support more advanced lighting, shading, textures, and more. So, let's switch to a more complicated scene, which used many of these features.
+
+Here's the Amazon Lumberyard Bistro scene you saw running in the State of the Union on four GPUs. The scene has almost one million triangles. But, even with these advanced lighting and shading techniques we're still able to achieve almost 20 million rays per second on an iPad Pro. And that's a combined measurement including primary, shadow, and secondary rays. So, we've created what we think is an easy to use API that you can use to start implementing these types of applications today. So, that's if for our demo, for now. Thank you.
+
+[ Applause ]
+
+So, don't worry if you didn't catch all of that because this application will be available for download as a sample. The sample demonstrates everything I've talked about today and more. We recommend that you get started by downloading the sample and adding your own geometry, lighting, shading, and so on.
+
+There's, also, a lot more to the API that I didn't have time to talk about, today. So, we, also, recommend that you take a look at the documentation and headers. And with that, I'll hand it off to my colleague, Wayne, who will talk about how we can extend this to multiple GPUs. Thank you.
+
+[ Applause ]
+
+Thanks, Sean. Hi, everyone. So, say you're working on your Mac. It has an internal GPU. But you've, also, plugged in a couple or really high performance eGPUs. And what we'd like to be able to do is use all of these GPUs together to make Ray Tracing go as fast as we possibly can. So, how are we going to do this? Well, there's three things we need to think about. First of all, how are we going to divide up the work between GPUs?
+
+Secondly, at some point the GPUs are going to need a way to exchange data. So, how are we going to deal with that? And finally, we need a way to keep everything synchronized. Now, for this, I'll show you how to use the new METAL Events feature that we're introducing here, this week. So, let's get started.
+
+So, to divide up the work we're going to use something called Split Frame Rendering. The idea here is to partition our frame into regions. And then, we'll assign each of these regions to a different GPU, so that they can be rendered in parallel. Now, each GPU will run the full rendering pipeline that Sean described earlier. So, that's everything from initial ray generation right through to shadow rays and shading. Now, once all GPUs have finished we'll pick whichever one is connected to the display and we'll copy across all of our completed regions for composition.
+
+Now, composition could just be stitching the regions together into one frame buffer. Or you might want to combine them with the results of a previous render to refine the image and remove noise. Now, before we can render anything, we need to make sure that each GPU has a complete copy of the scene. Assets, such as your vertex buffers and your textures need to be replicated on all GPUs. And so, do the triangle acceleration structures that Sean introduced earlier.
+
+Now, for the acceleration structures, we really wanted to avoid you having to build them from scratch for each GPU. So, we added an API that enables you to take an existing acceleration structure and make a copy for each GPU that you want to use. Now, this copy is nonrecursive.
+
+So, any buffers that you have attached to your acceleration structure, for example, your vertex and your index buffers, you'll need to copy those separately. And then, attach them to the acceleration structure that we just created. So, now that the data is replicated on all GPUs we're ready to start rendering.
+
+Now, the interesting thing for our multi-GPU perspective is that this part of the pipeline is virtually unchanged from what Sean described earlier. The only difference we need to make for multi-GPU is to restrict regeneration to whichever part of the screen a particular GPU is working on. Everything else is the same. So, for that reason, let's move straight on to what's, probably, the trickiest stage for multi-GPU, and that's its final composition phase here.
+
+Now, for best performance on macOS, each GPU will render into its own private buffer. And once rendering has finished we need to copy that buffer over to whichever GPU we're using for composition. Now, we can't copy between the buffers, directly, because METAL resources can only be used on the device that they were created on. So, you can't create a buffer on one GPU, and then try and attach it to a Blit encoder on a different GPU. That's just not going to work. So, this means that our copies will need to go through system memory.
+
+Now, to make this as efficient as we can, we use the buffer arrangement that you see here. We're going to create two METAL buffers; one on each device that wrap a common CPU allocation. And as the buffers wrap the same underlying memory anything that is written into the METAL buffer on device A is, also, visible to the METAL buffer on device B.
+
+Now, as I mentioned earlier, for performance reasons on macOS all of the actual rendering work is done using private buffers. And then, we Blit our completed regions through system memory when it's time to copy them to a different GPU. So, here's a quick look at how to set this up. First, we create our buffer on device A, using METAL shared storage mode. And this allocates system memory, internally. And we can get appointed to it using the .contents method.
+
+We, then create a buffer on device B using the NoCopy API to wrap the memory that we just allocated to buffer A. Now, something to be aware of for this API is that the buffer needs to be a multiple of page size. So, you'll need to pad the length when you create the original buffer.
+
+So, now that we're able to share memory between devices we need to think about synchronization. Now, to help with this we have an example timeline here to help us visualize two GPUs running in parallel. The dark boxes represent command buffers and the green boxes represent work that we've encoded into those command buffers. For example, using a compute command encoder. So, the GPU at the top there, is going to do some rendering. And when it's finished, it'll Blit its completed region into the shared buffers that we were just talking about.
+
+Now, while that's going on GPU B is, also, doing some rendering. Now, this is the GPU that we're going to use for composition. So, at some point it's going to need the buffer that was produced by GPU A. Now, we can see here that we have a problem. There's no synchronization in this area, here. So, there's nothing to prevent GPU B from trying to read the buffer before GPU A has finished writing to it.
+
+Now, to deal with this we can use METAL Events. With METAL Events, we'll insert a wait into the command buffer. So, while the GPU is executing, it'll reach the wait, and then it's just going to stop. And what it's waiting for is a signal from the other GPU. Once that signal is received we know that GPU A has finished writing to the buffer and it's now safe for GPU B to access it.
+
+So, this is an elegant way to fix our synchronization problem. But, clearly, having a GPU, potentially, a very powerful GPU just sitting there waiting is not good. So, we need to make this wait as short as possible and, ideally, we want the GPU working instead of waiting. So, what I'm talking about, here, is load balancing.
+
+So currently, we just split the screen equally between GPUs. And there's a couple of problems with this. Firstly, it doesn't take into account that you might be using GPUs of different performance. If one GPU is much faster than the other, then it stands to reason that, yeah, it's going to finish first. And the other problem is that some parts of the screen are more complicated to render than others. They take longer. They might have more complex geometry or more complex materials.
+
+So, to fix this, we need to adjust our region sizes adaptively. Now, the aim here is for each GPU to take, approximately, the same amount of time to render its part of the scene. Now, the way we do this is we start with the fixed partitions that you see here, and we render a frame.
+
+And we time how long each GPU is working for. And then, we use that to decide how big a region to give each GPU the next time around. And we do this the whole time your application is running. So, it constantly adapts to the performance of the GPUs that you have connected. And wherever you are and wherever you're looking in your scene.
+
+So, to measure how hard a GPU is working, we use command buffer completion handlers. Now, completion handler is a block of CPU code that you can have run after the GPU has finished executing your command buffer. Now, on iOS command buffers have a couple of useful properties that you can read to find out how long it took to run on the GPU. But these aren't available on macOS. So, we need to come up with an approximation.
+
+And the way we do this is we store the host time when each command buffer completion handler was called. And if you do this for every command buffer, you can then use the differences between these times to figure out how long the GPU was running for. So, for example, to estimate how long the three command buffers shown here took execute, we've measured the time between the completion handler was called for command buffer 3 and command buffer 0. So, that's the theory. And now, let's see it in action.
+
+All right. So, this is the Amazon Lumberyard Bistro scene that Sean was showing you earlier. And this time, it's running on a MacBook Pro. And you can see in the top left of the screen here, we have a rays per second metric. As you can get an idea for how it's running.
+
+So, this includes the primary rays, secondary rays, and the shadow rays. They're all included in this metric. So, you can see, we're getting about 30 million rays per second. And it'd be nice if we were going a little faster. So, I'm going to enable one of the eGPUs that I have connected, here.
+
+So, you can see from the text there, we're now running on an RX 580, as well as the internal GPU, here. And performance has doubled to about 60 million rays per second. And you can also see the green lines here that we're using to help visualize how the load is split between GPUs. So, one GPU is rendering everything above the line. And one GPU is rendering everything below.
+
+So, with the eGPU we're now going about twice as fast as we were before. I was kind of hoping for a bit more, there. And so, the problem is the eGPU is sitting there waiting. And that's because we're using these fixed partitions. So, if we switch on the adaptive load balancing, here, you see the RX 580 just grabs a big chunk of the work, now. And we're going much faster than we were, previously.
+
+So, the scene here has approximately one million triangles. And we're now going to switch to an outside view. It's the same Amazon Lumberyard scene but we're outside, now. And this scene has approximately 3 million triangles. And I have another GPU sitting here. So, we'll turn that one on, too.
+
+And, this time, it's a Vega 64. So, you see the Vega grabbing a big chunk of the work, there. And what's interesting about this configuration is we have three very different GPUs working together. They're different architectures and they're very different performance, too. But they're all working together to help produce this great image.
+
+[ Applause ]
+
+So, today we introduced the MPSRayIntersector, a new API that you can use to accelerate ray triangle intersections on the GPU. As you saw from my demos, it's available on all of our iOS and macOS platforms. And it scales really well as you add multiple GPUs on macOS. Now, we're really excited to see how you use Ray Tracing in your applications.
+
+We used Path Tracing in our example, today. But there's also hybrid rendering. You might want to incorporate Ray Tracing to do really nice looking shadows or ambient occlusion or reflections. And there's also non-rendering in cases. For example, autosimulation, physics, AI collisionless action. There's a ton of stuff you can do with this.
+
+So, to help you get started you can find sample code on developer.apple.com. So, be sure to check that out. Also, the header files are full of documentation and information on some additional features that we weren't able to cover today. And finally, we have our lab session tomorrow from 12. Sean and I will be on hand to talk more about the API and to help you get started with Ray Tracing in your application. So, we hope you can join us for that. So, thank you, for coming to our talk. And enjoy the rest of WWDC.
+
+[ Applause ]

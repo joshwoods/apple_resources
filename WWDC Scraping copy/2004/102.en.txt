@@ -1,0 +1,215 @@
+---
+Title:  Network Kernel Extensions
+Year:   2004
+Web:    https://nonstrict.eu/wwdcindex/wwdc2004/102/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Hello. I'm here to talk about Network Kernel Extensions on Tiger. As you probably already heard, we've made a number of massive changes. To the networking stack, we had a few goals. We needed to get better SMP scalability. We've been chipping dual processor machines for a long time and the way that the locking model is set up in the Kernel in Panther and previous releases really didn't give us an ability to take full advantage of those multiple processors.
+
+In addition, we wanted to add support for 64-bit user space processes. And these changes required-- in order to implement this, we needed to make a lot of changes to data structures and move a number of functions around. And it really led to massive changes almost everywhere, which broke Kernel Extensions, the previous Network Kernel Extensions.
+
+So if you have a Network Kernel Extension today that's loading on Panther, it won't load on Tiger. If you're just an I/O Kit driver, an Ethernet driver or something, you'll be okay. But if you've been using the old DLL layer or socket filters, protocol filters, any of that stuff, you're going to need to make changes to your NKE to get it to work on Tiger.
+
+Some of these changes involve moving to using opaque data structures and accessor functions. We provide Kernel Programming Interfaces which are well-defined set of interfaces for interacting with these data structures and the stack. The initial implementation of these KPIs is available in the WWDC build that's on your CD. There are actually some bugs in the kernel on that that will lead to a panic in a few situations.
+
+So along with the previous session, session 103, there's some content that's available online and part of that is a new kernel that you can use when you're trying to test these kernel programming interfaces. So I encourage you to go ahead and download that and install that. There's a readme that explains how to get it installed and that'll let you play around with what I'm about to show you.
+
+So we're going to go over the Kernel Programming Interfaces. Again, these are available on Tiger. These should give us more stability so that when we make changes in the future we aren't going to keep breaking your Kernel Extensions. And moving over to these Kernel Programming Interfaces is required to get your KEX running on Tiger. Many of the symbols that you used to link against are no longer there.
+
+So, with a better SMP scalability, as I said, we've been shipping these dual processor machines for a long time, and we've been using this thing called a funnel, the network funnel, to protect all of the data structures inside the kernel, and it's basically one big lock. We've taken that one big lock and we've moved to finer-grained locking, where we use a bunch of locking primitives, such as the simple lock, a mutex, and multiple reader, single writer locks, and we've really broken it down so that we can have multiple processors running through the stack at the same time.
+
+One of the results of this is that the Kernel Extensions are responsible for protecting their own data. Since there's no longer one big lock that both the stack and the Kernel Extensions are running under, they have to be aware that they could be re-entered. The internal locking model that we use is mostly transparent to the NKEs and that was done intentionally so that we will be able to make changes to that in the future as we tune the performance.
+
+So in Panther, we have one big lock around networking and we have another big lock around the file systems. And in Tiger, for the networking stack, we moved to a bunch of smaller locks in various areas. And we're going to continue to fine tune the exact locking model. And the KPIs are intended to keep that transparent so that you don't have to be involved with it. And we won't break you if we change it.
+
+We did change the data structures in a lot of ways in order to implement this, adding locks to these structures and moving stuff around, adding reference counts. This did affect the binary compatibility. We're going to have all Kernel private data structures be opaque and we're going to provide accessor functions so that in the future when we need to make additional changes to these, it won't cause problems. We won't have to break your KEXT, you won't have to recompile, you won't have to deal with any of that.
+
+There are five main network KPIs. There's the Network Interface KPI for providing new interfaces to the networking stack. There's the Socket KPI for interacting with sockets in the stack inside the kernel. This is commonly used for network file systems such as NFS, AFP, and SMB.
+
+[Transcript missing]
+
+And finally we have the Network Interface Filter which gives you an ability to filter packets at the interface layer. There are a number of additional helper KPIs for getting access to various things such as mBuffs or communicating with a user daemon in user space.
+
+So we have a diagram of the networking stack here, and at the top layer we have the sockets. The items in blue can be provided by Kernel Extensions. So the Kernel Extensions can interact with the socket, they can create a socket filter, they can create an IP filter, they can create what we call plumbers, which I'll go into a little bit later, as well as interfaces and interface filters.
+
+So the Network Interface layer, it's actually broken up into two different sections or two different layers. There's the Interface layer, which has the interface itself, such as an Ethernet interface or PPP interface. And then there's the Plumber layer. And the Plumber is the glue between a specific protocol, such as IP, and an interface, such as Ethernet. So ideally the interface, such as Ethernet, would know nothing about the protocol, and the protocol shouldn't know anything about the interface. it's the plumber's responsibility to tie these two things together.
+
+If you're familiar with the Data Link Interface Layer, one of the things we've done is eliminate the Interface Family Modules. We found that a lot of the functionality that was provided by the Interface Family Module was already, was usually tied to the interface. So we just went ahead and rolled all that functionality into the interface, which makes it a lot easier to provide a new interface because instead of having to write an interface and an Interface Family Module, you just do it all in the interface. We've also eliminated DL tags. So when you're sending or receiving, the packets will--what used to be a DL tag is now identified by both the interface and the protocol family.
+
+So at the bottom of the stack we have Network Interfaces. And the Network Interface KPI gives you the ability to provide new interfaces to the networking stack. A Network Interface has five primary responsibilities. Network Interface is responsible for inputting packets into the stack, as well as demuxing the packets or determining which protocol a specific packet belongs to.
+
+As part of the DMUX, it has to handle, add, and delete protocols so that it can keep track of the DMUX descriptor mapping to protocol family mapping so it can match packets when they come in. The interface is also responsible for framing the outbound packets, basically putting an interface header on it, as well as outputting the actual packets and handling iOctals for cases where multicast filterless changes or other state changes are requested.
+
+The network interface is documented in net/kpi_interface.h in the Kernel Framework. Network interfaces go through a typical life cycle. The network interface is allocated, and then various parameters and properties of that interface are set. Once the interface is set up correctly, the interface is attached to the networking stack. At that point, the protocols attach, and then packets are sent and received, and then the interface can request a detach. The protocols detach from the interface, and then the interface itself is detached from the stack.
+
+So to allocate an interface, there's an IFNET allocate function and you fill out an IFNET init parameter, a param structure that defines most of the initial parameters of the interface. Part of that is a unique ID and an interface family. Right now, the networking stack keeps pointers to the network interface all over the place and it doesn't properly ref count its references to the interface. So we can't just get rid of the interface when your interface goes away. We end up recycling it. In the future, we hope to get rid of this, but for now we're kind of stuck with it.
+
+There are some little gotchas though with this. When you're allocating an interface and you specify a unique ID and an interface family, there must not be another interface that's currently attached with that unique ID and interface family. If there is an interface and it's detaching, then you may block until that detach is completed so that we can recycle to you the same interface. Again, the recycle mechanism is temporary and we provide an IFNET reference and IFNET release for handling the reference counting. For now, when IFNET release reaches zero, the interface gets recycled. In the future, we will free it. After you've allocated the interface, you can set additional properties.
+
+Once you've set up the interface the way that you want it, you can use IFNET attach to attach the interface to the networking stack. You can also specify a link layer address that will be associated with that interface. At this point the interface now appears in ifconfig and a kernel event gets generated to notify the stack and people in user space, or processes in user space, that a new interface has attached. And that may trigger protocols to attach.
+
+The protocol attaches usually triggered from user space in response to a kernel event that an interface has been attached. The Plumber code is responsible for handling the attach. Its Plumb function gets called to attach the protocol to the interface, which in turn triggers the interface's add protocol function.
+
+The interfaces add protocol function gets past a list of Dmux descriptors and those Dmux descriptors then map to a specific protocol family. It's the interface's responsibility to keep track of those mappings so that when the interface's Dmux function gets called to match a packet to a protocol, it can refer to that list that it stored.
+
+The protocol detach is also handled by the plumber. The plumber's unplumb function is called, which then calls a function to detach the protocol from the interface. The interface's delete protocol function gets called, which gives the interface an opportunity to clean up that demux descriptor to protocol family mapping. Once this is done, the protocol's detached callback is called to notify the protocol that it has been detached from the interface.
+
+The outbound packet path is a little bit complex. The protocol calls ifnet output, and ifnet output calls any interface filters pre-output functions and give the filters a chance to process the packet before an interface header has been prepended. Once that's done, the protocol's pre-output function is called. The protocol's pre-output function is responsible for determining the destination link layer address. This may require performing an ARP or whatever, neighborhood discovery for IPv6. The protocol's pre-output function is also responsible for determining the frame type.
+
+From there, the destination link layer address and the frame type are passed on to the interface's framer function, which then generates the interface header. At that point, the interface filters are all given an opportunity to filter the fully formed packet before the interface's output function is called to transmit the packet.
+
+On the inbound side, the driver is responsible for calling IFNET input to pass the packet to the stack. I have an input queues the packet and at a later time the input thread comes along and dequeues the packet. It then calls the interface's demux function to determine which protocol that packet belongs to. The protocol's interface filters are then called, and finally the protocol's input function is called.
+
+To request a detach from the stack, the driver can call ifnet detach. The detaches are asynchronous with a callback. When you call ifnet detach, there's a kernel event that gets generated to notify the stack and processes that the interface is going away. And this can lead to the protocol-- this leads to the protocols being detached. Once all of the protocols have been detached, the interface is removed from the list of interfaces.
+
+and the interfaces detach function is called back to let the interface know that it's safe to unload and that it won't be called again. At this point the stack releases its reference on the interface and if there are no other references the interface is either recycled or freed.
+
+There are some locking considerations when you're working with or supplying an interface to the networking stack. The access to your network interface is not serialized, so you need to protect any of your data structures. There are also some limitations in what you can do from your callbacks. You cannot add another interface or add a protocol from any of the callbacks that you supply through the network interface.
+
+In addition, if you're going to try and detach an interface, a protocol, or an interface filter, these operations will be delayed. You do get some protection with the demux. Your demux function will never be called at the same time that either your add protocol or delete protocol functions are being called.
+
+In addition, your add protocol function will never be called at the same time as your delete protocol function is called. So if you're using a linked list or something to keep track of the demux descriptor to protocol family mappings, you can manipulate that list in your add and delete protocol functions without worrying about locking it.
+
+Moving up the stack a little bit more, we have the Protocol Plumbers, which are responsible for gluing an interface to Protocol. and these have the knowledge of how a specific protocol runs over a specific interface. This is where knowledge of how to perform ARP or neighbor discovery or in the case of Apple talk AARP would live. The protocol plumber registers a plumb and an unplumb function, and the plumb function is responsible for attaching the protocol, and an unplumb function is responsible for detaching the protocol. The protocol plumbers are documented in net/kpi_protocol.h in the Kernel Framework.
+
+The Plum function typically calls IFNET attach protocol and it specifies a list of demux descriptors which describe in an interface specific way the type of packets that this protocol wants. The plumber also specifies an input function that will get called for any of the packets that are received for this protocol, as well as a pre-output function, an event function for handling events on the interface, an ioctyl for handling any protocol-specific event, ioctyls on that interface, and a detached function to get notified when the protocol has been detached.
+
+The protocol's input function is important. This is where any ARP packets get handled or something similar depending on which protocol you're supporting. In addition, if you need to strip any headers off or do anything else so that you can just pass a raw packet to the protocol, you do that in the Plumber input function before you call ProtoInput. ProtoInput is the function that you use to pass a packet to a protocol once you've taken anything out that's interface specific.
+
+The protocol plumber's pre-output function gets called on the outbound path just before the framer function for the interface. And this gives the protocol plumber an opportunity to perform any ARPs. The protocol plumber is responsible for determining the destination link layer address and the frame type. So that those can be passed to the interface framer function.
+
+When you're working with a protocol plumber, there are a number of locking considerations. The unregister is synchronous and the unregister won't actually detach your protocols from interfaces. So you need to keep account of how many times you've attached if you're supplying any function pointers such as the input or pre-output functions. Because until you've been detached from every interface, your code's still going to get called. And if you unload before you've been detached, you're going to run into a panic.
+
+There are some restrictions in what you can do in your plumb and unplumb functions. You really, you must not try and register or unregister another plumber and you also cannot trigger a plumb or unplumb function for any other protocols. If you do this you'll run into a deadlock.
+
+At the top layer we have sockets and the socket KPI gives you access to sockets inside of the kernel. The KPI is based on the user space APIs, and it only lets you get access as a client of a socket. You can't implement a protocol and interact with a socket in the ways that a protocol would.
+
+In place of a struck socket pointer, you now use a socket T. In user space, of course, you use file descriptors. But since this -- in the kernel, since the layout of a socket structure is private, we're moving to the opaque type socket T. Sockets go through a typical life cycle. The socket is created, various options are set. The socket is connected, data is sent, data is received, and the socket is closed. The socket KPI is documented in sys/kpisocket.h in the Kernel Framework.
+
+To create a socket, we use the function sock socket. It's very similar to the socket function in user space. The major difference is that it allows you to specify an up call function. And the up call function will let you get notification when data is ready. So in this example, we're creating a TCP socket. And we're going to get back the socket. We're passing in my up call as the up call function. And my cookie is a parameter that will get passed to the up call function.
+
+The Socket Sup call gets called when either data is waiting to be read or a connection is completed. Access to your upcall function is not serialized, so if you're going to be manipulating data in your upcall, be sure to take any locks. The upcall is also called on the fast path.
+
+If you make a blocking call in here, you'll actually stop all incoming data if you make a blocking call in the socket. In addition, if you do any processing that's going to take a little while, you should really do it elsewhere because you're going to hold up a lot of other stuff.
+
+In this case we have an up call function. The state's stored in the cookie and we check to see if we're connected and then we perform a read after taking a lock. We should take a lock where the comment's at. And then we deal with some of the data and then we would release the lock.
+
+You can use sock-set-sock-opt and sock-ioctal to set various options. There's also a sock-get-sock-opt to retrieve options. In this example, we can see sock-ioctal is being used to set the socket to non-blocking I/O. And the sock-set-sock-opt is being used to set the receive buffer size to about 32K. There is no... The function that you'd usually use to make a file descriptor non-blocking isn't available in the kernel because you're not working with a file descriptor here, you just have a raw socket. So in order to set non-blocking I/O, you really need to call sock_ioctal.
+
+Connecting a socket is pretty straightforward. Sock connect is based on the connect user space call. The difference between SOC connect and the old ESSO connect, if you've done any programming in the kernel before with sockets, is that SOC connect will actually block if the socket is a blocking socket.
+
+If you set the socket to non-blocking or you specify message "Don't wait" as the last parameter, then this will give you a non-blocking connect. You can use the function sock is connected to determine whether or not the socket has completed its connection. And your up call will get called when this connection completes with either success or failure.
+
+For sending, there are two different functions. Both of them are based on send message, so they use a message header. Socks_send will send data that's stored in a kernel buffer, and socks_send_mbuff will send data that's stored in a chain of mBuffs. In this example, we're filling out a message header, and we're setting the I/O vec to the kernel buffer that we have. And we set up the name to point to the destination that we want, and then we call socks_send to send the data.
+
+Receiving is very similar. There are two receive functions and they're based on receive message. So there's SOC_RECEIVE and SOC_RECEIVE_MBUFF. SOC_RECEIVE receives data into a Kernel Buffer and SOC_RECEIVE_MBUFF receives data into... receives data as the MBUFFs. In this example, we're calling sock receive and we're filling out our message header first and we're specifying a buffer in the kernel. And when you're all done with the socket, you use sock_close. You can't call sock_close on a socket that's associated with a file descriptor because that will really confuse the kernel. Since this API doesn't do anything with the file descriptors, you're going behind the file descriptors back.
+
+There are some locking considerations. Don't make calls to sockets concurrently on different threads. While you're protected in user space through the file descriptor layer, if you do this in the kernel, we're not going through the file descriptor layer, so that protection is pretty much gone. And especially if you're reading on one socket and close the socket on another socket, you're going to run into a kernel panic pretty quickly.
+
+[Transcript missing]
+
+So we have a socket filter KPI that lets you filter data and connections and other socket related operations at the socket layer.
+
+These are commonly used for implementing a socket layer firewall so you don't have to deal with keeping track of all the state yourself. You can actually let the stack do that. You can also use it for implementing privacy controls or content filters as well as transparent proxies. And the socket filter KPI is documented in sys/kpi_socketfilter.h in the Kernel Framework.
+
+[Transcript missing]
+
+So, I'm going to start off with a little bit of a brief introduction to the NKEs. I'm going to start off with a little bit of a brief introduction to the NKEs. If you specify that you want a global filter, that global filter will then be attached to any new sockets that are created after you've registered your filter.
+
+And if you specify a programmatic filter, those filters will be attached when somebody uses the SONKE socket option to request your filter be attached to their socket.
+
+[Transcript missing]
+
+When a socket filter is attached to a socket, the attach function gets called and this gives the socket filter an opportunity to allocate some data for storing state that will be associated with that connection to that socket.
+
+If you want to, you can return an error to prevent your socket filter from being attached to the socket. To unregister and detach your sockets, you can call SFLT_UNREGISTER. And this is also an asynchronous unregister with a callback to let you know when it's completed. When you call this function, it will prevent any more sockets from being attached to your socket filter, and it'll start detaching your socket filter from all of the sockets that it's currently attached to. So your socket filter will get detached when either the socket is closed or the filter is unregistered. The SF_UNREGISTERED callback that you can specify indicates that the detach has been complete and it's safe for you to unload.
+
+For filtering inbound data, in the past you had to filter or patch SB append, SB append data, SB append control. It was kind of complicated and convoluted. There's just one inbound data filter now called SFDataIn. This function is not called in the context of the socket owners process. So looking at the proc info to get information is not going to be useful.
+
+From this function you can modify the data in the mbuf chain. The return value from this function is very important. If you return zero, the data continues being processed as normal. If you return eGIS return, the processing is going to stop and it's going to assume that you've taken responsibility for that data and that data will not be freed. If you return any other error, the processing will stop and the data will be freed. If you do swallow the data by returning an error or e-just-return, the process that owns the socket won't be woken up.
+
+If you need to inject data later, you can use the SOC_INJECT_DATA_IN function. For outbound data, it's much the same. There's an SF data out callback that you can specify. This is usually called in the context of the socket owner's process. The data can be modified and the return values are just the same for data out.
+
+If you return a zero, then it processes as normal. If you return e just return, then the processing stops and you're free to hold onto that data. If you return any other value, the processing stops and the data gets freed. If you need to later inject some data that you had queued or something, you can use sock inject data out.
+
+You can also filter binds. This lets you either bind to a different address from the requested one or prevent the bind altogether. If you need to bind to a different address, call SOC bind again on the same socket, but with the new address that you want to bind to, and then return e just return.
+
+Or if you got an error back from your second call to SOC bind, you need to return that error. If you do intercept the bind and bind to a different address, you may want to also intercept the get SOC name so that you can keep the process thinking that it bound to the socket that it tried to bind to.
+
+You can also filter connects both inbound and outbound. For inbound connects you can only allow them or disallow them. You can't change the address that the connection is coming in from. For the outbound connections, you can allow or disallow. And you can also connect to a different address.
+
+If you need to connect to a different address, call SOC connect again and specify the new address and then return eJustReturn if SOC connect succeeded. If SOC connect failed, then go ahead and return the error that you got from SOC connect. And again, you can intercept getPeerName to keep the process thinking that it connected to the address that it had requested.
+
+There are some additional filter points for sockets. The SF notifies you of socket state changes. For example, when you're being disconnected or you're in the disconnecting state. You can also intercept socket options using the SF set option and SF get option callbacks. You can intercept iOctals. You can either handle them or block them. And you can also intercept listen to prevent processes from being able to create listening sockets.
+
+Moving. So moving down the stack a little bit more, we have IP filters. IP filters give you a chance to filter packets at the IP layer. And the really nice thing about IP filters is that the packets are passed to you after they've been reassembled on the inbound side, so you don't have to deal with fragments. On the outbound side, you get the packets before they've been fragmented.
+
+and the filter is also interface independent, so you don't have to worry about attaching a different filter to every single interface that comes up and has IP attached to it. You also get an opportunity to process the packets both before and after IPSec. The IP filters go through a typical life cycle. They're attached to either IPv4 or IPv6. And then they filter inbound and outbound data. And then they're detached. They're documented in that inet/kpi_ipfilter.h in the Kernel Framework.
+
+The IP filters are attached using IPF_ADD_V4 and IPF_ADD_V6 and they both use the same structure to define a input and output filter function. Calling these functions returns a filter ref that you use for later detaching the filter.
+
+[Transcript missing]
+
+called before we fragment the packet, but also before and after we do any IPSec processing.
+
+So the function gets called, and it's passed in the protocol. And the protocol specifies the protocol that we're currently processing at. And you also get an offset from the beginning of the packet to that protocol. So the beginning of the mbuf chain will always start at the IP header, or IPv6 header.
+
+And then for an IPSec packet, you might get called once with the ESP header, with the offset from the IP packet to the ESP header. And once IPSec has decrypted the packet, you'll get called again with TCP or ICMP, and the offset from the IP header to the ICMP header.
+
+You can use IPF inject input and IPF inject output to inject data. With IPF inject input, it injects the data right after the packets have been reassembled in IP input. If you pass a filter ref, it will prevent this packet from getting processed again by both your filter and any filters before you. If you've modified the packet, you shouldn't pass a filter ref because that'll prevent any filters from having a chance to look at the new modified packet.
+
+IPF inject output injects the data right into the IP output function. And again you can pass a filter ref to avoid processing the packets twice. To detach your filter, you call IPF remove. This detach is asynchronous and your IPF detach callback will get called to notify you when your filter has been detached and it's safe to unload.
+
+There are some considerations with locking. Again, access to your IP filter is not serialized, so you need to be sure and protect any data structures that you've got. In addition, if you're going to call to inject data, you need to drop the locks before performing the inject because there's a chance that you might get called re-entrantly, and if you try and take your lock again, then you end up with a deadlock. This is broken in the WWDC build. You'll need to use the kernel that comes as part of the session 103 supplemental stuff.
+
+Moving down to the bottom of the stack we have the Interface Filters. The Interface Filters let you filter inbound and outbound packets at the interface layer. You can also filter the iOctals. Interface Filters are commonly used for a packet layer firewall or something like a virtual packet switch. The interface filters are also the replacement for the old protocol filter. We no longer have protocol filters. The interface filters are documented in net/kpi_interfacefilter.h in the Kernel Framework.
+
+To attach an interface filter, you fill out an IFF filter structure, and then you call ifltattach. This gives you an opportunity to specify a protocol. It's important to note that the protocol doesn't specify -- you aren't attached to that protocol attachment. With the old protocol filters, if you wanted to attach to IP over EN0, you could only do that when IP was attached to EN0. With the new interface filters, you can specify that you want to get IP packets, and you can attach to EN0 even when IP isn't attached.
+
+And your filter will remain attached until the interface goes away or until you detach it. You just won't receive any packets unless IP is actually attached. When you're ready to detach your filter, you call iflt_detach. And this is asynchronous with a callback to let you know when it's safe to unload.
+
+For filtering inbound packets, the interfaces demux function gets called first to give it an opportunity to match the packet to a protocol so that we can know which interface filters to pass this to. If you specify zero for the protocol, then you get all packets for any protocol or packets that don't match any protocol that's currently attached.
+
+Your IFF input function will get called. It's allowed to modify the packet. If it does need to modify the packet, it should verify that the checksums are correct, if it's going to make any changes that affect the checksums, and it should call mbuf_inbound_modified. And this will clear all of the checksum flags so that we don't try and perform a hardware checksum later and run into problems.
+
+The return values are important, like in the socket filter. If you return a zero, then the processing continues as normal. If you return eJustReturn, the processing stops, but the packet's not freed. So you're responsible for either queuing it and reinjecting it later, or freeing it, or doing whatever you want with it. But you're responsible for freeing it. If you return any other value, it'll end up freeing the packet, and the processing will stop.
+
+On the outbound side you have two different places that you can filter. There's a pre-output function that lets you handle the packet before the interfaces framer has had a chance to prepend the interface header. On the outbound, you also have the IFF output function which gives you a chance to process the fully formed packet which includes the interface header.
+
+If you're going to modify the packet, you should call mbuf outbound finalize, which will force it to do any checksums in software that would have been done in hardware, so you get a fully formed packet. And it also clears all the checksum flags, so if you reinject it somewhere else, you don't run into problems. This may perform additional work, such as inserting a VLAN header, although those packets probably won't get past your filter.
+
+The return value is important and it's just like the return values for the socket filter and the inbound filter. If you return zero, then processing continues as normal. If you return eJustReturn, then you get to hold onto the packet. If you return any error value, then the packet gets freed and the processing stops.
+
+There are some additional places, additional filter stuff you can set up at the interface layer. The IFF event lets you receive notifications of events on the filter, on the interface. Most common events are protocols attaching and detaching and the interface detaching. The IFF Ioctal lets you filter the Ioctal functions so you can either intercept and handle your own Ioctals or you can intercept Ioctals that would normally go to the interface. If you need to inject inbound or outbound data, you can use the IFNET input function and IFNET output functions.
+
+If you need to communicate with a user space process, the easiest way to do that is to use the Kernel Control KPI. Kernel Control gives you a way to send small messages over a socket to user space. It's commonly used for configuring a Kernel Extension or for retrieving information from a Kernel Extension. The Kernel Control KPI is documented in sys/kerncontrol.h in the Kernel Framework. Registering a kernel frame--sorry, registering a kernel control is done by filling out a Kernel Control Register struct and calling control register.
+
+This lets your Kernel Extension receive notification when a socket connects to your Kernel control or when it disconnects. It also lets you receive information from user land and you can handle get and set socket options.
+
+[Transcript missing]
+
+So when your control connect function gets called, you can allocate any data that you need to associate with that connection to a specific socket.
+
+And then you need to free that on your control disconnect callback. If you need to send data to the process, to the socket, you can use control and Q data and control and Q mbuf. Control and Q data works with a kernel buffer and control and Q mbuf works with data that's stored in an mbuf chain.
+
+With the kernel control, access to it is not serialized, but it is safe to send to the client at any time. So, with it not being serialized, you really need to protect any data structures that you interact with whenever you get a callback to notify you that there's data on the socket.
+
+In addition, there's another helper, KPI, the protocol layer. And this is documented in net/kpi_protocol.h in the Kernel Framework. This supplies to you the hooks for injecting packets into a protocol. There are two functions, the proto-input function and the proto-inject function. The proto-input function is intended for plumbers for passing packets up to IP or IPv6 or even AppleTalk.
+
+And they're really meant for the inbound packet path. If you're going to be injecting packets from anywhere else in the stack where you're not on the inbound path, you need to use the proto-inject function. And these are the replacement for the net_isr mechanism that used to queue packets and then wake up the input thread.
+
+In addition, there's an MBUF KPI that gives you access to the data that's stored in MBUFs. All of the packets in the stack are stored in mBuffs along with a bunch of other useful information. The mbuf KPI is based on the original mbuf interfaces and we've added a lot of accessor functions. The accessor functions names are based on the field name in the old mbuf. So for example mbuf_length gets the length of the mbuf.
+
+The headers in the mBufs have changed a little bit. And the result of those changes may be that you can't store quite as much data in an mBuf that has a packet header or even a regular mBuf. And the cluster sizes might also change. So don't make any assumptions about the amount of data that you can store in an mBuf. You can use mBufstat to get the values of all of the sizes for the various mBufs with headers and clusters. We may be changing these things again. We changed them in Tiger to add support for mbuf tags.
+
+The MBuff KPI is documented in sys/kpi_mbuff.h There's still a number of things that are missing and we're working to get these in there as quickly as we can. There's no access to the routing tables, which makes it a little bit difficult for the plumbers to perform their ARP code correctly.
+
+There's also no access to BPF, but we will be providing access for TIGER. There are no accessors for indicating that you support hardware checksums or for detecting that a packet requires or requests some hardware checksum. There are the two functions for clearing those flags on both the inbound and outbound side.
+
+There isn't a whole lot of sample code, but we're working to change that. In addition, the kernel framework hasn't been completely cleaned up yet. For Tiger GM, we're hoping to get the kernel framework cleaned so that there aren't any data structures or functions in that framework that aren't part of the KPI. In addition, the list of exported symbols through the BSD kernel text hasn't been cleaned up yet, so there are still some symbols in there that we don't want to have as part of the KPI. But for Tiger GM, we will clean that up.
+
+In addition, we really need your feedback. We have an email address set up, kpi-feedback@apple.com. And we need you to get started soon because the earlier that you give us feedback, the easier it's going to be for us to get the changes that you need into the kernel so that you can get your Network Kernel Extension working on Tiger.
+
+There are some resources for more information. Craig Keithley is the IO Technology Evangelist. And there's the KPI feedback email address, kpi-feedback@apple.com. In addition, we have some more reference stuff. The NKE, the Network Kernel Extension KPI reference is available online and also in the developer folder that gets installed with Tiger. There's some more reference stuff.

@@ -1,0 +1,283 @@
+---
+Title:  Mastering Advanced Objective-C Features
+Year:   2008
+Web:    https://nonstrict.eu/wwdcindex/wwdc2008/940/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Good afternoon, everyone, and welcome to the end of WWDC 2008. My name-- You're not supposed to cheer so much for the end. I want to get some sleep too, so that's okay. My name is Greg Parker, and today I'm going to talk to you about some Objective-C and garbage collection advanced features.
+
+So the master's course syllabus. We're going to start with some Objective-C runtime features and then go into some GC details, particularly for low-level GC programming for C level, and upgrading a program to garbage collection if you have an existing code that is not garbage collected. And finally, some GC debugging tips for some hard-to-find and hard-to-diagnose crashes. So let's start with the Objective-C runtime.
+
+The topics I'm going to talk about today briefly are some dynamic properties and the modern Objective-C ABI. Both of these are present in Leopard, but they're a little bit different in Snow Leopard, and they're very different on the iPhone, which is why we want to go over them again this year. The other topic is virtual table dispatch, which is a nifty little addition in Snow Leopard. We'll see in a minute.
+
+Greg Parker Dynamic properties. If you went to the other Objective-C sessions, you saw some descriptions of basic property usage using the atSynthesize. atSynthesize tells the compiler to create an implementation of the property, to create the getter method, create the setter method. Dynamic is different. Dynamic means you promise to provide an implementation later through some unspecified mechanism.
+
+So that just tells the compiler there will be an implementation. Don't give a compiler warning and trust you to do the right thing. So what is the right thing? You have a couple different options for how to implement the dynamic property. One option is basically creating an abstract property. In this case, the superclass declares the property and says @dynamic as the implementation.
+
+And then at runtime, there is no superclass implementation. It's abstract. Instead, the subclass actually implements the property. For example, it could use atSynthesize in the subclass's implementation or could provide getter setter methods directly, any number of alternatives. This is a good way to get, if you have an abstract method in C++ and you want the similar sort of model in Objective-C, this is the closest you can get using a property.
+
+Another option for implementing the property is to implement it at runtime using the Objective-C forwarding mechanism. If you're unfamiliar with this system, what happens at runtime if you call a method that does not exist is that instead a message is sent called forward invocation, which creates an NS invocation object, which represents the method that did not exist. And your class and your object can handle it themselves.
+
+So in this case, the getter method or the setter method would be sent to the object using forward invocation, and you can implement forward invocation to do whatever property access you want to provide. This mechanism is easy. It's easy to write in your code. Forward invocation is an easy mechanism to use, but it's slow. Actually creating the invocation object and calling forward invocation takes some time, and that needs to be done every single time. every time the property is accessed.
+
+If you want more speed, the option is to use the new technique in Leopard, which is a resolved property or a resolved method. This mechanism kicks in before the forwarding machinery. What it does, it calls the resolve instance method on the class. This mechanism allows the class to create a method if one did not exist just before that method gets called. So it's really the last chance for the class to provide an implementation if it didn't have one already.
+
+In the property case, you can use the property metadata that the runtime created, that the compiler created, to decide what the implementation should look like. So, for example, CoreData NSManagedObject, you can write a property but not implement it. CoreData will use the property metadata and whatever database backing you're using for CoreData to create the implementation at runtime for you.
+
+This mechanism is more difficult. I believe there is a sample code on the developer.apple.com to show how to do it, but it's a little bit tricky, but not too hard. Once the implementation is added, it's much faster. It works just like an ordinary method at full method speed.
+
+Next, let's talk about Vtable Dispatch. This is a performance optimization in Snow Leopard. The observation is a small number of selectors are responsible for most calls that your program makes. ALEC, ENIT, RETAIN, all these methods that everybody uses, everybody calls them. And they account for 50% or more of the method sends in your process. Well, let's make them faster. How much faster? Something like this. Two to three times faster of method dispatch for the small number of selectors, about a dozen or so, that constitute most calls.
+
+The way this works is a little bit like C++. Dynamic methods in C++ use an array lookup. In Objective-C, we use a hash table to provide better compatibility and more flexibility at runtime. But for these methods, retain, release, and a few others, we do create a virtual table at runtime. We do an array-based dispatch instead of a hash table lookup. As you can see, the array-based dispatch is quite a bit faster.
+
+Unlike C++, this is Objective-C after all, we like compatibility and flexibility. The virtual table is not hard-coded at compile time and can be modified at runtime, actually at application launch time. So later on in Snow Leopard, we expect to provide a mechanism where your application can identify which selectors you call frequently and that you want to run faster.
+
+The final Objective-C runtime topics have to do with the modern and legacy runtime ABI. Greg This describes the metadata layout, the format on disk, the format in memory of the runtime's data structures. On the iPhone and 64-bit Mac, we have a new platform. We could break binary compatibility. So we redesigned all the data structures in Leopard for better performance, better memory usage, and better forward compatibility and forward features.
+
+The iPhone simulator and 32-bit Mac still use the legacy ABI. Different performance, different set of features. So I'm going to talk about some of the differences between them, because if you're porting to 64-bit on Snow Leopard, or if you're writing an iPhone application, you need to know what the differences are between those platforms versus 32-bit Mac and the iPhone simulator.
+
+Greg Parker The modern Objective-C ABI adds stricter IVAR access control. The legacy ABI has private IVARs using the @private keyword. But if you use an @private IVAR, more specifically, if you abuse an @private IVAR, all you get is a compiler warning. Your program still runs. It still can use the IVAR. And whoever made that private IVAR is a little bit unhappy because they wanted a private IVAR, and you didn't honor that.
+
+The modern ABI is a bit stricter with its IVAR access. If you access a private IVAR that belongs to some other framework that is outside of your code, you may get a link error and your program will not run. This is an example of the link error given a class name and an IVAR name that you weren't allowed to use that private IVAR.
+
+So particularly if you're porting from 32 to 64-bit, or if you're compiling an iPhone application that you've previously only seen on the simulator, you may see this error. So moral of the story, make sure you run your iPhone application on a real iPhone, or at least compile for a real iPhone, to make sure you're not abusing any private IVARs.
+
+The other new IVAR access feature is @Package IVAR protection. This is a new qualifier added in Leopard for the modern ABI. The summary of how it behaves inside your application or your framework or wherever your IVAR is defined, it looks like an at public IVAR. Outside that, it looks like a private IVAR. So this is useful if you want more protection than a public IVAR, but less protection than a private IVAR. And legacy runtime, it just looks like a public IVAR. The compiler doesn't give you any warnings. The linker doesn't give you any errors.
+
+The final Objective-C feature in the modern ABI is non-fragile instance variables. So let me show you a fragile instance variable. Here's a demonstration of a subclass of NSWindow. You're writing some new pet store that's going to be the next killer app. And you've added IVARs for the kittens and the puppies that are visible in the pet store window in your NSWindow subclass. So this is a diagram of how those IVARs are laid out in memory. Now let's say NS Window itself wanted to add new IVARs. The problem is, in the legacy ABI, the IVARs collide. They try and take the same memory, and it crushes your kittens. Aww.
+
+We don't want this. The modern ABI works better. It moves the IVARs out of the way. The compiler and the runtime cooperate so that the IVAR offsets are available to be modified at runtime without recompiling the subclass, which means the runtime can notice that the superclass is now bigger or that the IVARs got rearranged or anything like that and modify the offsets so that the code works without recompiling. Saves the kittens. Everybody's happy. Again, this works in 64-bit, and this works on an iPhone application, but it does not work in the 32-bit Mac, and it does not work on the iPhone simulator.
+
+The last ABI feature is C++ compatible exceptions. Again, let me show you what the legacy ABI did wrong. and how it works better in the modern. Here's a simple set of code, Objective-C++ code, that is doing some exception handling. We have a C++ try block and an Objective-C throw.
+
+The problem in the legacy ABI. First of all, we have a destructor for an object. When the exception is thrown, the destructor is not called because C++ exceptions and Objective-C exceptions are not compatible in the legacy ABI. We also have this catch block, also not called when the Objective-C exception is thrown. The same thing would happen if you reversed the cases, if you had an Objective-C try and a C++ throw.
+
+The modern runtime fixes all of this. It does call the destructor, does call the catch block. If we reverse the languages to be Objective-C try, C++ throw, it also works. The destructor is called the Objective-C default catch or finally block is also called. So 64-bit and iPhone, the exceptions now work the way you want if you're writing C++ and Objective-C code.
+
+One other detail, zero cost exceptions. I put zero cost in quotes because they're not really zero cost. What zero cost means is actually zero CPU time tri-blocks. They still cost a memory. Throwing exceptions still takes a lot of time, so you may not actually want to use exceptions quite so much, especially on the iPhone. Exceptions are slow in general.
+
+Greg This diagram shows you which exceptions are zero cost on which platforms. 64-bit Mac and iPhone using the modern ABI, C++ and Objective-C are either both zero cost or neither zero cost. In the legacy platforms, the 32-bit Mac and the simulator, Objective-C is not zero cost, but C++ is. So just keep that in mind if you're writing exception code and you care about that performance of dry blocks.
+
+So that's all I have to say about the Objective-C runtime. We've seen dynamic properties, how you can build flexible runtime storage for them. We've seen Vtable dispatch, a nice performance boost for you. And we've seen the modern ABI, which improves some features like IVARs and exceptions if you're writing for 64-bit Mac or if you're writing for the iPhone platform.
+
+Next on the agenda, low-level garbage collection programming. So I'm going to go through several topics of how to write garbage collection code at a low level when you're not working with ordinary Objective-C objects. I'll start with the GC memory system in general. Some of this will be familiar if you saw the earlier garbage collection talk, but I'll go to a bit more detail about how the garbage collector works. Objective-C's garbage collector is designed for Objective-C code and Objective-C objects. That's where most of the code to our platform is written. That's what we've optimized for and designed it to work best with.
+
+It is not a new pointer-safe language. We still have C, we still have void stars we have to deal with. And the garbage collector is not trying to manage all memory in your process. In particular, malloc blocks are not managed. They can still leak. Malloc blocks are also not scanned for pointers. If you store a pointer to a garbage-collected object inside a malloc block, the garbage collector may not see that pointer and may throw the object away.
+
+So let's talk about what the garbage collector does manage. It manages all of your Objective-C objects. It manages all of your core foundation objects, CFStrings, CFArray. And finally, it manages heap blocks from a new foundation function called NSAllocateCollectible. This is basically your malloc replacement if you want an ordinary block of data, but you want the garbage collector to know about it and to manage it for you. Unlike your heap blocks from malloc, or operator new for that matter, the garbage collector will not destroy those objects for you. You're still responsible for freeing them yourself.
+
+I mentioned the garbage collector does not look at all memory, primarily for performance, also because it's hard for the garbage collector to know about all the memory in your process. Where does it look? It looks in instance variables and global variables of Objective-C types and instance variables and globals marked strong.
+
+It also looks in some thread stacks for NS threads, and it looks inside some heap blocks, the ones allocated with NSAllocateCollectible with the NSScanned option. Everywhere else, it doesn't look. Doesn't look in divars and globals of other types. Doesn't look inside malloc memory or whatever other memory you've allocated in your process.
+
+So what does that mean for your C data structures if you want them to work in garbage collection? Here's a GC incompatible data structure. It's not really incompatible. It's just a -- it's partly incompatible in that it has an ID pointer, that value pointer. The garbage collector is not going to look inside that because it's allocated with a malloc block.
+
+So here are the changes you would need to make it work with the garbage collector. The first change is to use NSAllocateCollectible to allocate our structures. That way the garbage collector will throw away these structures when they're done. We're also using the NSScanned option because the structure has a pointer to an Objective-C object inside it. We need the garbage collector to know about that pointer and to see that pointer when it's scanning.
+
+The other change we've made is to mark the C pointers as strong. So the garbage collector will look inside those pointers and also use the correct write barrier for those pointers. So what is the write barrier? The write barrier tells the garbage collector that you modified a pointer. In particular, you modified a pointer it wants to know about.
+
+This allows us to implement several garbage collection algorithms. One of them is the generational algorithm. When the write barrier sees that you assigned an old object to point to a young object, the write barrier tells the garbage collection that the old object now needs to be scanned. Otherwise, the generational algorithm assumes that only the young objects are interesting, and it's going to work harder to delete the young objects.
+
+There's also the ThreadLocal algorithm, which is a new performance optimization in Snow Leopard. We keep track of which objects have only been seen by the thread that allocated them. But for example, if a global variable is modified to point to a thread local object, the write barrier sees that and tells the garbage collector that that object is now globally visible. It escaped the thread.
+
+Finally, the garbage collector works mostly non-stopping in that it lets the other threads run while the garbage collector does work. What this means is if the garbage collector has already scanned an object, And then the pointer is changed while the garbage collector runs. The write barrier tells the garbage collector that it may need to re-scan that pointer because it changed behind the garbage collector's back.
+
+Ordinarily, the write barrier is generated by the compiler. You don't need to do any extra work for it. This only works for Objective-C compiled code. So if you want to write C code that uses the garbage collector, make sure you compile your C code with the Objective-C compiler.
+
+Usually it's automatically inserted into your assignment statements. Here's an example of an instance variable being assigned a value. The compiler inserts this instead of the assignment. It actually calls it runtime function. Similarly, if we have a structure, we're assigning a structure value, and the structure contains an Objective-C variable. The compiler will insert a different structure copy. It'll use a memmove collectible instead of memmove.
+
+If you want to have ordinary C pointers that the garbage collection knows about, mark them strong. Then when you assign them, the compiler will use another write barrier that tells the runtime and the garbage collector that a C pointer has changed. Like I said, usually the compiler does this all for you. Sometimes you need to do it yourself.
+
+The two common examples for doing it yourself, the first one is memmove. If you have a memcopy or a memmove and the memory that you are copying might contain pointers, you need to use this memmove function instead, the memmove collectible function. It works just like memmove, but it also tells the runtime and the garbage collector that some pointer values might have changed. So this is what the compiler uses for structure assignments.
+
+The other write barrier that you might need to use by hand is atomic compare and swap. We have an OBJC compare and swap that's a replacement for the OS Atomic compare and swap pointer. It just does an atomic compare and swap and then tells the garbage collector what it just did.
+
+Point of terminology confusion. There's a NOAS atomic compare and swap pointer barrier. This is a memory barrier and a garbage collection rights barrier. Don't get confused. There are several other write barriers in the garbage collector. Most of the time you don't need to call them. They are just the implementation of strong. So use the strong keyword instead and let the compiler do the rest for you.
+
+When do you need strong? When do you need the write barrier? This is the magic incantation that describes what the write barrier is for. Use an appropriate write barrier whenever you write a pointer to the start of a GC-managed block into GC-scanned storage other than the current thread's stack.
+
+Let's see that again. Use an appropriate write barrier. There are several flavors of write barrier. If you're writing them by hand, you need to make sure you use the right one. Or just use strong, and it will choose the right one for you. Whenever you write, this means whenever you write. If you're writing into any of these storage classes that the garbage collector wants to know about, you must use a write barrier. If the write barrier is absent, the garbage collector won't see your pointer change, and it might destroy objects that you wanted to keep.
+
+A pointer to the start of a GC-managed block. This is the value being written. The garbage collector only cares about pointers to blocks. If you're writing ints, if you're writing pointers to other blocks, you don't need to use the right barrier. It's only if the value is a garbage-collected block and the start of a garbage-collected block, because the garbage collector doesn't know about anything else. Greg Parker
+
+[Transcript missing]
+
+Accept the exception, which is the current thread's stack.
+
+You do not need to use a write barrier for your local variables. This is a performance optimization. We don't want to slow down your local variable access. So the garbage collector manages threads specially, such that it does not need a write barrier for the thread stack of the current thread.
+
+So, basic cheat sheet for memory management of C data structures and C data structures containing Objective-C pointers. If you want a garbage collected CarStar block or other ordinary memory block, use NSAllocateCollectible instead of malloc. If that block might contain pointer values, use the NSScanned option. For the write barriers, most of the time you can mark your pointers as strong. There are a few other cases like memcpy where you might need to change the function.
+
+And finally, don't store garbage collected pointers into unscanned memory or variables that aren't marked strong because the garbage collector won't see them. A typical option instead is to use a weak variable, which will create a proper weak reference instead of just an ordinary dangling pointer. Another option for unscanned memory is external reference counts.
+
+Greg Parker External reference count is a way to keep an object alive, even if the garbage collector would otherwise throw it away. You can think of it something like a classic Objective-C retain count, where if the retain count is above zero, the object lives. In the garbage collected case, if an external reference count is not zero and is decremented to zero, the object might not go away.
+
+That just means the garbage collector is now free to delete it, but if there are any ordinary pointers to the value, the garbage collector will still keep it alive. Most garbage collected objects still have an external reference count of zero, which means the garbage collector is fully responsible for it.
+
+There are several different ways to modify the external reference count. First option is to use the foundation NSGarbageCollector object. Disable collector for pointer, enable collector for pointer. These functions nest, they just increment and decrement the external reference count, and while the collector is disabled, the collector will not destroy that object. Although it will destroy any other objects, it feels like.
+
+You can also change the reference count with CFRetain and CFRelease. So just like the ordinary Objective-C non-garbage collector retain count. But you have to be careful with these two because the ordinary Objective-C methods, retain, release, auto-release, are ignored when garbage collection is on. In fact, the Objective-C runtime doesn't even send those messages. It just returns immediately. What this means is they don't balance. You cannot call cf.retain and then later the release method. In garbage collection, you'll end up with a dangling reference count, which will just look like a leak. You can still have leaks in garbage collection this way.
+
+One use for the external reference counts is interoperating with your C code or your C++ code. You can use it to keep the object alive if you're storing it somewhere where the garbage collector wouldn't look. For example, if you have some C API that has a void star context parameter in its callbacks, and you want to pass an Objective-C object through that context parameter, you can increment the reference count of the object before passing it into the context. So the garbage collector will keep it alive even though it doesn't know what that C code is doing with the pointer.
+
+Other examples of this are global variables that aren't of Objective-C types or malloc blocks that are not using the new APIs. Also, if you have C++ member variables that are storing Objective-C object pointers. Unless you do extra work, your C++ objects are allocated on the malloc heap where the garbage collector isn't looking. So you can use the external reference count to keep the objects alive, just like you would in a non-garbage collected environment.
+
+One danger of the external references is you can still have reference count cycles, just like a non-GC application would have reference count cycles. So you have to be careful that you don't have an externally retained object that then points to some object that points to something else that points back to the original object and would have decremented reference count but can't because none of them objects will go away. So be warned of that. It's just like the non-GC case.
+
+Finally, the reference count is important if you are interoperating with core foundation code. For example, if you're calling the ordinary CF create array, CF create string, CFString create, sorry, create or copy functions. In non-GC, they return an object with a retain count of one. In garbage collection, they return an object with an external reference count of one, and you are responsible for releasing them somehow.
+
+There are three common patterns for managing that external reference count in the garbage collected environment. The first one, if you're creating a temporary CF object, is just simply CF release the object when you're done, just like you would if garbage collection were off. The object will not be destroyed at that point. But it will tell the garbage collector that the garbage collector is free to destroy it when it is ready.
+
+Another alternative, if you're storing your CF object in an instance variable, for example, is to call CFRelease inside the finalize method. This works, but you need a finalizer, which you might not otherwise need. And also, you might create a cycle if your CFArray with a retain count points to an object that points back to the object whose finalizer would have called release.
+
+The alternative in that case is to use a new function added in Leopard called CFMakeCollectible. CF Make Collectible, when garbage collection is on, simply decrements the reference count. So the typical use for this is to use it immediately after calling CF Create. So you call CF Create to create your object with a reference count of one, and then call CF Make Collectible to decrement the reference count back to zero and tell the garbage collector it's free to destroy the object.
+
+Greg Parker There's one caveat to this, which is there are some CF types that don't work in this case. CF clay collectible actually causes the object to self-destruct. As far as I know, there aren't any publicly available core foundation types that you would actually manipulate. If you do happen upon one of these, CF make collectible will call to your program at runtime, so you'll actually know that you've called CF make collectible on a self-destructing CF type. Two final CF notes. First of all, don't use any CFAllocators other than the default allocator. In general, it makes the garbage collector unhappy.
+
+Second note, which actually I don't have a bullet point here, your CF types are not considered garbage collected types. So if you have a CFStringRef, the garbage collector will not scan it unless you mark it strong. So be aware of that if you have core foundation variables in your garbage collected program.
+
+Next garbage collected GC topic related to core foundation is weak pointer containers. Traditional non-GC programs use core foundation containers for non-retaining references. A CFArray with null callbacks, for example, will not retain or release its values. It'll just store them as raw pointers. In garbage collecting, this doesn't work.
+
+You must not use a core foundation container with null callbacks to store GC pointers. The problem is it's not thread safe. And in fact, it cannot be made thread safe. You cannot add any amount of locking to your program to make it work. The problem is the garbage collector will be modifying these pointers and throwing your objects away.
+
+And you cannot create a lock that the garbage collector will use. So the problem with these containers, the classic core foundation containers, is that they just store dangling pointers. See if the garbage collector does not scan them. They're not weak pointers, so the garbage collector does not erase them. And so you end up with a race, where one thread tries to destroy the object, the other thread tries to read it from the container.
+
+The solution is to use the new container classes added in Leopard. These are the NSMapTable, NSHashTable, and NSPointerArray. These are pretty much direct analogs for the core foundation container types. These container types are customizable via a type called NSPointer functions, which works a lot like the core foundation callbacks would.
+
+You can use pointer comparison to store your values, or you can use the object comparison is equal and hash methods to store your values. And the containers can contain any type of reference. It can be a strong reference to the types, it can be a weak reference to the variables, or it can be a copied reference. So these types work with garbage collected code. They also work with non-garbage collected code, for the most part. So you can use them to replace the core foundation types you might be using for the containers.
+
+So the basic configurations for the container types using NSPointer functions look like this. You can store an object value to use is equal or hash to decide whether they're equal or not. You can store an object pointer and just use a pointer comparison as the hash value. And you can use a strong reference or a weak reference or a copied reference. For example, if you're storing strings in a table and you want to protect yourself against immutable strings.
+
+But that's not all. They work for more than just objects. In fact, they work for just about anything you can think of. NSPointer function-based containers can source C strings or integers or structs. They can use malloc memory. They can use custom memory allocator functions you provide yourself. So it's a full suite of options to replace the core foundation container types. And they work in garbage collection. They work in non-GC in most configurations. So the checkmarked options here are the configurations that are supported, known to work in Leopard. It's possible that some of the others work, but we recommend you don't try them.
+
+Last garbage collection topic I want to mention is threads. The garbage collector handles threads specially in order to make your local variables run fast and in order for the garbage collector not to have to stop your threads. The Objective-C garbage collector is not a world-stopping collector. It never needs to stop all your threads simultaneously.
+
+Also, it doesn't stop any thread that is not participating in Objective-C. For example, you might have an audio playback thread that wants some real-time guarantees. That thread, as long as it does not use any Objective-C code, will not be stopped by the garbage collector and it will be able to run freely without any interruption.
+
+On the other hand, that means you need to do some special work if you're writing thread code, particularly if you're writing pthread code. One example is thread stack scanning. The garbage collector does not look at all threads. In particular, it does not look at P threads if they are just raw P threads that you created with PthreadCreate.
+
+If you want the garbage collector to see your local variables, you should use an NSThread to create the thread. Or at the start of your thread, you can call an NSThread method, like NSThread current thread, which will create the NSThread object and tell the garbage collector that your thread is an interesting thread the garbage collector might need to look at.
+
+Another problem with threads is passing pointers to them. You must not write directly to a thread stack that is not your thread's stack. So don't take the address of a local variable and give that to another thread to modify. The garbage collector will not see that change and might destroy the pointer. Also, you should not use the PthreadCreate argument that is passed when creating a thread. The garbage collector does not see that value and might destroy the object between thread creation and the time the thread actually starts running.
+
+The solution, again, use NSThread. Several NSThread methods provide an object parameter. You can use that to pass a garbage collected pointer to a thread. If you're using a subclass of NSThread, or if you're using a subclass of NSOperation, you can use IVARs from those classes. Finally, you can use the external reference count on a thread. You can increment the garbage collected pointer in the parent thread, pass it to the child thread, and have the child thread decremented when it's done.
+
+There are a couple things you might need to do when running a thread, particularly if you are writing a thread with an event loop or run loop or some other top level code that you are writing yourself. First thing you want to do is call the Objective-C clear stack function.
+
+Ordinarily, the garbage collector scans stacks conservatively, which means it doesn't look at what the variable types are on the stacks. What that means is that sometimes the garbage collector will see a value that used to be a local variable but is not anymore. The garbage collector will keep that value alive even though your program is actually done with it.
+
+If you call the clear stack function at the top of your event loop or before blocking in the run loop, that will erase all those stale references on the stack. This is particularly important for compiler optimized code because setting local equals nil might be optimized away by the compiler, so the local variable is still left stale in the stack.
+
+The other case where you might need to explicitly help the compiler is explicitly requesting a garbage collection. The garbage collector works fine if you don't ask it to run, but it works better sometimes if you do ask it to run. Usually this is the case if your program has created a large number of temporary objects, or it has some large graph of objects that you've just thrown away. It may be useful to tell the garbage collector that you've just thrown away a large number of objects, and it might be profitable to run the garbage collector right now.
+
+The usual way to do this is use the NSGarbageCollector collectifneeded method. And typical places you'd want to use this are at the top of your event loop, just before you block, or in places where your non-GC code used to call The Auto-Release Pool. If your non-garbage collected code is destroying an auto-release pool, there's a good chance that our auto-release pool used to contain objects in your non-garbage collected code. And so it would be useful for the garbage collector to run to destroy those objects.
+
+One caveat here, you don't want to use this if you're holding a lock, usually, because finalizers might run in response to this call. And if the finalizers try and use that lock, and you're already holding the lock, you end up with a deadlock. Deadlocks are bad. Don't do that.
+
+Finally, the main thread when launching your program. You want to start the garbage collector. In an AppKit program, this is handled by NS Application Main. You don't need to worry about it. In a Foundation program, the garbage collector, by default, never runs unless you ask it to run.
+
+And usually, this is not the most performant way for the garbage collector to run. It runs faster on its own thread. So if you want the garbage collector to run faster, call the startCollectorThread function to start the garbage collector. If you want to spawn the garbage collector thread, it will start running on its own when it needs to.
+
+So that's the summary of low-level GC programming. We've seen the memory layout the garbage collector uses. We've seen the write barrier, which a garbage collector must see for assignments of garbage collected values. And we've seen external reference counts and weak pointer containers, if you're dealing with core foundation objects, and a few topics on threads, if you're writing thread code, particularly top-level thread code.
+
+Upgrading to GC. Let's say you have a non-garbage collector program that you want to start using the garbage collector with it. It can be done. Xcode is an example of a large program that used to be not garbage collected, and now it is. The Apple System Frameworks are another example: Foundation, AppKit, WebKit. They all need to run in a garbage-collected program, so they all need to be compatible with garbage collection.
+
+A new example in Snow Leopard is Automator. The new 64-bit Automator is a garbage collected program, whereas the 32-bit version is not. Upgrading to GC can be done. However, it may be difficult. The difficulty usually depends on the contents of your code. Some warning signs to be aware of. If your program uses DLK for things that aren't memory management, you might have some problems converting to garbage collection.
+
+If your program uses malloc a lot, or particularly uses C++ or Crown Foundation a lot, you might have trouble upgrading to garbage collection. Because there will be more work, more code you need to examine to make sure that you're doing the right thing. it is compatible with the garbage collector.
+
+On the other hand, the upgrading can be done incrementally. What this means is you can gradually adopt garbage collector patterns that are more friendly to the garbage collector and use mechanisms that work whether or not your program is running. In particular, you can leave your source codes, retain and release calls alone so that they'll still work with the garbage collector off. For example, if you have a program that you want to ship the non-GC version, but you want to experiment with garbage collection, you can do this in a single source base and leave the non-GC version intact, but experiment with garbage collection on the side.
+
+Here are some GC upgrade tasks, some types of code you need to look at, some changes you might need to make to your program. Most of these have to do with core foundation or with C objects or with things that were non-retained dangling pointers with the garbage collector off.
+
+Two particularly important items. The first one is finalized methods. Your dAlloc methods are not called with Garbage Collection, so you need to write finalizers. You can do this incrementally. You can take a first pass, which creates finalizers that are just based on dAlloc, perhaps even copied and pasted from dAlloc.
+
+This is not the best way to go in the long run, but it is a way to get your program up and running at least a little bit under Garbage Collection. In the long run, though, you really want to modify your design patterns, reduce the number of finalizers you need, or eliminate them entirely.
+
+The other primary task that you need to be aware of for most Objective-C code is that retain and release are not used interchangeably with CF retain and CF release. This is a case where core foundation toll-bridged objects, the toll-free bridging is not quite as toll-free as it is in the non-garbage collected environment. Greg Parker If you are writing a framework or a plugin that needs to be loaded into multiple applications, there are some extra work you need to do for garbage collection. The problem is you don't get to choose whether garbage collection is running. The application chooses that.
+
+So what that means is you have one binary which needs to work whether or not garbage collection is on, and which means you have the same source code that needs to support both. This is how all of Apple's system frameworks work. Some things to be aware of there are auto-release pools, called the drain method instead of the release method. With garbage collection on, drain is a hint that garbage collection might be useful to run right now, but otherwise it does nothing. With garbage collection off, drain destroys the auto-release pool as normal.
+
+Other things you need to worry about are core foundation objects, using NSMAP table versus a core foundation dictionary, using CF release in your D-alloc, and choosing something else for the garbage collected case, like CF make collectible at allocation or CF release in your finalized method. There are several different options for doing that. Finally, in some cases, you may need to check whether the garbage collector is running. We discourage this most of the time, but it is possible. The check is whether the default collector object is nil or not.
+
+So that's the summary of upgrading to GC. It can be done. We've done it for Xcode. We've done it for other applications. But it may be difficult. If you're writing your code in a high-level Objective-C style, it might be easy. For example, when we originally turned on TextEdit GC, we required one line of change. But if you're writing low-level code, it might be more difficult. Finally, if you're writing a framework, you need to be careful to write code that works whether or not the garbage collector is running if that framework needs to be loaded into an arbitrary process.
+
+Finally, let me show you some GC debugging techniques. I'm going to run a demo of several buggy garbage collection programs and show you how to analyze them, how to debug them. This is a garbage collected version of Sketch. It's actually the developer example Sketch with garbage collection turned on. That's all I did. And then I introduced a bug.
+
+So I'm going to run this under instruments. I'm going to show you a leak. Leaks do exist in garbage collection, but they're different than they are in non-garbage collection. A leak in garbage collection is an object that you expected to go away but did not. So I've created some rectangles. And if we look at instruments, we can see there are now two rectangle objects allocated. Now I'm going to delete them. Go back to instruments. There's still two rectangles. OK, why are there two rectangles?
+
+Let me show you the backtraces where they're allocated. Those are the addresses. This is the backtrace of where it was allocated. It is, in fact, allocated by my code. So what I want to know is what code is holding on to that. What objects are referencing the rectangle objects such that it's still alive? I could use the garbage collection instrument that we've added in Xcode 3.1, but I'm going to do it the hard way. I'm going to show you the command line version. So I'm going to pull up GDB on my sketch process.
+
+And I'm going to ask GDB, what is referencing? My Rectangle Objects. I can type the address of one of them here. Info GC references and an address. So ignore this warning. That is a bug. It will be fixed. The interesting point is we have an object. There's the address of the object that is pointing to my rectangle. There's some array object. I have an array of rectangles somewhere.
+
+That's not very useful. Let me look at the entire stack of pointers, starting at a garbage collector root and leading to my object. This is a longer stack. It starts at my rectangle, and then we have the CFArray. And then we see the undo stack. Aha! The undo manager has kept a pointer to my rectangle so that I can undo.
+
+And if I continue the process, I can actually undo and get the rectangles back. So that's what happened. That's not really a leak. That was just a place where I didn't understand how my program worked. So let's see a real leak. I'm going to create some circle objects. I've introduced a different bug into the circles.
+
+And then, let me close my document. What I expect to see--
+
+[Transcript missing]
+
+So let's do the same trick with the document object, see what code is still holding onto that. Info, gcroots, and the address. 5E0. There's the roots. We have my document object, and we have a global variable called RecentDocument still pointing to my document object.
+
+In fact, if we went and we looked at the rectangle objects, they are also being referenced through that path. Or they would have been if I hadn't deleted them. Oops. Never mind. They would have been if I had run the demo properly. So let's take a look at my code and find that recent document variable.
+
+Find in project, recent document. There it is, static global variable, no surprise. For some reason, I was really stupid, and now my init method, I've created a pointer to the most recent document. Well, of course, that pointer will keep one document alive, whichever one is allocated last. One fix for this would be to use week.
+
+Now that global variable will still point to that document, but the garbage collector is free to destroy it and will zero the pointer when it's done. So I can rebuild my program and run instruments again. I'll see that I can create my document. There it is in the Instruments window. When I close it, it goes away. Document count is now zero. So that bug's fixed. But don't applaud yet, because the program is still buggy. Let me bring up my sketch process again. Of course, I still have two of them because GDB is still running.
+
+I'm going to draw some circles. Oops, I'm not going to do that yet, because I need to be running in the Xcode debugger. So let me run in the debugger so I can show you the console message as being printed because of the next bug. The next bug is because of circles. Here's my GDB console. I close the document.
+
+And I get an error in the console log complaining about resurrection. Our garbage collector does not allow resurrection, which is when an object is being finalized and then somebody tries to keep that object alive by storing it into a global variable or otherwise trying to preserve it. Our garbage collector doesn't allow that. Once you hit finalize, the object is doomed. It will be destroyed no matter what you try and do.
+
+In this case, the garbage collector is complaining, particularly the write barrier is complaining, that we wrote an object pointer to a finalizing object into memory that the garbage collector can see. In particular, we can see it's a circle object. In this case, it's actually a key value observed circle object. And we can see the address that the garbage collector complained about.
+
+There's also a handy function that the garbage collector calls where you can set a breakpoint when this occurs. I've already done this, which is why I'm stopped in the debugger instead of having the program continue to run. At this point, we can look up the backtrace of AutoZone ResurrectionError, and we see that I'm in the Circle Finalize method.
+
+And again, oh gee, I wrote a broken Finalize method. Imagine that. In this case, I've created an NSMutable array, which is not dead, and I've stored the Circle pointer into that not-dead array. The garbage collector sees this and complains that you now have a dangling, or will, once the object is deleted, you'll have a dangling pointer to the Circle object. Obvious solution, don't do that. And since this is my test program, and this is the only reason why I wrote this finalized method, delete it entirely.
+
+So this is an example of why you need to make sure your finalizers just do as little work as possible, because they might do work that, for example, stores the object in an array, and then you'll get a resurrection warning. So now the program would work. I won't bother showing you the working version now.
+
+The next example I want to show you is some crashes due to write barrier problems and due to scanned memory problems. This is some C code that I've converted directly to Objective-C, and converted directly to garbage collection without using actually much Objective-C at all. It's really mostly a C program. I have a C structure.
+
+indicating a work item for my work queue program. I have a producer thread which is generating these work objects. And I have a consumer thread which is reading these work objects from a list and destroying them later. In the garbage collection version, I actually don't have any free calls or any release calls in this code because I'm trying to use garbage collected C objects. So in particular, we can see that I've used nsalocate collectible to create the array of objects.
+
+And I'm using NSAllocate collectible for each individual work item structure. So if we run this program in the debugger, All will not be happy. Bad access. That's not good. I'm not supposed to get pointer errors with the garbage collector program, am I? Well, I'm writing garbage collected C code, and C code is not always as happy with the garbage collector. In this case, I crashed nobjc-message-send. And that's not really a very useful backtrace. Do I have a better one here? No.
+
+Unfortunately, I'm not getting the friendly backtrace I wanted, which actually showed me where it was crashing. So you'll have to take my word for it when I tell you it's crashing here. Maybe I can do it better than that. Oh, because I'm in the wrong frame. I bet if I rerun it again, it'll die in a different place.
+
+That's more like it. So here's the instruction I really wanted to crash on. This instruction is checking, is doing a sanity check on my work object. I have an index in the work object, which is the same as the index in the array, or should be, but in this case, it's not. So let's look at the contents of that object.
+
+So that does not look like a very friendly index value between 1 and about 10,000, is it? So something has destroyed the object. Most likely, it destroyed the object and reallocated it as something else. So that means we need to look at where this pointer came from and where it is being stored.
+
+It was created by my producer, Thread. This is the code that's allocating the object, and we're storing it into this array. So the array is correctly being scanned with the NS scanned option. So that suggests that it should work, that the garbage collector should see that pointer. But it turns out the NSCAN option is insufficient in this case because I'm missing the right barrier.
+
+Now, the one good way to decide whether a write barrier is responsible for the crash you're seeing is to change the garbage collector's behavior such that it works more reliably even without a write barrier. You can do this by setting a couple of environment variables. Obviously, use TLC, no, turns off the thread local collector.
+
+Obc disable generational. Yes. This turns off the generational algorithm, which means all collections are full collections, which means the write barrier is not actually necessary some of the time. So since I'm having trouble reproducing this bug, I won't try and show you running with these two set. But typically, a write barrier error will show itself when it crashes normally and does not crash with these values set. Turns out the problem in my program is here.
+
+This variable is a local variable, but it is an indirect pointer.
+
+[Transcript missing]
+
+So that's one of the bugs in my program. Unfortunately, it is tricky to track down. Right barrier errors are not the easiest ones to debug with our current debugging tools. Turns out there's another bug. I know this 'cause I wrote it. Another bad access. This one in a slightly different place.
+
+We go to our backtrace. This time, the item structure is intact. The index value is correct. First, it doesn't want to tell me that, but it is correct. We're having trouble accessing the NSNumber that is also part of the work item. So again, we can print the value. Looks like an ordinary pointer value. We see the index is reasonable, so that part is correct now. Let's look at the NSNumber object.
+
+Greg Parker Let's do it this way. I do XI sub value. This should be an NSNumber object, but that's not an NSNumber class pointer. So this NS value has been scrambled. If we run it a couple more times, We may actually get another crash I'd like to show you. Ignore those. Those are another bug I'm not going to show you.
+
+So the other case that you'll commonly see of an is a variable that is trashed is one that looks like this. Typically, it'll start with some Fs and then have some random values, and it'll end misaligned. What is happening here is that the value is obviously wrong, but the bitwise negation of the value looks more like a reasonable pointer. It's actually in your heap.
+
+It's actually an even-numbered value, that sort of thing. The garbage collector and actually the C memory manager mangle their free list pointers to be negated, and those free list pointers are in the same slot as your ISA. So you can frequently tell if an object is actually a deallocated object because it'll look like a mangled pointer.
+
+So in this case, I have the NSNumber object, which is being prematurely destroyed before we get here. So I need to look at where it was allocated, where it was stored in the meantime. In this case, the NSNumber is being stored in a work T. We should be getting the correct write barrier because this is a garbage-collected type.
+
+The garbage collector should know about that. The compiler should issue a write barrier for us. So this is the assignment. If we disassemble the code here, we would see the write barrier present. And this is the memory where it is stored, which is scanned memory, except it's not. We should have used an Escand option.
+
+Because this is an ordinary heap block, the garbage collector won't look in it for my Annis number pointer unless I allocate it with the scanned option. So now my program should really work. Runs, it starts up, and now my producer and consumer threads are actually seeing all the objects properly garbage collected, properly managed.
+
+Not sure why you're plotting. It's really easy to fix bugs you wrote yourself. So again, debugging these problems can be difficult in a large program, especially with the write barriers and trying to diagnose which write barrier was missing. So the best way to write this program is to use proper Objective-C objects, Objective-C container types, if I don't need the really low level C performance. So that's all I have for you today. At this point, let me show you the info slide here.
+
+Of course, I left my clicker in this pocket. So for more information, we can talk to Michael Jurowicz and the other DevTools evangelists. We also have documentation on the website about the Garbage Collector, writing Garbage Collector programs. So now, I'd like to invite Michael Jurowicz and the rest of the Garbage Collection team for some Q&A.

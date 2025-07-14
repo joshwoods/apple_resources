@@ -1,0 +1,295 @@
+---
+Title:  OpenGL ES Tuning and Techniques
+Year:   2009
+Web:    https://nonstrict.eu/wwdcindex/wwdc2009/312/
+
+[!] This transcript has potential transcription errors.
+---
+
+ Name's John Rosasco, my colleague Benj Lipchak are here today to present to you OpenGL ES Tuning and Techniques. So without further adieu, let's get going with this session. So in today's session, we're going to cover some of the hardware architecture and some of the differences between the iPhone and iPod Touch family of devices and the new iPhone 3G S and how the difference in those architectures will affect application performance and how to program to them.
+
+We're then going to take a look at a list of top ten performance optimizations that we've compiled, to try and help steer you clear of any pitfalls that you may run into while writing your app. Once we've gone through that list and Ben just helped me demonstrate how to approach and resolve some of those problems, we're going to look at a section on finding bottlenecks.
+
+So let's go into hardware. The family of iPhone and iPod Touches prior to the iPhone 3G S recently announced, are all based on the PowerVR MBX-lite, which you may have seen in some of the earlier sessions. These devices use a tile base deferred renderer and we're going to talk some about how that differs from a stream renderer in today's session and this family of devices supports OpenGL ES 1.1 only. There's an architectural difference that's relevant and we'll talk to some details about that as well and there's a fairly hard limit on texture and surface memory for the MBX-lite family of devices.
+
+Moving on to the new iPhone 3G S hardware architecture. This is based on the PowerVR SGX and this also uses a tile based deferred renderer and it supports both OpenGL ES 1.1 and 2.0, which implies of course it has, it's fully programmable and has a hardware shading capability. The iPhone 3G S has a much higher memory bandwidth capability and there's no real hard limit as you saw in the MBX family.
+
+You get more of a kind of linear drop off in performance as you increase the load on, the memory load on the system. A couple of other notable differences with the iPhone 3G S is that it has hardware VBO support, so VBO performance is increased because of that and there's also stencil buffer support. So tile based deferred rendering. Let's talk about that a little bit.
+
+The slide here is showing what a stream rendering GPU and that's kind of a conventional GPU that many of you may have programmed prior to the iPhone family of GPU's The sudo code that you're seeing there at the top is relatively simple and there's an outer while loop there showing while there are more rendering commands, compile a set of state changes and then take those state changes with some draw command and effectively draw the data at that point in time.
+
+Once you've iterated over that full list of draw commands and all the state changes that go with each of those draw commands, you go to this simple set up of presenting the data on screen for view with the presentRenderBuffer call. So notice that's a pretty simple set of sudo code and notice this is all-specific. This isn't really a CPU side sudo code you're looking at, it's just what the GPU's doing to draw a single frame.
+
+So let's compare that to a tile based deferred renderer that's on the iPhone, on the entire iPhone and iPod Touch family. This sudo code as you notice is a little bit more sophisticated than it is for a streamer renderer, a little more complex. There is this initial highlighted code that you're seeing here, essentially showing that each frame of rendering is cached, so all of the drawing commands for that frame of rendering are cached and while there are more drawing commands on all the state changes that influence those drawing commands that the system caches that to allow it to effectively take advantage of how the scene data is arranged so that it can call and run at higher performance. So once that data is all cached, each frame of data is divided effectively into screen tiles and a list of drawing commands is created for each of those tiles.
+
+So once you've done that division, you know what's required to draw each tile and all the drawing commands, the set of tiles for the frame buffer is iterated over and each of those tiles requires that the color, the depth and the stencil buffers are all loaded. Then the visibility of the pixels for that tile is determined using that list of drawing commands.
+
+Then the fragment shader is executed for those visible pixels and the color, depth and stencil buffers are then stored out. So once each of the entire set of tiles has been processed, the data is presented on screen as it was simply with the present RunnerBuffer as in the previous slide. So all this sophisticated sudo code, why is that relevant to your application?
+
+There's a couple of reasons. Specifically I guess starting with while, why that more complicated rendering model to begin with. Well effectively, that TBDR is set up to do better on chip utilization of data essentially. So you're not doing as many memory accesses as if you just constrain the drawing to a single tile worth of data, frame buffer data and all the drawing command associated with it, you can keep all that processing on chip so it makes for a much higher performance GPU.
+
+So you have this higher performance but there is a couple of caveats that are associated with that and that is at any time that you have a drawing command that has a dependency, a downstream dependency in the stream of rendering, it can cause a performance problem on this architecture that is a bit dissimilar to that of a stream renderer and some examples of those rendering commands with these dependencies are frame-buffer binds, read pixels calls and anything that does texture updating. So let's take a look at an ideal kind of frame architecture.
+
+If you take all of those things in mind, what is it that you need to do, how do you need to lay out your frame drawing and all the commands there in such that you're not going to violate this TBDR architecture and you're going to help it along to do the fastest frame rendering it can.
+
+So the beginning of this frame, it's always advisable on this TBDR to avoid texture updates in general and that is because in order for the TBDR to cache entire frames of rendering, anytime you do a texture modification, the TBDR has to make a copy of that data because there could be some drawing that's going to happen with that and if it's caching a frame's worth of rendering and it needs to be able to process it, it may, it has to make another copy of that data.
+
+So that's why the comment you see here on the slide about avoiding this if possible but if you do need to do texture updates during your frame rendering, rather than just pre-computing them and binding textures, do them at the beginning of your frame. That way you won't cause a flush and interruption in mid-frame while you're rendering.
+
+Down below that is the initial call to bind the framebuffer. So you'd bind your framebuffer there, you do your clear and then any other GL commands in the frame and then getting down toward the end, the last draw command is listed there. And then if you have to do readpixels, try to avoid that if possible because it's very expensive on the architecture, but some applications actually require that. Do that at the very end of the frame for the same reason, you don't interrupt the command stream and you, kind your kind of, this laminar flow and the high frame rate going.
+
+So let's move into that top ten list we were talking about earlier in the intro and I'm going to hand it over to Benj to describe how we're going to go about attacking these items.
+
+ Thanks John. So hi, I'm Benj. John and I thought it would be fun for this session to artificially construct a demo app in our laboratory which does everything wrong. So all of those top ten list items you just saw, ignore them all and it basically serves an example of how not to do things.
+
+So that way one by one we can turn on the right way of doing things and see the performance improvement. And one thing I'll say up front is that we targeted OpenGL ES 2.0 with this app and that's primarily just because the last item in the top ten list is all about shaders.
+
+But all the rest of the tips applied to both OpenGL ES 1.1 and 2.0 and so not only this iPhone 3G S which we'll be demoing on, but also other iPhones and iPod Touches. So let me describe the app to you while I run it in the simulator, just so you can see what I'm talking about. Bring down the heads up display.
+
+OK, so the spheres that you're seeing spinning around there, those are actually four sided polyhedral that have been tessellated recursively a bunch times in order to increase our vertex load, each time pushing the vertices out to radius 1. So that's why they look like spheres. And each of the original faces of the tetrahedron has a different rendering state and so it has different shaders, different textures.
+
+Some of the ones you can see there, you've got a picture of the Earth plastered onto one side, you've got, you can see the colorful side, that's actually the normals being visualized, the face normals. So you can see the tessellation One of those sides has kind of a polished sea stone look to it.
+
+It's got a fong shader. And the fourth side is using blending to toss out some of the pixels and keep the rest of them semitransparent. So then we take that sphere, we've got seven of them going from the foreground out into the distance and so this is pretty simple demo app.
+
+There's no bunnies being inflated, there's no cars with environmental mapping with funnel turn being twisted. So you might ask, what could possibly go wrong here and the answer is about ten things. So with that I would like to official conclude our use of the simulator in this session and that is because simulator is a great prototyping tool, but it has drastically different performance characteristics than the target devices. And so I'm going to switch over to the phone now.
+
+Nice. OK. Where you can see what is basically a slide show of the sphere family vacation, running at about 6, 6 1/2 frames per second in there. And so with that I'm going to bring up a tool that you should use as part of your performance tuning arsenal and that's called Instruments. And you can see there is an OpenGL ES template here. We're going to choose that.
+
+I'm going to attach to our running process and I'm going to click Record. And at this point, well you can notice the CPU is pretty much pegged. This is the CPU load down here. But what I'm interested right now in is the Core Animation frames per second, which is showing about the same thing as we're seeing on screen there with the frames per second counter. Getting about 6 frames per second.
+
+One interesting thing you should note about core animation frames per second, this is the number of frames per second being sent to the compositing engine. So if you're doing off screen rendering to FBO, that's not counted against this limit. So here we are with our OptimizeMe App, called OptimizeMe, you can guess why.
+
+We starting off at around 6 frames per second and it's totally broken state with ignoring all the top ten list items, so this is a good time to send it back to John to talk about those first top ten list items.
+
+ OK thanks Benj. Let's get started on that top ten list.
+
+The first on our list is avoiding alpha test and fragment shader discard. Alpha test is a costly operation on these TBDR renderers. It effectively defeats the hidden surface, hidden surface removal and the culling, the core screen culling that can, that the you know, gathering all that frame data allows the TBDR to do.
+
+Usually alpha test can be, that operation can be very well simulated or duplicated using frame buffer blending, especially if you have a fragment shader in combination so you can modulate the alpha value and have it feed into the blending functions that you've got set on the frame buffer to achieve the same effect that you would doing an alpha test kind of discard.
+
+The use of the keyword discard and a fragment shader under ES 2.0, is also an expensive operation because it causes the GPU to have to go through an expensive visibility test for all the fragments that are going to be generated. So the use of discard is discouraged in general. So let's move on to number two.
+
+Don't depth-sort opaque surfaces. Conventional kind of stream renderer's it's natural to do a depth-sorting of opaque surfaces so that you can, so that you can basically take the data and at the depth test, discard the fragments. Because the TBDR is doing that for you and you know, doing this core stream culling that we're talking with the hidden surface removal, you're effectively kind of defeating that mechanism by depth, doing the depth-sort of the opaque surfaces, and you're essentially performing a redundant operation. So it's kind of expensive.
+
+When it comes to the draw order of your data in your scene, there is an advisable kind of pattern of these three latter bullets that you're seeing on the slide. And that is to render the opaque object first and that is effectively because you're kind of successively refining your frame data and if you can, the more, the larger chunks of stuff you can get rid of earlier on in your frame rendering, the higher performance it will be.
+
+By rendering these big opaque objects first, all of the fragment processing, vertex processing, all of the blending, all of those operations on anything that would have been obscured essentially gets avoided. If you do need to use discard however, given that it is expensive, it's nice that you have that second in the list here.
+
+Because those opaque objects may prevent that operation as well, but put those second. And then finally, because blending, anything that's blended is going to depend on destination fragments in your frame buffer, you need to render those in sorted order last. So going back through the list, render opaque objects first, then render each of these kind of implies a grouping right. So if you have like a scene of data that you're rendering, it's sometimes tough in your application to take that domain of how your scene rendering is done and shuffle it around, shuffle the data around so that it's grouped such that it works well with the renderer.
+
+But if you can group all of your opaque objects so that and then those with discard and then those with blending together, it will allow you to kind of execute in this order and get the optimal kind of performance out of these renderer's So moving on to number three.
+
+Number three is a little bit more of generic advice. A lot of today's session that Benj and I are doing is really targeted at kind of device specifics. You know you saw the earlier sessions with the kind of foundation layer that Michael and Alex built and then the cool rendering techniques and you know, kind of accessorizing you can do that Alex and Luke described. Well this session is you know, about the tuning and it's kind of, it's got pieces of both kind of general GL programming advice and others that are device specific.
+
+This one kind of falls into that general programming area where you want to batch as much drawing, general GL programming that is, that you want to batch as much drawing as you can and minimize state changes. Every time you issue a draw call, there's an overhead associated with it. So naturally, if you, if you've got 10,000 vertices to render, if you issue one draw call to do that, you're going to get much higher performance than if you issue 100 calls to do that.
+
+So there's an example here showing that kind of competition between application domain space problems and pipeline efficiency domain space. So pipeline efficiency, there's a couple of these examples in this presentation that are like this and Benj and I realize the hazard of presenting the wrong way to do stuff on the slides, but we thought it was worthwhile doing because hopefully it's triggering you know, one or two people to say hey, wait, that's how I'm doing it.
+
+So the better of these two examples is at the top, the top condition of that if and that's the batched rendering. Where a single VBO is bound on the first program statement, second to that a leaf texture is drawn and then an array of leaves is drawn with that rendering state.
+
+This atrocious example in the else condition has a draw command that's essentially a leaf draw method, is up here and it's iterating over all of the leaves, asking the tree which leaf it is and then the leaves, you know you have this nice cool oops thing with this encapsulation where it knows how to draw itself, but in the process it disregards the rendering state of the rest of the pipeline and completely thrashes it with all of these instances to draw where it's binding the VBO redundantly and it's extra etc, etc. So that is a paramount performance issue and it happens. It's a pretty pervasive problem.
+
+So try to keep the lookout for that when you're looking to tune your application or better yet, when you're architecting your scene graph to begin with. So with those three, I'm going to hand it back to Benj and he's going to apply some of that to our broken application.
+
+ OK thanks.
+
+Thanks John. All right, the first stuff that John talked about is really easy one to show. Here you're seeing one of our slow fragment shaders. So we have slow versions of our shaders and fast versions for this demo app. Here you see we are discarding pixels if the computed alpha value in the fragment shader is close to 0 and also if the incoming color is non-opaque. So if those two conditions are true, we are discarding our pixel entirely.
+
+This is similar to alpha test in ES 1.1. Now in the fast version of the shader, we just remove the discard entirely and we turn on blending and we end up getting the same result on the frame buffer. So that was an easy one to show. Next tip that John talked about was about not spending CPU time sorting your opaque geometry.
+
+Some of the sub-bullets there were that you do want to draw your opaque stuff first and then anything that's discarded or blended. So you can see in our code here, we are drawing the first three quadrants of our spheres opaque, so we're drawing those first, followed by fourth quadrant, which is the one that we use discard or we replace the discard with blending.
+
+And we draw that last. So that brings me to the next one, which is about state grouping, and this is the example of how not to do it. So you can see here, we are looping over all seven of our spheres and for each sphere we're setting up a rendering state for the first quadrant, drawing that quadrant, setting up rendering state for the next quadrant, drawing that one and so on, for all four quadrants. Then we go to the next object and do that same thing over and over again.
+
+So for every object we're switching between every state, that's the suboptimal way of doing it. Instead, we recommend you group your state like John was talking about. And so here, we've drawn the pieces of each object that use the initial state, then we switch to state one. So here, you're seeing setting up the first state, then we loop over all objects and drawing just the pieces of those objects that use that state and we move on to the next state, loop over all the objects there. The last one I want to talk about here is batching your data.
+
+So when I said that we artificially constructed this demo app in our laboratory, I failed to mention it's an evil laboratory and we are drawing each triangle individually with its own draw call. The better way of doing this, infinitely better, is to batch up your draws so you're drawing lots of triangles all at once. So in this case we are drawing and entire quadrant at a time and it makes a huge difference and I'd like to demonstrate.
+
+So if we can bring up the phones side by side. I think for starters, so this is where we left off around 6 frames per second. I already have Instruments running here. So I want you to keep your eye on the CPU, because not batching up your draws, not combining like state, has a pretty nasty CPU overhead required for validating and setting up each draw call.
+
+So I'm pulling up the heads of displays, I'm going to turn on state grouping and batching and I'll have to keep animating and there you can see we've just jumped up from 6 to about 15 or 16 frames per second and notice the CPU load here has gone down to almost nothing. So with that let me send it back to John to talk about the next bunch of top ten tips.
+
+ OK. Thanks Benj.
+
+So four and five are regarding data management with number four being proper vertex data management. The inputs to GL as you know, are vertices and pixels and how you treat those vertices is very important. Probably the easiest advice you can get for better kind of vertex handling is to use VBO's. VBO's are really dovetailed in really easily with the vertex array specification in GL and it's a very simple matter to use VBO. So if you're not using them already, go ahead and make that switch. It's a very comfortable change.
+
+The second tip that's very important on the iPhone architectures is to keep the, keep the vertices's, the vertex data each of the attributes for you vertex data, aligned on four white boundaries. And that may include increasing the size of the vertex if it gets you better alignment and there's always some empiricism involved in there but you know, if you can put you know, three component normals on 4 byte boundaries, you despite the fact that you have an additional component there and you know the memory associated with it, you may actually get higher performance.
+
+So keep that in mind. Use of smaller data types, do some empiricism around that too. If you can get away with a short instead of a float for instance or an unsigned byte instead of a short, by all means take a look at those and conserve bandwidth in the system, especially embedded systems. And then interleaving the vertex data. With these diagrams on the right just showing a simple way to improve cache locality so that the when a device fetches individual vertices, it's got all of the relevant information in a kind of cache coherent friendly manner.
+
+So a small example here of proper vertex data alignment with the good case on the top, faster, smaller, interleave the line vertices and the bad case on the bottom. The top example is showing 16 bytes per vertex. We've got a struct there defined and so we have an array of structs effectively and each of the types is unsigned.I'm sorry, shorts rather and they're four components each. So notice that as I alluded to a moment ago, that the normal pointer there is using the size of that structure as the stride between each subsequent normal. And although there's additional memory associated with that, this is higher performance.
+
+So keep that in mind when you're constructing it. It doesn't matter the number of vertex attributes. The example shown here is in ES 1.1, it's the same you know, general idea in 2.0 certainly. On the bottom the slow performing example, is using a bigger data type for the vertex information.
+
+It's using floats. Your app may need that, it may not. And then it's using shorts for the normals and in this case, it's three components each. When that data adds up and in the case of the vertex data, those are well aligned because they're four bytes apiece and there's three components so no problem, but the normal data is not and each of those has to be fetched on a per vertex basis and that's going to slow your app down if your vertex data is arranged as such. So moving on to texture data management.
+
+Tip number five. A really easy thing is use compressed textures and now I hope I'm not hammering an issue that's you know, going to be the proverbial beating the dead horse here but, the compressed textures are a great way to improve the memory efficiency of your application and reduce the bandwidth demands.
+
+Hopefully some of you have had a chance to work with the texture tool in the PBRTC compressed texture format. If you have you probably noticed that not only can you get higher performance because you're putting less demand on the system, but the compressed textures actually will give you higher quality too and with lossy compression, that's totally counterintuitive. It's like why would that give me higher quality?
+
+Well even the 4 bit per component, compressed texture format, PBRTC, is eight time smaller, it's 1/8th the size of a 4 component unsigned byte texture format. So that means that if you double the size of the textures you're using in two dimensions you're still using only half the memory footprint.
+
+And if you take a look at those textures side by side and Benj will go into that in some detail when we take a look there, you'll notice that most of the time you'll get much better quality with the compressed textures. Now there are some exceptions to that and that's application domain specific.
+
+Certainly if you're doing a lot of textures that are line art or vector based and you have you know, real low frequency images with high contrast edges and these sort of things, you can sometimes see some of the ringing artifacts and macroblocks that you get out of texture compression. But for anything that comes off of a camera or anything that's even remotely analog and many of the kind of simple textures for games and things like that, they work great as compressed textures.
+
+Much higher quality, much higher performance. Use of mipmapping, now that's an old adage that goes with any GL application programming. There's an additional one third memory allocation required for that. But on the back end, when the texture is processed and those texels are fetched, the CPU effectively is allowed to fetch from smaller texture levels and that can really conserve on the bandwidth. Going hand in hand with mipmapping is deciding on what type of filtering to do.
+
+If you use mipmapping, it's kind of natural to think OK, well I'm going to do tri-linear filtering so I can look at it not only in the neighborhood of the current level but the levels that are before and after it. That's a natural thing to do but, note that that takes double the operations than a bi-linear filter does. So you may want to do that quick switch of that text parameter to geo linear to try to the bi-linear filtering mode to see if it actually affects you rendering quality and if it doesn't by all means turn that to bi-linear and save yourself some performance.
+
+The next bullet here is use texture atlases. The use of texture atlases, well it doesn't jive too well with the use of mipmapping because you're going to get kind of filtering artifacts when you try to go through that mipmapping chain. That's really not a memory bandwidth saving tip, it's more of a state management tip.
+
+So if you're able to create this mothership texture and it's got you know, fifty little textures in it and you can do a single texture bind and then do, use texture coordinates and maybe some scales and biases to extract the texels you want from that, you're going to get a lot higher performance than if you go through and you know you got a single character and he's got you know, fourteen texture on them and doing fourteen different texture binds to accessorize that guy.
+
+So use texture atlases when you can. We talked about avoiding mid-frame texture updates and again, that's a memory kind of footprint issue and again there's a copy associated with that on the TBDR, so those should be avoided. So a code sample here is a simple loading if a compressed texture, mipmap stack and these textures, if you haven't had a chance, if you haven't had a chance to work with the compressed textures, you use the offline texture tool that's part of the iPhone developer SDK to compute these texture levels offline and then just go through and iterate overall levels.
+
+We talked about the filtering mode, bi-linear versus tri-linear, that's the second, the text parameter line that you're seeing there with the last argument there dictating whether you're doing bi-linear or tri-linear filtering. If you want to do bi-linear filtering, you simply switch that last parameter to GL linear. Moving down there, you're always going to have to set your you know, the commensurate kind of mad filter and rat modes, but that's not really relevant to this example and then just iterate over the text levels and load the texture, the compressed texture.
+
+It's fairly simple. So minimizing memory footprint, this is a little bit of a rehash but whenever you go to look at performance of an application, one of the toughest thing can be like where do I look and how do I tune this application? Well if you generally are a good steward of the bytes on your system and you're very conscientious about how you use them, you'll have a lot less trouble kind of diagnosing performance problems down the way. So the use of these smaller and more efficient texture and vertex form and the mid-frame texture updates of course, but also consider how your depth buffer is allocated. Do you need a depth buffer and if you do, can you get away with 16 bits versus 32?
+
+The same argument can be made for color buffer set up. The visible color buffer when you specify the dictionary for the EAGL Layers properties that you probably saw in some of the earlier sessions, you can reduce the size of the color buffer if it's not needed and any of these steps, all of these things in cooperation will reduce the bandwidth pressure on the system and will increase the performance undoubtedly. So with that I'm going to hand it back over to Benj for four, five and six.
+
+ Thank you John. So this groups of tips was all about data management and we're going to start by looking at vertex data. Here is an example of how not to store your geometry. This is code that is not using VBO's, so we're using client side vertex arrays You'll notice there's no buffer object found and we malloc our own data here, getting back a pointer to client memory. Pay no attention to this misalignment bytes term. I'll talk about that in just a moment.
+
+But our vertex array pointers are all pointers to the actual client memory here and the code subsequent to this will then fill in our tessellated geometry at this next vertex data pointer. So now, let me bring you to the VBO version of this code, right up here, which looks very similar.
+
+Difference being we have a non-zero buffer object bound and instead of calling malloc, we are calling GL buffer data to allocate memory and manage it for us by the GL. Now our vertex attribute pointers are no longer actual pointers to client memory, instead they are offsets, starting at 0, within our buffer object.
+
+And finally, we map our buffer object. So again, we have a CPU accessible pointer and we'll continue to fill that data the same way as we did in the non-VBO case with our tessellated geometry. And later on, we'll unmap it before we draw with it. So now, let's talk about this misalignment bytes term. What better way to demonstrate how bad it is to not have your vertex array data aligned, then to intentionally throw it off by a byte.
+
+So again, evil laboratory, so we're allocating, you can see we're calculating our size for our allocation. We're just allocating an extra byte. All of our vertex array pointers, whether they're in VBO's or not, are all offset by one byte and you'd be surprised the impact that can have and you'll get to see it. So next, let's talk about texture data management. And for this I will talk about a couple techniques, which are near and dear to my heart, well won't really talk about them, John talked about them so I'm just going to show.
+
+So here, you see side by side, uncompressed and compressed textures. So John talked about the performance gains, you're probably familiar with wide use compressed textures for performance reasons but you may still be asking yourself, why do I really want to use compressed textures, don't they degrade the image quality, not improve it. And so I'd like to spin it the other way and show you in kind of an apples to apples comparison.
+
+On the left here you have 32 bit per pixel uncompressed 128x128 dimension texture and for the exact same memory footprint cost, here is a 512x512 2 bit per pixel PBRTC compressed texture. And you can probably see, I'll zoom in for the people in the back row, just a little bit, but you know, huge difference here. So that's why we recommend using the compressed formats. You can actually, for the same cost, get a much better image quality.
+
+And now if we can bring up the phone as well. I would like to show, actually if we can go full screen for a moment on the phone, if we have that technology. Great. Because we'd like to, I'd like to look at the furthest away spheres showing the Earth texture on them. I've freeze framed it. Look at the white sparklies. As I animate it again, you can kind of see them shimmering off in the distance there.
+
+Now I'm going to turn on mipmapping and now once the, once it spins around you can see the Earth again, no more shimmering, it's a nice, smooth Earth texture. So you're not getting those aliasing artifacts. Now if we can go split screen again, I'm going to go to Instruments and going to start recording here.
+
+I want to show you the memory footprint difference as we turn on alignment, OK, compressed textures is the one we're mostly interested in in here and now this resource bytes metric, I haven't talked about yet. This is all of the resources used by ES, that includes textures, render buffers and on the iPhone 3G S, it includes vertex buffer objects.
+
+And I will tell this to keep animating and you can see that the resource bytes went from about 40 megs to unde@r 20 megs, just from turning on the compressed textures. Now you might be thinking well, that 20 megs still seems like a lot for this simple demo app, keeping the note about some of these, actually all of the metrics sampled here by Instruments, these are sampled across the entire system. So what you're seeing there isn't necessarily caused by your own app.
+
+There's lots of other things going on in the system, many things layered on top of OpenGL ES, so keep that in mind. What you're seeing here isn't just caused by you. But if you make changes in your app, you can see the differences as they affect the entire system. So we're now up to about 22 frames per second, jumping around around 20, 22, up from the original 6. With that, I'd like to send it back to John to talk about the last group of tips.
+
+ OK thanks Benj. So moving on to number seven. Number seven is related to the iPhone compositing system and how your GL application interacts with core animation in the layering system. It's, this is kind of an A or B kind of advice. It's relatively simple to just take your GL and use your GL to draw your landscape content. Unfortunately, it's even simpler to use Core Animation to do it, but the performance isn't as good.
+
+So try not to take that carrot of just doing a layer transform and using Core Animation, you know, the layer property for Core Animation to do your layer, to do your landscape transforms. There is, when you get a landscape event, you can simply swap the width and height on your viewport calculations and do kind of a rotation about Z, to keep your model upright when you're, when the device gets landscaped so. Moving on to tip number eight.
+
+Making your GL layer opaque. It's always a good idea in this compositing system, you're going to have any number of layers there and but the best way to get the best performance out of a compositing system is to make sure that all your 2D content is on- top, the GL content is on the bottom, then opaque and it's a simple matter of setting the property on the layer as in the example here, where you're, this is drawn directly from that OpenGL ES template application that is created when you create a new project in Xcode.
+
+And it's simply a manner of obtaining a layer and setting that property to ES and then that layer will be opaque and it will tell Core Animation not to be compositing your GL content to things below it. So draw only when needed. It's like duh right, but there's a little bit of a trap when it comes to writing code for embedded devices and that is that you're not plugged into the wall anymore.
+
+So if you're not plugged into the wall, anytime you render and you keep the GPU and the CPU busy, it's eating up your battery. So you really want to take a look at your application domain and say OK well, my data's not really that dynamic, maybe I can get away with 30 frames a second or 15 rather than 60. So setting the animation interval, again drawing on the ES template application, to a larger interval such that you're not, you're just not just hammering away on the GPU can really be friendly to your user's battery life.
+
+And then the other thing is, if your data is really static, the example on the latter part of the slide is just stopping the animation entirely and that is just a matter of invalidating the timer that's actually generating the method calls into your EAGL class. In your drawing class.
+
+So write efficient shaders is our number ten on the top ten list. And number ten is special and it gets an asterisk because it's not applicable to both the MBX family and the SGX family. It's applicable just to the iPhone 3G S, which is SGX based and OpenGL ES 2.0.
+
+So here's some general tips on writing, on writing efficient shaders. Let's go into the, just right into the general tips. And that is we talked a little bit earlier in some of the earlier sessions if you were here, about doing pre-compilation and linking and although the complication and linking is going to happen on the device, try and keep in mind that that state is very expensive to compute and you know, it's kind of like, it's like a set of derived state.
+
+You send in to the implementation, here's my shader source and then you want the implementation to derive an efficient compiled binary out of that that you're running with. And when you do that it's unlike any other kind of GL state where you could just you know, poke a bit in there and say OK there, it's ready to go, it's you know blending's enabled, etc, etc. It's a very important that that's an initialization time operation if that's not obvious enough. Unrolling small loops.
+
+There's always an overhead associated with any execution where a loop is processed. If the loop overhead can be removed by a small, in a small, well the loop overhead can be removed if you have a small enough loop and just, even just simply unroll it in your shader.
+
+Using static array access is if possible. Whenever you set up an array in a shader and you do static array accesses, it tells the compiler essentially, what elements of the array are being accessed and can effectively throw away unused elements and do better at kind of register allocation if you will.
+
+And then there's always a cost associated with branching and especially so on GPU's because branching can, it's obvious that branching is going to be needed for any real program, but using so judiciously will help kind of minimize the tendency to break parallelism in the device. Because these are, they're [inaudible] devices, they were meant, a shader is meant to process shading hardware rather is meant to process multiple logical instances of vertex shaders and multiple logical instances of fragment shaders and any time you kind of break that parallelism, you're going to get lesser performance. So moving on to respect device limits.
+
+There are various qualified variable types in GLSL and those are uniforms, attributes and varyings. Shading architecture is always take the variables and try to keep things in registers like any journalized computing architecture and if you respect the device limits by querying the limits for uniforms, variants and attribs, you get two benefits. One your code is guaranteed to work right and you don't get that guarantee if you don't, if you exceed these limits. It may work, it may not.
+
+And two you get better performance. And these analagous calls here are just, are these simple get integer calls to determine what the max limit on some of these are and you notice here in the get integer call it says, uniform and fragment vectors. So it's actually telling you how many vectorvec4s you can get or how many vec4s are valid on the system. And if you're interested in looking at packing rules and things like that about declaring kind of heterogeneous data types for you shaders, you can look at that more in the GLSL, ESGL, SL specification.
+
+So moving on. Hoisting computation up and out. Fragment shaders and vertex shaders execute a lot and the tendency, especially when you have a screen with a small screen like an embedded device, the fragment shading operations tend to be the overwhelming majority if the computation. So if you can take any operation that was in the fragment shader and move it up into the vertex shader, you're likely to save computation, similarly if you can take that computation out of the vertex shader and hoist it up and make it like a uniform, like keep it constant across all the vertices, you're going to save a lot of computation as well.
+
+You know, taking a lighting example, if you're doing per pixel lighting and a shader, maybe you can get away with per vertex lighting and even with per-vertex lighting, maybe you can get away with doing an inverse transform on the light and model space and preventing any of those you know, basically a multiply in the vertex shader in doing so.
+
+So try to take a look at the lighting model that you've chosen for instance or any other operation that may be reasonable to hoist to a higher level in the chain and see if you can get the results you desire without you know, getting down into that nitty gritty of you know, the fragment of the vertex shader at that level.
+
+So efficient texture fetching. So texture fetching logic in the MBX and the SGX systems is dedicated silicone on the chip and it's separate from the rest of the shading architecture. So if you can issue a texture fetch early in your shader, you're increasing the parallelism and the overall performance of your app.
+
+So try to issue your fetches from the shader early and that's simply the texture 2D look up call that you're seeing at the bottom of the slide here. That is the fetch operation. You can issue that early in the shader you're going to get better performance. The second bullet there is avoiding dependent texture reads. A dependent texture read is defined as any time your fragment shader takes a texture coordinate value and changes it by any amount. That's a dependent texture read.
+
+And what that effectively does is it creates a dependency, a serialization in your fragment shader, as of that instant. Because it can no longer take that fetch operation, hoist it out of the shading logic and execute it into parallel because the shading logic itself is computing the coordinate you're trying to use.
+
+So it by definition has to happen downstream of that calculation. You know sometimes you know, the example here is showing just a simple bias to a texture coordinate. So this variant, this texture coordinate variant is coming in and a bias, a simple bias is being applied to it and that simple add is enough to serialize that fetch.
+
+You know, there are other examples of like you know, if you have two texture units enabled and you're using one for instance as a look up into another, so you have one texture that's defined with coordinates in it and then you fetch from that. Then you grab the coordinates out of it and then you use those coordinates to fetch from another one. That's a dependent texture read as well. So if you can avoid that and make your algorithm work around that, you'll get better performance.
+
+So making empirical precision choices is the last in our shader tips. And the addition of the shading language to ES 2.0 came, brought with it precision qualifiers and there are three precision qualifiers, lowp, mediump and highp, as you see on the slide there. Each of those has a certain range in precision associated with it.
+
+With a lowp that's probably going to be the most kind of outlyers, as far as general understanding is because it's got this range of -2 to +2 and 8 bits of precision. Mediump and highp can be considered you know, like the iEEE spec and they're kind of basic terms of half precision and single precision.
+
+It's very important, well I guess first, this kind of floating, varying lowp color code up here on the right, that example is listed as a known example of where you can get a lot of efficiency by reducing the fidelity of your color, your incoming color varying. We've noticed, the GL team has noticed a lot of kind of performance efficiency there. The GPU can do parallelism with these lower, these lower precision varyings and you know, combine them as a SIMB operation so you get higher throughput. So that's kind of a canonical example of using lowp.
+
+But when it comes to generally deciding how do I qualify my shader variables by precision, you really need to be empirical when you do that. The first step is kind of a few step process and the first thing is you can set up your shader in relatively high precision or the highest precision, in highp, get the results that you want and then you can kind of successfully, successively refactor those, some of those values down. Bring a highp into a medium or a medium to a low and see first if you're getting the correct results, the render results are satisfactory for your application and second, do you actually get more performance.
+
+Because it's not guaranteed that going from you know, one of the higher levels to the lower levels is going to give you more performance by any stretch. I mean, it could actually cause the other direction. Depends on how the compiled code is generated so, you always need to validate that and be empirical about making decisions about your precision qualifiers. So with that, I'll hand it back to Benj and he can go through these few tips here.
+
+ Thanks John.
+
+So before we do one last check in on the performance of OptimizeMe, I just wanted to show you a comparison, zoom in on this so you can see a little better. No, too much. OK. So this is on the left, slow version of a particular vertex shader and on the right, the fast version.
+
+And I just want to highlight a few things here First is the incoming color to the vertex shader. In the slow version, it's a per-vertex attribute, whereas in the fast version we're using uniform color. Just so happens that in our tessellated spheres, that we just have a color for each quadrant. A base color for each quadrant.
+
+So we didn't actually need to use per vertex colors. Next thing there, John was just talking about, highp versus lowp. For colors, we can often get away with lowp and we're able to do that here. So I'm using lowp for our color varying. I would point at each thing, but I'm zoomed in so I can't do that.
+
+The last thing in the vertex shader that I want to point out in difference is in the texture coordinate that we're writing out. In the slow version, we're writing out the object space vertex position and we're going to use that as a texture coordinate. But that's going to range from -1 to +1 and in order to use it to index into a texture, we're going to need to map it to the range 0 to +1.
+
+So in the slow version, we don't think too much about it and we just decide all right, fragment shader can do that right before it fetches. No problem. In the fast version, we are doing this hoist that John was talking about and we're hoisting that computation so that we do it on a per vertex basis instead of a per pixel basis. So you can see the scale by one half and the offset by one half, happening in the fast version of the shader before we write out that texture coordinate.
+
+So now if we switch to the matching fragment shader. OK again the first diff is just the highp versus the lowp color. Next thing you'll see here is the work that we hoisted out of the vertex shader, out of the fragment shader in the fast version while it's still sitting here in the slow version.
+
+So we are calculating a scaled and biased texture coordinate based on the incoming texture coordinate in the slow fragment shader and not only is that costing us the performance of actually having to do that scale and multiply, the multiply and add on a per pixel basis but it also hits this dependent texture read case that John was talking about.
+
+So the fast path is to use your texture coordinate as is, as it was interpolated, use it directly for your texture fetch. Here we are doing some math operations on it before using it for the texture fetch, causing us to fall off that fast path and so don't do that if, you can avoid it. And the last difference here is you remember from way back, tip number one, getting rid of the discard.
+
+You'll see the discard in the slow fragment shader here, in the fast one we've turned on blending, we don't need it, much faster because it doesn't take us off the fast path or tile based deferred rendering. And so without further adieu, let's bring up the phone next to the code.
+
+And let's turn on our fast shaders and you can see that we have gone up to about hovering towards 40 frames per second. That's up from the original 6 1/2 frames per second. So all you had to do was follow these top ten tips and recognize the performance improvement. So hopefully showing you what the wrong way of doing things is, how not to do things, you might be able to remove some of the evil code from your own applications. Send it back to John to talk about some, the art of finding the bottleneck.
+
+ OK. Thank you Benj.
+
+[ applause ]
+
+OK, so we've talked about these various approaches and if you're going to follow those guidelines, you're definitely going to get, your application's going to be much closer to that you know, kind of sweet spot on the performance curve for the devices.
+
+But how do you go about looking for those problems once you've got an application written? The finding bottlenecks thing is common to any GL programming, every kind of pipeline architecture, at least that we're familiar with, has always got different parts or components of it where you can run into limitations. And it can be a little disheartening at times.
+
+Like if you go and you look at your app and it's running at 12 frames a second and you're trying to target 30 and you spend two weeks like reworking your entire scene database with all you vertex data, making it incredibly efficient, only to find out that you in fact were fragment limited and it doesn't matter if you were only rendering one vertex, your frame rate wouldn't change.
+
+So the key is to find what stage your application is limited by and the key of the key of finding that one stage is to find the fewest strings to pull or the least turning of knobs and pulling of levers to make your application respond by increased frame rate. So some of these limitations, we're going to go through those.
+
+CPU limited is you know, if you're doing scene calling or you know, view custom calling or physics in your application, you can use Shark and see if in fact you have a CPU hotspot there. If your CPU's pegged at 100%, it's pretty likely that a little bit of tuning on that side is going to give you an increase in frame rate. So vertex processing limited.
+
+If you have lots of huge vertices in your application, you're trying to render battleships or something on your phone, you can run into bandwidth limitations pretty easily. And we talked about some of the kind of optimization techniques of using the smaller vertex attribute types, the real kind of key there again is looking for those easy things to touch is the conversion, to VBOs. Aligning your vertex data is probably more difficult.
+
+You know, using smaller vertex data types and aligning your vertex data are probably more difficult to do than to switch to VBO's. So you always should kind of successfully start with the you know, the low hanging fruit and then go through the more sophisticated manners of eliciting this vertex limitation. And those bullets are a little bit out of order now that I look at them. It really should be, they convert the VBO's first, then perhaps the smaller size and then that line vertex data after that. And then you can also be shading limited.
+
+If you running the ES 2.0 application, take your vertex shader that does all this fancy stuff and bumpmapping or whatever it's doing and put a pass through shader, just punch a pass through shader in there. Obviously your rendering is not going to be what you want but if you boom you've got 5 more frames a second out of it, you know that maybe limiting some of the operations you're doing there or finding another technique or hoisting is going to result in improved performance.
+
+So if you're using massive textures in your application, obviously we talked about using the compressed and mipmap textures, if your textures are already mipmap, you can try and determine if you're texture fetch limited. Like in the architecture, whether it's fix function or programmable. By using the LOD bias values.
+
+Both ES 1.1 and ES 2.0, have ways to set the texture level higher which will effectively make it such that the GPU is fetching from a smaller texture level and when it's fetching from a smaller texture level, it's not blowing the caches out as much, the memory bandwidth requirements are lower and you may actually see a performance difference simply by setting that. And then if that becomes the case, then take a more close look at how you're fetching.
+
+Can you move that up earlier in your fragment shader for instance, can you reduce the size of the levels you're using, you use compress textures, etc. So moving on from that, fragment shading limited. This is, the fragment shading limited is the easiest kind of lever to pull and that is that you can just simply take your window size and make it smaller.
+
+If you're generating fewer fragments, limitations and computing those fragments are going to show up pretty quickly in your frame rate so, make a quick change of the size of the window, the viewport, render fewer fragments and see what you get. Then similar to the vertex optimization tip, make a pass through fragment shader.
+
+Just write the color out and you know, bypass your entire fragment shader and see if you get a result there. And then once you've made that determination, if you decided yes in fact I am fragment limited, then just do some successive refinement to your fragment shader, maybe use a less sophisticated method. Sometimes you can get away with lesser methods on a smaller screen and things, things are less perceptible, especially if you're porting from a desktop app where you're required to run at 1600x1200 for instance.
+
+So compositing limited is probably a little bit of a new kind of bottleneck consideration if you're coming from a desktop or you know, various other GL implementations. And that is just looking to see that you're efficiently using the iPhone compositing system. And we talked earlier about using GL to do the landscape transforms and making sure that your GL layer's opaque and at the bottom of the stack so that the compositing is simplified. But the compositing check is another quick lever to flip, which is just switch the compositing off.
+
+Just render the GL only. If rendering your HUD on top of your game for instance, is causing a problem or if you're trying to render something in fact below you game even worse yet, if you quickly, if you disable compositing by setting the layer property to opaque like we talked about earlier, you'll see, you could very well see a frame rate increase.
+
+So summarizing today's session. If you have existing applications, start by identifying those bottlenecks and look for those real easy, easy things to tweak to see if you can get some, you know elicit some changes with increases in frame rate. And batching your drawing state. There's, the spectrum of yes, here's my ideal application domain kind of object oriented representation of the data and way over here is the pipeline optimal kind of representation of that same data. So look at that spectrum and that's something that's obviously desirable to do before you kind of write your game and during the design process.
+
+But batching that drawing state and minimizing state changes, getting as much state you know, grouping all of your scene data into these various groups is a really easy way to increase performance. Choosing appropriate data types, formats and precision and just conserving memory where possible. I mean, that's kind of common sense stuff but, it's always something that's got to be looked at. Accounting for your variable declarations in your shaders and respecting those device limits we talked about.
+
+And then finally, knowing how tile base deferred renderer differs from a stream renderer that you know, many of the applications and again, if you have ported or whatever, there can be some ramifications there you know, there's many applications out there that are doing text sub image calls regularly and if there's a way to architect around that, you're going to get better performance.
+
+So that's the rundown for today's session. There's a related session to this that is not GL specifically, but just application tuning on the Mac OS on the iPhone platform, on the iPhone family and that's tomorrow or rather Friday morning at 9 am. And then there are a couple of labs that were mentioned in previous sessions, both tomorrow, one at 9 am, and one at noon and many of the guys you see here from the GL embedded team are going to be at those labs and you can ask as many questions as you can fit into those time slots I suppose. And then documentation.
+
+Apple is incredible about documentations. One of the things I love about developing on the platform is that you go to the developer website and I've worked with these documentation guys, they're amazing. They produce incredibly clear and concise documentation to really kind of help you along. So check out that url on Apple's site and then look at the Khronos website for the GL ES specification and the extension registry. And again, pointing to Allan Schaffer as our graphics evangelist. For more information, you can contact him.

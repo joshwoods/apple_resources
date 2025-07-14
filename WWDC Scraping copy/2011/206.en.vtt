@@ -1,0 +1,2724 @@
+WEBVTT
+
+00:00:12.370 --> 00:00:14.360
+Morning.
+
+00:00:14.430 --> 00:00:19.080
+Welcome to introducing
+XPC here at WWDC 2011.
+
+00:00:19.240 --> 00:00:21.300
+My name is Damien Sorresso.
+
+00:00:21.300 --> 00:00:24.900
+I'm responsible for XPC, LaunchD,
+and the associated
+
+00:00:24.900 --> 00:00:26.380
+technologies here at Apple.
+
+00:00:26.380 --> 00:00:31.980
+XPC is Apple's new inter-process
+communication solution specifically
+
+00:00:32.080 --> 00:00:35.370
+geared toward application developers.
+
+00:00:35.380 --> 00:00:38.230
+So what we're going to do today
+and what we're going to cover
+
+00:00:38.500 --> 00:00:41.380
+is a bit of background on IPC.
+
+00:00:41.510 --> 00:00:46.650
+And then we're going to use that and
+go right into how we take concepts that
+
+00:00:46.790 --> 00:00:53.380
+have existed for IPC for all these years
+and apply them in a new way using XPC.
+
+00:00:53.420 --> 00:00:56.550
+Then we're going to cover the actual
+API calls you guys are going to use
+
+00:00:56.700 --> 00:01:01.050
+in your code and peppered throughout,
+we're going to have some examples.
+
+00:01:02.580 --> 00:01:07.780
+So let's start with
+inter-process communication.
+
+00:01:07.940 --> 00:01:11.380
+According to the canonical
+source of all knowledge,
+
+00:01:11.380 --> 00:01:14.240
+inter-process communication
+is a set of techniques for the
+
+00:01:14.390 --> 00:01:19.720
+exchange of data among multiple
+threads in one or more processes.
+
+00:01:20.230 --> 00:01:22.960
+So what is this useful for?
+
+00:01:22.960 --> 00:01:27.720
+Well, on modern operating systems,
+we have address space separation.
+
+00:01:27.720 --> 00:01:32.200
+So if you can get another address
+space to do some work for you,
+
+00:01:32.340 --> 00:01:35.480
+then if that address
+space happens to crash,
+
+00:01:35.480 --> 00:01:37.100
+you are unaffected.
+
+00:01:37.100 --> 00:01:42.350
+In terms that impact app development,
+you can factor out small tasks into
+
+00:01:42.350 --> 00:01:47.210
+small helper tools that if they crash,
+let's say because they
+
+00:01:47.210 --> 00:01:50.420
+decoded a bad JPEG,
+then instead of the entire
+
+00:01:50.420 --> 00:01:55.070
+application coming down with it,
+you instead just get a crash and say,
+
+00:01:55.070 --> 00:01:59.180
+"Well, I couldn't decode this JPEG,
+but feel free to continue on." And it
+
+00:01:59.210 --> 00:02:01.350
+results in a much better user experience.
+
+00:02:03.680 --> 00:02:06.900
+Also,
+with Mac OS X Lion and the Mac App Store,
+
+00:02:06.900 --> 00:02:11.100
+we're living in a brave
+new App Sandboxing world.
+
+00:02:11.280 --> 00:02:16.840
+So we really want to take applications
+and split them up into little pieces,
+
+00:02:16.890 --> 00:02:21.960
+each of which has the least
+privileges necessary to do its job.
+
+00:02:23.190 --> 00:02:26.950
+This way, if you're, again,
+doing some sort of operation that is,
+
+00:02:26.970 --> 00:02:32.130
+say, prone to buffer overflows or
+something along those lines,
+
+00:02:32.130 --> 00:02:37.500
+if there is an exploit in that operation,
+then the exploit is localized to a
+
+00:02:37.500 --> 00:02:42.130
+very small helper tool that doesn't
+necessarily have all the privileges
+
+00:02:42.240 --> 00:02:45.730
+that would let an attacker get all
+the information they might want,
+
+00:02:45.730 --> 00:02:50.740
+like, say, access to your user's
+address book or mail.
+
+00:02:52.390 --> 00:02:56.300
+So over the years, there have been a lot
+of different frameworks,
+
+00:02:56.300 --> 00:02:59.010
+APIs, and solutions for
+inter-process communication.
+
+00:02:59.020 --> 00:03:04.480
+When we started out with POSIX,
+we had kill, signaling,
+
+00:03:04.480 --> 00:03:07.740
+and then we had the file
+descriptor based ones.
+
+00:03:07.740 --> 00:03:10.140
+So you'd either use Schmatt
+or Socket or a pipe,
+
+00:03:10.140 --> 00:03:13.130
+and then you'd use read and
+write to sling bytes all
+
+00:03:13.130 --> 00:03:15.700
+throughout file descriptors.
+
+00:03:15.700 --> 00:03:18.940
+Then we came into the
+80s and we had Mach,
+
+00:03:18.940 --> 00:03:21.960
+which introduced a message based API.
+
+00:03:22.340 --> 00:03:27.110
+So instead of just sending raw
+bytes and forcing the other side to
+
+00:03:27.110 --> 00:03:30.900
+reconstruct the message that you sent,
+perhaps from multiple reads,
+
+00:03:30.920 --> 00:03:34.160
+you could just send the
+entire message in one go.
+
+00:03:34.160 --> 00:03:38.230
+And the Mach guys developed a
+technology called MIG to wrap
+
+00:03:38.230 --> 00:03:43.370
+around this and make it more or less
+like a transparent function call.
+
+00:03:43.380 --> 00:03:48.220
+And then as we got into Next Step and
+Mac OS X as it exists today,
+
+00:03:48.220 --> 00:03:50.640
+we have things like NS Connection,
+NS Proxy,
+
+00:03:50.640 --> 00:03:54.980
+which are used... which are used
+to implement distributed objects,
+
+00:03:55.050 --> 00:03:59.220
+and we have the CF stuff at the CF layer,
+CF message port, CF Mach port.
+
+00:03:59.300 --> 00:04:03.180
+So there's a lot,
+and this is barely scratching the
+
+00:04:03.200 --> 00:04:06.300
+surface of what exists for IPC today.
+
+00:04:06.300 --> 00:04:08.800
+So we've got all these things.
+
+00:04:09.130 --> 00:04:11.460
+How happy are we with them?
+
+00:04:13.980 --> 00:04:15.900
+It's still pretty bad.
+
+00:04:16.560 --> 00:04:18.950
+And...
+
+00:04:19.560 --> 00:04:22.020
+The industry has kind of been
+struggling with this about,
+
+00:04:22.130 --> 00:04:24.220
+you know,
+we've been coming up with new ways
+
+00:04:24.340 --> 00:04:27.430
+to sling bytes back and forth.
+
+00:04:27.850 --> 00:04:30.100
+But that's only one dimension of IPC.
+
+00:04:30.320 --> 00:04:34.800
+You'll notice that in 2004,
+the amount of misery
+
+00:04:34.800 --> 00:04:36.280
+dropped just a little bit.
+
+00:04:36.520 --> 00:04:38.240
+What happened there?
+
+00:04:38.470 --> 00:04:39.780
+Well, LaunchD happened.
+
+00:04:40.480 --> 00:04:43.520
+And how does LaunchD help
+make IPC easier?
+
+00:04:44.980 --> 00:04:48.310
+Well, LaunchD introduced the
+concept of on-demand services.
+
+00:04:48.310 --> 00:04:53.100
+So prior to LaunchD,
+you had to have a client and a server
+
+00:04:53.100 --> 00:04:55.670
+negotiate their lifetime with each other.
+
+00:04:55.680 --> 00:04:59.800
+So if the server was not running,
+the client had to make sure to start it.
+
+00:04:59.830 --> 00:05:01.820
+The server had to put
+a PID file somewhere.
+
+00:05:01.820 --> 00:05:04.200
+The client had to recognize
+the PID file was there.
+
+00:05:04.200 --> 00:05:07.800
+And then it would go from there
+and find some socket on disk.
+
+00:05:07.920 --> 00:05:08.890
+And then it would connect to that.
+
+00:05:08.920 --> 00:05:11.690
+And if anything bad happened
+throughout this whole process,
+
+00:05:11.700 --> 00:05:14.070
+you had to go back to the
+beginning and start over.
+
+00:05:35.600 --> 00:05:39.260
+So we want to build on this experience
+we've gained with LaunchD and
+
+00:05:39.260 --> 00:05:42.150
+introduce a more complete solution.
+
+00:05:43.520 --> 00:05:46.160
+So the '70s,
+they gave us the ability to set
+
+00:05:46.160 --> 00:05:49.410
+up a pipeline and send bytes.
+
+00:05:49.910 --> 00:05:53.340
+LaunchD gave us On Demand,
+but there's still a
+
+00:05:53.340 --> 00:05:55.500
+couple things missing.
+
+00:05:55.570 --> 00:05:57.720
+And those are what XPC provides.
+
+00:05:57.730 --> 00:06:01.820
+We need to provide automated
+bootstrapping and structured
+
+00:06:01.850 --> 00:06:07.900
+messages and wrap all of this up in
+a nice API that's very app centric.
+
+00:06:10.110 --> 00:06:12.130
+So how are we going to do this?
+
+00:06:12.380 --> 00:06:16.760
+Well, we're taking a familiar concept,
+Model View Controller,
+
+00:06:16.770 --> 00:06:19.470
+and applying a little twist to it.
+
+00:06:20.690 --> 00:06:23.100
+So let's talk a little bit about
+Model View Controller first.
+
+00:06:23.280 --> 00:06:27.090
+I'm sure a lot of you, if not all of you,
+are familiar with this already.
+
+00:06:27.280 --> 00:06:31.880
+Model View Controller is a very popular
+design pattern to separate your app
+
+00:06:32.180 --> 00:06:34.780
+into three basic units of functionality.
+
+00:06:34.870 --> 00:06:37.320
+And it's designed to
+encourage modularity.
+
+00:06:37.390 --> 00:06:39.980
+Because if you logically
+group functionality,
+
+00:06:40.040 --> 00:06:44.170
+it makes changes less risky,
+and it makes your code
+
+00:06:44.280 --> 00:06:45.920
+much easier to maintain.
+
+00:06:46.020 --> 00:06:48.430
+So with Model View Controller,
+as you may have guessed,
+
+00:06:48.550 --> 00:06:51.090
+the three things are your data model.
+
+00:06:51.330 --> 00:06:55.680
+This is the stuff that the user
+interacts with only in an abstract way.
+
+00:06:55.680 --> 00:07:00.070
+This is how you're going to
+model the underlying parts of
+
+00:07:00.120 --> 00:07:03.540
+the data your code operates on.
+
+00:07:04.240 --> 00:07:06.320
+And then we have the
+UI presentation layer.
+
+00:07:06.490 --> 00:07:10.860
+This is all the code that's responsible
+for doing all the great animations that
+
+00:07:10.860 --> 00:07:14.270
+you guys have seen in various WWC demos.
+
+00:07:14.600 --> 00:07:16.580
+And then we have the business logic.
+
+00:07:16.810 --> 00:07:20.250
+This is typically the code that
+glues the data model and the
+
+00:07:20.340 --> 00:07:22.500
+presentation layer together.
+
+00:07:22.530 --> 00:07:26.970
+So it's more of the mundane stuff,
+but absolutely necessary.
+
+00:07:30.240 --> 00:07:32.350
+Now I said we're going
+to apply a twist to this.
+
+00:07:32.480 --> 00:07:36.710
+And to understand what that twist is,
+you need to understand what
+
+00:07:36.720 --> 00:07:38.100
+Model-V Controller offers.
+
+00:07:38.360 --> 00:07:42.770
+It encourages modularization
+at the source code level.
+
+00:07:42.970 --> 00:07:48.180
+So your files are factored
+out and everything's separate.
+
+00:07:48.250 --> 00:07:51.900
+And you can even use it to encourage
+modularization at the project
+
+00:07:51.900 --> 00:07:57.040
+level by making your app able
+to load third party plug-ins.
+
+00:07:57.380 --> 00:08:00.710
+But it still only applies
+to one address space.
+
+00:08:00.870 --> 00:08:04.610
+When you compile it all together,
+all the Dottos get linked together,
+
+00:08:04.620 --> 00:08:06.530
+they're all the same thing.
+
+00:08:06.640 --> 00:08:10.120
+The operating system does not know
+the difference and it does not know
+
+00:08:10.120 --> 00:08:14.320
+about all the hard work you've done to
+separate these things from each other.
+
+00:08:14.490 --> 00:08:19.630
+So a fault at any one of those
+layers has the exact same effect.
+
+00:08:21.500 --> 00:08:24.430
+So the twist we're going to
+have is that we want to apply
+
+00:08:24.440 --> 00:08:27.940
+Model View Controller to address spaces.
+
+00:08:27.940 --> 00:08:34.400
+And the most useful thing to isolate
+from your app is usually the data model.
+
+00:08:34.460 --> 00:08:37.960
+So if you're going to do
+things like decompress a JPEG,
+
+00:08:37.960 --> 00:08:45.870
+deal with a PNG, parse an H.264 movie,
+apply a GZIP filter, whatever,
+
+00:08:45.980 --> 00:08:49.960
+we can take that and move it off
+into a separate address space
+
+00:08:49.960 --> 00:08:54.720
+and apply the principle of least
+privileges to each of these parts.
+
+00:08:54.720 --> 00:08:56.980
+And because they're in
+separate address spaces,
+
+00:08:56.980 --> 00:09:00.870
+the OS enforces the strict
+separation of all the
+
+00:09:00.900 --> 00:09:03.800
+functionality of your application.
+
+00:09:03.800 --> 00:09:07.040
+And so what we have is
+basically a fundamental
+
+00:09:07.040 --> 00:09:09.120
+redefinition of what an app is.
+
+00:09:09.120 --> 00:09:12.960
+It is not one big
+monolithic chunk of code.
+
+00:09:12.960 --> 00:09:18.880
+It's many pieces of code working
+together to present a consistent
+
+00:09:18.880 --> 00:09:22.070
+and robust user experience.
+
+00:09:23.720 --> 00:09:26.630
+And we've taken,
+we've used this new model to
+
+00:09:26.630 --> 00:09:28.970
+great success within Apple.
+
+00:09:29.170 --> 00:09:31.970
+So we've got two examples
+we'd like to talk about.
+
+00:09:31.990 --> 00:09:35.010
+The first is QuickTime Player and
+the second is Preview.
+
+00:09:35.560 --> 00:09:40.190
+Now what QuickTime Player does is
+it takes any video you feed it,
+
+00:09:40.190 --> 00:09:45.480
+like an H.264 stream,
+and decodes it in an XPC service.
+
+00:09:45.480 --> 00:09:51.010
+And this service is sandboxed and
+isolated and it basically can't do
+
+00:09:51.010 --> 00:09:54.200
+anything except run code on the CPU.
+
+00:09:54.200 --> 00:09:55.440
+There's really no I.O.
+
+00:09:55.440 --> 00:09:56.250
+that it can do.
+
+00:09:56.250 --> 00:09:59.590
+And this is efficient because we use I.O.
+
+00:09:59.800 --> 00:10:05.480
+surface so that the separate process,
+the service, can draw directly.
+
+00:10:05.560 --> 00:10:07.140
+And then we can also use the I.O.
+
+00:10:07.140 --> 00:10:10.520
+to create a new application that's going
+to be able to run the same process.
+
+00:10:10.520 --> 00:10:12.870
+So we've got a lot of
+different ways to do this.
+
+00:10:13.500 --> 00:10:18.500
+And since the service is doing all
+the hard work of parsing H.264,
+
+00:10:18.780 --> 00:10:23.280
+the stuff that's really easy to
+get wrong and sometimes introduces
+
+00:10:23.470 --> 00:10:27.070
+crashes or security vulnerabilities,
+crashes in that service don't
+
+00:10:27.200 --> 00:10:28.670
+affect QuickTime Player.
+
+00:10:28.680 --> 00:10:33.090
+So the user doesn't have all the other
+movies they have open taken down.
+
+00:10:33.710 --> 00:10:39.100
+And if a crash in the service
+turns out to be exploitable,
+
+00:10:39.140 --> 00:10:42.000
+well,
+there's little to nothing that that code
+
+00:10:42.000 --> 00:10:44.510
+can do because they can't read anything.
+
+00:10:44.650 --> 00:10:47.080
+So they can't harvest
+the user's address book,
+
+00:10:47.180 --> 00:10:50.090
+they can't harvest mail,
+and they certainly can't elevate
+
+00:10:50.090 --> 00:10:56.270
+privileges and run arbitrary code at a
+privilege level that's anything useful.
+
+00:10:56.620 --> 00:10:58.230
+So that's one example.
+
+00:10:58.340 --> 00:11:02.510
+Our second example, preview,
+is a sandboxed app.
+
+00:11:02.660 --> 00:11:05.740
+Now sandboxed apps live
+inside a little container,
+
+00:11:05.790 --> 00:11:10.580
+and they have no access to anything
+beyond that container by default.
+
+00:11:10.600 --> 00:11:14.820
+This is very much how it works on iOS,
+and now we've taken that
+
+00:11:14.860 --> 00:11:16.720
+and put it on Mac OS X.
+
+00:11:16.970 --> 00:11:20.660
+But Preview has to be able to
+open separate documents sometimes.
+
+00:11:20.830 --> 00:11:27.070
+So if a user opens a PDF,
+that PDF may reference other PDF files.
+
+00:11:27.070 --> 00:11:31.810
+And Preview solves this problem
+by parsing the PDF that it's
+
+00:11:31.810 --> 00:11:34.960
+opened in a separate XPC service,
+because again,
+
+00:11:34.970 --> 00:11:36.720
+parsing can be dangerous work.
+
+00:11:38.960 --> 00:11:45.930
+And Preview only has access
+to what it actually needs and
+
+00:11:45.930 --> 00:11:53.910
+what the user has actually said
+that it should have access to.
+
+00:11:53.910 --> 00:12:02.240
+And this allows us to minimize the
+impact of any exploits that might
+
+00:12:02.340 --> 00:12:06.690
+exist in the PDF parsing code.
+
+00:12:09.210 --> 00:12:11.800
+So those are some examples
+of how we've used XPC.
+
+00:12:11.800 --> 00:12:15.540
+Let's talk about how you
+guys would want to use XPC.
+
+00:12:16.990 --> 00:12:20.900
+Well, first of all,
+XPC is new on Lion and it's only
+
+00:12:20.900 --> 00:12:22.700
+available on Mac OS X currently.
+
+00:12:22.700 --> 00:12:27.970
+And what we've done with XPC and
+services and these separate helpers
+
+00:12:27.970 --> 00:12:30.080
+is we've made them part of your app.
+
+00:12:30.160 --> 00:12:33.600
+They do not reside outside
+your app bundle in any way.
+
+00:12:33.600 --> 00:12:35.880
+They never get moved
+or copied from there.
+
+00:12:35.880 --> 00:12:39.490
+They are always in there and they
+are automatically bootstrapped.
+
+00:12:39.570 --> 00:12:45.380
+You guys do not have to call a single
+API to install these privileged helpers.
+
+00:12:45.670 --> 00:12:48.860
+The system just detects that they're
+there and does the right thing.
+
+00:12:48.860 --> 00:12:53.500
+And the helpers themselves have
+their process lifecycle controlled
+
+00:12:53.650 --> 00:12:55.480
+by a runtime behind the scenes.
+
+00:12:55.540 --> 00:12:59.180
+So you don't have to worry about
+lingering helpers taking up system
+
+00:12:59.180 --> 00:13:01.060
+resources when they're idle.
+
+00:13:01.060 --> 00:13:02.550
+We take care of all that for you.
+
+00:13:04.870 --> 00:13:07.810
+A little more in depth,
+we identify a service by
+
+00:13:07.810 --> 00:13:09.610
+its CFBundle identifier.
+
+00:13:09.750 --> 00:13:11.610
+We're big fans of reverse DNS.
+
+00:13:11.800 --> 00:13:13.700
+We use it all over the place,
+as you'll see.
+
+00:13:13.700 --> 00:13:18.520
+Your services are little bundles that
+will live in the content slash xpc
+
+00:13:18.520 --> 00:13:21.620
+services directory of your application.
+
+00:13:22.820 --> 00:13:26.450
+Services are meant to be
+purely on demand and stateless.
+
+00:13:26.450 --> 00:13:29.610
+So a service should have as
+little state as possible,
+
+00:13:29.680 --> 00:13:33.750
+and it's meant to do a little piece of
+work efficiently and then go away so it
+
+00:13:33.750 --> 00:13:36.160
+takes up as few resources as possible.
+
+00:13:37.860 --> 00:13:40.800
+And we will automatically track
+the activity of your service.
+
+00:13:40.880 --> 00:13:44.670
+We know when you're receiving a message,
+we know when you're processing a reply,
+
+00:13:44.670 --> 00:13:47.170
+and we know when you have
+no more outstanding work.
+
+00:13:47.470 --> 00:13:51.200
+So we can idle exit you when
+we know that you've gone idle.
+
+00:13:52.800 --> 00:13:55.800
+And on Mac OS X and
+Lion in the App Store,
+
+00:13:56.000 --> 00:14:00.800
+this is the only way to separate
+privileges in the App Sandboxing world.
+
+00:14:00.800 --> 00:14:03.510
+So if you have a piece of code
+that you want to run with,
+
+00:14:03.510 --> 00:14:07.350
+say, an entitlement that you don't
+necessarily want to put on your app,
+
+00:14:07.400 --> 00:14:10.020
+an XPC service is the way to do it.
+
+00:14:10.090 --> 00:14:13.380
+And for the entire shebang,
+code signing is required.
+
+00:14:16.260 --> 00:14:18.200
+So this is what the bundle
+structure looks like.
+
+00:14:18.310 --> 00:14:22.360
+As I said before, we have this contents
+XPC services directory.
+
+00:14:22.380 --> 00:14:27.840
+And we name our bundles with
+the reverse DNS style name.
+
+00:14:27.930 --> 00:14:31.630
+So that must be identical to
+the CFBundle identifier that's
+
+00:14:31.740 --> 00:14:34.300
+specified in your bundles Info.plist.
+
+00:14:34.400 --> 00:14:36.920
+So in this case,
+we have a photo uploader app.
+
+00:14:36.920 --> 00:14:40.460
+And it might want to have a
+separate service responsible
+
+00:14:40.550 --> 00:14:42.290
+for actually doing an upload.
+
+00:14:42.350 --> 00:14:46.310
+And it might have a service that's
+responsible for unzipping any,
+
+00:14:46.310 --> 00:14:50.560
+say, gzipped replies that the
+server might send back.
+
+00:14:51.290 --> 00:14:55.790
+Digging into one of those services,
+we have basically just the
+
+00:14:55.790 --> 00:15:00.140
+executable and an Info.plist and
+any associated resources that you
+
+00:15:00.260 --> 00:15:01.860
+want to include in your bundle.
+
+00:15:01.860 --> 00:15:07.780
+And notice that we name the executable
+com.mycompany.photouploader.service
+
+00:15:08.450 --> 00:15:09.530
+functionality.
+
+00:15:09.540 --> 00:15:14.810
+And again, we enforce that this must be
+the same as the bundle name
+
+00:15:14.810 --> 00:15:17.520
+in your CFBundle identifier.
+
+00:15:18.080 --> 00:15:21.300
+This is so that when you see this
+thing running an activity monitor,
+
+00:15:21.300 --> 00:15:25.980
+it's very clear what application
+it belongs to and what it's doing.
+
+00:15:29.750 --> 00:15:32.780
+The default environment of a
+service is very restrictive.
+
+00:15:32.920 --> 00:15:36.030
+As I said before, we really wanted these
+things to be small,
+
+00:15:36.030 --> 00:15:38.100
+stateless, and on demand.
+
+00:15:38.260 --> 00:15:41.530
+So think of them more
+as background agents,
+
+00:15:41.670 --> 00:15:46.740
+like let's say you set the LSUI element
+bit in your info P list for your app,
+
+00:15:46.820 --> 00:15:50.100
+rather than an actual app themselves.
+
+00:15:50.260 --> 00:15:53.870
+And by default,
+we will throw you into a GCD run
+
+00:15:53.870 --> 00:15:56.730
+loop by calling dispatch main.
+
+00:15:57.270 --> 00:16:00.350
+And each service runs in a
+separate security session
+
+00:16:00.660 --> 00:16:02.040
+from the app that hosts it.
+
+00:16:02.090 --> 00:16:07.870
+So the service does not have access to
+the keychain credentials or the keychain
+
+00:16:07.870 --> 00:16:10.350
+access that the app does by default.
+
+00:16:12.390 --> 00:16:16.300
+Now if you need these behaviors,
+or if you need to modify them slightly,
+
+00:16:16.300 --> 00:16:20.170
+we have a few bits in the info P list
+of your service that you can set.
+
+00:16:20.200 --> 00:16:21.990
+The first is the run loop.
+
+00:16:22.120 --> 00:16:27.740
+If you need to integrate with
+NS run loop transparently,
+
+00:16:27.740 --> 00:16:31.950
+you can set this run loop key
+to be the NS run loop string,
+
+00:16:31.960 --> 00:16:35.550
+and we will call NS run loop run
+instead of dispatch main to get
+
+00:16:35.700 --> 00:16:37.770
+things moving in your run loop.
+
+00:16:38.840 --> 00:16:44.040
+And if your service does need
+access to the host keychain entries,
+
+00:16:44.350 --> 00:16:46.760
+then you can set this
+join existing session bit,
+
+00:16:46.780 --> 00:16:50.590
+and we will put you in the same
+session that the host app is in.
+
+00:16:50.600 --> 00:16:54.810
+And we also have an environment
+variables dictionary so that you can
+
+00:16:54.810 --> 00:16:59.050
+specify any environment variables
+and key value form in a dictionary
+
+00:16:59.090 --> 00:17:01.000
+that your service may need.
+
+00:17:03.380 --> 00:17:07.200
+Now let's talk a little
+bit about the XPC API.
+
+00:17:07.420 --> 00:17:11.700
+We have two fundamental components
+at the lib system level.
+
+00:17:11.830 --> 00:17:15.770
+So you don't have to actually
+link against anything new.
+
+00:17:15.870 --> 00:17:19.360
+All you have to do is include
+a header and you're good to go.
+
+00:17:20.020 --> 00:17:21.730
+The first is the Object API.
+
+00:17:21.890 --> 00:17:26.050
+And this is the API that
+lets you construct,
+
+00:17:26.140 --> 00:17:32.040
+decompose, and generally handle an
+IPC request from another process.
+
+00:17:32.160 --> 00:17:36.910
+And the second is the Transport API,
+which is responsible for managing
+
+00:17:36.910 --> 00:17:42.490
+the communication pipeline
+between a server and its client.
+
+00:17:43.270 --> 00:17:47.730
+So we're going to start, well, sorry.
+
+00:17:47.990 --> 00:17:51.260
+These things are actually
+very closely tied together.
+
+00:17:51.260 --> 00:17:57.780
+Traditionally in IPC, the network,
+or the connection and object
+
+00:17:57.780 --> 00:18:01.380
+serialization parts have been separate.
+
+00:18:01.580 --> 00:18:06.270
+So the pipe that you're sending the
+bytes over doesn't actually know anything
+
+00:18:06.270 --> 00:18:08.200
+about the structure of those bytes.
+
+00:18:08.200 --> 00:18:12.760
+And we decided to take a different
+approach by letting the pipeline actually
+
+00:18:12.860 --> 00:18:17.770
+know something about the structure
+of the bytes that you were sending.
+
+00:18:17.790 --> 00:18:21.780
+So we've kind of unified the
+object and transport layers of IPC.
+
+00:18:23.400 --> 00:18:27.300
+And as a consequence of this,
+the fact that there's serialization
+
+00:18:27.300 --> 00:18:30.340
+going on behind the scenes is
+just an implementation detail.
+
+00:18:30.540 --> 00:18:36.350
+There's no public serialization format
+that we guarantee or expose to you.
+
+00:18:38.120 --> 00:18:41.500
+So let's talk a little
+bit about XPC objects.
+
+00:18:41.920 --> 00:18:46.000
+XPC objects are basically
+propertyless style objects.
+
+00:18:46.100 --> 00:18:50.410
+And we've taken them and really
+just distilled them down to what's
+
+00:18:50.410 --> 00:18:55.900
+fundamentally necessary to very
+quickly and very easily send a request,
+
+00:18:55.910 --> 00:18:58.780
+or construct a request, send it,
+and decompose it.
+
+00:18:58.890 --> 00:19:02.720
+And to this end,
+we've applied some constraints to
+
+00:19:02.760 --> 00:19:04.760
+the different kinds of objects.
+
+00:19:04.950 --> 00:19:09.760
+So any container class
+or collection is mutable.
+
+00:19:09.760 --> 00:19:13.260
+There's no immutable array variant,
+for example.
+
+00:19:13.550 --> 00:19:16.870
+But all the leaf nodes,
+that is the object types that
+
+00:19:16.870 --> 00:19:19.870
+cannot reference other objects,
+are immutable.
+
+00:19:20.000 --> 00:19:22.620
+So once you create them,
+they are freeze dried
+
+00:19:22.620 --> 00:19:24.220
+and locked in stone.
+
+00:19:24.280 --> 00:19:26.410
+And we've taken the
+API and we've made it,
+
+00:19:26.570 --> 00:19:31.460
+we've really optimized it for very
+easy message packing and unpacking,
+
+00:19:31.460 --> 00:19:34.760
+and all XPC objects are
+retainable and releasable.
+
+00:19:34.920 --> 00:19:40.140
+So they're even useful outside
+the context of sending messages.
+
+00:19:42.910 --> 00:19:45.850
+So collection wise, we have both kinds.
+
+00:19:45.940 --> 00:19:48.290
+We have arrays and we have dictionaries.
+
+00:19:48.290 --> 00:19:54.280
+And those are the two really,
+really fundamental kinds of collections
+
+00:19:54.280 --> 00:19:57.440
+that you want to send or that you
+want to structure in a message
+
+00:19:57.440 --> 00:19:59.260
+that you send to another process.
+
+00:19:59.920 --> 00:20:05.430
+And we have a very rich collection
+of just pure data representations.
+
+00:20:05.430 --> 00:20:09.540
+We have anything from a null to
+all the way to a string and a UUID.
+
+00:20:09.540 --> 00:20:12.080
+And again, these are all immutable.
+
+00:20:12.080 --> 00:20:15.580
+So once you create them from
+the raw data that you have,
+
+00:20:15.620 --> 00:20:17.630
+they're locked in stone.
+
+00:20:20.310 --> 00:20:23.560
+Now since we know something,
+since the transport layer
+
+00:20:23.820 --> 00:20:29.250
+knows something about the
+serialization and the object layer,
+
+00:20:29.560 --> 00:20:33.160
+we're also able to offer
+support for out of line types.
+
+00:20:33.260 --> 00:20:36.460
+So you can actually
+create a file descriptor,
+
+00:20:36.460 --> 00:20:41.060
+put it inside a dictionary or an array,
+send that message
+
+00:20:41.060 --> 00:20:44.900
+across to another party,
+and that party will get a file descriptor
+
+00:20:44.900 --> 00:20:47.250
+that is equivalent to the one you had.
+
+00:20:48.220 --> 00:20:50.410
+And we can also do this
+with shared memory,
+
+00:20:50.710 --> 00:20:55.320
+and there is also an IOSurface
+API that gives you an XPC object
+
+00:20:55.320 --> 00:21:00.310
+and then lets you construct an
+IOSurface from that object as well.
+
+00:21:00.320 --> 00:21:05.240
+So you can use this to very easily
+give your service an IOSurface.
+
+00:21:07.010 --> 00:21:09.110
+As I said,
+we took a lot of opportunities to
+
+00:21:09.230 --> 00:21:15.760
+optimize the collection classes for
+convenient packing and unpacking.
+
+00:21:15.760 --> 00:21:20.450
+And one of the things that has
+traditionally been kind of a pain that
+
+00:21:20.560 --> 00:21:24.890
+required a lot of code with respect to
+constructing an object graph has been
+
+00:21:24.930 --> 00:21:29.500
+wrapping primitive types up first,
+then inserting them into the dictionary,
+
+00:21:30.320 --> 00:21:34.650
+and then taking the boxed object
+back out of the dictionary,
+
+00:21:34.790 --> 00:21:37.770
+checking its type,
+and then getting at the underlying value.
+
+00:21:39.410 --> 00:21:42.970
+So what we've done for our collections,
+the dictionaries and the arrays,
+
+00:21:43.160 --> 00:21:47.240
+we've given them accessors that
+let you get directly at the
+
+00:21:47.240 --> 00:21:49.840
+underlying primitive value.
+
+00:21:49.840 --> 00:21:53.310
+So you don't have to do all
+the work of extracting a type
+
+00:21:53.310 --> 00:21:56.740
+or extracting a box object,
+checking its type,
+
+00:21:56.740 --> 00:21:59.120
+and then extracting the underlying value.
+
+00:21:59.120 --> 00:22:01.660
+We let you get directly at it.
+
+00:22:01.720 --> 00:22:04.610
+And this allows for very
+quick composition and
+
+00:22:04.610 --> 00:22:06.680
+decomposition of messages.
+
+00:22:06.750 --> 00:22:09.010
+And again,
+there's no type checking needed.
+
+00:22:09.350 --> 00:22:12.390
+Now because of this,
+we have to be able to return some sort
+
+00:22:12.390 --> 00:22:18.370
+of sensible default in the case that
+the type of the object you're trying
+
+00:22:18.370 --> 00:22:23.660
+to get at does not match what you
+expect or that is simply not present.
+
+00:22:23.660 --> 00:22:29.880
+So if you try to get a Boolean value out
+of a dictionary and the key you've asked
+
+00:22:29.880 --> 00:22:35.330
+for either is not present or the value
+for that key is not actually a bool,
+
+00:22:35.330 --> 00:22:38.100
+we will simply return false.
+
+00:22:38.100 --> 00:22:43.330
+And we have a set of sensible
+primitive types for all the other
+
+00:22:43.330 --> 00:22:48.720
+types we support or primitive returns
+for all the other types we support.
+
+00:22:48.720 --> 00:22:53.470
+And if it happens that the
+default value is in your,
+
+00:22:53.470 --> 00:22:57.580
+you know,
+set of expected values that you can get,
+
+00:22:57.580 --> 00:23:00.200
+then you actually do have
+to go down the slow path,
+
+00:23:00.200 --> 00:23:03.030
+extract the boxed object,
+do the type checking.
+
+00:23:03.190 --> 00:23:07.940
+But for the 80 or 90% use case,
+this will make your life a lot easier.
+
+00:23:08.080 --> 00:23:09.700
+So let's look at some code.
+
+00:23:09.720 --> 00:23:14.720
+The first thing you're going
+to do is include xpc/xpc.h.
+
+00:23:14.930 --> 00:23:19.740
+Then if you want to create a dictionary,
+we have the XPC dictionary create API.
+
+00:23:19.740 --> 00:23:22.940
+And all of our APIs follow
+the familiar create,
+
+00:23:22.940 --> 00:23:26.960
+get,
+and copy conventions that are enumerated
+
+00:23:27.100 --> 00:23:31.820
+in the core foundation API guidelines.
+
+00:23:32.050 --> 00:23:34.790
+Now we're going to create an N64.
+
+00:23:34.910 --> 00:23:38.180
+So 64-bit wide signed integer,
+and we're going to create
+
+00:23:38.180 --> 00:23:40.380
+it with a value of 640.
+
+00:23:40.470 --> 00:23:44.080
+And then to insert it,
+we just do xpc dictionary set value,
+
+00:23:44.160 --> 00:23:46.180
+and you're done.
+
+00:23:46.250 --> 00:23:49.240
+After, of course, you release it.
+
+00:23:49.920 --> 00:23:55.020
+But doing the release is a pain and
+making the boxed object is a pain.
+
+00:23:55.090 --> 00:23:57.700
+So let's just use the primitive setters.
+
+00:23:58.230 --> 00:24:02.080
+Well, we've got our same dictionary,
+but instead of creating the boxed object
+
+00:24:02.180 --> 00:24:08.030
+and then setting the value for that,
+all we're going to do is call xpc
+
+00:24:08.030 --> 00:24:13.040
+dictionary set int 64 and give it
+our key and give it the underlying
+
+00:24:13.040 --> 00:24:16.280
+primitive value that we want to set,
+and you're done.
+
+00:24:16.360 --> 00:24:19.590
+The value is now in the dictionary,
+and you can get at it with
+
+00:24:19.590 --> 00:24:21.310
+one of the primitive getters.
+
+00:24:22.780 --> 00:24:28.560
+So if we want to get back at that value,
+we do xpc dictionary get int 64,
+
+00:24:28.560 --> 00:24:31.960
+and then that will return
+directly to us the value that
+
+00:24:31.970 --> 00:24:34.270
+was boxed up for the key x.
+
+00:24:34.280 --> 00:24:39.240
+Now, we inserted a y in there as well,
+but we did not insert a z.
+
+00:24:39.240 --> 00:24:42.720
+So when we ask for z...
+
+00:24:42.920 --> 00:24:45.440
+Because it is not present
+in the dictionary,
+
+00:24:45.470 --> 00:24:47.900
+we'll get back a value of zero.
+
+00:24:47.900 --> 00:24:51.040
+And we'll also get back
+zero if we did insert z,
+
+00:24:51.040 --> 00:24:54.120
+but let's say we made
+it a string instead.
+
+00:24:54.710 --> 00:24:57.150
+Now let's talk about XPC connections.
+
+00:24:57.230 --> 00:25:01.030
+These are the fundamental primitives
+that you're going to use for sending
+
+00:25:01.030 --> 00:25:05.600
+messages back and forth between
+your application and your services.
+
+00:25:05.600 --> 00:25:08.490
+Connections are virtual.
+
+00:25:08.580 --> 00:25:13.150
+So the fact that you have a connection
+to a service implies nothing about
+
+00:25:13.280 --> 00:25:15.370
+whether that service is running.
+
+00:25:15.600 --> 00:25:17.600
+When you send a message
+over that connection,
+
+00:25:17.600 --> 00:25:21.600
+we'll launch the service on demand
+to process the message and that's it.
+
+00:25:21.600 --> 00:25:25.600
+You don't have to worry about negotiating
+PID files or anything weird like that.
+
+00:25:25.600 --> 00:25:27.560
+Connections are also bidirectional.
+
+00:25:27.630 --> 00:25:32.770
+So the same thing that you're going
+to send your message over is also the
+
+00:25:32.770 --> 00:25:38.050
+same primitive that's going to give
+you back the responses from the server.
+
+00:25:38.780 --> 00:25:41.930
+And all of it is asynchronous
+and non-blocking.
+
+00:25:42.080 --> 00:25:44.600
+So when you send a
+message over a connection,
+
+00:25:44.670 --> 00:25:48.510
+it returns immediately
+and we do not block.
+
+00:25:48.590 --> 00:25:52.590
+And we just take the message and
+we enqueue it behind the scenes
+
+00:25:52.590 --> 00:25:57.420
+and our runtime will transparently
+send the messages when we can.
+
+00:25:57.770 --> 00:26:01.470
+And we'll send all your
+messages in FIFO order.
+
+00:26:02.920 --> 00:26:08.230
+So, let's take a look at a little fun
+animation about how XPC connections work.
+
+00:26:08.300 --> 00:26:10.920
+So we're starting out, here's your app.
+
+00:26:10.940 --> 00:26:14.780
+Your app has a service and
+it's going to talk to it.
+
+00:26:14.780 --> 00:26:18.960
+The first thing the service
+sees is a peer connection.
+
+00:26:19.330 --> 00:26:22.570
+So it's a lot like the accept model
+where you're listening on a file
+
+00:26:22.570 --> 00:26:27.650
+descriptor and then you just get new
+file descriptors out of there and those
+
+00:26:27.750 --> 00:26:31.020
+represent independent connections.
+
+00:26:31.960 --> 00:26:34.520
+And then the app's going
+to send some messages.
+
+00:26:34.760 --> 00:26:40.780
+And the messages on the other end of the
+connection are dequeued in FIFO order.
+
+00:26:40.820 --> 00:26:43.640
+The service is going to do some
+work and then it's going to
+
+00:26:43.640 --> 00:26:45.430
+send responses back to the app.
+
+00:26:45.430 --> 00:26:49.990
+And then the service might go away
+or it might close the connection
+
+00:26:50.120 --> 00:26:54.800
+and then the app is actually
+notified that that event happened.
+
+00:26:54.800 --> 00:26:58.830
+So you know about the state of your
+connection in the same way that messages
+
+00:26:58.830 --> 00:27:00.970
+are delivered to your connection.
+
+00:27:04.080 --> 00:27:07.240
+Let's take a look at the
+client side of the code here.
+
+00:27:07.330 --> 00:27:10.640
+So as I said, we're going to create,
+the services are identified
+
+00:27:10.790 --> 00:27:11.990
+by their bundle identifier.
+
+00:27:11.990 --> 00:27:15.460
+So that is how we're going to create
+a connection to the service we want.
+
+00:27:15.500 --> 00:27:18.860
+And we're going to call
+xpcconnectioncreate to a service
+
+00:27:18.860 --> 00:27:21.020
+called com.apple.service.
+
+00:27:21.020 --> 00:27:26.020
+The second parameter is a dispatch
+queue that is the target queue
+
+00:27:26.020 --> 00:27:30.380
+that all of the events that fire
+on the connection will execute on.
+
+00:27:30.430 --> 00:27:33.980
+And you always need to set an
+event handler for a client.
+
+00:27:34.020 --> 00:27:36.730
+So if you're using a connection,
+we'll get a little bit deeper
+
+00:27:36.730 --> 00:27:38.040
+into event handlers later.
+
+00:27:38.040 --> 00:27:40.520
+But once you've done that,
+you resume the connection by
+
+00:27:40.520 --> 00:27:42.230
+calling xpcconnectionresume.
+
+00:27:42.230 --> 00:27:45.060
+That tells the runtime that
+you're happy with the state of
+
+00:27:45.110 --> 00:27:48.640
+the connection and that you want
+to start receiving messages on it.
+
+00:27:50.670 --> 00:27:54.040
+Now messages in XPC are
+always dictionaries.
+
+00:27:54.040 --> 00:27:56.400
+And so we're going to create a
+dictionary that's our message.
+
+00:27:56.400 --> 00:27:58.700
+We're going to set some UN64 in there.
+
+00:27:58.700 --> 00:28:02.040
+And then we're going to call
+xpc-connection-send-message.
+
+00:28:02.040 --> 00:28:03.940
+Once we did that, we're done.
+
+00:28:03.940 --> 00:28:07.890
+The runtime behind the scenes
+retains a reference to the message,
+
+00:28:07.990 --> 00:28:09.630
+so we can just release it.
+
+00:28:09.660 --> 00:28:12.440
+Sometime later,
+the message will be delivered.
+
+00:28:12.780 --> 00:28:15.330
+Now because we've enqueued
+a message to be sent,
+
+00:28:15.330 --> 00:28:18.090
+we're going to launch
+the service on demand.
+
+00:28:18.350 --> 00:28:21.880
+And because we've got our
+single connection object
+
+00:28:21.880 --> 00:28:26.180
+on the application side,
+there is also going to be a new peer
+
+00:28:26.450 --> 00:28:29.430
+connection object on the server side.
+
+00:28:29.500 --> 00:28:33.610
+So even if your app creates multiple
+connections to the same service,
+
+00:28:33.760 --> 00:28:36.950
+they all show up as multiple
+connections on that end.
+
+00:28:36.950 --> 00:28:41.590
+They're not all unified just because
+they happen to be from the same PID.
+
+00:28:44.920 --> 00:28:47.800
+So as I said before,
+message sends are non-blocking.
+
+00:28:47.850 --> 00:28:51.610
+And we maintain a queue of
+messages to send for you.
+
+00:28:51.670 --> 00:28:53.820
+So you can send as many as you want,
+and we will send them as
+
+00:28:54.000 --> 00:28:56.610
+fast as we possibly can.
+
+00:28:57.060 --> 00:29:00.030
+But if you need to know when a
+message was delivered-- let's
+
+00:29:00.030 --> 00:29:04.300
+say you had a really big chunk
+of data that you wanted to send,
+
+00:29:04.300 --> 00:29:09.050
+and you want to know when that data
+has left your address space so that
+
+00:29:09.050 --> 00:29:12.120
+you can start allocating more--
+
+00:29:12.520 --> 00:29:16.580
+You can use this XPC connection
+send barrier API.
+
+00:29:16.620 --> 00:29:22.190
+And you just call this right after you've
+called XPC connection send message.
+
+00:29:22.260 --> 00:29:26.460
+And then we will invoke this block
+that you provide on the connections
+
+00:29:26.460 --> 00:29:30.940
+target queue after we have sent the
+message that you provided for us.
+
+00:29:31.110 --> 00:29:34.670
+And then again, release the message at
+the end when you're done.
+
+00:29:35.950 --> 00:29:39.470
+Looking at the server side,
+or the service side,
+
+00:29:39.740 --> 00:29:46.200
+an XPC service is going to call xpc_main
+with a single argument which is a
+
+00:29:46.350 --> 00:29:48.910
+function that is your event handler.
+
+00:29:49.490 --> 00:29:54.640
+And that event handler is going to
+receive new peer connections whenever
+
+00:29:54.640 --> 00:29:56.720
+there is a new connection to it.
+
+00:29:56.820 --> 00:30:01.780
+So, in the new connection handler,
+you can see that it accepts
+
+00:30:01.790 --> 00:30:05.580
+a single parameter that is
+of type XPC connection T.
+
+00:30:05.580 --> 00:30:10.070
+And then from there, we're going to,
+in the same fashion as we
+
+00:30:10.070 --> 00:30:14.140
+handle the connection that we
+got from XPC connection create,
+
+00:30:14.140 --> 00:30:18.110
+we have a similar set of responsibilities
+for the connections we get in
+
+00:30:18.230 --> 00:30:20.080
+this new connection handler.
+
+00:30:20.080 --> 00:30:24.060
+So, we're going to set an event handler
+and we're going to resume it.
+
+00:30:24.140 --> 00:30:27.380
+Now, because this came in as
+a parameter from a block,
+
+00:30:27.380 --> 00:30:31.140
+by convention,
+you do not have a reference to
+
+00:30:31.140 --> 00:30:34.620
+the connection that you get.
+
+00:30:34.620 --> 00:30:38.090
+So, if you want to keep a reference,
+you can call XPC retain
+
+00:30:38.090 --> 00:30:39.740
+on that peer connection.
+
+00:30:39.740 --> 00:30:44.090
+Now, we've got this little peer event
+handler thing inside our block.
+
+00:30:44.140 --> 00:30:46.990
+So let's take a look at
+what that looks like.
+
+00:30:47.510 --> 00:30:50.220
+So our pure event handler,
+we're going to check the type
+
+00:30:50.330 --> 00:30:52.090
+of the event that we got.
+
+00:30:52.450 --> 00:30:55.300
+If it's a dictionary,
+then we got a message.
+
+00:30:55.400 --> 00:31:00.300
+And so we should decompose the message,
+figure out what the request is,
+
+00:31:00.300 --> 00:31:01.920
+and then handle it.
+
+00:31:03.040 --> 00:31:05.330
+But we can also get
+different kinds of events,
+
+00:31:05.460 --> 00:31:07.190
+in this case, errors.
+
+00:31:07.420 --> 00:31:09.800
+So what happens if we get an error?
+
+00:31:09.950 --> 00:31:11.150
+What does it mean?
+
+00:31:11.400 --> 00:31:16.220
+Well, errors in XPC can be directly
+compared using pointer equality.
+
+00:31:16.270 --> 00:31:22.160
+So we're going to check if the event is
+equal to XPC error connection invalid.
+
+00:31:22.200 --> 00:31:26.990
+And what that means is that the remote
+side has closed down its connection.
+
+00:31:27.190 --> 00:31:33.040
+So this is your cue to tear down
+any data structures that you may
+
+00:31:33.040 --> 00:31:35.760
+have associated with this peer.
+
+00:31:36.680 --> 00:31:40.510
+We also have another type of
+error that connections can receive
+
+00:31:40.880 --> 00:31:44.400
+that indicates whether or not,
+or that indicates your
+
+00:31:44.490 --> 00:31:46.560
+service is about to go away,
+but you still have
+
+00:31:46.720 --> 00:31:47.630
+outstanding work to do.
+
+00:31:47.640 --> 00:31:50.310
+So this is your cue to
+flush all your buffers,
+
+00:31:50.310 --> 00:31:52.040
+write data to disk, etc.
+
+00:31:52.040 --> 00:31:53.690
+We'll get more into that later.
+
+00:31:53.700 --> 00:31:58.110
+And since we retained a reference
+to the peer when we got it,
+
+00:31:58.110 --> 00:32:00.550
+this is our cue to
+release that reference.
+
+00:32:01.380 --> 00:32:06.020
+So you can send and receive
+messages across a connection,
+
+00:32:06.020 --> 00:32:12.220
+but a very useful pattern in terms of
+dealing with a server is being able to
+
+00:32:12.220 --> 00:32:16.300
+get a single reply to a single request.
+
+00:32:16.300 --> 00:32:19.830
+So even if you receive a
+message over your connection,
+
+00:32:19.830 --> 00:32:22.620
+if you want to tie it
+to a specific action,
+
+00:32:22.620 --> 00:32:27.460
+it's up to you to track the state of it
+and demux the reply when it comes in to
+
+00:32:27.560 --> 00:32:30.230
+figure out what you have to do with it.
+
+00:32:32.100 --> 00:32:37.900
+So we let you do a one to one mapping
+of a message to a reply handler block.
+
+00:32:37.920 --> 00:32:41.740
+And this is independent of
+the connections event handler.
+
+00:32:41.880 --> 00:32:47.650
+So when we deliver messages to you,
+you'll get these FIFO stream of messages
+
+00:32:47.660 --> 00:32:49.360
+that go to the connection handler.
+
+00:32:49.380 --> 00:32:54.150
+And then you'll just get us, you know,
+each reply handler block will be
+
+00:32:54.200 --> 00:32:57.340
+invoked individually on its own.
+
+00:32:57.810 --> 00:33:03.570
+So the semantics of this reply handler
+are very similar to the semantics of
+
+00:33:03.630 --> 00:33:05.490
+the event handler of a connection.
+
+00:33:05.510 --> 00:33:07.470
+If you get a dictionary,
+that's your reply.
+
+00:33:07.580 --> 00:33:10.380
+Just deconstruct it and
+handle it however you want.
+
+00:33:10.400 --> 00:33:14.690
+Or else, if you get an error,
+that indicates that for some reason,
+
+00:33:14.690 --> 00:33:16.440
+the remote end will never reply.
+
+00:33:16.700 --> 00:33:18.560
+That could mean that
+the remote end crashed.
+
+00:33:18.660 --> 00:33:21.900
+It could mean that it chose
+not to reply to the message.
+
+00:33:21.900 --> 00:33:25.980
+It could mean that it simply
+closed its connection to you down.
+
+00:33:27.660 --> 00:33:32.060
+On the server side,
+it's up to you in your message schema
+
+00:33:32.060 --> 00:33:36.350
+and protocol to tell the server that
+I expect a reply to this message
+
+00:33:36.350 --> 00:33:40.610
+because the server has to do something
+a little bit special to get a reply sent
+
+00:33:40.610 --> 00:33:43.080
+back to you in a one-to-one fashion.
+
+00:33:43.100 --> 00:33:48.350
+So, otherwise,
+sending a reply message is very much
+
+00:33:48.500 --> 00:33:51.300
+the same as sending a normal one.
+
+00:33:51.400 --> 00:33:57.070
+The big difference is that we're going
+to call this xpc dictionary create
+
+00:33:57.070 --> 00:34:01.260
+reply API and it gets a single argument,
+which is the message that
+
+00:34:01.270 --> 00:34:02.640
+you want to reply to.
+
+00:34:02.640 --> 00:34:08.740
+And then it gives you back a dictionary
+that when you send it over a connection,
+
+00:34:08.740 --> 00:34:13.520
+we know to invoke the single reply
+handler block rather than the
+
+00:34:13.750 --> 00:34:16.630
+connections event handler block.
+
+00:34:16.640 --> 00:34:18.740
+But otherwise, it's exactly the same.
+
+00:34:18.740 --> 00:34:21.380
+You just call xpc
+connection send message.
+
+00:34:21.400 --> 00:34:25.580
+and then you release the message
+when you're done with it.
+
+00:34:28.020 --> 00:34:30.050
+So we covered errors a little bit before.
+
+00:34:30.050 --> 00:34:32.120
+Let's talk about them a
+little bit more in depth.
+
+00:34:32.220 --> 00:34:36.740
+We have three errors,
+which is a vast error space, I know.
+
+00:34:36.740 --> 00:34:41.010
+And the first is XPC error
+connection interrupted.
+
+00:34:41.060 --> 00:34:46.080
+This is your cue to re-sync
+any state to the other end.
+
+00:34:46.180 --> 00:34:52.170
+And what connection interrupted means is
+that something happened on the other end,
+
+00:34:52.440 --> 00:34:54.310
+but we can still get to the server.
+
+00:34:54.320 --> 00:34:57.740
+So the server may have crashed,
+for example.
+
+00:34:57.740 --> 00:35:00.860
+In this case,
+that just means that it's up to you to
+
+00:35:00.860 --> 00:35:04.180
+send a message back to the server saying,
+by the way,
+
+00:35:04.250 --> 00:35:08.800
+you were doing some work on behalf of me,
+and I'd like you to finish it, please.
+
+00:35:08.800 --> 00:35:14.870
+And this is something that we can
+do because services have names,
+
+00:35:14.880 --> 00:35:18.400
+and those names are always available,
+and we can always reconnect.
+
+00:35:18.400 --> 00:35:22.120
+Now, if you get the XPC error
+connection invalid,
+
+00:35:22.120 --> 00:35:25.600
+that means that the connection
+is just no longer usable.
+
+00:35:25.600 --> 00:35:27.870
+So in this case, it might be a PNN.
+
+00:35:27.940 --> 00:35:33.380
+It's a peer connection that you got
+from the XPC main event handler.
+
+00:35:33.380 --> 00:35:39.270
+And because if that connection goes away,
+it's not backed by a service name,
+
+00:35:39.280 --> 00:35:41.060
+so we cannot reconstruct it.
+
+00:35:41.120 --> 00:35:45.390
+And then the last one we have is
+the termination imminent error.
+
+00:35:45.400 --> 00:35:49.800
+And that is your signal that you
+should prepare to exit cleanly.
+
+00:35:49.880 --> 00:35:56.070
+So that means the app wants to
+go away for whatever reason,
+
+00:35:56.080 --> 00:36:00.280
+but you... you still have some
+outstanding work that we've detected.
+
+00:36:00.280 --> 00:36:05.130
+So we need you to finish that work in
+a timely fashion because we're going to
+
+00:36:05.230 --> 00:36:07.330
+send SIGKILL to your process very soon.
+
+00:36:11.200 --> 00:36:15.840
+So the errors that can be delivered
+to different types of connections,
+
+00:36:16.010 --> 00:36:18.800
+as I said before,
+connection interrupted can only be
+
+00:36:18.800 --> 00:36:24.500
+delivered to connections that you
+get back from XPC connection create,
+
+00:36:24.500 --> 00:36:25.860
+which are named connections.
+
+00:36:25.860 --> 00:36:28.060
+So then that just means
+remote end closed it,
+
+00:36:28.190 --> 00:36:31.450
+went away, did whatever,
+it was just a blip in the pipeline.
+
+00:36:31.460 --> 00:36:37.290
+The connection invalid error can
+only be delivered to peers received
+
+00:36:37.290 --> 00:36:40.280
+from the XPC main event handler.
+
+00:36:40.880 --> 00:36:45.980
+And this is because a named
+connection can always be reconstructed
+
+00:36:45.980 --> 00:36:47.430
+because the name is always there.
+
+00:36:47.460 --> 00:36:53.450
+A peer connection that the service
+receives can never be reconstructed.
+
+00:36:53.460 --> 00:36:54.610
+So,
+
+00:36:54.770 --> 00:36:58.130
+And the termination imminent
+error will again only be delivered
+
+00:36:58.130 --> 00:37:02.540
+to peer connections because
+it's only relevant to a service,
+
+00:37:02.610 --> 00:37:05.830
+because the service is
+the thing doing work.
+
+00:37:08.540 --> 00:37:13.270
+Now we have some other functionality
+in XPC that doesn't directly
+
+00:37:13.270 --> 00:37:18.400
+relate to application development,
+but is still very useful for
+
+00:37:18.400 --> 00:37:20.240
+anybody who's writing daemons.
+
+00:37:20.360 --> 00:37:26.020
+And so we've made LaunchD and XPC work
+together in some really nice ways that
+
+00:37:26.020 --> 00:37:33.100
+we think will be very beneficial to
+anybody writing a daemon on Mac OS X.
+
+00:37:34.300 --> 00:37:39.490
+And the first way we've done this is
+that we let you use XPC to communicate
+
+00:37:39.730 --> 00:37:42.200
+with launch to advertise services.
+
+00:37:42.380 --> 00:37:47.130
+So in a launch DP list,
+you can advertise a service.
+
+00:37:47.200 --> 00:37:49.440
+And that is called a Mach service.
+
+00:37:49.610 --> 00:37:54.100
+So we can use this XPC connection
+create Mach service API to create
+
+00:37:54.560 --> 00:37:58.350
+connections to services that are
+advertised in launch DP lists.
+
+00:37:58.350 --> 00:38:03.090
+So what this means is that you
+cannot dynamically register a name.
+
+00:38:03.200 --> 00:38:06.780
+It must be declared up
+front in a launch DP list,
+
+00:38:06.780 --> 00:38:10.650
+and then that P list should live
+in slash library launch agents
+
+00:38:10.880 --> 00:38:13.810
+or slash library launch daemons.
+
+00:38:14.330 --> 00:38:19.960
+Now, because we don't have the full
+XPC environment in a launch D job,
+
+00:38:20.130 --> 00:38:23.490
+you have to manually set up your
+listener so it's a little bit more
+
+00:38:23.490 --> 00:38:28.530
+complicated and the error cases are
+slightly more complicated as well.
+
+00:38:30.200 --> 00:38:33.990
+So how you would do this is
+that you put this Mach services
+
+00:38:34.110 --> 00:38:37.030
+key in your launch DP list.
+
+00:38:37.030 --> 00:38:40.340
+And we're just going to call
+it com.apple.xpc.example.
+
+00:38:40.340 --> 00:38:43.610
+And the value is just
+a Boolean saying true.
+
+00:38:43.620 --> 00:38:46.930
+And then when you want to
+connect to this service,
+
+00:38:47.090 --> 00:38:51.880
+it's actually on the client side very
+much the same as if you were connecting
+
+00:38:52.060 --> 00:38:54.940
+to one of your app's bundled services.
+
+00:38:54.940 --> 00:38:59.290
+So you just call xpc_connection
+create_mock_service with the name
+
+00:38:59.290 --> 00:39:01.940
+and then your target_queue parameter.
+
+00:39:01.950 --> 00:39:04.270
+And at the very end is a
+flags parameter that for now
+
+00:39:04.390 --> 00:39:05.930
+we're just going to pass 0 to.
+
+00:39:05.940 --> 00:39:09.590
+And then we're going to set the
+event handler very much the same way
+
+00:39:09.680 --> 00:39:11.920
+we did for an application service.
+
+00:39:11.940 --> 00:39:13.920
+And then we resume the connection.
+
+00:39:13.940 --> 00:39:16.870
+So very similar on this side.
+
+00:39:16.940 --> 00:39:22.060
+It's on the server side that things
+get slightly more complicated.
+
+00:39:22.410 --> 00:39:24.920
+So we're going to set up
+this listener connection.
+
+00:39:24.970 --> 00:39:28.200
+And we're going to do that by
+calling the same XPC service or
+
+00:39:28.200 --> 00:39:31.240
+XPC connection CreateMockService API.
+
+00:39:31.310 --> 00:39:35.420
+But instead of a 0 at the end,
+we're going to pass xpcConnection
+
+00:39:35.800 --> 00:39:37.460
+mockServiceListener.
+
+00:39:37.520 --> 00:39:41.860
+And the difference between
+this connection and,
+
+00:39:41.860 --> 00:39:47.430
+let's say, a peer connection that you get
+from the xpcMadeEventHandler is
+
+00:39:47.430 --> 00:39:52.620
+that the only kinds of objects this
+connection will get in its event
+
+00:39:52.620 --> 00:39:55.730
+handler are connections themselves.
+
+00:39:55.890 --> 00:40:01.970
+So you can take this event and
+safely cast it to an xpcConnectionT.
+
+00:40:02.190 --> 00:40:07.680
+Otherwise, the new peer event handler is
+effectively equivalent to the handler
+
+00:40:07.980 --> 00:40:09.650
+that you would pass to xpcMade.
+
+00:40:09.890 --> 00:40:12.400
+And again,
+we resume the connection to let the
+
+00:40:12.460 --> 00:40:14.900
+runtime know that we're ready to go.
+
+00:40:15.760 --> 00:40:19.830
+Our next feature that we've made
+LaunchD and XPC work together on
+
+00:40:19.830 --> 00:40:22.170
+is something we call XPC events.
+
+00:40:22.180 --> 00:40:26.940
+And these are basically for
+handling messages from the system.
+
+00:40:26.940 --> 00:40:30.700
+You don't necessarily have some client
+out there who's sending you messages,
+
+00:40:30.700 --> 00:40:33.800
+but there are some system events
+that you might be interested in.
+
+00:40:33.800 --> 00:40:37.540
+And what these basically are are
+alternate sources of demand for
+
+00:40:37.540 --> 00:40:39.540
+launching yourself on demand.
+
+00:40:40.390 --> 00:40:45.760
+And we've got an architecture that
+lets us support and implement arbitrary
+
+00:40:45.760 --> 00:40:50.880
+user space and kernel events through
+a very elegant event delivery API.
+
+00:40:50.880 --> 00:40:55.830
+And you enumerate the events that you're
+interested in in your LaunchDP list.
+
+00:40:59.030 --> 00:41:02.580
+So when I say events,
+I might be talking about I/O Kit,
+
+00:41:02.640 --> 00:41:06.620
+which has been one of our most long
+standing feature requests for LaunchD,
+
+00:41:06.770 --> 00:41:12.140
+is the ability to launch a job on demand
+when a certain I/O Kit event happens.
+
+00:41:12.220 --> 00:41:15.340
+And we've done that here.
+
+00:41:15.420 --> 00:41:18.420
+So the first thing you're going to
+do is make this new launch events
+
+00:41:18.420 --> 00:41:20.960
+dictionary in your LaunchDP list.
+
+00:41:21.040 --> 00:41:24.020
+And then in there is a
+sub-dictionary that says,
+
+00:41:24.020 --> 00:41:26.450
+these are the I/O Kit events
+I'm interested in.
+
+00:41:26.540 --> 00:41:31.200
+And that is just the signature,
+which is com.apple I/O Kit.matching.
+
+00:41:31.330 --> 00:41:36.210
+That itself is a dictionary of
+events that you're interested in.
+
+00:41:36.440 --> 00:41:41.880
+And so you might be a vendor
+distributing a device and so that is,
+
+00:41:42.100 --> 00:41:45.550
+let's just call it
+com.apple.deviceattach.
+
+00:41:45.560 --> 00:41:49.730
+And then you just specify your matching
+dictionary as you normally would.
+
+00:41:49.790 --> 00:41:53.970
+You put your product ID, your vendor ID,
+provider class,
+
+00:41:54.150 --> 00:41:57.680
+whatever I/O Kit event you want,
+you can match on and you'll be
+
+00:41:57.680 --> 00:42:00.200
+launched on demand when it happens.
+
+00:42:00.240 --> 00:42:04.940
+And there's one more thing you
+have to put in for I/O Kit support
+
+00:42:04.940 --> 00:42:09.900
+in your matching dictionary,
+which is this IOMatchStreamKey
+
+00:42:10.020 --> 00:42:12.390
+and you need to set it to true.
+
+00:42:14.690 --> 00:42:17.740
+We also support BSD notifications.
+
+00:42:17.850 --> 00:42:22.600
+So BSD notifications aren't
+quite as complex as I/O Kit.
+
+00:42:22.600 --> 00:42:23.530
+They're just names.
+
+00:42:23.670 --> 00:42:28.780
+So whenever somebody uses the
+notify APIs to post something,
+
+00:42:28.840 --> 00:42:33.620
+your LaunchD job might want to be
+launched on demand when that happens.
+
+00:42:33.770 --> 00:42:38.120
+So the event system that you're
+going to use instead is the
+
+00:42:38.280 --> 00:42:42.040
+com.apple.notifyD.matching system.
+
+00:42:42.090 --> 00:42:46.600
+And then all you do in your
+event dictionary is say,
+
+00:42:46.600 --> 00:42:48.340
+this is the notification name.
+
+00:42:48.390 --> 00:42:54.160
+And with this, you can very easily,
+very simply launch your job on demand
+
+00:42:54.330 --> 00:42:58.140
+when anybody posts a notification.
+
+00:42:58.490 --> 00:43:00.490
+And they don't even have
+to know who you are.
+
+00:43:00.670 --> 00:43:03.750
+You're just interested
+in some system event.
+
+00:43:05.520 --> 00:43:08.370
+So you also need to consume
+these notifications.
+
+00:43:08.500 --> 00:43:13.890
+So your LaunchD job needs to
+receive events through some handler.
+
+00:43:13.960 --> 00:43:16.790
+As I said before,
+if one of these events happens and you're
+
+00:43:16.790 --> 00:43:20.980
+interested in it and you're not running,
+LaunchD will launch you on demand.
+
+00:43:21.040 --> 00:43:24.860
+And as you're running,
+we will continue to feed you events.
+
+00:43:24.880 --> 00:43:30.460
+So we do that through this
+XPC set event stream handler.
+
+00:43:30.480 --> 00:43:34.960
+And this is a very simple API that just
+gives you the events that have happened.
+
+00:43:35.100 --> 00:43:39.660
+So because the events are queued up and
+you receive them through this handler,
+
+00:43:39.700 --> 00:43:42.900
+we guarantee that even
+if the event happened,
+
+00:43:42.900 --> 00:43:47.080
+let's say while your process was exiting
+and before LaunchD restarted you,
+
+00:43:47.090 --> 00:43:50.830
+that you will get that event
+and be relaunched to process it.
+
+00:43:50.940 --> 00:43:54.520
+So the first argument is the event
+system that you're interested in,
+
+00:43:54.520 --> 00:43:55.820
+the event stream.
+
+00:43:55.830 --> 00:44:00.880
+And so in this case, we're interested in
+com.apple I/O Kit.matching.
+
+00:44:00.940 --> 00:44:06.220
+The second parameter is a queue that you
+want to fire this event handler block on.
+
+00:44:06.240 --> 00:44:10.560
+And the third parameter is the
+actual event handler block itself.
+
+00:44:10.560 --> 00:44:15.140
+It's the same type as an event
+handler for a connection.
+
+00:44:15.450 --> 00:44:20.350
+In the case of an I/O Kit,
+so all events that you receive
+
+00:44:20.610 --> 00:44:24.080
+through this handler are
+guaranteed to have one key set,
+
+00:44:24.080 --> 00:44:28.720
+at least in a dictionary,
+and that is the xpc event key name.
+
+00:44:28.810 --> 00:44:34.080
+And that tells you what
+event actually fired.
+
+00:44:34.100 --> 00:44:37.610
+So in your LaunchDP list,
+you assigned a name to
+
+00:44:37.610 --> 00:44:41.810
+the event dictionary,
+com.apple.
+
+00:44:41.930 --> 00:44:44.320
+or com.vendor.deviceattach.
+
+00:44:44.360 --> 00:44:49.960
+That's what this API or that's
+what this key will give you back.
+
+00:44:50.070 --> 00:44:54.700
+So you can use it to distinguish among
+any interested events that you have.
+
+00:44:55.190 --> 00:44:59.790
+And in the case of I/O Kit,
+we actually give you the
+
+00:45:00.110 --> 00:45:05.130
+I/O registry entry ID of the
+node that caused this to fire.
+
+00:45:05.310 --> 00:45:09.550
+So if you know anything about I/O Kit,
+you can take this ID,
+
+00:45:09.830 --> 00:45:14.100
+pass it to the I/O Kit APIs,
+and then get directly an
+
+00:45:14.160 --> 00:45:20.140
+I/O Object T node that you can use
+to communicate with the registry.
+
+00:45:20.210 --> 00:45:25.330
+You don't have to reconstruct your
+matching dictionary in code to do it.
+
+00:45:25.530 --> 00:45:29.330
+We just tell you which
+node actually fired.
+
+00:45:30.040 --> 00:45:35.160
+So different event streams, you know,
+I/O Kit versus BSD notifications,
+
+00:45:35.160 --> 00:45:36.360
+will have different payloads.
+
+00:45:36.470 --> 00:45:41.980
+In the case of BSD notifications,
+there's nothing really to be a payload.
+
+00:45:41.980 --> 00:45:45.280
+The name that you provided
+is payload enough.
+
+00:45:45.380 --> 00:45:51.020
+Currently, we support launching on demand
+for I/O Kit and BSD notifications,
+
+00:45:51.070 --> 00:45:56.170
+but we fully intend to add more
+event streams as time goes on.
+
+00:45:56.430 --> 00:45:59.630
+But we think this is a really good
+starting set that will provide
+
+00:46:00.040 --> 00:46:05.930
+developers a lot of functionality
+to get their jobs running on demand.
+
+00:46:08.040 --> 00:46:10.140
+So that's the end of our session.
+
+00:46:10.140 --> 00:46:12.780
+We've got a few related sessions
+I'd encourage you to check out.
+
+00:46:12.780 --> 00:46:18.850
+Yesterday was Introducing App Sandbox,
+and just earlier today was the
+
+00:46:19.030 --> 00:46:22.060
+Blocks in Grand Central Dispatch
+in Practice session.
+
+00:46:22.060 --> 00:46:24.760
+Tomorrow,
+I very heavily encourage you to check
+
+00:46:24.760 --> 00:46:27.160
+out Mastering Grand Central Dispatch.
+
+00:46:27.160 --> 00:46:28.220
+It's going to be a great session.
+
+00:46:28.220 --> 00:46:31.860
+And for more conceptual
+overview about Launch on Demand,
+
+00:46:31.870 --> 00:46:35.900
+check out the Launch on Demand
+session from last year's WWDC.
+
+00:46:35.900 --> 00:46:40.900
+And documentation-wise,
+we fully intend to have man pages,
+
+00:46:40.900 --> 00:46:42.820
+but we do not have them yet.
+
+00:46:42.890 --> 00:46:49.740
+Instead, what we've got is a pretty good
+coverage in the header docs.
+
+00:46:49.900 --> 00:46:55.800
+So take a look at User Include
+XPC for any API-related questions,
+
+00:46:55.800 --> 00:47:01.900
+because what we talked about today for
+XPC was very much scratching the surface.
+
+00:47:01.900 --> 00:47:04.560
+There's a whole lot more
+stuff we couldn't cover.
+
+00:47:04.560 --> 00:47:05.870
+And of course, we're going to be talking
+about the XPC in a little bit.
+
+00:47:05.870 --> 00:47:05.880
+So if you're interested in
+learning more about XPC,
+
+00:47:05.880 --> 00:47:05.880
+please do so.
+
+00:47:06.050 --> 00:47:08.870
+Any questions you have,
+please post them on the dev forums.
+
+00:47:08.870 --> 00:47:10.600
+We check them regularly,
+and we'd be happy to
+
+00:47:10.600 --> 00:47:11.880
+answer your questions.
+
+00:47:11.880 --> 00:47:13.880
+So with that, thanks for coming.

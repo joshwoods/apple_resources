@@ -1,0 +1,191 @@
+---
+Title:  Adopting Metal, Part 2
+Year:   2016
+Web:    https://nonstrict.eu/wwdcindex/wwdc2016/603/
+
+[!] This transcript has potential transcription errors.
+---
+
+Hi, everyone, and welcome to WWDC. I hope you're all having a good time so far and you've had some nice sessions you've seen. We've got a great week for you guys. It's going to be really fun. I'm Matt Collins. This is my colleague Jared Marsau and we're here to talk Adopting Metal, Part 2. This is Section 603. So if you're in the wrong place, you get to see some graphics.
+
+So let's recap. We have two Adopting Metal Sessions. Hopefully you were here for Warren's presentation a little bit ago, where we talked about the fundamental concepts: Basic drawing, lighting, texturing, good stuff like that. And in this presentation we're going to take it to the next level. We're going to draw many objects. We're going to talk about managing dynamic data, large amounts of dynamic data, GPU-CPU synchronization, and we'll cap it off with some multithreaded encoding.
+
+Tomorrow we've got some great presentations. We'll talk about what's new in Metal. We'll have the first session, tessellation, resource heaps, memoryless frame buffers, and some stuff about our improved tools to really help you guys get the best out of your apps. Part 2, we'll talk about function specialization and function resource read-writes, wide color and texture assets, and additions to Metal performance shaders.
+
+And if you really want to dig in heavy, we'll have an awesome talk about advanced shader optimization, shader performance fundamentals, tuning shader code, more detailed about how the hardware works. It'll be great. So if you're really interested in tuning your shaders to make them to best they can be, check out that tomorrow.
+
+So this is Part 2 of Adopting Metal and we're going to build on what we learned in Part 1. We figured out how to get up and running. So let's take a look at the concepts that you need to get the most out of Metal in a real-world situation. We've got a demo that will draw a ton of stuff in a simple scene and we'll use that demo for context during today's session as we discuss and learn a couple lessons from it.
+
+We'll talk about the ideal organization flow of your data, how to manage large chunks of dynamic data, the importance of synchronization between the CPU and the GPU, and, like I said before, some multithreaded encoding. So hopefully you're familiar with the fundamentals of Metal because we won't be going over them again. So we expect that you understand how to create a Metal queue, a Metal command buffer, how to encode commands, and we'll build on that to go forward. So let's start with the demo itself and see what we're aiming towards.
+
+So right now we've got 10,000 cubes and they're all spinning around, loading in space. It's an interesting scene. Metal allows us to issue a ton of draw calls with very low overhead. So here we have 10,000 cubes and 10,000 draw calls. You can see on the bottom there's a little shadow. We're using a shadow map, playing on the bottom, some nice anti-aliased lines give you some depth cues, and of course all of our cubes.
+
+So what goes into rendering a scene like this? As you can see, we've got a lot of objects and each of these objects has its own associated piece of unique data. We need the position, rotation, and color. And this has to update every frame because we're animating them. So this is a bunch of data that we're constantly changing, constantly have to reinform the GPU what we're drawing. We can also draw a few more objects, maybe a little more.
+
+You can spin it around a little bit and see that we're actually floating in space. So we have a draw call for cube and a bunch of data for cube and we have to think about the best way to think about this data, how to manage it, and how to communicate it to the GPU. So let's dive right in. Thanks, Jared.
+
+Managing Dynamic Data: This is a huge chunk of data that's changing every frame. And as you can imagine in a modern app like a game, you also have a bunch of data that every frame needs to be updated. So our draw basically looks like this. We want to go through all the objects we're interested in drawing and update them.
+
+Then we want to encode draw calls for every object and then we have to submit all these GPU commands. We have a lot of objects. We started at 10,000 and we were cranking it up to up to 100, 200,000. Each of these objects has its own set of data and we have to figure out the best way to update this.
+
+Now in the past, you might've done something like this. You push updated data to the GPU, maybe uniforms or something, you bind a shader, some buffers, some textures, and you draw. And you push some more data up. You bind shader, buffers, textures. You draw your next object. In our scene we repeat this 10,000, 20,000 times, but we really want to get away from this sort of paradigm and try something new.
+
+What if we could just load all our data upfront and have every command that we issue reference the data that was already there. The GPU is a massively powerful processer and it does not like to wait. So if all our data in already in place, we can just point the GPU to it and it will go happily crunch away and do all our rendering for us.
+
+And each draw call we make then references the appropriate data that's already there. In our sample, it's very straightforward. We have one draw that references one chunk of data. So the first draw call references the first chunk of data, the second, the second chunk, and so on. But it doesn't have to be that way and we can actually reuse data.
+
+We have some data, like at the front here, frame data, that we can reference from all our draw calls or we could have a draw call that references two pieces of data in different places. If you're familiar with instancing, it's a very similar idea. All your data will be in place before you start rendering.
+
+So how do we do this in Metal? In our application, we create one single Metal buffer and this is our constant buffer. It holds all the data that we need to render our frame. We want to create this upfront, outside of the rendering loop, and reuse it every time we draw.
+
+We don't duplicate any data. Again, any draw call can reference any piece of data, so there's no need for duplication. Each draw call will reference an offset into the buffer. It'll do a little bit of tracking to know which draw represents which offset. And then you'll just draw with everything and everything will be in place. Let's take a look at the code for this.
+
+Here's the code from the app. You can think of us as having two sets of data. Like I mentioned before, there's a set of frame data that will update here and there's a set of data that will change per object. This is the unique rotation position, et cetera. So we need to put both sets of data in place.
+
+Now what do I mean by per-frame data? Well this is data that is consistent across every draw call we make. For example, in our sample we have a ViewProjection matrix. It's a 4 by 4 matrix, very straightforward, if you're familiar with graphics. It represents the camera transform and the projection. This is not going to change throughout our frame, so we only need one copy of it.
+
+And we'd like to reuse data as much as we can so we can create one copy and put it into our buffer. Let's start filling this out. So here, we have our constant buffer, which is just a Metal buffer we've created. And with the Contents function, we have a pointer to it.
+
+Our app has a helper function, which is GetFrameData, and this returns that main pass structure I just showed you that has the view transform in it, the ViewProjection transform. Excuse me. And then we simply just copy this into the start of our buffer and then we're in place.
+
+So our buffer will look like this. We'll have a MainPass with the appropriate data for our frame and we'll put it at the start of our giant constant buffer. So now we have all this empty space afterwards. And like we saw, we need to do 10,000, 20,000 draw calls, so we need to start filling this out with a ton of information.
+
+So then we have a set of per-object data and this is the unique data we need to draw a single object. In our case, we have a single LocalToWorld transform, which is the concatenation of the position and the rotation and we have the color. So this is the set of data we need per draw call.
+
+So we'll walk through every object we want to render. We'll keep track of the offset into the buffer. We have our updateData utility function, which will do our little update for our rotation, and then we'll update the offset. This will pack our data tightly and we'll fill it out as we go through. Let's take a closer look at what updateData looks like. It's quite simple.
+
+Now, animation is kind of out of the scope of this talk, so I have a little helper function here that's updateAnimation with a deltaTime. This could be whatever you want in your own application and indeed you should but depending on what sort of animation you need. But it my case it returns an objectData object which has the LocalToWorld transform and the color. And just as I did before, I copy it into my constant buffer.
+
+So here's what that looks like. I've got my frame data in place. I have my other data, another piece, and another piece. So all our data is in place and we're ready for rendering. But are we missing anything? Turns out that we are and I want to bring your attention to this.
+
+We have one constant buffer. I mentioned I created one Metal buffer and I was reusing it. Now there's a problem with this. The CPU and the GPU are actually two unique parallel processors. They can read and write the same memory at the same time. So what happens when you have something reading to a piece of memory while something else is writing to it?
+
+Resource contention. So it looks a little like this. The CPU prepares a frame and writes it to a buffer. The GPU starts working on this and reads from the buffer. The CPU doesn't know anything about this, so it decides I'm going to prepare the next frame and it starts overwriting the same data. And now our results are undefined. We don't actually know what we're reading to, reading from, or writing to or what the data state will be.
+
+So it's important to realize in Metal, this is not handled for you implicitly. The CPU and GPU can write the same data at the same time however they'd like. You must synchronize access yourself. It's just like writing CPU code that's multithreaded. You have to ensure you're not stomping yourself.
+
+And that brings us to CPU-GPU synchronization. Let's start simple. The easiest way to do this would to just be to wait after you've submitted commands to the GPU. Your CPU draw function does all of its work, submits the commands, and then just sits there until it's ensured the GPU is done working.
+
+That way we know we won't ever override it because the GPU will be idle by the time we try to generate our next frame. This won't be fast but it's safe. So we need some sort of mechanism for the GPU to let us know, hey, I'm done with this, go do your thing.
+
+Metal provides this in the form of callbacks. We call them handlers and there are two of them that are interesting, addScheduledHandler and that executes when a command buffer has been scheduled to run on the GPU. And for us, an even more interesting one is the completion handler and this is called when the GPU has finished executing a command buffer. The command buffer is completely retired and we're ensured at this point it's safe to modify whatever resources that we were using there. So this is perfect. We just need some way to signal ourselves that, hey, we're done, we can go forward.
+
+Now how many of you are familiar with the concept of a semaphore? Anyone? Pretty good. Quick background on semaphores. They are synchronization primitive and they're used to control access to a limited resource and that fits us perfectly here. We have one constant buffer and that's a limited resource, so we'll have a semaphore and we'll create it with a value of 1. The count on a semaphore represents how many resources we're trying to protect.
+
+So we'll create our semaphore. And again, this is something that should be created outside of your render loop. And the first thing we do once we start to draw is we wait on the semaphore. Now in Apple semaphore, we call it waiting. Some people call this taking. Some people call it downing. It doesn't really matter.
+
+The idea is that you wait on it and our timeout we set to distant future, which effectively means we'll wait forever. Our thread will go to sleep if there's nothing available and wait for something to do. When we're done, in our completion handler we will signal the semaphore. That'll tell us that it's safe to modify the resources again. We're completely done with it and we can go forward.
+
+So this is sort of a naive approach to synchronization but it looks a little like this. Frame 0 we'll write into the buffer. And on the GPU, we'll read from the buffer. The CPU will wait. When the GPU is done processing Fame 0, it will send the completion handler and frame 1 will work and create another frame on the CPU.
+
+And that will process on the GPU and so on. So this works but, as you can see here, we have all these waits and both the CPU and GPU are actually idle half the time. It doesn't seem like a good use of our computing resources. What we'd like to do is overlap the CPU and the GPU work. That way we can actually leverage the parallelism that's inherent in this system, but we still need to somehow avoid stomping our data.
+
+So we'd like our ideal workload to look like this. Frame 0 would be prepared on the CPU, pushed to the GPU. While the GPU is processing it, the CPU then gets to work creating frame 1 and so on, and again. So one thing to keep in mind here is that the CPU is actually getting a little ahead of the GPU.
+
+If you notice where frame 2 is on the CPU, frame 0 is the only thing that's done on the GPU. So we're a little bit ahead and I want you to keep that in mind for a little later. But first let's talk about our solution in the demo and what we do here. We'd like to overlap our CPU and GPU but we know we can't do it with one constant buffer without waiting a lot. So our solution is to create a pool of buffers.
+
+So when we create a frame, we write into one buffer and then our CPU proceeds to create the next frame while writing into another buffer. While it's doing this, the GPU is free to read from the buffer that was produced before. Now we don't have an infinite number of buffers because we don't have infinite memory. So our pool has to have a limit. On our application, we've chosen three.
+
+This is something that you need to decide for yourself. We can't tell you what to do because there are a lot of things that go into the latency consideration, how much memory you want to use. So we recommend you experiment with your app what fits for you. For this example, we've chosen three.
+
+So here, you can see we've exhausted our pool. We have three frames that have been prepared but only one is finished on the GPU. So we need to wait a little bit. But by now, frame 0 is done, so we can reuse the buffer from the pool and so on.
+
+So let's look at this in code. Here's synchronizing access to constant buffers. We've already got a semaphore and they're great for controlling access to limited resources. In this case our limit is three but it can be whatever you'd like. So here we create our semaphore with our count.
+
+And instead of creating one constant buffer, we now create an array of them. And lastly, we need an index and we'll use this index to represent the currently available constant buffer for us to use. We can walk through the array and wrap around and the semaphore will control our access and protect us.
+
+So in our draw function, we'll immediately wait on the semaphore, and if there's nothing available, we'll go to sleep. Once we've taken the semaphore and proceeded, we know it's safe for us to grab the current constant buffer. In our index, current constant buffer is tracking which one's available.
+
+Then we fill out our frame as normal, encode all our commands, do all our updates, add the completion handler, and then we'll signal the semaphore, saying, hey, we're done with this frame. You can go forward. And the last thing we need to do is update the index. We'll add one. We'll use modulo to wrap around. And don't worry, we don't have to worry about overwriting ourselves because the semaphore will protect us.
+
+So constant buffers in the demo. The demo has an array of three buffers and I've seen some applications track buffers by marking them as, oh, this is being read from in frame number 7, this is written to you in frame number 5. But with this model you don't actually have to do that. The semaphore takes care of all the synchronization for you.
+
+And if you can take the semaphore, you're guaranteed that the last frame that was using that was done, otherwise you'd still be asleep. So now all our data is in place and it's protected. And we'd like to start issuing a bunch of draw calls to get some stuff on the screen.
+
+So here's the basic rendering loop for our demo. We have two passes: One pass that draws a shadow map and one pass that reads the shadow map, and we've decided to split these into two separate command buffers. There's a good reason for this. It lets us have two encoding functions that are independent and unique. They don't depend on each other. You encode the shadow pass. You pass that to command buffer and the constant buffer that you've already filled out and it encodes all the commands to render the shadow map.
+
+And then you have a separate encoding function that encodes the main pass. You pass it to mainCommandBuffer and the other data you need and it encodes all those other commands. When the encoding is all done, you call commit on your two command buffers, push them off, and then you've got your frame.
+
+So what goes into actually encoding drawing one of our cubes? We need a bunch of data and not just the rotation data. We need some geometric data for the cubes, which is quite simple, you know, think about a cube is what, eight vertices, maybe an index buffer. And in our sample, we don't really have complex materials or anything, just some very simple Lambert shading. So we could reuse that pipeline state object across all of our cubes.
+
+We mentioned the per-frame data earlier. We need one copy of that. So we'll update it. Stick it in place. And then of course we need the per-object data, that LocalToWorld and the color information that we're animating. So when we issue our draw calls, we want to make sure we reference the correct data.
+
+So our encoder will produce commands, put them into our command buffer, draw call 0 will reference both the frame data and the object that we're interested in. Draw call 1, similarly, will reference the frame data and the object 1 data and so on. This way everything's in place. We issue our calls and the GPU will start crunching away.
+
+Now we have a ton of draw calls to issue. You know, in our demo, it was minimal, 10,000, and we want to issue these as efficiently as possible. So we'd like to avoid doing redundant work. We don't want to reset everything every draw. Anything that's shared, geometry, pipeline states, we'd like to set that once and leave that in place. So avoid redundant state updates and avoid redundant argument table updates.
+
+It's also worth keeping in mind that the vertex and fragment stage argument tables are completely separate. You can bind a buffer to the vertex stage and not to the fragment stage or vice-versa. But if you have to bind everything to both stages, this can potentially double the calls you call the setVertexBuffer, setFragmentBuffer.
+
+This is one reason we didn't use set vertex bytes in our example. You can imagine we have 50,000 objects and we had to make a copy of all that data twice, once for the vertex stage and once for the fragment stage. That would quickly get really big. But if we kept it all in one buffer and just referenced it, we wouldn't have to worry about that. And the last guideline I want to point out is using a new function, setVertexBufferOffset/ setFragmentBufferOffset. This merely changes the pointer into one of your buffers.
+
+So you can see here when you call these, they actually don't take a reference to a Metal buffer. They take an offset and an index. This is because you must have already set the buffer to that specific point and this just changes the pointer within it and that's perfect for what we want. We have one constant buffer and we're just walking through it. So we can set it once in the beginning and then every time we draw, we call setVertexBufferOffset and just point the next draw call to the current spot in our buffer.
+
+It looks a little something like this. We bind this constant buffer and then we call setVertexBufferOffset with this offset. Then we call it again striding it forward and again striding it forward. We're not changing the buffer that we've set to this index. We're just changing the offset within that buffer.
+
+With these guidelines in mind, our encoding is actually pretty simple. We have a bunch of data we can set up front. The per-frame constants is pretty obvious because we know we're not going to change it. So we'll set that. We'll set the constant buffer once because we know it has to be in place for us to use the setVertexBufferOffset function.
+
+We'll set the geometry buffer and the pipeline state because we know they're shared across all of our cubes. Then finally we can start looping through all the objects we want to draw. We'll set the offset into the constant buffer for our current draw. And then we'll actually issue the draw.
+
+And here's the code from the encode main pass function in the sample. We'll start off by setting the vertex buffer that is our geometry and the render pipeline state, which is our litShadowedPipeline. We'll set the constant buffer so we can use setVertexBufferOffset later. In this case we're setting it to both the vertex and the fragment stages.
+
+And then we'll set the per-frame data. Now you'll notice here that I've set the constant buffer to two separate indices with different offsets. And Metal allows you to do this as much as you want. You could set the same constant buffer to every index at a different offset if you'd like, completely up to you.
+
+And then we dive right into our loop. We need to track the offset because we know that we're not starting right at the beginning of our constant buffer. There's some frame data in there. So the offset will be pushed back past the frame data. Then we'll call setVertexBufferOffset and setFragmentBufferOffset to point this draw to the correct data that we want to draw with. We'll issue the draw call and then we'll set the offset again just striding one object data struct at a time.
+
+So our draws are in place. This is still very linear. And I promised you some multithreading and Warren mentioned that, hey, you can actually encode a bunch of stuff in parallel in Metal. So how would you do this? An ideal frame might look like this. Our render threat is chugging along and it realizes, hey, I need to render a shadow map and I need to render a main pass.
+
+It'd be great if I could code this in parallel. I've got multiple CPUs. So what if I dispatch this work out, encoded some stuff, then I rejoin back to the render thread and the render thread pushed this over to the GPU to do a bunch of work. This would look great.
+
+How many of you have used GCD? This is a great fit for Grand Central Dispatch. If you're not familiar, Grand Central Dispatch is Apple's multiprocessing API. This is an API that lets you create queues and these queues manage computing resources on your machine. There are two types of queues you can create. There's a serial queue. When you dispatch work through a serial queue, you're guaranteed that all that work will happen in order.
+
+But what's more interesting for us is the concurrent queue. When you dispatch work to the concurrent queue, GCD will look at your system and figure out the best way to schedule this for you. And that's perfect. We have two jobs we need to do in parallel. So if we created this one queue and just pushed the work to it, it would do that for us. This is another object you want to create once and reuse. So here's some code to create a concurrent dispatch queue. You should always a label on your queues. I've used the very creative label queue here but you might want to call it something else.
+
+So we made some modifications to the code. We still create the command buffers at the start. But since we were smart enough to use two command buffers and separate our encoding functions into two unique things, there isn't much else for us to do other than dispatch the work. So dispatchQueue.async is the main call you use to dispatch work to a queue in GCD. This is an asynchronous call. It'll push the work on and your thread will keep going. So here we dispatch the shadow pass and then we dispatch the main pass.
+
+We'll want to commit this work somehow so we call dispatch barrier sync and this makes sure that all the work is done by the time we get to this point. And then finally we've rejoined and we can commit our work. Now the ordering is important here. The shadow map has to be done by the time we reference it. So we have to commit the shadow command buffer first and then the main command buffer later.
+
+There's something else I want to bring up here. How many of you are familiar with the concept of a closure? Great. How many of you have ever had an issue where closures captures self and you thought you were referencing something else? You can be honest. It's happened to all of us.
+
+I just wanted to call this out. Closures capture self. So if you're referencing a member variable or an iVar within them and you're not explicitly saying self.iVar, it's still actually going to reference that variable. So if you want to make sure you're going to reference the correct data, it's a good idea to capture it outside and I'll show you what I mean in a second.
+
+These two things don't do the same thing. So in the first one where I encode the shadow pass, you can see the constant buffer I'm grabbing is dependent on self.constantBufferSlot. I don't actually know what that will be at the time it executes. This is really asynchronous programming. So by the time my dispatch is actually running, this could've changed behind my back. It may be right but it may not be. I can't guarantee it.
+
+So keep that in mind and don't do it that way. Instead, we'd like to capture a reference to the constant buffer we're interested in. So here we just say let constant buffer and grab it out of the array. But then when we issue our dispatch, we reference the specific one that we've already grabbed. That makes sure we know exactly what data we're reading from.
+
+So this is some multithreading fun. The actual code in the sample looks like this. We capture the constant buffer. And when we use it, we make sure we're using the correct one, the one that we've captured already, to know that we're using this frame's constant buffer. Now I had mentioned the ordering earlier and how this was important.
+
+When you create a command buffer and you commit it, the ordering that this executes on your GPU is implied by the order you commit it in. So if I commit the shadow command buffer first and the main command buffer second, I'm guaranteed that the shadow one will happen first on the GPU followed by the main command buffer. Sometimes we refer to this as implicit command buffer ordering.
+
+But you can be a little more explicit about it. Metal provides an enqueue function that enforces command buffer ordering. If you have a set of command buffers, you can enqueue them and you're guaranteed that they will execute in that order regardless of how you commit them or when you commit them.
+
+This is something really cool because it allows you to commit command buffers from multiple threads, in any order, and you don't have to worry about it. The runtime will ensure you're executing in the correct order. So let's see how to apply this to our code. A couple new additions here. Now when we create our command buffers, we immediately enqueue them in the order. Again, the order matters, so we still have to enqueue shadowCommandBuffer first and then mainCommandBuffer second.
+
+But now when we dispatch, we can actually commit from within our other thread. Again, the runtime is going to ensure the ordering. So we don't actually have to worry about it. This actually lets us remove that barrier we had before because we have no need to rejoin and commit the command buffers. They're already committed for us.
+
+But I seem to have skipped over all that synchronization stuff I talked about a second ago and we still need it because we're still going to be overriding ourselves if we don't have it. So can we apply these same synchronization lessons to this sort of multithreaded world? It turns out we can and it's actually quite straightforward. We bring back our friendly semaphore and our array of constant buffers. And again, don't forget to grab the correct one that you want. At the start, we'll wait on the semaphore and sleep if nothing's available. We've enforced our ordering with enqueue and we push it through.
+
+Now we know that mainCommandBuffer is the final command buffer in our frame. And we know that we want to signal that our frame is done. So we should add our completion handler to the mainCommandBuffer and you could do this from within the dispatch. So the mainCommandBuffer is the final command buffer. We add the completion handler to it, to signal our semaphore, and we commit it from within the dispatch, just like we did before.
+
+Now you may notice here that I'm referencing self.semaphore and a second ago I just told you to watch out for that. So what's going on? Well it turns out a semaphore is a synchronization primitive and we do actually want to be looking at the same one as all of our other threads. So we want the value of the semaphore at the time the thread is executing. So in this case, we actually want self.semaphore, something to keep aware of.
+
+And here's the recipe for our rendering. At the start of our render function, we wait on the semaphore. We select the current constant buffer. We write the data into our constant buffer that represents all of our objects. We encode the commands into command buffers. We can do the single-threaded, multithreaded, however you'd like.
+
+We add a completion handler onto our final command buffer and we use it to signal the semaphore to let us know when we're done and we commit our command buffers. And the GPU takes all this and starts chugging away at our frame. So let's look at the demo again and see what this got us.
+
+So here you can see in the top left, this is single-threaded encode mode and you can see how many draws we're issuing, 10,000. And the top right, you can see the time it takes us to encode a frame. So here we've got 5 milliseconds and we can crank the number of draws up and see that it starts costing more and more as we draw things.
+
+Now this is single-threaded mode. And when you think about it, we're drawing a shadow map, which means we have to issue 40,000 draws in the shadow map, and then we're drawing the main pass, which means we have to issue another 40,000 draws to reference that. But again, we can do this in parallel, so we've added a parallel mode to this demo. And you can see how it's faster to go through. Now take a look at everything that's going on. You can fly around a little bit.
+
+So here we have 40,000 cubes, unique, independent. They're all being updated. We're using GCD to encode a bunch of stuff in parallel. We have two command buffers: One to generate the shadow map on the ground and one to render all of the cubes in color. The lighting is quite simple, Lambert shadowing, which is basically what Warren talked about earlier, the N.L lighting.
+
+And that's our demo. This will be available as sample code for you guys to take a look at. Hopefully you can rip it apart, take some of the ideas and the thoughts in it and apply them to your own code. So what did we talk about today? When you walked in here, hopefully you came to Warren's session earlier and maybe you knew a little bit about graphics or had done some programming before, but we took you through everything in Metal. The conceptual overview of Metal, the reasoning around it is to use an API that is close to the hardware and close to the driver. We learned about the Metal device, which is the root object in Metal that everything comes from.
+
+We talked a bit about loading data into Metal and the different resource types and how you use them, the Metal shading language, which is the C++ variant you use to write programs on the GPU. We talked about building pipeline states, prevalidated objects that contain your two functions, vertex and fragment or a compute function, and a bunch of other baked-in, prevalidated state to save you time at runtime.
+
+Then we went into issuing GPU commands, creating a Metal queue, creating command buffers off that queue, and creating encoders to fill the command buffer in, and then issuing that work and sending it over to the GPU. We walked you through animation and texturing and using set vertex bytes to send small bits of data to do your animation in.
+
+Then when the small bits of data weren't enough, we talked about managing large chunks of dynamic data and using one big constant buffer and referencing it in multiple places to get some data reuse out of the system. We talked about CPU-GPU synchronization, the importance of making sure your CPU and your GPU aren't overriding each other and playing nicely. And then lastly, we talked a little bit about multithreaded encoding, how you can use GCD with Metal to encode multiple command buffers on your queues at the same time.
+
+And that's adopting Metal. Hopefully you enjoyed the talk and you can apply some of these to your apps and make your apps even better than they already are. If you'd like some more information, you can check out this website, developer.apple.com/wwdc/603. We have a few more sessions tomorrow that I recommend you go check out. At 11:00 o'clock, we have What's New in Metal, Part 1 and then a little later at 1:40, we have What's New in Metal, Part 2. That'll tell us everything that's new in the world of Metal, awesome stuff you can add to your applications to make them better.
+
+And then for you hardcore shader heads out there, we have Advanced Metal Shader Optimization at 3:00. So if you want to know how to get the best out of your shaders, I recommend you go check out that talk. It's really great. Thanks for coming to hear us talk. Welcome to WWDC. Have a good rest of the week. Thanks again.

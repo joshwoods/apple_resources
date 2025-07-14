@@ -1,0 +1,277 @@
+---
+Title:  Core Data Tips and Tricks
+Year:   2008
+Web:    https://nonstrict.eu/wwdcindex/wwdc2008/381/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Good afternoon, everyone. Welcome to session 381, Core Data Tips and Tricks. My name is Miguel Sanchez. I'm an engineer in the Core Data team. This is the middle chapter of the Core Data trilogy that we have prepared for you guys. This is the second session. I must warn you, we will end in the cliffhanger.
+
+So the purpose of this session is for you to gain a deeper understanding of Core Data technologies. I'm going to go over some best practices that we'd like you to follow. I'm going to be paying particular emphasis on optimization and performance issues within Core Data. I'm also assuming that most of you have some Core Data experience. Can I get a show of hands who does not have Core Data experience?
+
+Okay, those people that don't have a lot of Core Data experience, it's still a good session for you guys to listen to. There's a lot of good content that you will get out of it. I'm just not going to cover all the basics. And finally, the content that I'll be talking about is Leopard content. So this is all applicable to what's already shipping and you have had since last October.
+
+This is our roadmap. We'll be spending some time looking at fetching behind the scenes, how you can optimize that. Then going to a little bit of debugging and performance analysis, advanced property modeling that will lead us into migration, Leopard migration, and we'll finalize with multi-threading. Let's start out with fetching. By the way, the counter is not going.
+
+So fetching-- thank you. I hope everybody in this room is already aware of the speed difference between fetching something from MyO versus memory. So as your code data application is going along, it's requesting information, requesting fetches. Some of those will be serviced by data that you have already in memory.
+
+And some of the other fetches will have to go to disk to get them. So be aware that there's a huge speed barrier between those two worlds. When you're in the memory side of things, we're measuring things in nanoseconds. When we go to disk, we're now using milliseconds as a unit of measure. That's a sixth order of magnitude difference.
+
+It's actually not a million times slower. It's more in the thousands. We're measuring gigabytes versus terabyte accesses. But it's still a very important difference here. A thousandth time slower by having hit the disk. So it's very important for you guys to realize and to be aware of where that data is coming from and only fetch the things that you absolutely need to fetch.
+
+Now, Core Data already does a lot behind the scenes so that you don't have to worry too much about this. For example, as you know, we don't bring in all of your object graph when you instantiate your database. We simply bring in the main objects you initially requested, and if those have relationships, we treat the destination objects as faults. So those are like thin shells of objects which are not fully populated, and we only fetch them from disk as you actually touch those objects and request information. So we're not pulling in the whole object graph.
+
+One thing you might not be aware of is that behind the scenes, we are keeping a raw cache with entries with all of your object information. So here's the raw cache, here's my fully instantiated person, and there are the fields for the person entity. So when you trigger a fault, We go to the database and we populate the raw cache and then we fully realize your faulted object.
+
+But you must not equate firing a fault with accessing disk. It's not the same thing. Triggering a fault means simply that we're going to fully realize your object, but we could potentially find the information that we need in the raw cache already. This is because that information was prefetched somehow. It was fetched by another context, or maybe you even fetched it already in the code that you're in where you had returned your object back into a fault. So don't think that firing a fault always goes into disk.
+
+The keys for you to control how fetching happens is through the Fetch Request API. At a high level, you have an entity and a predicate that you're giving us. But remember that you have a lot of tweaking that you can do within the Fetch Request that you create.
+
+You can tell us whether you want us to return full objects or just the IDs. Do you want us to populate that row cache that I mentioned or not? Do you want us to pre-fetch relationships? Stop after a certain limit? So let's just walk through each one of these specific cases and how you would optimize your fetching.
+
+The absolutely most optimal fetching that you can potentially do going to disk is when you simply want to get back the count of a fetch request. So we have API on NSManagedObjectContext where you pass out a fetch request and we simply bring back the count of whatever was resulted in the database. So we don't create any IDs, no instance creation, no populating of the row caches, entries.
+
+The second level up is if you only want us to give you the object IDs. If this is what you want, by default we give you back full objects. If you only want object IDs, you can use the set result type in NSFetchRequest and you set the result type to be NSManagedObjectID result type.
+
+Now, why would you only want to get back IDs? There's a lot of things that you can do with IDs. You might be doing a simple membership comparison, where you don't need the full object. It's not an object-to-object comparison there. You're simply checking whether something belongs into a set, and that set could have come from a relationship or somewhere else. So you might not need the full ID to answer the question that you-- the full object to answer the question that you need.
+
+Now, one important thing to realize is that I just mentioned that we were going to get object IDs in the previous slide. The fact that you requested only object IDs in your fetch request does not imply that we did not populate your raw cache entry. So we do populate the raw cache entries, even though you only request the object IDs.
+
+The one thing we don't do is we don't fully realize your objects for you, but the raw cache entries are still populated. So if you want to avoid that step, you also have to tell us to not include the property values. So the default is to include the property values in the raw cache, and you have to tell us to not do that, and then we would only give you back the object IDs. So these two things are orthogonal, object IDs with populating the raw cache.
+
+Moving on, you want to prefetch your data. Let's say that you're in a situation where you're fetching in people of a person entity. And you know that every time you access a person, you will always be accessing the address information for that person. So you don't want to be triggering a fault individually and incurring multiple trips to the database. You want to give us the hint that you're going to be accessing that information right away, so why don't we do something about it?
+
+So if you tell us to prefetch the address relationship when you specify the fetch request, what we would do is we would reduce your fetches down to two. We would do the initial fetch to get all the people that you requested in your fetch request. Then we collect all of the object IDs for the related objects. And then in a single fetch, we go to the database and pull in all of the address information.
+
+So now you only have two database access rather than triggering a database access each time you're going and each time you're touching an address object. Notice that we're not creating address objects. We're simply bringing in the prefetch, the row cache entries, and then we're still creating faults for you.
+
+But then later on during the execution of your application, when you actually touch that object and the fault is converted into a fully realized object, you won't be crossing the threshold of I/O. You'll be getting your information back from memory. So this will be a lot faster. Thank you.
+
+You'll notice in the previous slide that I said we bring in the raw cache entries, but we still create faults. You can go one step further and tell us, you know what, I don't even want you to spend time creating faults. Just give me the fully realized objects. So you would use the set returns objects as faults to know it's yes by default.
+
+And in this case, when we're doing the initial fetching, we're populating the raw cache entries, we can be a little bit more efficient about converting all those objects into real objects rather than triggering the faults one by one later on. So So this is yet another step that you can ask us to do.
+
+You could also incur fetching when you're doing deletions. Let's say that you're deleting a manager object. goes away, you save out to the database, you think this is a very lightweight operation, you're simply deleting one thing of your database. Not quite. Remember that a good part of what Core Data does for you is all of the object graph management and your relationship maintenance.
+
+So if the manager is related to employees, and those employees' worst case scenario, they happen to be faults, you haven't even accessed them in the past, but we still have to update all their inverse relationships and cascade the deletes depending on what you decided to do. So we go out and do the fetches and realize the objects and do the correct updating of the relationship.
+
+So keep that in mind. A deletion can incur a lot of fetching because we're doing the relationship maintenance for you. So if you want to avoid situations like this, you know you're going to be in a situation like this, you might want to pre-fetch those related objects because you know that you're going to be deleting them and you're going to need to access them right away. And also balance how often you're going to be in a situation like this. Don't spread them out too far, but also you might not want to do them right one after the other.
+
+Searching. We're still in the fetching side of things. Remember that one of the things that you pass down to the fetch request is a predicate. The predicate is evaluated by the database engine, SQLite in our case. So you can be smart about how you structure your predicate. Be sure that you order all of the easier parts to execute at the beginning, at the front of the predicate, so that you filter out requests early on. You might want to limit relationship queries where you're incurring joins. At the database layer, so there's still something that you can do about smartly constructing your predicates.
+
+One of the heavier things that you can do with searching is when you are doing a regular expression matching and full text searching. So you certainly get a lot more flexibility, but this is heavy compute intensive. If you're doing a lot of contains searches, you might want to complement the core data store that you have with a specific text indexing solution such as SearchKit.
+
+And if you do that, the way that you would bind the two worlds would be through the object ID. So the object IDs is what would be represented in both sides, and you do the heavy searching on your engine, and then you bring back that object ID, and you fetch your objects in the core data side of things. So that's it for fetching. Always remember where your data is coming from. Disk or memory, that's a big, big, big speed difference. Only fetch what you need, and try to prefetch things that you know you're going to be using right away.
+
+So you're developing your application, and you get to a point where you realize that something's not quite right. Things seem slow. How do you determine what is going on? What is slow in your application? You suspect that it might have to do with the fetching, but how do you prove that?
+
+So here are the mechanisms that you have for tracking down issues in Core Data. One of the easiest one is to simply enable SQL debugging. So we have a default that you com.apple/cordatasqldebug. When you enable this, every time we go to the database, we're going to log the SQL that goes. If you guys were in the previous session, What's New in Core Data, you saw Adam do a lot of this in his demo.
+
+So it's a good place also to learn a lot about how we're doing the things behind the scenes for you. So I encourage you to turn on the debugging and look at the SQL we're generating as we're going to the database and how we're bringing back that information. So in this case, we have a very simple example where we log a line of SQL.
+
+And you see how long it took to execute in the database. And then we brought back only one row. If you see this happening a lot, you're manipulating your application UI, and you see a lot of one rows coming back, then that might be a hint that maybe you could batch some of those things. So you see that the disk access is happening.
+
+Now, parsing through all that SQL information might be a little too complicated once you get a lot of output. So another level of debugging that you can do is by using the Instruments application. The framework implements DTrace probes. We have them in there. The result of that can be analyzed in the Instruments application. You can get information about fetching, fault firing, I/O access.
+
+So if you use the Instruments application, We even have a template, a Core Data template, to start your debugging. If you select that template, we give you three instruments by default. There's a fetching instrument that gives you information as to what's going on when a fetch request is being executed, what kind of things we're fetching, how many things came back.
+
+There's a cache, there is a, what's the official name? The Core Data cache instrument. This is where we tell you when we're missing the cache, we thought something was going to be in one of the entries in the row cache, it's not there, now we have to go to the database. And a saving instrument that tells you how long the saving took.
+
+So I'm going to walk you through an example of how you would gather this information from the instrument's UI. This is a simple example. It's GoFetch. It's available on the ADC website. You can do it later on after the session. But you basically have a person, which is a lightweight entity. It simply contains textual information. And then a heavier entity with image information. In this case, it's the icon.
+
+The GoFetch UI allows you to configure a lot of things over on the left-hand side here. This is a good place to experiment with all of the settings that I mentioned for fetch request. For purposes of this walkthrough, I am only going to be enabling or disabling prefetching of relationships. The GoFetch UI allows you to configure a lot of things over on the left-hand side here.
+
+This is a good place to experiment with all of the settings that I mentioned for fetch request. For purposes of this walkthrough, I am only going to be enabling or disabling prefetching of relationships. The person information, which is the lighter weight, as well as the image information. We're always displaying that in the UI. And right after I do the fetch, I drag the scroller up and down so I reveal more of the information.
+
+During the second run, The only change that we do is that we enable prefetching so that we say, you know, don't leave the icon objects as false. Go and prefetch their information so that you don't do single firing of false. So let's say we had done this. What would it look like in instruments? Here's the first run. Here's the second run. And here's the second one. Let's focus on the fetching instrument first.
+
+As you can see on the top, where we didn't have prefetching, we did a lot less fetching, and it was a lot quicker to do that, because we're only fetching the light instance, which is the person. It only has person, first name, and last name. So we're done very quickly. And at the bottom, where we're enabling the prefetching, the fetching took a lot longer initially, because we're now prefetching all of the heavy information in the image, in the icon entity.
+
+Well, why would we want to do that? Why would we want to incur that cost? Well, because what this UI does is that we always show the icon information right next to the person information. So if we now focus on the cache misses instrument, you'll see that as I'm dragging the scroller up and down, in the first case, I am now missing the cache.
+
+There's activity there going on, and that is incurring a disk access. Well, in the second case, where I already did the prefetching, we're not missing the caches. So just in terms of namings, RCM is Relationship Cache Miss and Cache Miss for CM. It should actually say to many Relationship Cache Miss. So in this case, we only have it to one relationship.
+
+If you put them together, if you see these two instruments together, you can clearly see how they're related. Say you're no prefetching. But then we do the fetching later on, or lots of prefetching, and then we don't do any fetching later on. So this is how you can gather information from this application.
+
+As some of you might know, the Instruments application has two other main UI areas. In the detail area, you will see the beginning and the end of each one of our probes. So in the case of fetching, we show you that we're fetching persons. This is the kind of entity we're fetching. And not only that, but this is how many we fetched.
+
+So that's all instrumented behind the scenes for you in the framework. And if you want to know where in your code this is, you simply drag the pointer in the Instruments application, and we show you the stack trace. So just drag your pointer to where you see a lot of activity, which you're not expecting. And then in the back trace, you will see, hopefully, somewhere in your source code which you can identify, and then you can now drill down and figure out what's going on there. So that's it for the Instruments application.
+
+Moving on, there's a version of Core Data of the Core Data framework which is debug for debug purposes. You can download this from the ADC website. You can just go to the download section, developer tools, the debug and profile libs. It's part of the debug libraries that you can get from the ADC website, not just Core Data.
+
+What you get when you have this library on your system is we enable a lot of the assertions. So you might trigger, if something's going wrong in your application, you might fire off an assertion, and it would give you more information as to what we thought should have happened and is not happening.
+
+It's mostly useful for when you're doing multi-threading debugging. If you're in that scenario, I'll be talking about multi-threading later on, but you would enable the user default com.apple.core.data threading debug, and then we enable all of the multi-threading assertions. So this is a great way for you to gather more information.
+
+Once you download the library, there's one step of configuration. It's all explained in TechNode 2124. TechNode 2124, by the way, it's a very general debugging in Mac OS TechNode. It has a lot of information as to how you would go about general debugging in the platform. So if you're not familiar with the TechNode, I suggest that you check it out. But a little part of NetTechNode is how you would configure the debug libraries.
+
+So the debug libraries have a suffix, underscore debug. If you want your application to pick up those libraries, you have to set the DYLD image suffix setting. You can also set this within Xcode. If you're going to the inspector for the executable, there's an option there to set, this is the suffix I want to use in the libraries that you're picking up. The only gatter here is that you might have other debug libraries on your system, so if you don't want to pick up all of the debug libraries, you want to rename that file to a unique suffix and then set only that unique suffix.
+
+So we're done with the analysis and debugging section. Turn on SQL Logging for learning a lot about how we're doing things behind the scenes. Use the Instruments application. And use the default, the debug library if you want to use a little more help in debugging your multi-threaded applications.
+
+Moving on, next tip and trick section, Advanced Property Modeling. I'll be focusing purely on three things here. Non-standard types, fetch properties, and derived properties. This is not a full modeling subsection of my talk. For that, you would want to go to the next hour. Melissa will be doing a full presentation on better schema design for Core Data, so I recommend that you guys go to that. We're simply focusing on certain aspects of attributes here.
+
+So, Transformable Attributes. Here we have a very simple example where you have a car entity, and you want that car to have a color. But you want to model your color as an NS color. And as you quickly see, we don't have NSColor in the default types that Core Data supports. We have numbers and dates and strings, but we don't have a color type. So no worries, you can select the transformable type. That's one of the types that you have available to you. And that will allow you to model one of the non-standard types.
+
+So the trick is to use transformable type. This is a new kind of type we introduced in Leopard. And what we do behind the scenes for you is that we archive and unarchive this other type into a data. So by default, we use NSKeyed unarchived from data transformer. We use the value transformer. But you can use your own. You can specify within the UI whatever transformer that you want to use.
+
+As long as it goes back and forth between an NSData and it's bi-directional. The one other gotcha that you need to keep in mind here is that-- The fact that you told us that your type is transformable didn't tell us anything about the fact that you're actually using an NSColor behind the scenes.
+
+So you're going to get compiler warnings if you start accessing the set color and color accessors because we don't know anything about the actual type that you're using. So be sure to declare the property in your header with the correct type so that you don't get those compiler warnings. But everything else is done behind the scenes for you, the transforming back and forth.
+
+Fetch properties. Fetch properties, think of them as kind of weak one-way relationships. Fetch properties that are part of your entity are populated by executing a fetch request and bringing that information back as an array and putting that in your entity. This is slightly different from a relationship. As many of you know, a relationship, when you're inspecting a relationship in your instances, we are treating those as sets. So this is a fetch request result.
+
+We give it to you back as an array. It's part of your instance, but we're also not doing any relationship management for you. We're not doing refreshing. We're not doing inverse relationships. When would you want to use something like this? If you have a smart group concept in your application, but most likely when you're modeling cross-door relationships.
+
+There's actually an example for doing the cross-store relationship modeling with fetch property. It's actually on the systems that you have now. As of Leopard, just go to the /developer/example/core-data, the iClass example, look in there, and part of what that example does is modeling a cross-store relationship with a fetch property.
+
+So here's a quick example. We have a collection entity and a song entity. Within your collection, you want to have a property that represents your highest rated songs, the songs that you've rated the highest. But you don't want that to be a full-blown relationship, so you model that as a fetch property, you associate a predicate, And that would be a fetch property. Now, remember, we're not taking care of refreshing this property.
+
+Once we fetch it the first time, we're not taking care of monitoring when new songs are coming in or going away and refreshing the property for you. That is something you have to do. So you have to register for change notification at some sort of level, be it the object, context, or controller level.
+
+And when you get that notification, what you most likely want to do is turn your object back into a fault so that the next time you get a notification, you can see it's not a fault. And by the time you access that relationship, we re-execute the fetch request. So this is your responsibility.
+
+The simplest case of a derived attribute is a full name where you're concatenating a first name and a last name. But a more interesting use case for this would be as an optimization technique. Let's say that you have a blog entry entity where you have all of your blog entries, which are kind of big chunks of text, those are being stored in the regular text attribute, right?
+
+But there could be all kinds of random stuff in that text accents and different cases. So you want your searching to be very fast in a normalized version of that text. So you would model a derived property, normalized text. You do the normalization step each time you set the regular text. And that normalization step might be a little heavy. So you're doing that each time. But once you have that result, you can store it in that property. So you're deriving that information.
+
+The simplest case of a derived attribute is a full name where you're concatenating a first name and a last name. But a more interesting use case for this would be as an optimization technique. Let's say that you have a blog entry entity where you have all of your blog entries, which are kind of big chunks of text. But a more interesting use case for this would be as an optimization technique.
+
+So you're deriving that information from original information. And it's actually persisted in your database, unlike the full name example right above that. That's just a transient property. So you're actually doing the processing and caching that information and saving it out. So when you do your searching, you can do a lot faster searching on the normalized property rather than the regular text property.
+
+We also have an example for this. It's called the right property. It's on the ADC website, and it's actually associated to this session. So if you go to the things that are associated with this session, this is one of them, one of the ones that you'll find. This example not only does the derived property, but it also does some interesting stuff with overriding the default behavior in the search field so that you can normalize the property before you pass it on to the fetching. So take a look at it, we do a couple of interesting things there.
+
+So that's it for property modeling. You can model your own custom data types using transformed properties. If you want weak relationships, use fetch properties and use direct properties as a mechanism for caching expensive computations. Moving on, as you're improving your model and modifying it to make it more efficient, you're most likely going to come across the concept of versioning and migration.
+
+So why is this an issue? Core Data does everything, we do everything for you as long as you give us the blueprint of your data in the shape of a model. So you give us a description of your data and we're able to manage a store for you with that information. The moment that you change the blueprint, But you retain the data in the old format, we don't know what to do.
+
+You're giving us an incompatible blueprint to the data store that you're pointing. So this is what we're calling a version skew, version incompatibility. So we don't know what to do. This is where migration comes into play. What are the kinds of things that you can do to break our ability to read your data?
+
+If you change the name of your entity, anything having to do with inheritance, anything having to do with the properties that you're persisting out, and the same thing at the property level, name, optionality, attribute types, you're changing the description of your data. And you already have a data store, which does not match that description. So we have a hard time reading it.
+
+There are things that you can change in your model which do not break our ability to read your data, such as the class name that we're going to use to instantiate your objects at runtime, transient properties, because by definition they're not in the store, user info, and similarly for properties.
+
+So what we do to determine, oh, let me just, how many were in the last session in what's new in the Core Data? Okay, so not that many. If you haven't heard, we have the concept of lightweight migration that we're working on for Snow Leopard, but even in that realm, knowing this content is still important because this is still what's going on behind the scenes.
+
+So what we do is, every time you give us a model, we calculate a hash digest of each one of the entities in that model. It's a 32-byte hash digest, which I'll represent as an icon here for easy comparison. And when you save your data to your store, we save that versioning information as part of the store's metadata.
+
+So once we have that versioning information, we are able to check whether a store is compatible with the model that you're giving us. So when you ask us to work with a store and a particular model, the first thing we do is calculate the versioning information, go to the store and get the metadata, compare it. If they're the same, we know that we have the correct blueprint to access your data. So we bring up the stack and we do what you expect us to do.
+
+Similarly, this is how we would determine that you did a change, because after we calculate the version hashes, they don't match the version hashes that are stored in your store as the metadata. So the default behavior for a Core Data application with a UI is to bring up this panel saying, I don't know how to read your data, you gave me the wrong version of the model, so do something about it.
+
+Fortunately for you, there is something you can do about it, and we help you a lot. Since Leopard, we have the mechanism of versioning your models. So models are not independent entities anymore. They're actually, they can have different versions, and they can be grouped inside of a higher level model, a version Core Data model. So Xcode has this functionality. You can tell it to create a new version of your model, and you keep track of them within your project.
+
+And we also give you the ability to provide us a mapping model that tells us how to go from one version of your model to another. And we even have a whole new mapping model editor since Leopard, so this is how you kind of bootstrap the migration. So what's a mapping model? A mapping model is yet another blueprint where you tell us how to go from your old version to the new version of your data.
+
+Here's an example. Let's say that in your initial version of your data model, you embedded the address information for a person inside the entity. So you decided to model persons with their street and their state inside. And then later on, you realize that that was a little inefficient, you didn't wanna do that, you wanna have two-one relationship. So you change your model to now have person and an address with the address information in a separate entity. The problem is that you already have a store that contains information in that format.
+
+So you somehow have to explain to us how you want us to map that information over, how you want us to migrate that information over. You would have to tell us, you know what, take the person's instances and create new person instances from that. And take persons and also create address instances for each one of the people. And inside each one of those new instances you create, move the age and the name over into the person instances and move the street and the state over into the address instances. So you have to give us this information, we can't figure this out for you.
+
+We introduced five new classes in Leopard. The top three have to do with the modeling of the mapping model, and the bottom two are what actually perform the migration. I'd like to point out here that, in particular, NS Entity Migration Policy is a subclassable class, so you don't have to settle for the default behavior that we give you. These are things that you can plug in your own migration logic into. So what goes on behind the scenes when we're migrating your stores?
+
+Well, we start out by detecting a version incompatibility, right? You give us a model which is not compatible with the store that you gave us, that you pointed us to. So we look in the resources of your project, because they should be there, you've been managing them all along, and we look for the source model, the correct version of your model, and a mapping model that tells us how to go from A to B. We pass that on down to the Migration Manager, and the Migration Manager takes care of instantiating two Core Data stacks.
+
+and performs the migration in three phases. During the first pass, we move over all of the instances.
+
+[Transcript missing]
+
+Let's look at entity mappings, the mapping modeling in a little more detail. So the entity mapping needs to have the source entity and the destination entity. You can give it a name too, and you can order it inside of the mapping model. And most importantly, you can specify a custom policy class name, which would be a subclass of our default behavior if you're not happy with what we're doing for the migration.
+
+Entity mappings are made up of property mappings. The essence of a property mapping, think of a property mapping as a value expression. So you provide us a value expression, we evaluate it, and whatever comes out of that, that's the value of your property that you want us to fill in, the destination entity.
+
+Because it's a value expression, you have access to certain special keys that by prefixing them with dollar signs, such as dollar sign source, destination, manager, entity mapping. So if you want to access these things in your value expression, just be aware that they're there. And they're documented in the NS Entity Migration Policy.
+
+Here's a simple example. This is how you would tell us, I want you to migrate the name field by simply getting whatever the name was on the source and stick it into the new instance's name. So just go to the source, dollar sign source, dot name, and whatever that value was, that's what I want my name property to be in the new world.
+
+Let's get back to the example here. So we have a source and a destination. In this case, you would need to define two entity mappings. The first entity mapping would migrate from person to person. So the source and the destination is person. And the mapping at the property level would be age and name, where you're simply going to the source and fetching them from the source.
+
+Then you would need a second mapping for migrating a person to an address where the source is a person and the destination is the address. And this is where you're extracting the address fields from the source. So this is information that you need to define for us in the mapping model. You can do more sophisticated things, such as introducing inheritance hierarchies. Say you have a flattened space with employees only in the old version of the model, and you decide to split up your employees into managers and programmers.
+
+So you can do that by defining an entity mapping, employee to manager. The source is still employee, but you can associate a filter with an entity mapping. So you can say, don't fetch all the employees. Only fetch the employees whose level is greater than two. Those are the managers in my world. So the destination instances I want you to create from those employees are managers. And you migrate the entities, the field level values over.
+
+You'll notice I haven't mentioned much relationships. How do you actually indicate how you want us to re-hook up your relationships in the second phase? So here we are at the end of the first phase of the migration. We've created the instances. Now we want to bind the person to the address.
+
+Your first crack at this might be, well, I just want to get the source's address. That's what I want you to fill in as the address in the destination world. That's not quite going to work for two reasons. One is, if you evaluate dollar sign source dot address, well, first of all, there is no address in your source context.
+
+Sure, the information was embedded in the person, but from a key path point of view, it doesn't take you anywhere. And even if it did take you somewhere, let's say that you had a version of the model that had an address, the resulting object is an object that lives in that context. And you can't just pluck an object out of a context and stick it into another context.
+
+Objects belong to one specific context. So even if that were the case, you can't just take that value and stick it into the address. What you really want to do is, you want to answer the question, What was the address instance that was created for this person? So you want to do a lookup.
+
+We do have a couple of lookup methods in the Migration Manager class. So instead of using that expression, You will need to use a function expression. Remember, property mappings are just expressions that we're evaluating for you. So the function expression looks a little more daunting here on the screen, but the mapping model of UI and Xcode has a way for you to generate this without having to type this in.
+
+You only type in the essential element. So what the function expression is saying is, I want you to execute a call on the manager. This is where the $manager access comes into play. The method that I want you to call is, what is the destination for the entity given this source?
+
+So you're basically asking, given this source and this mapping, when you were creating addresses from persons given this source, what was the address you created? So that will result in that instance over there. So and that is what we want to bind in the relationship. So that's how you-- relationship mappings are a little bit-- they take one additional step.
+
+Migration logging, it's a debugging mechanism. We do have a user default, com.apple.core.data.migration.debug. Enable that if you want to see what's going on during migration. It's mostly useful for the bootstrapping phase of migration, when we're determining whether the model is compatible or not, when we're looking for mapping models. So we do a lot of logging there, and you can see whether, why we're not finding your mapping model, or why we didn't find the right source model that you expected us to find.
+
+So that's it for versioning and migration. We do the skew detection for you based on the calculation of the version hash digest. And we do model-driven migration. In a lot of cases, you don't have to write a lot of code or any code. You simply define it in the model, and we do the migration for you. What we're trying to do in Snow Leopard is to infer some of those mapping models in certain scenarios so that you don't even have to specify the mapping model for us.
+
+But you still need the other things. You still need a source model. You still have to deal with versioning, and you still have to be aware of that. We're just trying to be smarter about inferring the kinds of changes you did. But that's a Snow Leopard thing. So for Leopard, you still have to provide the mapping model for us.
+
+Moving on to the last topic, multi-threading in the Core Data environment. What would be the motivations for wanting to use multiple threads in Core Data? One of the main ones is that you probably want to be more responsive in your UI. You know that you have a heavy operation that you want to spin off into the background while you quickly return to the user in your UI while stuff is happening behind the scenes. So that's one of the main motivations that you have.
+
+We're shipping lots of hardware with more and more cores each time, so you might want to take advantage of that, leverage those. Or you can do a lot of importing, heavy importing. If you're importing from some sort of legacy data type, XML, a lot of importing behind the scenes, you can do that by spinning off a thread in the background while your UI remains responsive.
+
+One thing that you have to be aware of, though, is that the fact that you spin off a thread, this is not a magic solution. Just the fact that you created a thread doesn't automatically make everything fast. Always keep in mind, what are the contention issues between the two different threads that you're creating? So you might have multiple threads, but if they're all competing for the same resource, they're just going to be staggering one after the other, and it would be a sequential processing model.
+
+Here we have an extreme case of that. We created a simple program where all we did is allocate memory in four different threads. In both cases, we're allocating memory in four different threads. It's even a quad-core machine, so we do have the hardware resources. But in the first case, even though we have four threads, we're sharing a lock, and we're sharing one single memory pool. And you can see that that case is a lot slower than the second case where we have multiple threads.
+
+So we have multiple memory pools and a single lock per each thread that we're using. You have four threads, but if you're not smart about how you're going to be marshaling between the shared resources, you're going to end up with a lot worse performance. So always be aware of where the bottleneck is.
+
+From Core Data's point of view, the element that is thread safe is the object ID. So these are immutable objects that you can pass back and forth between threads without worrying too much about what happens to them. They can't change. The pattern that we want you to use is to, if you do start using multi-threading, is to have a separate context for each thread that you create. So you go ahead, spin off your threads, but be sure to have a separate context for each one of those threads so that what falls out of that... is that objects belong to only one context, and consequently, they only belong to one thread.
+
+And believe us, this will make your life a lot easier, especially when you get down to the debugging side of things. There's fewer interactions. You know that if you have an instance of your object, the only code that could have changed it is code that was executing in that single thread and not other things that are coming in from other threads. It improves the locking because you're not locking at a very fine-grained level at the object level. We can move the locking up at a higher level. So there's more concurrency that can happen. This is the thread confinement pattern.
+
+If you do follow this pattern, there are certain things that we do for you. We take care of locking the managed object context and the context and the coordinator. Every time we're accessing the coordinator, we do take care of locking that. So even though you have multiple threads, going back to what is the shared resource, in the very simple form of this pattern, the shared resource is the persistent store coordinator. Okay.
+
+So even though you have multiple threads with multiple contexts, when they're getting to the coordinator, for whatever reason, they're either fetching or they're saving, that's when they're doing the locking, and that's when they have to wait for the other threads. But we take care of doing that for you. So you don't have to think in those terms. You simply do what you do, and Core Data does that behind the scenes.
+
+Because that's a shared resource, you might wonder, well, if I have multiple contexts and multiple copies of my object, am I not duplicating my information? And you're duplicating some information but not all of the information. If you remember back to the first section that we talked about in the fetching, do you guys remember the row cache and the row cache entries?
+
+So think of your managed objects as kind of thin wrappers where anything that's heavy, an image or strings, they're actually pointing to the entries inside the row cache. These are shared copy on write if you modify them, but so you're not really duplicating all of your object information. They're being shared at the persistent store coordinator level, and you simply have thin wrappers of them that are existing in your application. in your context.
+
+So don't worry too much about this. Now, how do you want to communicate information back and forth between one thread and the other? Remember that I said that the thread-safe element that we're providing for you is the object ID. So this is what you pass over into the other threads without worrying. And in the other thread, what you do is that you use the method objectWithId to go get a local version of that object in that context.
+
+Now you cannot pass objects that have been recently inserted because they still don't exist down in the coordinator side of things. But you can pass objects that have been fetched or updated. So things that haven't been saved yet are still not in a place where you can access them in separate threads. So let me show you an animation of how this works.
+
+You decide to do background fetching. So you're going to have a main thread, which in this case happens to be this one on the right-hand side. That's your UI. It's entertaining your user so that they don't get bored. And behind the scenes, you're doing a lot of heavy fetching. It's in a separate thread, right?
+
+You're done with the fetching in thread one. Now you want to tell thread two that it's ready. You can use that information. You can't pass the objects around because those are not thread safe, but you can pass the object IDs. So you pass the object ID. The main thread takes that object ID.
+
+and request the corresponding object and get a local copy of that object in the context. You will notice that when I got that object information, I didn't go to the disk. Do you guys remember my first slide where going to disk is thousands of times slower? I only went to the Rokash entries.
+
+So the fetching, I did get the benefit of doing the prefetching behind the scenes in the other thread, because even though I'm recreating the objects, I'm going to the Rokash. Okay, so this is the shared resource and the heavy hit on the I/O was taken by a background thread while my UI was responsive. So this is the main pattern that you will be using for multi-threading.
+
+We lock, so if you're accessing the store coordinator, if you're messaging the store coordinator explicitly, take care of that, of locking it. If you explicitly message it when you're asking us to add a new store or you're getting object URIs, when you're accessing the store coordinator, just be sure to lock it.
+
+You might also want to lock it when you want to group a set of operations and make those visible as a single operation to the other threads. So you would lock the coordinator, remember that's a shared resource, you do an insert, a save, a delete, whatever else you want to do, and then you unlock the coordinator, and then the other threads can't do anything at that moment until you're done. So that's a way of creating the illusion that this was one atomic thing.
+
+Another pattern that you might want to follow is if you don't want the persistent store coordinator to be your bottleneck, you might want to create multiple Core Data stacks so that that's not the shared resource. So you would have multiple coordinators. Of course, now you're duplicating data, right? Now you really are duplicating the raw cache entry, so you really do have two copies of your objects.
+
+But it might be the case where you know that this thread is accessing one store and that thread is accessing another. So there won't be any conflict. So if there is a conflict at the store level, then the shared resource is the file. So there's always a shared resource at some point.
+
+There's actually an example of doing multi-threaded background fetching. The animated slide I showed you two slides ago, it's on your systems. This isn't something that you have to download. You can just go to Developer, Examples, Core Data, Background Fetching, and you can see the code for doing all this, passing the IDs around and then getting the fully realized objects with the ID in a separate thread.
+
+Wrapping up, some general Core Data threading tips in Cocoa. If you're doing undo, the default settings for the undo manager are not compatible with multi-threading. So you want to disable that in the context by setting the undo manager to nil. The groups by event is not thread safe, so you want to not use that and manage the grouping of the undo by hand. So you can't do it, you just have to do it by hand.
+
+And the second thing about spawning off threads is that the threads that you're creating are detached. What that means is that the main process, once they're created, it's not worrying about whether they're done with their work or not before the main process quits. So they go away, they're detached, so it's not my responsibility. If I want to quit, I quit.
+
+So be careful about what those threads are doing. Because if they're doing something that is important, such as saving or leaving your data in an inconsistent state, you don't want the main process to quit. So you have to implement additional code. This is your responsibility. So that the main process is always checking, hey, are you done with what you're doing? Because I'm about to quit. So don't, don't, this is your responsibility. Remember, they're detached threads.
+
+In some cases, you don't care if you quit because the work that you're doing behind the scenes is work that you can throw away. You're doing background fetching, you're doing cleanup, you don't care. Tear the process down. You're not going to leave your data in an inconsistent state. So it's a good thing in some cases.
+
+There's also, as of 10.5, there's NSOperationQueue, which is a mechanism that you can use to model these dependencies between tasks so that the main task does not quit until the other subtasks are done. So it's a convenient Cocoa API for modeling the dependencies. You can wait for completion.
+
+You can say this task depends on this, and now I have to wait until it's done. You can even, you have mechanisms for suspending tasks that are running. So look into this as something that you would use for your threads to be communicating so that the main process doesn't quit and leave you in a bad state.
+
+If you want to introspect the hardware that you're running in, you have access to that information via Process Info or SysControl by name. So you can ask what your hardware is. You can't just pawn off threads if you don't have the right number of cores or you have a limited set of resources. If you want to ask, here's how you ask.
+
+And just like the first slide where I hope everybody realizes that going to the I/O is slow, I hope everybody realizes too that multi-threading is not a trivial thing. You don't just spawn off a thread. So educate yourself. Here are two references that we recommend. Even though the first book has Java in the title, it's a more general software engineering book with how to program with multiple threads, independently of the language, so that's a good overview. The second book is more of a pattern style kind of book. And we also have documentation on the ADC website for multi-threading topics.
+
+So one last thing here, information that I referenced in this talk. A lot of what I talked about, in fact, I think everything, a lot more of that is in the Core Data Programming Guide. This is a 180-plus page document that you have on your system. It's very detailed. It gives you a lot of advanced information on Core Data. There's a bunch of tutorials.
+
+There's two examples I talked about that are on your system, the background fetching and the iClass for the fetch properties. And there's two examples associated with this session on the ADC website, the GoFetch to play around with the fetch request options and the derived properties for normalizing textual data when you're doing the searches.
+
+And like I said, this is number two of three of Core Data sessions. At five in the Marina conference room, there will be the last Core Data session. This will be the schema modeling session. And all of the Core Data team will be available to you tomorrow, right before you get drunk between 2:00 and 4:00. The beer bash is tomorrow, I believe, right? So we have four hours of not being drunk before we go, where you can ask us questions. and our evangelist, Michael Jurowicz, and send us bug reports and/or use the Cocoa Dev discussion list for answering more questions.

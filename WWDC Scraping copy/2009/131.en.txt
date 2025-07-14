@@ -1,0 +1,207 @@
+---
+Title:  Scaling Performance Using Grand Central Dispatch and Intel Libraries
+Year:   2009
+Web:    https://nonstrict.eu/wwdcindex/wwdc2009/131/
+
+[!] This transcript has potential transcription errors.
+---
+
+ So welcome everyone. First of all, a big thanks for staying for one of the last sessions at this WWDC, so thank you My name is Pallavi Mehrotra and I'm part of the Software and Services Group at Intel and I'm a software engineer there. Today myself and my colleague, Richard Hubbard also from Software and Services group, will be presenting a talk on Scaling Performance with the Grand Central Dispatch and Intel's Libraries.
+
+So before we dive into the talk, I want to give a special thanks for Phil Kerly and Justin Landon both from the Software and Services Group at Intel. They guided us throughout our project. And lastly but not the least, the developers from Grand Central Dispatch Group at Apple. Thank you. So what are our objectives today?
+
+We have 2 main objectives today: Demonstrate performance on the latest Mac Pro platform which uses the latest Core i7 Architecture from Intel using the Snow Leopard Operating System. And secondly, we'll demonstrate how we can implement an application called Face Tracker using Grand Central Dispatch threading methodology and we'll show you some results for that.
+
+So our agenda is the first thing is we'll kind of revisit the Face Tracker Application but using Intel's Threading Building Blocks technique. So we'll visit that design a little bit. Secondly, we'll dive into how did we go about implementing the Grand Central Dispatch and we'll show you some performance result in processor scaling that we achieve at both these methodologies and then we'll wrap up with a summary.
+
+So before showing all these, I want to give you a brief overview, a background of what we did last year. We were here last year's WWDC and we demonstrated an application called Face Tracker and this application basically simply tracks a human face in a video clip and it tracks front and side faces and we'll show you a little bit of that a little bit later.
+
+And-- but the main thing is we demonstrated how we can use some of the tools from Intel like Intel's Performance Primitives, Intel's Threading Building Blocks, and we also utilized Intel's optimized Compiler, and at the same time we demonstrated 3 different threading technologies, pthreads, OpenMP and TBB or Threading Building Blocks.
+
+So we demonstrated that last year. And in addition to the design and code, we showed you how we can scale performance using these methodologies on the previous generation Mac Pro which ran Leopard Operating System and was running the core architecture code name Penryn. So that was last year. So before we dive too much into it, let me show you a brief demo of what this Face Tracker app is.
+
+[ Pause ]
+
+ So as you can see, it's just this video clip. It's a 720p clip and it's tracking a face on the video clip using a circle around the face. Sometimes you'll see it's in red, sometimes in green while other times in blue. And what that indicates is it's using like various mechanisms.
+
+Sometimes it's detecting a front face and marking it with a green. When it will detect a side face, it marks it with a red and if it detects both, it marks it with a blue. So just to note those things. Another thing to see it's running pretty slow. It's really using majority of only one CPU at this time. It's pretty compute-intensive. It has various-- doing various things.
+
+It's detecting various kinds of faces, side, front, et cetera. At the same time, it's doing additional things like a quality filter. It's eliminating some of the false positives it might be finding. Maybe there's something in the background which is not really a face and it's marking it. And we are also at the same time eliminating those kinds of false positives. So it's running pretty slow and that's the simple Face Tracker App.
+
+Going back to the slides. So let's show you a little bit of what this Face Tracker design is and how it was implemented using the Threading Building Blocks. So as you can see the various blocks in this diagram basically correspond to various functional units in the application. The File Decode just parses the video clip extracting one frame data at a time It takes that data and passes onto the next stage which is the Frontal Face Detection and that just detects front faces in the clip and marks it with the circle over there where you want.
+
+The second state is the Profile Face Detection and which is just detecting side faces in the clip. Then that data moves on to something called a Quality Filter where it-- one of the stages just collects some heuristics data from the previous four or five frames and then in the next stage, it uses that information to eliminate any false positives that might be occurring in that frame. And finally, it renders to the screen. So as you can see, this design lends pretty well to a pipeline design.
+
+And Intel's Threading Building Block provides such an abstraction. It provides a very good abstraction, high-level abstraction for a pipeline-based design where each of these functional units very nicely correspond to specific stages of the pipeline, a token in the File Decode is parsed from the file, that token is passed on to the next stage of the pipeline and so on.
+
+You will also notice that some of these stages are marked parallel while others are marked serial. So depending on what you're doing, if you're parsing the file or rendering to the screen or if you're collecting some heuristics data, those might be serial functions and those are marked as serial stages of the pipeline. While others there are detecting faces up in a given frame or if you're eliminating any false positives, those kinds of functions can be easily done concurrently, so those are marked as parallel.
+
+So let's dive a little bit into the code of the Threading Building Blocks. So as you see, TBB provides a very nice abstraction, but there are few things you need to do, you have to set up your code before you can use this abstraction. One of the first things you have to do is you have to create C++ classes basically one class for each stage of the pipeline of your app.
+
+Also note that you have to inherit your C++ class from the TBB filter class so that you see in this code, then you just provide your constructor and destructor and whatever initialization you need to do there. Also note it defines an operator function and we'll go into detail a little bit later on that. And-- but another thing to note here when you're defining your constructor, you need to identify if this particular stage of your pipeline is serial or parallel.
+
+And fortunately, TBB provides a very simple mechanism, basically a Boolean flag to save whether this stage would be serial or parallel as you can see in this code diversity end of the slide. So that's your class definition. You would be doing this for each stage of your TBB or application pipeline. So once you've defined your classes and your constructor, et cetera, the next thing you have to do is the work. So for each of the classes, you have to define your work function.
+
+And that's where this operator function comes into play. This is where you would be processing your token or in this particular application, the frame data. Another thing to notice when you're doing this, there's something you return out of this function and that's basically your frame data or token data which has been modified by this stage in whichever manner you desire and then passed on to the next stage of the pipeline. If you're done with all the items to be processed, you just return NULL. So that's how you would be implementing your work function where your meat of the work would be happening.
+
+And now that you've set up all your classes, you have written your work function, now you need to be able to initialize, create, and run your pipeline. So how would you initialize the pipeline? One of the first things you have to do is initialize your TBB scheduler. Now one thing to know, you'll notice CORE_NUM. This is where you are defining how many threads you desire and then you instantiate your pipeline object.
+
+So those are the 2 things you have to do when initializing.
+
+ So now you've done your-- you've created your classes, you've defined your work function, you've initialized your TBB pipeline. Now, you have to basically add your various stages of filters of the pipeline. As you can see here, we are adding 2 filters or 2 stages of the pipeline, the input filter and the detection filter.
+
+That's pretty easy to do as well in TBB. You just instantiate your filter stage object, in this case, for example the input filter, invoking your constructor, initializing whatever data you want to, and just calling the add_filter function to add it to your pipeline, so it's as simple as that.
+
+So you would do that for each stage of your TBB pipeline. So once you've added it, the only thing remaining is running this pipeline. So that's easy to do as well, just invoke your run function and pass in a parameter called your tbbNumPipeline which basically is setting your level of parallelism. Once you're done, you obviously want to clear up your pipeline. So that's the sort of a gist or an overview of how the TBB code look like, pretty straightforward.
+
+So what were some of the features or key things about TBB that helped us when doing this application? Well, the first thing is TBB provides number of abstractions. I mean pipeline is just one of them, so keep that in mind. Also, pipeline abstraction inherently provides us 2 really important things. One is flow-control and the other is reordering. So why flow-control? When you have a pipeline-based design, you could have some stages which are obviously slower while others are faster. You don't want to flood your pipeline with tokens or frames and congest the pipeline.
+
+Maybe there are some bottlenecks down the pipeline and you don't want to just flood it. So you need some kind of mechanism to control that. So that's where the flow-control comes in. Now, reordering. So in a typical pipeline, you would have some serial stages and parallel stages. So if you have a parallel stage followed by a serial stage, now what will happen is your tokens or iTunes or whatever would become out of order in the parallel stages, but your serial stage which is following the parallel stage is expecting these items to be in order, in the correct order. So you need some kind of reordering mechanism.
+
+And again, TBB helps us here. It gives us both these mechanisms for free. We don't need to write any user code to achieve these 2 things. So that helped us. And then some other things. TBB is portable across platforms. It's optimized for the Intel architecture and it's open source.
+
+There is a commercial version supported as well. So those are some of the key features of Threading Building Blocks. So moving on. So what were our key messages from last year's WWDC? We showed you the Face Tracker design, how complex it was. I mean you can add any more amount of complexity you want and why were we able to do this, because of all the multiple cores available to us. So that's one of the reasons. You can add more complexity. You can add more features to your application and utilize all the resources and the cores available with the multiple cores. Secondly, we showed that there was a potential to run even higher resolution clips.
+
+So last year we ran a 480p clip and this year we're going to show you a much higher resolution clip. And so there was definitely with multiple cores more resources available at hand, you can run even higher resolution videos. And lastly but not the least, by utilizing TBB, we demonstrated that it's good to use high level threading technologies and we'll show that with GCD again later on.
+
+So those were some of the key messages from last year's WWDC. And these still apply. All these recommendations, all these key messages are still valid even today and even more so as we'll demonstrate. So this year what do we have at our disposal? We have Intel's new Core i7 Architecture, and what does that give us?
+
+It gives us a lot of enhancements. If I were to name a few, you have the enhanced memory system, your integrated memory controller instead of your-- and you have your front-- instead of the front side bus you have the Nehalem system where you can leverage the lower latency of accessing the local socket versus the remote.
+
+You have much larger caches and you have more levels of caches. So you have your first level, midlevel, last level cache. More importantly, the last level cache is inclusive, meaning you have better coherency or easier coherency. A lot of the resources like your load and store buffers, their-- the numbers are just larger on Nehalem.
+
+Like your reorder buffer, you have much larger number. What does that mean? It means you can have a higher number of micro apps in flight at any given time. That means more parallelism, more resources at your disposal. So what else? I mean if I were to name, I could name more. I mean you have more cases where you would forward your stores to loads.
+
+You have many more cases of macro-fusion. You have many more combinations of compared jump and testing jump which are macro-fused within Nehalem architecture and so on and so forth. You have a lot of power efficiency features like Loop Stream Detector which was mentioned by Phil in the earlier presentation and so on. But lastly and not the least, we have Hyperthreading and we are going to go into a little bit of details, give you an overview of what that is.
+
+So with all of this, the new architecture and of course we have the Apple's new and latest Operating System, Snow Leopard, what can we do? So we'll illustrate even higher better performance, better processor scaling with the Face Tracker App. We're going to show you what Hyperthreading gives you and then we're going to take this app and convert it into the Grand Central Dispatch methodology and see what kind of performance we get with that. So that's what we're going to do this year.
+
+So this is a graph showing performance of the Face Tracker Application. Running a 720p clip on Nehalem, the numbers are frames per second. The blue bars or the gray bars are the ones which were obtained from the Penryn platform which was the previous generation of the Mac Pro and the red bars are the Nehalem platform which is the latest Mac Pro generation. And it shows the data for various cores. And the Penryn system was running on about 3.2 gigahertz, the Nehalem is running on a lower frequency, about 2.93 gigahertz.
+
+Additionally, we got a boost by compiling our application with the Intel Compiler which has obviously been optimized for the Nehalem architecture. So obviously, longer bars are better and what did we see? We found about 15 to 18 percent boost in performance with no code changes. We just took the app, just out of the box, we run it on Nehalem and we got about 15 to 18 percent pretty consistently on all the cores. Another thing to notice with the new architecture and the platform, we can run the 720 clip in real time.
+
+This was not possible last year. This is possible now, with more resources, yadda-yadda-yadda, everything I've mentioned about the architecture. You have more resources available. So definitely great, so Nehalem is great. OK. So like I promised to you, I'll talk a little bit about Hyperthreading. So what is Hyperthreading? So just a brief overview, no lot of details or anything. It's as basic as running 2 hardware threads, 2 logical threads on the same processor core.
+
+And what's happening is the front-end of the processor, the allocate, the retire, all those subsystems of the processor basically alternate between the two logical threads running in each cycle. So in each cycle, each of the threads are given an equal chance to run. And if that thread doesn't need that cycle, the other-- it's fair game that the other thread can take it.
+
+So it does ensure to some degree a fairness between the 2 logical threads. So on the right we have these 2 diagrams. The one on the left is when the Hyperthreading is not turned on. On the right it's when the Hyperthreading is turned on. The various blocks or boxes in this are basically the blue ones are Thread 1 and the green ones are Thread 2.
+
+ The white ones are the Idle times.
+
+The vertical axis is time and the horizontal one is basically execution units. So as you can see when Hyperthreading is turned on, your application is finishing up in nowhere all less amount of time. When Hyperthreading is not turned on, the 2 threads are running basically serially. So you have the concurrency with Hyperthreading.
+
+Now talking a little bit about the various resources, the various processor resources, that type of threading. So a lot of these buffers and queues which I had talked about earlier are basically shared or partitioned. There are some which are statically shared like your buffers, like your load buffers and store buffers, your reservation station, your reorder buffers, your instruction TLB, all those are statically partitioned between the 2 threads. But then there are other resources which are competitively shared and those are your caches, your first level cache, your midlevel, your last level cache, your data TLB, all those are competitively shared between the 2 logical threads. So what else does the architecture give you?
+
+The architecture provides you with the four-wide decode. You could decode up to four instructions every cycle. You could retire up to 4 and you have up to 7 execution ports, 3 for your memory applications and 4 for your computation operations. So with all this, I mean what's the best way to utilize it? Feed the execution engine and one of the ways to do this is thread. So Hyperthreading helps you certainly with that.
+
+Also when you have more number of threads, it's pretty obvious that you can hide latency of a single thread or even your slower threads so you get that. Plus, Hyperthreading is a power efficient feature. I mean it's much cheaper to add a logical thread than to add a new core completely. So it's definitely a low die cost. And depending on the design of your application, it can boost your performance.
+
+So that's Hyperthreading in a nutshell. So how can you turn this on or off in Snow Leopard? This is just a snapshot of the Processor Palette in Snow Leopard. As you can see there's a check box which is circled in red and you can turn that on and off. I think by default it comes turned on. And on the right you see the usage of the various cores. Per core you can see about 2 lines, one basically corresponding each to the logical threads of the logical CPUs, so showing you how to enable or disable Hyperthreading.
+
+And now, I'm going to show you a demo with all cores turned on, with Hyperthreading turned on, and going back to the same application, the Face Tracker Application and see-- I mean if you remember when I ran it the first time it was pretty much crawling and let's see how does it do now.
+
+[ Pause ]
+
+ I mean it's running much, much faster. It's doing exactly the same things. [Applause] It's running a 720p. You can look at the CPU usage, I mean it's using-- utilizing all the cores. Let me just run it one more time, run pretty quickly. Still detecting all the side and the front faces, et cetera. You don't see false positives, that's because of the quality filter functionality we added. And there it is.
+
+So Nehalem is good. Go back to the slides. So that was the demo on the 16 logical core or 8-core machine with Hyperthreading turned on. So what does, I mean, Hyperthreading give you? We talked about how great it is and all that but we go back to the frame, to the Face Tracker Application. Again, we collect the frames per second numbers and here we are running on the same platform, the same Macro platform except in one case, we have turned off the Hyperthreading and in the other case we turn it on.
+
+Obviously, again, the longer is better and you can see Hyperthreading gives about 8 to 25 percent boost in your performance. Again, I've made no code changes with the Face Tracker App. It's the same code just Hyperthreading turned on. It's running on the same 2.93 gigahertz Macro platform using the new Nehalem Architecture, Snow Leopard OS and again, leveraging Intel's Compiler. So there you have it, HT giving you a boost of about 8 to 25 percent.
+
+It's again running the same 720p clip. So to summarize, what did we see? Going from the previous generation Mac Pro using the Leopard OS Operating System, and the Penryn Architecture, going from there, and then moving on to the latest generation Mac Pro utilizing Snow Leopard and Core i7 Nehalem Architecture using the Intel Compiler, we saw about 29 percent boost in performance when running a 720p clip without any code changes. So we demonstrated that not only the new architecture, the OS, the tools are good for you. We also showed you that we can now support much higher resolution videos.
+
+Last year we ran 420. This year we're running-- I think that should be 480-- and this year we are running 720p clip. We also demonstrated that we can support many more thread style, 16 versus 8 before and that's the TBB design for you. And now we're going to dive into how did we go about porting this TBB based design over to the Grand Central Dispatch based design and to talk about that I'll invite my colleague Richard Hubbard. Thank you.
+
+[ Applause ]
+
+ Thank you. Hello! So now you've seen the background on Face Tracker with TBB and now as Pallavi mentioned I'll talk about how we ported the application to Grand Central Dispatch. So it's exciting always to work with a new technology. Apple presents this new technology to take advantage of a multicore platform and our goals with doing this port was to learn about the technology, how do we apply it to Face Tracker, how does it compare to previous threading frameworks and we also wanted to either maintain or see if we could even improve performance by using GCD.
+
+Some of the challenges we faced, and some of these were really specific to our application. We had a C++ based application and the APIs that we used with Grand Central Dispatch just take-- they took the function pointers. We used the _f version of Dispatch so we had to figure out, you know, will we invoke the C++ method and we also had to provide some of the infrastructure that TBB gave us, so the flow-control, the pipelining, and the reordering, we had to handle that.
+
+And of course this was a-- you know when you think about threading, multi-threaded apps here we are working with a new technology where you probably think of the common things. How am I going to start threads, how am I going to synchronize access to various data items and is this a headache or not. But the cool thing about GCD really is that it manages so much of that for you. It makes it very simple. So I just wanted to walk through some of the things that we had to provide that GCD wouldn't give us.
+
+So we had to, first of all, we had to pipeline the application and the pipeline was as Pallavi showed is built very simply in TBB. You just add objects to the pipeline and with GCD we had to just define a different type of class. We called it a stage worker class and the class just had links to the queue of the next stage in the pipeline and also a reference to the next object in the pipeline.
+
+So that's how we connected the pipeline together and I just wanted to show you that. When we instantiated the pipeline in this approach we worked backwards, so we instantiated the output stage first and then the last profile stage and as you see, when you instantiate the object you have to create the link and that's why we worked backwards, and looking down at the bottom of the slide instantiating, you know, the stage N-2 and then connecting that up to the next stage in the pipeline. So that really wasn't that hard to do.
+
+ So that's how the stages in the pipeline were connected together. Another thing we had to implement was moving through the pipeline.
+
+So again, this was pretty transparent by TBB and in GCD all we really had to do was there was a simple, very small structural context information that was passed through the pipeline. This is different from the application context that you may have seen in the GCD deep dive.
+
+This was just a structure with a pointer to a frame structure and a pointer to an object that was going to handle the work for a given stage. So when a stage is done with the work, all it had to do was using the next pointer, it would just get the queue for the next stage and put work on to that queue. Here's an example of that.
+
+There at the top is just a thin layer where we just cached this void pointer. With GCD, when you invoke the dispatch_async you're passing in a queue, you pass in a context pointer and you pass in the work that you want to do. So from that we had to get the pointer to the context and then just invoke the right method which we called stage work and then at the end after a stage is done with its work it's very simple, it just acquires the next stage's queue and invokes dispatch_async with that queue and we continually would use even though use object stage was always used but because it was object oriented, each object would provide its own implementation of stage work. So this is how we managed to just use one simple thin layer and keep moving work through the pipeline.
+
+Another difference between TBB and GCD is how to specify whether you're dealing with a parallel or a serial stage. So Pallavi showed how you do that when you invoke the base class constructor in TBB, and in GCD the way you do it is with the type of queue that you instantiate.
+
+So there's a global concurrent queue if you want to work, if you have a parallel stage so you would simply call dispatch_get_global_queue to get that global concurrent queue. There's an alternative way to do this which we experimented with. So if you have a parallel stage you could have an array of queues for that stage.
+
+Now this creates some problems or issues which I'll go into in a minute but that's, if you didn't want to use this, the global concurrent queue, you could do it this way as well. And the performance was very similar, but there's an advantage to using the global queue and if you're using, if you know your stage is serial, just, you can instantiate just a single FIFO queue and that will handle all your work. So, here's an example of that.
+
+Here we see, I think I went. Oh, no. I'm sorry. I just want to go over the complexity. If you do choose to go with the parallel queues, now you have some overhead to handle. This shows kind of a very generic approach where a given stage doesn't know a priori whether the next stage is serial or parallel. So it looks at the queue count of the next stage and if it's 1 then it knows it's serial and that's pretty straightforward then you just queue it up on that queue.
+
+But if the next stage was parallel you have to somehow spread the work out among all this array of serial queues. So this is just a simple round robin approach but when you use the global concurrent queue you don't have to worry about any of this. GCD just handles it for you. So from that point of view, you know one of our key learnings was to use the global concurrent queue when you need to work in a parallel.
+
+So let GCD do that work for you. Another difference was detecting whether or not the work was done. So with TBB the first stage returns a null to the framework and then TBB knows that that's the signal that the work is done. In GCD the pipeline is the same. As I mentioned earlier we didn't want to try-- we didn't want to change much of this application.
+
+We wanted to port to GCD with minimal changes so, you know we, of course, so the first stage we saw it's reading a movie, it knows the frame count and it can easily find out when the last frame is there and what we did with GCD was we kind of circumvented the pipeline when we saw that it was the last frame and we sent a special frame with a flag marked that it was the last frame. And rather than push that through the entire pipeline which would push a lot of non-necessary work we just sent it right to the output stage, and from there then the main would then just wait for a semaphore.
+
+So that was another mechanism that GCD provides is the semaphores. Here's an example of this. This is the input stage. It's just watching the frame count and when it gets down to zero it knows that it's at the last frame. It instantiates a separate async context and marks it such that it wants to send this right to the output stage. It marks the frame number and this is important because of the parallel stages and the out of ordering that could happen.
+
+You don't want to send this frame down to the output stage directly then it could show well, without marking it as the last frame because you might miss some of the frames that are meant to be displayed. And then you simply put it on the queue for the output stage and drop down and wait for that semaphore at the bottom, and there the main just goes to sleep using the dispatch time forever. So here's a little walkthrough of how we-- from a kind of a queue point of view, on the bottom you see the global concurrent queue, three other FIFO queues that we used. One was used for reordering.
+
+The heuristics data stage that Pallavi mentioned earlier is also a FIFO queue. In the output stage, of course, we need to present the frames in order. So it begins by main putting work on the global concurrent queue for the frontal detect stage and the frontal detect stage does its work and it queues up more work on the exact same queue but it's for different work.
+
+So you can use the same queue and just put whatever work you like on it. Well at least it worked here just fine. So when the profile detect was finished it knows that the next stage is connected up to the reorder stage, so gets its queue out of the object and puts the work on the reorder stage. Now, here you also see some of the flexibility that you have when you work with GCD.
+
+The output stage also requires work to be in order but we didn't throw that on a reorder stage first. So you might have some reason where you want a separate reorder stage or you could just embed that work into the stage that needs the reordering. So it's very flexible in that manner.
+
+Once the data heuristics stage is done, it queues work up for some more parallel stages so it goes back on to the global concurrent queue and the two drawing stages complete and finally after the draw a profile stage is done, it queues work on the output stage's queue.
+
+We also experimented with even more queues and when we first began this work, we separated out into separate objects how do we move work from one stage to another. So we had what we called a pipe connector and its only job was to take work from stage A and move it to stage B.
+
+So we had more queues. We probably had at least-- well, we didn't have dozens but we had at least twice this many and it presented no real performance impact so the number of queues didn't seem to be a problem at all with the Face Tracker demo. Then one of the last pieces of the infrastructure we needed was a way to reorder frames.
+
+So they're processed in order as reading the film clip. At some point in the pipeline they pass through parallel stages to achieve the concurrency and get to speed up and they have to get processed in order again. So it's a rather simple reorder algorithm.
+
+ We just cache the pointers to context that are out of order and then when the expected one comes in we'll walk through that cache and just play out everything that's in that cache.
+
+So here's a diagram, a little picture of that, so this is the first stage. Again, the file decode, everything comes in order and after the frontal face and the profile detection stages, you just really have no idea what the order could be, and so then you reorder. Again, there's another parallel stage and back to in order at the display output.
+
+Just to show you the algorithm we used for this, we first looked to see if it's the expected frame so we watched the frame count as it comes in and if it's not the frame we expect then we cache it and we form an index based on a simple module of the frame number and we increment the cache count so we don't want to-- later on we didn't want to walk through that cache unless we knew that there were some out of order frames in there.
+
+So that's just a simple flag to help us with that. And as other frames come in and we see they are the frame we want, then we simply display that frame, check that flag to see if there's something in the cache and if it is, we'll play out everything in the cache that's in order. So that was pretty straightforward, worked really nicely for us.
+
+And there was-- another thing was the flow-control and you get the smoothest presentation by that, the video just frankly looks the best when you limit the number of frames in flight and the number works best as equal to the number of CPUs in your system. So you could either detect the number of cores and adjust your parallel or limit your-- the number of frames and flight at anytime to that number and again, here's-- the GCD gives us a mechanism to do this.
+
+The semaphores could either be used as counting semaphores where you initialize into the maximum number of things that you want to manage. The input stage decrements as it attempts to test the semaphore and as long it doesn't go below zero you won't sleep and then you add work to the pipeline, and then as the output stage processes the work, it increments that semaphore. So it was very easy to use, no problem at all and we used another semaphore as well at the end of the movie.
+
+So after the main had queued up the last frame, it waits for the movie to complete. So this shows you the feedback, the flow control between the input and the output stages so you have to use dispatch_semaphore_create to instantiate the semaphore. Semaphore wait on the input side and dispatch semaphore signal when the output stage is done with the work. So here's just the code to do that, so another type, dispatch_semaphore_t for the semaphore.
+
+We initialize it with the number of CPUs, so if we were on either 2 or 8 or 16 and then the input stage calls dispatch_semaphore_wait at the top of the loop, does its work and the output stage in the bottom simply signals the semaphore. So again, very straightforward, nice, easy to use.
+
+So now I'd like to show you the demo using GCD
+
+[ Pause ]
+
+ OK. Helps if I hit Enter.
+
+[ Pause ]
+
+ So there you see the works being distributed across the cores. It's moving pretty quickly and in case you looked away, we'll run it once more.
+
+[ Pause ]
+
+ So, it's pretty hard to tell the difference when you look by the eye between the TBB and GCD implementations. But now let's look at some numbers and compare GCD and TBB performance. So these are on the same Nehalem system, the dual-quad-core system and these numbers are all with Hyperthreading enabled and as you can see for the 1 core, 2, and 4, the numbers are very close. So this shows how you get a lot of choices here to get good performance but note on the 8-core system that GCD actually performed about little more than 5 percent better than TBB and both of the frameworks were able to achieve real-time performance on the 8-core system.
+
+So we're really thrilled with that to see, to play with something new and see that the performance was really nice. Now how did GCD scale across processors? So this slide shows the same system and starting on the lowest that's the baseline number. It's the 1-core without Hyperthreading and then we enabled Hyperthreading and then 2-core is with and without. And as you can see it scales up pretty nicely and you get some-- between 20 and 30 some percent0 performance with this application with Hyperthreading and scales up to 8.3X when all 8 cores with Hyperthreading are enabled.
+
+So this scaled very nicely as well. So, just to go through some of the takeaways from our experience using GCD, it's a very good framework for centralized thread management. It allows you to construct pipelines in the way you might need to do it and so TBB gives you a nice framework for linear pipelines but if your pipeline is different then you can do whatever you really need to do with GCD-- let GCD do the work for you. We tried to work with parallel or rather an array of queues and it wasn't that hard to manage but it was an additional piece of work you had to put into your application, so let GCD do that.
+
+The global concurrent queue takes away that burden. One thing to point out, the Intel Compiler currently does not support block objects but there is-- the function pointer versions of GCD work just fine and there's no performance penalty that we could tell. Some other points to bring out, standard debugging techniques that you know from multi-threading all apply here.
+
+Our application evolved overtime. When we first started we mocked up a very simple application just to learn the APIs and we started with a synchronous model. We used the sync APIs first that worked just fine then switched over to the async versions and we avoided the parallel queues at first and that just delayed the issue of dealing with reordering. If everything is serial, you can debug the rest of the work of your pipeline and not worry about reordering and things. So you could consider putting that piece off 'til the end and just work with all serial queues at first.
+
+So those are just some of the things we learned working with GCD. So to summarize, Snow Leopard and Nehalem Architecture are really a winning combination. You get 15 to 18 percent performance gain from the Hyperthreading without any changes to your application. Hyperthreading provides an additional gain, 8 to 25 percent. Here we have another great choice for threading framework.
+
+We've got TBB and GCD and the key messages that we presented last year are still true today. As you continue to add more and more features and complexity to your application, you want to be able to take advantage of the multicore systems and use technologies like Threading Building Blocks and Grand Central Dispatch to do that.

@@ -1,0 +1,235 @@
+---
+Title:  Managing Processes with launchd
+Year:   2009
+Web:    https://nonstrict.eu/wwdcindex/wwdc2009/500/
+
+[!] This transcript has potential transcription errors.
+---
+
+ Welcome to the Designing for Launchd WWDC session. So I'm Damien Sorresso, I'm the Launchd Maintainer here at Apple. So let's just dive right in. So why launchd? What did it give us? We had inetd, we had cron. Launchd gives us centralized process management. There's 1 daemon on the system responsible for kicking off all processes. And we give all this to you in a data driven way, which means it's less code for you to write to get a daemon up and running on the system.
+
+And we've embraced an on-demand architecture. So what we'll cover in this session is the essentials, basic philosophies of launching on demand, our philosophy about process lifetimes, the best design practices that you guys should embrace when writing your daemons or agents. The grouping and logical organization of launchd jobs in 2 sessions, and we'll cover what's new in Snow Leopard as denoted by this cool graphic.
+
+So what is launchd? It's our PID 1. We launch the system, we get everything kicked off. So we are the system bootstrapper. We manage system jobs, which are daemons, and user jobs, which are agents. And launchd is the canonical way of launching processes on Mac OS X. We really encourage you to use launchd for your process creation needs rather than forking if you can.
+
+And if you can't, tell us why and we'll try and fix it. Launchd is also a virtual process manager, and this ties into our on-demand architecture. So let's talk a little bit about that. It all has to do with this quote, The Fundamental Theorem of Software Engineering, "All problems can be solved by introducing an extra level of indirection." So that's what we've done here. Jobs in launchd are like virtual memory pages, that they're virtual processes.
+
+So when you load a job, that's like mapping a page. Starting a job is faulting the page in, stopping it is evicting the page, unloading a job is like unmapping the page, and our demand comes through IPC, whereas for memory the demand is via read and write requests to a page. So your launchd job, if it exposes services, is virtually available as an IPC destination.
+
+Launchd monitors the IPC resources that your job uses, and when a request comes in, we kick it off for you. So there's no checking for a PID file to make sure the server's running, or anything like that. All you have to know is that your job will be available when it's needed. And we want all these IPC mechanics hidden behind API.
+
+You guys as developers call a lot of API that actually behind the scenes is messaging a daemon. So for example, the security framework, if you want to get an authorization reference, the security framework goes over to securityd and asks it "I need an off reference" and securityd does all the checking, and then returns something if the request was successful.
+
+And you had no idea that was going on, and that's the way we like it. So this on-demand architecture gets us 3 things: processes become more efficient, more flexible, and more reliable. And the best part about the on-demand architecture is that all 3 of these things just emerge when you design your daemon to be launch on demand. If your daemon can come and go as needed, it can just be killed or idle exit when it's not doing anything, and it doesn't have to take up system resources. It also lets you more dynamically respond to system state changes.
+
+So if an environment variable changes, you can simply kill yourself and then come back and pick up that new state. Because of this you also become more reliable, so a critical system daemon that before launchd might... it going down might have been the equivalent of a kernel panic, it's now just kind of a minor hiccup because we can just re-launch it and it can just keep servicing requests. So why does this make sense in the context of our industry?
+
+Our industry has a history of virtualizing resources to make them more... to make their availability more robust. The primary example we covered before was with main memory. So pages are backed by either physical memory or the hard drive, and when you request an allocation like a big one, 10 meg allocation, the system doesn't give you 10 megabytes of physical memory. It gives you 10 megabytes of virtual memory, and says here's your buffer, and if you try and write to it we'll give you those resources when you need it.
+
+And we've also done the same thing with GPU memory on Mac OS X. So GPU memory can be backed by our virtual memory subsystem, we're doing the same thing with GPU resources. So when you submit a Shader job to using OpenCL or CoreImage, it does all the checking to see if the built-in graphics hardware can handle that request.
+
+And if not, the job is paged out to the CPU to be done. But you didn't know what happened; it was work that needed to be done. And in Grand Central Dispatch we're doing the same thing with threads. So you just submit a block of work, GCD takes care of all the thread managing behind the scenes for you, and you don't have to worry about the availability of a thread because GCD will page it in if needed.
+
+And all of this provides a standardized interface to multiple different implementations of the same technology. So what does this get you in terms of practice? What applications does this have? You can use this kind of philosophy in architecture to achieve things like privilege separation, or fault and resource isolation.
+
+So if you have a particularly crash-prone operation, or a dangerous operation like parsing something, you can factor it out into a separate process that's launched on demand by launchd. And if something goes wrong, it's just that process that crashes, not, say, a user-facing GUI app. And you can also, if the computation requires bringing in fairly large or extensive libraries, you don't have to bring those in if the daemon isn't running, and it can just come and go. And as we said before, you get more dynamic response to state changes. Something changes, you can just go away and come back and pick up where you left off.
+
+All the pending requests that you had when you exited will still be there when you come back, because launchd holds onto your resources while you're not running. And all this together creates, or exposes, kind of a model view controller paradigm for your processes where the model is a backing daemon, and the view and controller part is what the user sees. Let's talk a little bit about the basics of launchd jobs. Here we have 5 jobs that are on the system, and so the system boots up, none of these jobs are running.
+
+But then we kick off our... our demandd here. So it comes online. And let's say it wants to get information about its security session. So it calls API that messages securityd. Securityd wasn't running before but it comes online to service that request. And demandd did not have to do any sort of checking to make sure that the server was running before issuing its request, it just happened. Now let's say demandd wants to talk to coreservicesd. It wants to get information about a user session.
+
+Coreservicesd comes online, it services that request. Let's say securityd now wants to log a message to sislog, it says, "Hey, I'm alive." Sislog comes online and logs a message. Now securityd needs to get information about groups. DirectoryServices comes online, gives it the information it asks for, coreservicesd might want to do the same thing. After all this, we kind of get a nice little constellation of jobs.
+
+[ Silence ]
+
+So one of the things that separates launchd from classical system bootstrappers is our notion of dependencies. We don't actually have an explicit dependency graph. Since all of your jobs are loaded up front and they're available as virtual entities, all the dependencies are implied through IPC. Sending a message to a resource, or an advertised service, makes you dependent on that service.
+
+And this makes us a lot more flexible, because we don't have to find... you don't have to find your place in the dependency graph. It also lowers the barrier of entry for you guys writing daemons. You just drop a plist in the right location and you're done, you have a daemon that runs. This is like a plug-in architecture where the plug-ins all run in separate address spaces. So we mentioned property lists. What is the launchd plist like? What's its structure?
+
+What does it describe? It describes principally 3 things: it describes the environment that your job is going to run in, the services that your job advertises, if any, and the lifecycle of your job -- when and how it should run. It's a plist, I know it's tempting but please don't store application preferences in there.
+
+We want you to treat launchd plists as immutable entities, so once they're deployed, they don't change. To load a plist, you use our launchctl utility. That's the command line interface for launchd, and you simply use the load subcommand and point it to a plist, and the job gets loaded. And to unload, simple as calling unload on the plist.
+
+So there's some required keys that we need in our plist. The first is Label. This is just a string that uniquely identifies your job, and it can be anything you want, but we really like the reverse DNS style and it's becoming ever more popular, so com.yourcompany.yourproduct uniquely identifies your job. Then we have Program.
+
+This key is a string that points to the... is the path to the executable that you want launchd to kick off. It's basically the first argument to exec. And then there's ProgramArguments. This is the argument vector that the program will receive, so it's an array of strings that launchd gives the program when it gets kicked off.
+
+This is basically the second argument to exec. Another interesting key that we have in launchd is the KeepAlive key. We said that demand is principally based on IPC, but sometimes you just want something really simple like... maybe only run this job when this file is present on disk.
+
+Keep Alive lets you do that. It can be either a Boolean or a dictionary, and it lets you describe your job's lifecycle in terms of 3 things right now: we have file presence or absence, whether or not your job last exited with a successful exit status, and in our Unix world 0 means success; and you can predicate your job's lifecycle on whether or not there is another job loaded into launchd.
+
+All these criteria are oared together. So if any one of them is true, launchd will launch the job. And every time the job exits, these criteria are re-evaluated to see if launchd should keep the job alive. And if you want more details, check out the launchd.plist man page that's in section 5.
+
+So let's write a simple daemon. So we have our property list, it's got the XML headers, let's first insert our label. We just have a simple string, com.apple.wwdc-sample. Then we want to insert our program, so this is the path to the binary that we're going to execute, and in this case we live in libexec. Now we insert program arguments, so when our program runs it will receive a vector containing these 3 arguments.
+
+And we're going to put in KeepAlive true, which is basically just saying I want this to always run. It's the equivalent of wiring your job into the working set. And let's add 1 more key that's new to Snow Leopard called EnableTransactions. So here's our plist, let's talk a little bit more about this EnableTransactions thing.
+
+This enables really fast shutdown. So if you've installed Snow Leopard on your Dev machines, we encourage you -- shut down your machine sometime. You might be surprised at how fast it goes. So this is all based on a transactional model. By putting that EnableTransactions key in your job, you are saying that whenever you're about to do an operation that can't be interrupted, you'll call this vproc_transaction_begin API; and that opens up a transaction. So when launchd goes to shut down the system, it checks to see how many transactions you have open.
+
+If you don't have any, we simply send you SIGKILL, because that's... it's terminate without warning. If you do have open transactions, we send you SIGTERM, and you're expected to catch SIGTERM and react to it. So what you should do when you get the SIGTERM is unwind your existing transactions, and also stop accepting new ones. So these 2 API's are documented in vproc.h, and we found that just by adding the EnableTransactions key to a lot of jobs, shutdown proceeded at a much quicker pace. So let's do a quick demo of KeepAlive, see what it's like.
+
+[ Silence ]
+
+So I've got a couple of plists here. Here's our KeepAlive demo plist. We've got our label, and here we have KeepAlive criteria. This says keep me alive as long as this file is present on disk, because we've got this Boolean here set to true. The other condition we have is keep me alive as long as this job is loaded into launchd.
+
+So we're in that working directory, let's touch the file Keep Me Alive and see what... oh, and there's also a standard outpath key. This will just have launchd redirect your standard out to the file you specify. So let's touch Keep Me Alive... and then Tail our log file. This daemon, when it comes online, just outputs a sislog message, or writes out to its standard app, so when it comes online we should see a message.
+
+[ Silence ]
+
+Oops... Oh, that's why.
+
+[ Silence ]
+
+OK, so now let's touch Keep Me Alive and Tail-F, our log file. And it's alive, hurray. So now when we remove that file, launchd will no longer keep the job alive.
+
+[ Silence ]
+
+So now let's load the other job, because that's also a condition for launchd to kick this job off. So we'll simply do a launchctl load in our plist. And again we'll Tail our log file.
+
+[ Silence ]
+
+And we've got a new Alive message, so in about 5 seconds we should see another one. And there it is. So that's KeepAlive, really simple descriptions of your job's lifecycle. So back to the presentation. Launchd is a system bootstrapper. How do we do this? Let's talk a little bit about it. This is an apropos quote, "It's not so hard to lift yourself up by your bootstraps once you're off the ground."
+
+So launchd does all that boring stuff for you. It gets your process running so that it can just do what it needs to do. There's less bootstrapping code for you to write as a daemon developer. So when the system comes online, launchd gets kicked off by the kernel.
+
+And then launchd spawns an instance of launchctl. Launchctl just goes through common directories and starts loading jobs into launchd, and once all those jobs are loaded, then launchd starts evaluating their launch criteria. So you don't have to worry about your job being kicked off before the sislog job is loaded.
+
+We do this in an atomic fashion. So when launchctl is going through all these property lists and loading them, it looks for this disabled key. This key tells launchctl to skip over the job, and just not load it. So this should be treated as a default value. We can override this elsewhere.
+
+Remember we said we wanted plist to be immutable, so we wanted to store some of this state elsewhere. So this is the default shipping value of the disabled property of your job. If you just want to load it regardless, use launchctl load with the -f flag passed. And if you want to disable a job, you use the -w flag to launchctl load. So doing launchctl load -w will enable a job.
+
+Unload -w will disable it. On Leopard this used to actually modify the plist, so it would actually write the key to the plist. But since we wanted to move toward making plist immutable, we now store this state elsewhere in a separate database. So daemons are loaded during system start up, and they're managed by PID 1.
+
+The environment they execute in is privileged and there's no GUI interaction from this environment, so it's not safe to call those API's that could end up interacting with the user. It's like LaunchServices for example, is not safe to call from a GUI. And the reason for this is that daemons are singletons. There's 1 instance of a daemon for all clients on the system.
+
+So when you're writing a daemon, always assume either a headless environment, so no display attached, or a multi-headed environment, because we support fast user switching. You can have many users logged in at 1 time. So if your daemon tries to draw GUI, it's like what session would you draw it in?
+
+So just don't do it. Daemons are service providers, and they're loaded from /Library/LaunchDaemons and /System/Library/LaunchDaemons. And this is the order of precedence. So if the same plist or a job with the same label exists in both of these locations, the one in /Library/LaunchDaemons wins and /System/Library/LaunchDaemons is just for daemons that we provide.
+
+All of your daemons should go in /Library/LaunchDaemons. Agents are per user jobs. This is where all of your GUI interactions should take place... and an agent executes as the user on our platform. So they're loaded from ~/Library/LaunchAgents, which contains launch agents that are just for that user. They're also loaded from /Library/LaunchAgents, which contains all of your agents that you want every user to have, and then there's our persistent provided ones in /System/Library/LaunchAgents. And again, the order of precedence is that anything in the user's home directory wins in the event of a naming conflict.
+
+So what if you want to take a look at some of the jobs that are running on your system? Launchctl has a convenient list subcommand, that just dumps all the jobs that exist in your current launchd session. If you want to get more information about a specific job, you can just follow launchctl list with label.
+
+And when you're doing this from a user session, you'll be talking to your per user session. If you want to talk to the daemon, or the system session that hosts all the daemons, you can just use sudo and that will have you communicating with the proper launchd. So there's some different job types.
+
+The normal one is managed by launchd, and it just appears with this label -- com.mycompany.myproduct. Then there's an anonymous job, and this appears with a hex value, just there to uniquify it, followed by .anonymous followed by the name of the program. And anonymous jobs are just, we just keep track of them because they try to talk to us at one point.
+
+So a process that was not created by launchd tried to talk to launchd to get some information, so we just created a little bookkeeping record for it and we show that to you. Then whenever you launch a GUI app, LaunchServices creates a job that is managed by launchd and it has this little range-looking hex value in front of it, followed by the bundle identifier. So whenever you launch a GUI app, you'll see one of these. Then there's mach_init, which is deprecated, please don't use it.
+
+So let's list some jobs. What does some output look like? Well we got 3 columns, we get the PID, the status, and the label. The PID, self-explanatory, if the job is running that's the PID it is running as. The status column is the last exit status that the job posted.
+
+So the last time it exited, if it's a positive number, if you see a positive number in this column, it means that the job exited with that status. A negative number indicates that the job received a signal, and the value of that number indicates the signal number. So here we see that Dock received signal 15, SIGTERM, the last time it exited but then it came back. And then we have some anonymous jobs here, so there's a chain of creation.
+
+So we kicked off Terminal and we see that we have a LaunchServices job there, and then Terminal spawned login, and login talked to launchd. So we created a record for that. And then login spawned bash, which tried to talk to launchd. So we created a record for that. And then finally bash spawned this instance of launchctl that we just ran, which of course had to talk to launchd. So we created an anonymous job record for that.
+
+So that's the chain of anonymous job creation. So let's say we want to get more information about Finder. We just put com.apple.Finder in there, and here's a sample of what we get. So we get the label, we get its PID if it's running, we get the program, path that it will execute, and it also shows you the transaction count.
+
+So if you're one of these jobs that has opted into a transaction model, this is a quick way of checking your outstanding transaction count. We also see Mach services that Finder registers, and on Snow Leopard you can pass the -x flag to launchctl lists, so right before the label. And you get all this information in a parseable property list output kind of format, so it's all in XML.
+
+And also new in Snow Leopard we have the ServiceManagement Framework, which is basically programmatic equivalents to getting this information. So it's a CoreFoundation-layer API, and you can just call SMJobCopyDictionary, and you'll get back a CF dictionary containing all the information that we just saw. And we also allow you to promote your interaction to that with the system launchd by using an authorization ref. So with this framework you can list jobs, get information about a specific one, submit jobs, remove jobs, so no more spawning launchctl to do that work, and no more worrying about your permission. ServiceManagement takes care of all of it for you.
+
+So let's talk a little bit about launchd's sessions. Launchd organizes jobs into sessions, and here's a typical example system. So when you boot up, PID 1 comes online and it creates the system session. This is where all the daemons live. When you get to the login window, we have a login window session that hosts all of the jobs that need to run before a user logs in, but also display GUI.
+
+So you're at the login window, you type in your user name and password, what happens? We create a per user launchd for you, so you get a new launchd. Login window goes away, and the first thing that per user launchd does is create a background session. And since you're logging into the GUI, we create a subsession of that called the Aqua session.
+
+And this is where all of the jobs that deal with graphical user interfaces live, so your pasteboard, for example, gets loaded in this session. Let's get a little bit fancier. Let's say root wants to... SSHN. Root gets its own per user launchd and the background session, but instead of an Aqua session... we get an SSH session for each connection. So if you SSH in from like 2 machines, you'll get 2 SSH sessions for root, and they're running separately of each other.
+
+And to get even fancier, we support fast user switching, so let's log a user in. UID 502 logs in, gets a background session, and also gets an Aqua session. And then if we want to SSH in as user 502, user 502 gets an SSH session as well. So this could very easily be a real machine.
+
+This is how we organize our sessions. What exactly is a session? A session is basically your job's execution environment, and it's a combination of a set of jobs and a Mach bootstrap. A Mach bootstrap is just a collection of service names that map to ports, so that's how we VIN services on our platform. So whenever a framework asks for a Mach service of a given name, it starts off in your local bootstrap, tries to match the name.
+
+If it doesn't find it, it just goes upward until it does. So since Mach services lookups go up, you can't look up a service in another user's bootstrap. So it doesn't traverse through siblings. And if you want to get a kind of graphical idea of what this looks like, new in Snow Leopard we have this launchctl BS tree subcommand, and this will print out a tree-like representation of the Mach bootstrap. So it will give you an idea of what the Mach bootstrap structure looks like. And if you want to just see the services registered in your current session, you can just do launchctl bslist.
+
+So the system session is for daemons, and it's hosted by PID 1 and PID 1 also hosts the root Mach bootstrap. Per user sessions are for your agents, and they're hosted in per user launchd's, and they also host a user-private Mach bootstrap. So 1 user cannot look up services owned by another user. If you want to specifically target a session, we allow you to do that in your plist.
+
+By default agents go into the Aqua session, but you can override that by using this LimitLoadToSessionType key, and you can specify background, which is the other session. So if you want your job to persist after a user logs out, this is what you would do. So even though the user's Aqua session would go away, their background session would still be there, your job would still be running. And when it went away, the per user launchd would simply idle exit.
+
+Let's talk a little bit about user versus UID. In a lot of traditional POSIX platforms these 2 things are the same. The UID is the truth, that identifies you. But that's not true on our platform. On our platform the user is more than just the POSIX bits, because a launchd session consists of both jobs and a Mach bootstrap. The Mach bootstrap is part of what identifies a user.
+
+So launchd, the per user launchd, is the user space entity that unifies both the POSIX and Mach aspects of a user, and thus it provides the canonical user environment. So just doing set UID is not sufficient to run as a user on our platform, you must run as an agent. As with any good rule, there are some exceptions. UID 0 in Snow Leopard now has a per user launchd.
+
+It didn't before, but now it does. And so let's examine what we just said as it relates to root. So daemons run with UID 0, but they don't really run as root. They run as a system user. If you want to run as the root user, you would login to the GUI as root.
+
+And when you do that, as many sysadmins do, the terminal session you get when you... login to root user, interacts with the system launchd by default. So this was done to preserve consistency with previous releases. If you want to interact with root's per user launchd, you can pass -u root to launchctl, and then your subcommand.
+
+Since we provide this environment, it has impact on how you go about debugging your daemon. And the rule here is if you're debugging a daemon, don't launch it with GDB. What you should do instead is add this key WaitForDebugger to your plist, and this stalls the job at its first instruction, so that you can attach with GDB and start debugging it.
+
+But if you launch with GDB you're not launched by launchd anymore, so you're in a completely different environment and the environment that GDB provides, and the environment that launchd provides, will only get more and more different as time goes on. Another trick you can do is to use gdb attach -waitfor, and then just give it the name of your daemon. This will stall GDB until your daemon comes online, at which point it'll attach right then and there.
+
+And a case study of this is in our transaction API's, so the vproc transaction begin and end stuff, doesn't work if you're not running in your launchd environment. So if you want a debug instant off, you need to be run by launchd. So if you do GDB and then launch the app, it won't work. If you run the app from the command line yourself it won't work. Launch with launchd, and the moral of the story is that you should always debug and run in the same environment. So something new in Snow Leopard is we've flattened the Mach per user name space.
+
+What does this mean for you guys? It means that the GUI login and an SSH login get access to the same set of services, and this basically makes an SSH login equivalent to a terminal.app session. Keep in mind that this is not an X11-style remote display. While you can interact with the GUI over SSH now, all the GUI happens on the attached display, but this does make screen a lot happier. So let's see a little demo of it.
+
+[ Applause ]
+
+So we're back to our demo machine. Let's SSHN locally to ourselves.
+
+[ Silence ]
+
+So we're in a different session and we can check that by doing this manager name subcommand to launch CTL, and here we have that we're in a session that was created by SHD; whereas if we go over here and run that same command, we'll see that we're in the Aqua session.
+
+So here we are remoted in. Let's do something like this: we'll echo something to PB copy, the command line utility that lets you put things on the pasteboard. No error message, let's see if it actually did anything. And it did.
+
+[ Applause ]
+
+That would not have worked on Leopard. So that's something new in Snow Leopard, we think you're going to be really happy with it.
+
+[ Silence ]
+
+So about these session things. Think of this as a public service announcement. We have some different notions of sessions on our platform. We have launchd sessions, core graphic sessions, security sessions, and these things are kind of tied together by the task bootstrap port. So if your daemon is getting information about its session by checking its bootstrap port against some known value, you shouldn't be doing that. You should be using the proper API to get it session information, because this is an implementation detail and it will change. But this shouldn't affect the majority of you guys, and so if you don't know what I'm talking about it's OK.
+
+So how does all this stuff influence your architectural design? Let's take a little case study, a privilege separation. So a common UNIX design pattern is that you would have a daemon listening on a privileged port, and it would get a request that's destined for a certain user. And what the daemon would do is fork off an instance of itself, or fork off a helper. And that helper would acquire the privilege resource it needs from the daemon, and then it would do set UID, set GID, and do all that stuff to become the user. But remember, the user is more than just the UID on our platform. So that doesn't work.
+
+We need to convert the child to an agent. So here's our new architecture. The daemon still listens on the privileged port, however what we do instead is make the child an agent and we tell the child that it should be run once immediately when it's loaded. So when that agent runs, it checks in with the daemon.
+
+It says hey daemon, here I am and here's a resource that you can use to launch me on demand; so, like a file descriptor or a Mach fork. It sends 1 of those things to the daemon, the daemon says OK, stashes that away somewhere, and when the daemon gets a request for that user it gets back that descriptor that it can launch the agent on demand, and then sends a message to it.
+
+And the agent gets launched by the per user launchd in the user environment. And the agent doesn't have to do any of the set UID set GID magic, it just runs in the proper environment. It doesn't have to worry about any of that, we take care of all the boring stuff for you.
+
+So what about privilege escalation? GUI apps run as the user, they run unprivileged. But sometimes you need to write things to at C [phonetic] or some other system location. So the pattern we've been encouraging for you guys is to have a separate daemon that handles all that, just a really small piece of code that does exactly 1 thing. But we run into a bootstrapping problem here, because we're also telling application developers that we want you to have a drag-and-drop install. So without an installer you can't get your helper tool to the right locations, because that requires root.
+
+So how do we deal with this? We have a new API in Snow Leopard called SMJobBless. It's part of the ServiceManagement Framework, and this automates the installation of your privileged helper tool. So you can still drag-and-drop install, and also have a privileged tool without using authorization exec with privileges or set UID binaries; both of which we heavily discourage. And this API also ties the helper and the application together by code signing.
+
+So they establish a handshake, and the application says, "Here's my tool, this is what I want to install," and the tool says, "This is who can install me." If both of those requirements are met, we install the tool for you and you can be assured that it's the tool that you expect. It's not some... somebody hasn't hijacked your tool with their own to run privileged and compromise the system.
+
+And if you want to learn more about privileged helper tools, check out the Managing User Privileges and Operation With Authorization Services session. That was on Wednesday, and it was a really good session. So check it out on video. And there was also Assigning Your Application and Identity With Code Signing. So let's talk about fault and resource isolation. Safari on Snow Leopard now runs WebKit plug-ins in their own processes. And what this... and these processes are launched on demand by launchd, and if the plug-in needs to draw into Safari, it's all done entirely through IPC.
+
+Don't ask me how, it just happens. But what this does is it gives you fault and resource isolation. So if you have a particularly crashy plug-in, and it crashes, it doesn't take Safari down with it. Also if the plug-in is particularly memory hungry, it doesn't take up resources when it's not needed. It can just go away and come back, and this is all made possible through our launch on demand model.
+
+So let's see a demo of this.
+
+[ Silence ]
+
+So here we have content on a web page that requires a plug-in, in this case the QuickTime plug-in. So start playing.
+
+ ... helpful Mac geniuses. Must be so great to have a real person you can go to when you need help.
+
+ What, is that different for you?
+
+ Well...
+
+ And we can see that in Activity Monitor we have this process here, no there. WebKit plug-in agent, and that hosts all of the plug-ins.
+
+And so here we have the QuickTime plug-in for Safari, and that's running as PID 806. So let's simulate a crash.
+
+ I'm a Mac.
+
+ And I'm a PC.
+
+ And I'm a Mac genius.
+
+ Ah, incredibly helpful Mac geniuses. Must be so great to have a real person you can go to when you need help.
+
+ What, is that different for you?
+
+ Well... customer care representative.
+
+ Yeah hi... We'll be seeing you...
+
+ Uh-oh, there was a crash. But Safari is not affected; it just got the little plug-in guy, all done through launch on demand.
+
+[ Applause ]
+
+So... let's wrap up. What did we cover today? We covered the basics of launchd's philosophy, our virtual process model, launch on demand, all that fun stuff. We covered how daemons and agents can interact, and how you can leverage those interactions when designing your architecture. And finally we covered what's been added in Snow Leopard -- the flat per user name space, new launchctl subcommands, WebKit plug-in hosting. So for more information we have a mailing list, which I assure you we check.
+
+It's Launchd-Dev if you have questions, we're happy to answer. Launchd is also open source, it's under the Apache license so you can take a look at the source yourself, and if you really want, submit a patch. We're happy to take fixes, and for documentation we have the launchd man page in section 8. The launchd.plist command page in section 5, and the launchctl man page in section 1. And there's also header doc about all the ServiceManagement API's we talked about in the ServiceManagement Framework's header. So check that out.

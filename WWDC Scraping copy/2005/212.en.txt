@@ -1,0 +1,347 @@
+---
+Title:  Printing Best Practices for Your Application
+Year:   2005
+Web:    https://nonstrict.eu/wwdcindex/wwdc2005/212/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Good morning. Welcome to the 2005 printing session. I'm Richard Blanchard. I am the engineering manager for printing. So I like to start these sessions always with a thank you because so much of printing depends upon two different groups of developers. It depends upon the application developers on the one hand and the printer driver developers on the other hand.
+
+We're lucky enough to have thousands and thousands of applications that generate really beautiful output on Mac OS X through the printing system, so thank you to all the application drivers. And on the other hand, we also support thousands of printer models, so thank you to all the printer vendors and the people writing printer drivers. It's actually quite a luxury to have gigabytes of drivers and actually have to worry about how we're going to get them all on a disk and get them to our users. So it's a problem, but it's kind of the problem you'd want to have.
+
+So what does the print system do? We sit here in the middle of these two mountains of code written by the application writers and the printer driver writers. And we mediate. That's really what the print system does. The applications know what code or what they want to render. They give that to us in the print system. We do some handling of it, eventually hand it to the printer driver, which gets it to the printer. And so we do this mediation.
+
+And as we go forward, more and more of this mediation has turned out to be on our end, hey, my application, you know, application 2406, doesn't print with printer driver 7.0. And we end up having to go figure out why. And then once you start throwing in all the different communications protocols we support, that combinations, those combinations grow very quickly.
+
+And we have to come up with some way to try and handle those problems. So the goal today is to was to talk about ways we can handle those problems. And I think the basis for the problem is the fact that the application writers live in a completely different world than the printer driver writers. The application writers actually have it pretty good.
+
+You're in user space. You're in a login context. You get to access all of the user's files. You have all the right permissions. You have all of Cocoa to make your life easy. It's pretty good over there. On the other side, you have the printer driver writers, and they're in a different world. They live and run inside of a boot context. They never get to run as the user.
+
+They run as the LP user, or if they need special resources, as the root user. So they're separated, really, from the user and have to run in this special environment. And they don't necessarily always understand the travails that the application writers have to go through in order to generate proper output. And conversely, the application writers don't always think about what the printer driver problems might be.
+
+So the goal today was to give a tour of the printing system to try and bring those two worlds a little closer together to increase the understanding and hopefully, get applications that work with more printer drivers, have fewer problems, and printer drivers that understand the kind of output the applications might be generating. So along the way of that tour, and we haven't done that tour for a couple years now, really since we switched over to CUPS, which was pre-Jaguar, along the way, I want to stop out and point out developer opportunities and some new Tiger features.
+
+One of the big pluses today, last year, I was able to announce that we had changed 70% of the print system in the print UI. The year before that, we had changed 70% of this print system, in the print server, and while the mathematics was probably a little questionable, it was pretty scary, but this year, since we switched processors, we didn't have to really change big changes in the print system, so that was a plus.
+
+So for this tour, we're going to start on the printer driver side. And that really is CUPS, Common Unix Print System. That's an open-source piece of software we get from the great folks at Easy Software Products. Michael Sweet, if you know him, I'm sure he's here today. We work with them very closely. That is our print system. It's that open-source piece of software.
+
+Richard Blazchard In Tiger, we're using 1.1.23. So we get that from Easy Software Products. We add a couple things into it. We try and feed those changes back. Some of them are pretty Apple-specific, so not all of them go back. Richard Blazchard For Tiger, some of the things we added was Bonjour support. A lot of people thought or have thought that inside of CUPS, we do printer sharing via Bonjour, and we haven't in the past. It was just sort of a little sleight of hand people thought we did.
+
+Richard Blazchard So now in Tiger, the CUPS daemon will actually publish shared printers via Bonjour. Richard Blazchard Richard Blazchard So if you have a Bonjour client out there, maybe Bonjour for Windows or a Linux client, they can actually do Bonjour lookups and find the cues that are shared from Tiger. Richard Blazchard We also added something called Lazy CUPS instantiation or Lazy CUPS launching. The reason behind this was, and this somewhat pains me to say it, is not all our users actually print.
+
+Richard Blazchard And so the idea that there was this print daemon sort of always there and waiting for the user to print, and maybe they never did, was problematic, and especially if you're running something like a web server. Richard Blazchard You really never needed the print server. Richard Blazchard So what we did, now when CUPS starts up, that daemon starts up at boot time, it takes a look to see if there are any jobs ready to print. Richard Blazchard And if there are, well, then it continues on with its initialization, and it stays running.
+
+Richard Blazchard If there aren't any jobs to print, then it looks to see if it's supposed to be sharing printers, and if it is, it continues launching and it shares printers. Richard Blazchard But if it doesn't have any jobs to print, and it's not sharing any printers, it registers with the Mach bootstrap server and it quits. Richard Blazchard And that daemon's gone until the user actually does something with the print system.
+
+Richard Blazchard So they drop a print dialog or they go to the command line and do an LP command line or something like that. Richard Blazchard I guess one quick note, for people who are used to going to the CUPS web interface, that's not enough to actually start up the daemon.
+
+Richard Blazchard So you have to do something else, like go to the command line and give an LP command, and then the web interface will come up. Richard Blazchard So anyway, those are a couple of the changes we made on top of CUPS 1.1.23 and Tiger. Richard Blazchard Again, this is all open source. We keep it on our Darwin repository.
+
+Richard Blazchard We push that every night, so you can always see what we're doing. Richard Blazchard If you go to CVS and check it out, you'll see what we're doing. Richard Blazchard That's what we did the other day. Richard Blazchard If anybody was paying attention, they might have seen some interesting Endian issues being checked in over the last few weeks.
+
+So we have this thing CUPS, and what is CUPS? Well, it's a print server. In particular, it's an internet printing protocol server. It's responsible for publishing shared printers, finding shared printers. It's got the web interface we talked about. Queues jobs, and it starts print jobs. So we're going to look at that a little bit.
+
+How does it share printers? Well, it's got a bunch of different methods, especially in Tiger. CUPS has always shared printers via UDP. It sends out these UDP broadcasts on the subnet so that other CUPS daemons can see it. And so that still exists in Tiger, and it's the same as it was in 10.3 and 10.2 before it.
+
+We've added Bonjour we talked about. We also integrate with Samba. So if the user turns on Windows printer sharing, we use Samba to publish our print queues via SMB. So that's how we share them. How do we take jobs in? Well, pretty much via IPP, the internet printing protocol. That's the type of queues that get published via the UDP broadcast. That's the type of queues that get published via Bonjour. For SMB, obviously it's SMB that the jobs are going to come in.
+
+And we also take LPD jobs. And while we don't have any publishing of them, if you know the host name or the IP address of a Mac and you know the queue name, you can actually print to it via LPD. So we have a pretty broad way of publishing and actually accessing printers on Tiger.
+
+The way we find shared printers, the daemon's listening for these UDP broadcasts, and as they come in from another CUPS server, we take that information and we build a queue. So the UDPs work just as they always have, and it's automatic. In Tiger, we have lots of different ways in the user interface that users can also add these shared printers via Bonjour, SMB, or LPD, and even other words, and that's extensible.
+
+So again, basic print server functionality. You can queue jobs with CUPS. CUPS will support prioritization and scheduling. And it has printer pools. And I always like talking about printer pools because I think they're very cool. And I never find enough people who actually use them. The idea with the printer pool is if you have multiple print queues, you can, from our user interface, wrap them up into one queue that gets presented to the user.
+
+And the example I always use is the photographer who's got his six Raster printers and he's in a hurry to get his job done, needs to print out 20, 30 slides. You can make one of these pools-- CUPS calls them classes-- print to it. And then the jobs will be dispatched to the printers as they're available. And that's all just part of CUPS. And we put a little UI on top of that.
+
+All right, so now we'll start getting to the more interesting part. How does CUPS actually work? Because it's a print server, at some point we actually have to print. And CUPS creates a chain of processes when it needs to print, and these are broken down into filters, drivers, and backends.
+
+And this chain of processes is linked together so that at the head of the chain, there's a file input to the first process, and then the output from that first process is piped into the standard end and the next, his standard out to standard end, eventually all the way until it gets to a printer. And so we're going to look at that and see some developer opportunities for you, maybe.
+
+All right, so here's a picture of the print processes. What do the filter processes do? Well, they're MIME converters. They convert from one file type to another file type. That's all they do. They're very specialized, and they're very specific, and they're running there. By definition, the very last filter in the chain is the driver, and his job is to make printer-ready output. So he takes the last conversion of filters, usually wraps that up in some printer commands, and then will send that along again to his standard output, which is the standard output to a back end.
+
+[Transcript missing]
+
+So there's this complicated-- complicated is the wrong word. Never want to say complicated in front of developers. There is this chain of processes that go on. And because of the chain and sort of the shared assignment, some of these pieces are written by Apple, some are by the printer vendors. Sometimes things go wrong.
+
+We'll say that things only go wrong, really, when you're in development, and we'll ignore the rest. But when you're in development and you're writing your application and you're having problems printing, or if you're writing your printer driver and things aren't going right, I wanted to give you a pointer to where to go. And this is really very simple. You go look in var log CUPS error log.
+
+And the standard error from all those processes, when they're linked together, all get piped together. It goes into CUPS. CUPS looks at its CUPSd.com file to see what the error log level should be, and it writes out corresponding information into this log file. So you can go look at it. You look at it normally without making any changes, you'll see lots of informational pieces.
+
+But if you go into it and you edit and you say, hey, log level is an info. It's log level debug, because I'm a developer. You'll now get lots of interesting pieces of information in there. And what's more, if you're writing a driver and you put some fprintfs to standard error to kind of let yourself know what your driver's doing, those will all show up in the log and things will be a lot less mysterious. So that's where to go when things go wrong. After you make those changes, make sure you restart CUPS. It's a server. It needs to be told to HUP itself.
+
+And of course, this is really the best place. I've got stacks of these still in my office. If anybody comes into my office ever, and this has been about three years, and asks me a question about cups, I give them the nickel answer and I toss them the book and I say, come back when you know. So Michael Sweet's book, it's terrific. I always plug it.
+
+Richard Blaencharnd So what are you going to see in the log when you go look? This is some informational pieces, and I use this as an example because it really hammers home the idea of this chain of processes. Here's a job. It happens to be PDF going to a PostScript printer over LPD. And if you look in the log, it'll tell you, hey, for this job number 18, I had to start three processes.
+
+One, CG, PDF to PostScript, the Apple-supplied converter from PDF to PostScript. The second filter, which is because it's the last filter in the chain we call the driver, is the PostScript to PostScript. Richard Blaencharnd Richard Blaencharnd So, where are the developer opportunities here? Well, they're the MIME filters.
+
+Those are independent of the driver. You can write a MIME filter for your particular file type without ever writing a printer driver without being a printer vendor. So, there's some opportunity there. For the driver, that last filter, that's pretty much you're going to be a printer developer. You're going to be an OEM. But there are alternate drivers out there, alternative drivers out there.
+
+GIMP prints one. We ship that. There's OmniPrint. There's just tons of them. And so, if you are interested in one of those projects and want to bring them over, there's some good opportunity there. And lastly, the back ends. The black ends are, again, independent of the driver. All they do is do communications.
+
+And so, maybe you decided you actually want to generate PostScript from an output, but you want to FTP it somewhere because that's important to the workflow for your customer. You write this very simple tool to do FTP on the back end. And it can be written in C. It can be written in Python. You can do this in a Bash script. It's just very simple to do. And again, it's independent of all the drivers in front of it.
+
+So filters. We talked about filters a little bit. They convert from one MIME type to another. If you create a filter on our system and install it correctly, some magical things start to happen. All of a sudden, that file type, that MIME type, can be dragged on to, we call them printer proxies. They're desktop printers, but they don't always live on the desktop. So anyway, printer proxy is the funny name for them.
+
+But you can drag on to the little icon of your printer, and we will directly submit that into the print system without having to launch the application. So that's drag-and-drop printing, direct support if you do that. So filters. We also have a direct printing API that allows applications to directly submit files into the print system without going through a rendering stage, say, in Quartz. So if you do a filter, the direct printing API will all of a sudden support that file type.
+
+So what does it take to write a filter? It's incredibly easy. It's just a Unix command line tool. It takes six or seven arguments. Again, if you're the head of that chain, you're going to be taking in a file, so you get seven arguments. The last argument is the file you should read.
+
+If you're somewhere in the middle of the chain, you get six, and you read from standard in, standard out. You write, again, all your debugging information is standard error, so you can go back in that log and figure out what's going on when perhaps things don't go right.
+
+Richard Blaanchard So now you've written this command line filter, and again, it doesn't have to be in C. You can write them in lots of different ways. How do you get it in the system? The best way is to go into Etcetera CUPS, and you add two files. If you go look in there, you'll see we have some Apple.type and Apple.conversions file. You can add your own with your own company name on there. Those two files do two different things.
+
+The types file is how CUPS can identify the content of a file if it has to do auto-typing, whereas the conversions file says, okay, now that you've got the content of a file, you can do auto-typing. Richard Blaanchard Richard Blaanchard Richard Blaanchard Richard Blaanchard There's a particular cost-- zero is usually going to be for your driver because it's necessary to print. And here's where my tool lives. So you add that line.
+
+If that line doesn't exist, we assume it's a PostScript printer because there are all these PostScript PPDs and we run the PostScript driver for it. But if you have a PPD, which we try to wave our hands for the fact that whatever that first P stands for, PostScript maybe, if you have a PPD for something that's not PostScript, you add a line. That's Star Cup's filter.
+
+Alright, so when you're writing one of these, you probably have some different image formats that are handy for your printer that are going to be convenient to get to your printer. It turns out this Venn Cups Raster format supports lots of different bit depths and lots of different byte formats.
+
+So you'll probably find what you want in there, and hopefully you'll find that we're actually generating it correctly from our filters in front of you. For Tiger, we added something that was interesting. We're always trying to get better and better output, so we have 16-bit per color component raster support in Tiger. so we can generate... 48-bit RGB, 64-bit CMYK if you want.
+
+And we actually use some of Quartz functionality if you went on the Quartz sessions where they can generate floating point data, floating point raster data. So we generate floating point raster data and then repackage it up as 16-bit per component. So it's pretty interesting if you really have a high-end device, try that format out and see if you get any better output for yourself.
+
+Those are the drivers. Now you go to the back end again, the communications piece. Probably no coincidence. It takes very similar arguments to the back end-- I'm sorry, to the drivers and the filters. It is driven by the device URI. So every time you build a print queue, there's a device URI.
+
+The scheme on that device URI will specify what back end should be run. So here's a graphical explanation of that. Inside of the print queue, every print queue has a PPD and a device URI. The PPD has that star CUPS filter line we looked at, and that points to the driver. The device URI, if you look at the beginning of that, the scheme, names the back end.
+
+And so now when you're building up these processes, you have the back end, you know what that is, you know what the driver is, you know what the MIME type is on the print file because you've auto-typed it from the types files, and you then put together-- CUPS puts together a set of filters to get you from that print file to the driver. driver and then to the back end.
+
+So again, there are lots of opportunities here in this back end, in this printer driver world for print vendors, writing drivers, but really for anybody for filters and back ends. And it's probably worth, if you're an application vendor, try writing a filter just to get a little appreciation of what the printer driver guys have to live with over in that different world. So you should probably take a look at that.
+
+So the printer driver guys live over in that different world. One of the parts of that different world that cups context is they have no UI. They can't present UI over there. There's maybe not even a user logged in. There's definitely a need, however, for a printer driver to put up a user interface. They really want to be in a print dialog. And that's a problem because the print dialog is definitely happening at a completely different time than printing. It may be off by only a couple seconds.
+
+But it could be off by more because you can schedule jobs so the user, when they printed one, said, hey, print that tomorrow. And by the time it ends up going to the driver, it's a completely different day from when the UI and the actual printer driver ran. So they're separated in time. They're separated in users, as we talked about.
+
+When that UI runs, you're logged in as the user. There's actually a person there, and you have that permission for the UI. But by the time the printer driver gets it, it's a completely different user. It's this LP user. So they can't access files. We get some of our first time printer driver writers trying to, in their UI, write preferences that they then read back from their printer driver. And you can't do it because the file permissions prevent that. And then to really make things complicated, the UI and the driver might be on completely different machines. If you're printing to a shared printer, the UI is taking place over here on machine A.
+
+Machine B is actually where the driver's going to run. So forget the permissions problem. You're not even on the same drive. You're not going to get any information across there unless you do it correctly. How do these people do this correctly? How do you get a printer driver to get UI up? We have these things called print drivers. print dialog extensions.
+
+If you have a PPD-- and you must have a PPD in order to write a driver-- you can do nothing. And we will go into the PPD and look for the open UI, close UI keywords, and we will build a user interface for your driver. We'll just do that straight up. And it comes under the printer features panel.
+
+It's about what you'd expect, I hope, from a dynamic UI. It's not going to knock anybody over with its beautifulness, but it is functional. So we'll do that, and that's no work for you. And again, it solves all those problems we just talked about-- different users and different times.
+
+But people really want to write UI. They want to write their own UI. I mean, that's the fun part, especially if you're a printer driver writer, right? That's the only chance you get to interact with the user. So you can take advantage of it. So if you write one of these print dialog extensions, there's a couple things you really need to keep in mind.
+
+One, hey, all of a sudden you are now running with the user's ID, so permissions are different from what your driver's going to be. We talked about that. You can crash the app. If you crash your printer driver, CUPS handles that and the user will get an error.
+
+But nothing bad really happens. If your driver extension, your print dialog extension crashes, the user's going to see that app crash from under them and they're not going to be happy. Generally, they're not happy with Apple. And it's only when we go look at the logs and go, well, wait a minute, this little print driver extension was crashing. It wasn't us.
+
+But that's going to happen. And then the other one, going again back to Monday, is if you're running as a print dialog extension, you have to be the same architecture as the application. There's no translation happening within an application. So if that application's running PowerPC code, you need PowerPC print dialog extension. If they're running x86 code, you need x86 print dialog extension. So whereas for the print drivers, we can make lots of magic happen and there's all this intermixing of code, we can't do that with inside of an application and we don't.
+
+So you need to get busy and compile your print dialog extensions with these universal binaries. I've said that. That was a requirement from Steve Jobs. I had to say that every session. Universal. So how do you point to this? You go into your PPD and you add this Apple Dialog extension. Say, hey, here's where my bundle is. This is the bundle for the printer supported by this PPD. This is where it is.
+
+And for Tiger, we added the ability to write these print dialog extensions in Cocoa. So it's a lot easier to do now than it has been before. We took care of a lot of the problems that were in the old API, and it's pretty clean right now. The idea is your main class inside of that bundle implements this PDE panels is for type.
+
+And we will come along and instantiate your bundle for the right printer and say, hey, we're bringing up the page setup dialog, or we're bringing up the print dialog-- that's the type. Please give us all the panels you want us to show. And so you return this array of panels. And if you've seen some of the printer drivers, it can be a pretty big array. Sometimes they add a lot of stuff. That instance of PDE panels, they implement this informal protocol, and we will make calls into it. And in particular, we'll ask for the view.
+
+We'll get the view from this Cocoa print dialog extension, and we will embed it inside of the print dialog. And it will look like it's supposed to be there. And it is. We'll also give you lots of notifications. Hey, we're going to show you, or we're going to hide you. Is that OK? And then the two most important pieces, we'll tell you when we need you to take the values from your UI and store them. And when we want you to take the stored values and present them up in your UI.
+
+You're not going to get very far unless you have some context when you're writing this. So we have a callback into the print system that you can make from your Cocoa print dialog extensions. And you can ask the print system for the print session that tells you how the user's job's going. You can get the print settings. It's how it's going to print. Get the page format, how it's formatted. The current printer that's targeted in the PPD file. And there's some other callbacks, but that set will let you present your UI properly.
+
+So what I didn't mention that you can get, and you can, is actually a job ticket. And this is kind of a quick blast to the past. In the old Tioga architecture for printer drivers, we had the split of the way settings were grabbed. If you were an application, you used PM print settings. That was there.
+
+If you were a driver, you used job tickets. And the problem was we ended up with these two sets of APIs, and they didn't really cover each other very well. So we've been making steady progress towards phasing out access really to the job tickets and asking everybody to go through the print settings.
+
+So if you're writing one of these new Cocoa print dialog extensions, you can get either, and they represent the same data. We're going to ask that you get the print settings because that's what we want. We want applications and printer drivers to share the same API, but you can get both.
+
+So if you're used to one or you're porting over code, it shouldn't be a problem. We're going to be making this sample available through DTS. This is a very simple print dialog extension written in Cocoa, and all it does is when it's told to show its UI, it gets all the settings from all the PDEs and shows them.
+
+Kind of a helpful debugging thing. So if you're writing your PDE and the user's hitting a button and it's not being set properly, you can look here to see if you're actually getting it into the print settings itself. So that'll be coming probably in the next couple weeks.
+
+All right, so the PPD points to your print dialog extensions, but it can point to lots of other stuff if you're making one. You can add a pointer to an icon, and that's how you get the icons on the desktop printers, a printer utility, and new in Tiger, you can add a pointer to a low-ink tool, so we can actually find out the ink levels for your printer. And so I want to talk briefly about how that works.
+
+None of the printer drivers actually have low-ink tools right now, so what we have in Tiger is an SNMP query for network printers. So if you just have a network printer that supports SNMP, we will, when we need to, query the printer, figure out its ink levels, and we have a new panel that'll show the ink supplies so you can go see what your levels are. You can try that out.
+
+The ink tools are just command line tools, much like the filters. If you want to see how ours works, here's the path to it. You give it the printer ID, and it'll go make the query, dump a bunch of XML representation back to you, and you can look at it.
+
+And you can use that to judge how, if you're writing your own, maybe the data should be formatted. If you do write your own, and it's not working properly, we have this default that you can set that will cause us to write lots of information out to console that'll explain what we thought was wrong with the XML you generated.
+
+So we use it to check for load supplies and to show supply levels. We have an SNMP ink tool, and you can override it. If ours isn't working the way you want, even for your network SNMP printer, you can override it. If you have a USB device, you can put yours also in.
+
+It generates this XML. It's a top-level dictionary with a supplies table. Inside that supplies table is an array of supply dictionaries. Each one describes a supply on the printer. There are required keys that need to be in that to describe each one. It's the class. Is this a consumable or something that's being filled? So is it a waste bucket or is it maybe a piece of toner or ink? A description that we can show to the user, the max capacity, and the supply level capacity so we can draw our little bar charts.
+
+There are optionals. You can tell us the type. Is it ink? Is it toner? Is it fuser? You can tell us the unit that your measurements are in. They're in milliliters. You can give us a color to draw the charts in, and you can give us a part number.
+
+All right, so we use SNMP again for our ink tool, but we added some more SNMP support inside of Tiger. In particular, we wanted, when the user set up a network printer that wasn't using AppleTalk, we wanted to try and get closer to the AppleTalk experience of doing the auto setup. So we have an SNMP set of SNMP queries that are in there.
+
+It'll go get the products, some other standard stuff, but the PPDs can be augmented with information that link back the SNMP queries back to the typical PPD information. So in particular, these question OID strings say, hey, if you want to know what the level of or what the state of tray three, that installable option is, here's the SNMP object number. You should go query.
+
+They're always very long. And if it comes back and says installed, well, then you should treat it as if that is true, that is installed. And so you can add these OID queries into a PPD, and all of a sudden we get much more like AppleTalk auto setup of network printer, even if they're LPD or IPP, which traditionally don't work. All right, so that's the printer driver world. We're now going to move over onto the application world and see how we can do there.
+
+So there's the Cocoa printing API. Not going to say a lot about the Cocoa printing API. I hate to say it, but it just works. Generally, all you need to do is make an NSPrint operation. You give it the view that's going to be drawing the document, and then you invoke it.
+
+And you invoke it on a window so the sheet drops on the window and say, hey, tell me when it's done. And that's Cocoa printing at the top level. We get a lot of requests for people who then want to add an accessory view. This is the Cocoa equivalent to our print dialog extensions.
+
+And they want to add that. And again, that's very simple. You get this print operation. You say set accessory view. You give it a view, and that'll then end up in the print dialog again with all of the different pieces from the print system and the printer driver, all these different panels all looped together.
+
+There are a couple limitations on the accessory panels, and people have complained about this over time. And I expect the Cocoa team will address them, although I'm in no hurry for them to do so. There's only one print panel or one accessory view that can be really added at a time. And there's no access to the underlying Carbon data. That latter one is something I do want them to fix. The first one we're going to talk about here in a little bit.
+
+So I'm going to make the statement that ideally, your Carbon application will never add an accessory view to the print dialog. My stance is always that you have an application, you have menus, you have dialogs, you've got lots of user interface widgets. Why would you want to hide something up inside this modal print dialog?
+
+And that brings me to sort of my Don Quixote moment. This is, I've been failing inside of Apple at this for a while, and so now I'm going to fail in front of all of you. This is, there was this thing 10 years ago, 15, 20 years ago, called WYSIWYG.
+
+And the idea was, hey, the user would actually see on screen, in their view, what it was going to look like when they printed. And the first challenge is, if you have PowerBooks, go find an application that actually does this today. There are some. That's good. But people, it's not even lazy.
+
+There's just sort of this new model where they're showing the data in more interesting ways, but then they never give the user a way inside of that view to see what the printed data is going to look like. And of course, this hurts me deeply as somebody who prints a lot, even if it's just test pages.
+
+So the idea is, if you have things you're trying to put in this accessory view, think about not doing it there. Let the user reformat the page and edit the data live in that print view. Again, this is a printer guy's view of the world, but if it's a good format to print, it's probably a good format to show on screen to let the user see the data that's going to come out.
+
+FileMaker. Well, they were around before this great shift away from WYSIWYG, and I really like the way they do this. I always have, and I use FileMaker a lot. They have a little widget, which I've tried to circle here, and you click on it, and it shows you what it's going to look like when it prints.
+
+And while they don't let you edit that data live, you hit the other widget to get a different view, and now you can edit it or change the layout, and you never have to print. And so if you're just building a FileMaker database to give to somebody who they may print, you know what the output's going to look like as the creator of this template.
+
+Richard Blaanchard FileMaker. Well, they're going to print the template without having to waste paper or, you know, just fool around with it. It gives you a very good sense as a user of what you're creating, which is printed output in most cases. So happily, there are some other good examples.
+
+The Pages folks were terrific at this. I don't know if there are any of them here, but they were just a great group to work on, and they really got this right off the bat. So there was one windmill that I was able to take. Richard Blaanchard FileMaker. TextEdit.
+
+If you put that in wrap-to-page mode, which first you have to go find, but once you get it there, they actually do a decent job. Richard Blaanchard FileMaker. This is one of my favorite applications just because they took a function that a dress book has, Soho labels and envelopes, and they made it WYSIWYG. You're printing envelopes.
+
+Well, they're going to show you what those envelopes look like before you print it. Pretty novel. And, oh, by the way, they let you actually edit the data on the envelope because you just noticed at that point the zip code was wrong. So it's just a great feel, and it's the way I think things should work.
+
+And then iPhoto, not when they print, but in their book view when you're buying a book because you can't print the book out, right? You're buying it from some third party. So they let you actually see what it looks like and move the pictures around and show you where it lands up. So that's one of the things that's really cool about this.
+
+You can actually see what's on the page all inside of the user interface, and it's a great user interface. And I've actually hacked underneath the iPhoto folks their book view into their standard print view so you could actually do this the right way. And I'm still trying to talk them into using it. So bad examples, again, this is where life gets a little depressing.
+
+There's tons of them, and we could spend the next hour going through them. And they're becoming more and more common. And part of that, I think, is just because Carbon makes it so easy to write an application, and printing is always the last thing you write. If you write an application, people don't get to that step.
+
+They're just having to do it. And they're not happy with the view that they have with their columns and the tables. So if you're doing an application and you really care about this, and I would hope you do, there are a couple things you should look out for. This is the big warning sign, and I get so many requests from this to people at Apple.
+
+If you're trying to put a print view inside of the print dialog, you might be going the wrong way. The user, I would claim, at that point, once the modal print dialog is dropped, they see a print view and it's wrong. They now have to cancel, switch back, edit the data the way they want it, print again, drop the sheet again, go, is that right? It's just a crazy way to work.
+
+They should be seeing what they're going to print in their view, hit the print dialog, it should say print, you print, and you get what you expect because you've already seen it. So if you're trying to stuff a preview in there, stop. If you're doing it for cosmetic reasons, iPhoto sort of falls in this category, that's different. But please stop and weigh your options here.
+
+If you're trying to add formatting options that can't be viewed inside of your application into the print dialog, that's probably a problem. One of the favorite ones seems to be print footers. You might ask, what's going to be in the footers? Well, the only way to find out is to go into the print dialog, go to the accessory view, say, yes, print footers and print, and go look and see what that application decided to put on the footers. It should be nice if you could see that inside the view.
+
+So this is my request, and again, I'm used to disappointment, so it's OK if you don't do it. Try not to put print formatting options into the print dialog. If it's going to change the layout of what you're going to print, show the user before you get to the print dialog.
+
+The other variant-- and some people think this sort of appeases me and it doesn't-- is to put up an application print dialog before the system print dialog. So you say print, and then they drop a modal dialog that gives you all those options, and then you say print. That's really no better, but somehow people think this is an improvement. And then just use the power of your user interface. Let them format there. So that's my little battle. We'll go away from that.
+
+Uh, below the Carbon-- the Cocoa Printing API, which, again, is very simple and has a great fit to Cocoa applications. You can really get your application printing well with the Cocoa APIs very quickly. And if you just spend some time designing that view, then you can actually have a great application.
+
+Um, but some people can't use it. If you're a Carbon application, you obviously can't use the Cocoa Printing APIs. And there are Cocoa applications that need to access the full set of the printing APIs, and so they need to drop down below the Cocoa level to the Pure Printing APIs.
+
+And what I wanted to do a little bit was talk about how that works.
+
+[Transcript missing]
+
+If you have a PM page format, you can get the underlined PM paper. You can also take the page format and flatten it in the CFData and same with the print settings.
+
+So we're going to spend a little time just looking at the three important pieces of using this API. So when you're printing, you need to know where you're going to print it, you're going to know how you're going to print it, and you need to know how it fits on paper. So PM Printer, PM Print Settings, and PM Page Format. So PM Printer.
+
+So again, first thing you want to do if you want to, if you're one of these powerful applications that's trying to do something beyond the standard drop the print dialog and print, you want to get all the printers. And PM Server create printer list will return this array of PM printer instances. Now, ideally, you could actually get this from any print server on the network. Right now in Tiger, you can only get it for the local one. So you use this constant KPM server local as the server. And we'll give you all the printers on your local machine.
+
+Richard Blazcarz Those printers come back and they have a lot of different attributes. The one that you need to understand or the two you need to understand first are the PM printer ID and the PM printer name. And this is important if, even if you're just using the command line, but particularly if you're trying to present a user interface that models any part of the Apple user interface.
+
+The ID is a unique name for that queue on that machine. If you have the ID, there won't be another queue on your Mac with that same ID. And once you get that, you can get the ID and you can hand that to CUPS. You have to turn it into a C string from the CFString, but you can do that. Richard Blazcarz So you can get the ID and you can hand that to CUPS. You have to turn it into a C string from the CFString, but you can do that.
+
+Richard Blazcarz You can then talk to the CUPS APIs and get anything you want. The name, and this is a Mac OS X subversion of some CUPS piece. In CUPS it's called the description. We take it and we use it as the name. It's what we show to the user in the user interface.
+
+Richard Blazcarz And the difference is the ID has a very restricted name or character space. So if you go look in it, you'll see lots of underscores and lots of really not very pretty things. If you look at the name, we support UTF-8 and the user can name it, the queue, anything they want. Richard Blazcarz The ID is what you use on the command line. So you can't go look, rename your printer, my space printer, and go to the command line and print to my printer. You have to actually go back and get probably my_printer.
+
+Richard Blazcarz You can see this in printer setup utility, this distinction. There's a text edit field for the name. So again, user can change it anytime they want. But what we call the queue name is literally what we call the ID and the API, and that's going to be constant. You can't change that. And here it's the underscore with the IP address.
+
+So the PM printer has lots of other attributes. One of them, probably the most interesting, is whether it's remote. Is this print queue hosted on your local machine, or is it a queue that was found through this discovery mechanism we talked about at the beginning, probably UDP broadcast, and has come in and has been created for you underneath you?
+
+So PM printer's remote will tell you, hey, it's a local queue added by the user, or it's a remote queue that's just come in over the network. You can get the PPD. You can get the device URI. You can find out some of the capabilities of the printer.
+
+In particular, you can find out if it's the user's default printer. You can find out if it's their favorite printer. Favorites is interesting. If you're on a large network with lots of Macs, and you actually go in and do LPstat-T, you'll see all the queues that your system knows about.
+
+And it'll be very large. When we're at Apple, it's easily hundreds of shared queues are on a given machine that have been found over the network. But we don't present that to the user. We don't want the user, every time they go to the print dialogue, to see hundreds of-- of printers. So we have this concept of per user favorites. And that is, once the user goes and selects a shared printer, it gets marked as a favorite.
+
+And that goes into the user's working set of printers. Those are the printers that the user will see at the top level of the UI. So PMPrinterIsFavorite is a way for you to find out if it's one of that user's preferred printers. And we have people who are trying to put up UI for the user to select a printer. They don't know about this.
+
+They're all of a sudden surprised when they get user reports that on some large installation, they've got these giant pop-ups, and the user's not very happy. OK. So we have a couple of different ways to do this. Get the make model. Get the location. That's the textual string that the user has entered to give some helpful use for shared printers. And then capabilities. Can you do duplex? Can you do shared printers? So that's PMPrinter.
+
+That's where you're going to print to. PMPrintSettings is how you're going to print it. So you need to have a PMPrintSettings. I strongly encourage anybody who ever needs to create a PMPrintSettings to use the print dialogue. The print dialogue, again, is this amazing mixture of system UI, driver UI. and application UI that is incredibly hard not only to create, but definitely to recreate if you're outside Apple.
+
+So if you need to print settings, drop that print dialogue. We're doing some API probably going forward that will allow you to drop the print dialogue to get print settings without actually printing. So it'll be more for report-based applications that want to have the user say, OK, this is the way I want to print this report whenever I print it. So it's more for scripting and that type of thing. Future printing.
+
+So please don't try. Duplicate the print dialogues and use the print dialogues to get the PMPrintSettings created. Once they're created, you usually just use them for the life of a PM session. You're printing. You get the print settings from the dialogue. You print. And you get rid of them. The print dialogue takes care of the fact that there are presets and quick ways for the user to switch between different sets of PMPrintSettings.
+
+Most applications don't need to do that. So PMPrintSettings usually die at the end of a print job. But there are applications that need to keep them. And again, that's these report-based applications. So you can flatten the PMPrintSettings to, in Tiger, CFData or to a URL to a file. And there are unflattened equivalents. So you have access to both of those.
+
+Inside the print settings, there's lots of attributes. Obviously, again, copies and duplex. Can you do duplexes? Some of the obvious ones. We got tired of enumerating these. And again, this is part of replacing the old job ticket code that we had. We now have general ways of just querying on a print settings for a key.
+
+So we've got this key value getting sets, which incredibly obvious. Should have been in the API for a long time. But because we were using the job ticket mechanism as a crutch, we never had this. So take the crutch away, and we learned to walk. and it's much better.
+
+If you want to, again, then drop below our print API and get down to CUPS, you have to take our PM print settings and turn them into a string of options, which is what CUPS wants. And so there's API to do that. And again, we're trying to facilitate for these people who have really high-end print needs to get from maybe our print dialog all the way down to using the CUPS API in the specific manner they want to. We want you to be able to span that gamut. And again, that gamut's really broader than that. It's all the way from the CUPS API up to the Cocoa API.
+
+So that's how are you going to print. PMPageFormat is how you're going to then map onto a piece of paper. I'm a little less pendentic about page format than I am print settings. Print settings, I really want you in the print dialog. It's just hard not to do that.
+
+Page format, use the page format dialog if you can. It's what users expect. It's a good thing. Its task is much less daunting than the print dialog. So if you decide to bring some of these formatting options into, say, your printing view because you're taking this WYSIWYG idea very seriously and you maybe want the user to select the paper size live from inside your view, that's great. I actually don't have a problem with that.
+
+But page format's easy to drop. It'll get you a description of your in the page format, a PM paper, an orientation, and the scaling. And I say scaling for now. Scaling is one of these funny things that dates way, way back, pre-OS 9, just, I mean, really way back.
+
+And the idea with the scaling was that the user would, in page setup, go and select a page, maybe 10 inches by 10 inches, and then say, I want it 200%. And then the print system would lie to the application and say, hey, you know what, it's really only 5 by 5, not 10 by 10.
+
+And MacDraw, because this was really created for MacDraw, just to show you how old it is, would then go, oh, it's only 5 by 5, so I'm just going to draw half of my content. And the print system would go, oh, I tricked you, and it would blow it back up to the 10 by 10.
+
+So it's this crazy lying to the application to get the application to do something applications really can do today, which is scale their output. So I think over time we're going to get rid of that. There are better ways of handling it. You can see them in the Tiger print dialog, where we have scaling onto different paper sizes and some other features. So scaling for now, but hopefully it'll go away.
+
+If you do want to not use the page setup dialog or you want to be smarter about finding paper sizes for your application, you can get a list of PM papers and find the paper you want and then create a page format from that. So we're going to look at that. PM Printer Get Paper List.
+
+Give me all the papers for a particular printer. Each paper has in it a height and width and margins. And that's it. There's no orientation on a PM paper. That's the distinction between a PM paper and page format. PM paper is actually a physical piece of paper. What you're going to see, page format is that physical piece of paper mapped, usually via orientation, but also today via scaling. So you can get this paper list for your application, walk it, find the one you want. You're looking for 3 by 5, for instance.
+
+And then you can create a page format from it, because a page format's what the rest of the printing API is going to want when it comes time to print. So you can create a page format from that PM paper and then set the orientation. By default, you'll get portrait, but you can set landscape or alternate landscape.
+
+And so that's the way you can pick a paper size without going through the print dialog. You may also actually just know the paper size you want. You may know that you want this 10 by 10 piece of paper, and you don't care if the printer supports it.
+
+So there's PM Paper Create, and you can create any paper with any margins, any size you want, and use that. And from that, again, create a page format and use the whole printing API with that custom piece of paper. I can't promise you what's going to happen when you print that. I wish I could, but it depends on the driver.
+
+Can the driver support custom paper sizes? If they do, one thing happens. If they don't, there's going to be cropping. So you can get this. You can print. You can format to it. But there's some question about what's going to happen. And again, one of the PM printer attributes we looked at was hasCustomPaperSize. If it has custom paper sizes, then you have a much better chance of your custom paper size actually printing correctly.
+
+So again, going back to the idea of taking page format and maybe bringing some of that into your application, get a request a lot for how do we do the paper menu. And the paper menu in the page setup dialogue is this hierarchical menu where we try and group paper sizes that have the same physical paper size together into the same submenu where only the margins are different. So in this example, US letter, there's US letter and going back to the original laser writer days, US letter small, which has different margins. So we group those together for the US letter.
+
+Well, people want to reproduce this. So in Tiger, we have this call, PM printer create paper info list for menu. It's probably our longest call, I think, in the printing API. But the idea is, hey, give me back an array of PM papers. But if I need to do the hierarchical menu, instead of a PM paper, give me a subarray and inside of that have paper. So all you have to do is look in this array, walk it.
+
+If you find a subarray, then you're into the hierarchical menu. If you find a PM paper, then that's just what you're going to want to put in your page setup pop-up. So again, we're trying to make this easy for you guys to emulate pieces of the print system where it is appropriate. Page setup, it probably might be appropriate depending on how much WYSIWYG you're doing. Print dialog, it's definitely not.
+
+So that's PM Printer, PM Print Settings and PM Page Setup, PM Page Format. Those are the three most important pieces of the printing API. Once you understand that, you can do some more advanced things, and one of the advanced things you can do is our new Direct-- well, not new, but the Direct Printing API. It's new in that we have better support for all the MIME filters that we had before. So this actually works pretty well now.
+
+The idea with the Direct Printing API, this is especially for Unix ports. A lot of Unix applications come over and they already know in their code how to create PostScript output or how to create PDF output. And they don't want to draw through Quartz because it's going to be too much of a port, or maybe they're just going to do that in the second version. So they've got a PostScript file that they want to print, and they want to give it to the print system.
+
+And so the Direct Printing API lets them do exactly that. And Preview is actually a great example, not of a Unix port, but a great example of somebody who uses this. The idea is if you're in Safari and you hit Print and then you hit the Preview button, Safari draws with Quartz, that Quartz gets captured. It gets entered into a PDF spool file. That PDF spool file gets handed to Preview.
+
+Preview opens it up, draws that PDF spool file with Quartz, and you look at it. And there's a little Print button on the bottom of that Preview. So the idea is the user looks at it and says, yeah, that's what I wanted. And you hit the Print button.
+
+What Preview used to do at that point was draw the PDF through Quartz, so all the PDF was converted back into Quartz calls, which were spooled into the print system, which were then spooled back out into PDF, spooled into the print system, and then the print system later on would use Quartz to do it. So anyway, there'd be this whole extra step of going back from PDF to Quartz. Forget that. In Tiger, they just go, look, here's the PDF file. They use the printing API, the direct printing API, and it gets submitted directly into the print system.
+
+So if you have a Unix application that you're porting over and you've got a PostScript file and you just want to print it, the equivalent of LP, you can use the direct printing API. If you have a PDF file, you can do it as well. In fact... You can do it with any of the MIME types supported by those filters we talked about oh so long ago.
+
+PMPrinter.getMIMEtypes will let you take a PMPrinter and say, "Hey, what file types, what MIME types will this print queue accept directly?" And by directly, that means what file types, what MIME types can I hand it that it has filters to convert back to the format desired by the driver, and it builds up that chain of filters. So you can get this list back, and if you find the type you want, and PDF and PostScript are always going to be there, you can then use the Direct Printing API, PMPrinter.printWithFile.
+
+Here's the printer I want to print to. Here's the print settings. This is how I want to print. Here's the page format. It may or may not be applicable depending on the MIME type you're printing. Here's the MIME type. So if you want to give the system a hint and say, "Hey, look, this thing's PostScript, so we don't have to do any auto-typing," you can do that.
+
+You can also leave that null, and we'll try and figure it out as best we can. And finally, here's the file. So this will let you do what the print system does. Once we spool a PDF file, we use the equivalent of the Direct Printing API to submit that PDF file into the print system. This will let you do it yourself. And we actually have--there's at least one other shipping application that uses this to great effect.
+
+So take a look at that if you're one of those applications that might be useful for. The flip side of the direct printing API, which is, hey, I've got a well-formed file and I want to push it to a printer, is this printing without a printer. And it sounds funny, and the guys who were proofing my slides kept correcting this. I really meant this. Here, the idea is you have an application, and maybe your users want you to have an export to PostScript, for example, feature.
+
+And you don't really want to figure out how to convert Quartz to PostScript. So you can use the printing without a printer concept in our printing APIs to implement a PostScript export or a PDF export, some different things. So in order to understand how that works, you have to understand destinations. Every PM session has a destination, and the destination's broken into three parts. There's a destination type, a destination format, and a destination location.
+
+And there are APIs for getting all these. When you get the destination type, it's going to tell you, hey, this user is printing to a printer, or he's saving the file. Or he's doing a preview, or he's going through the new workflow menu. It'll tell you one of those things.
+
+So if you're an application, for example, that really doesn't want anybody saving the file your content-- you're an e-book application or something like that-- you can find out after the print dialog comes back up, but before you print, what the user has asked the print system to do. And destination type will tell that. And maybe at that point, you go, hey, I'm sorry. It's going to cost you another nickel to actually print this. You can capture it and stop the process at that point. So that's the destination type.
+
+Destination format. Okay, so maybe the user hit the save as PostScript selection. The two files are going to be the type. The format is going to be PostScript. And in our print dialog today, it's going to be PDF or PostScript always. It's going to be one of those two things. We're always generating out of the print dialog either PDF or PostScript. So that's the destination format today.
+
+And the location. The location is just a URL. And the location is pretty obvious if you're doing, the user is doing something that's a save to file. The URL is going to be where we're going to save it. You might want to override that. You might want to check and make sure it's on the proper volume. You can do anything you want after you get it.
+
+It could also be the workflow menu. Our new workflow menu, which we call Process PDF, that button on the left that's really a pop-up menu, that was the UI team. That had nothing to do with me. You can get that. And you can find out that the user is running PDF workflow on something, and you can change the way that works.
+
+But the important part is, if you're trying to implement something like export to PostScript, you can set all those things. So PM session, set destination will let you set the type and the format and the URL, the location. So you can say, hey, I want to save to PostScript.
+
+I want the output to be here. You set this on the session, and then you run your print loop, and it will generate a PostScript file for you. User never has to see the print dialog, and they never need to know that the print system was even involved. So that's printing without a printer. That's the way you can do export.
+
+PDF Workflow. Again, we already talked about the pop-up button. This is public now in Tiger. It's been hidden away for quite a while, really since 10.2, I believe. And there's a lot to be said around here about this, so I'm going to be saying it in the next talk, which is harnessing PDF. So that'll be the talk following this. We're going to talk about PDF Workflow and the way you can get items in there. So next talk, not this talk.
+
+So in summary, there are lots of places in the print system for application writers and printer driver developers to hook in. There's filters, drivers, and back ends. And there's just a lot of functionality that can be implemented there really very easily. Writing these filters and back ends is next to trivial, but it adds a lot of power in the system. And even if you're an application vendor, you might want to look and see what the benefits are of adding a filter in for some of your file types.
+
+And if you wanted to give them to us or open source them, that might make your file type even more popular. So there's ways that you can think about there. Print dialog extensions, ways to get some of your options out to the user. If you're a printer driver developer, that's good. If you're an application developer, you might want to stop and think about those a little bit.
+
+If you're just a Cocoa app and you're trying to print, use the Cocoa printing APIs. You'll be very happy with those. If you need to go beyond that, we have this rich printing API. It's worth looking at. The header files are a little daunting, but there's a lot of power there. And I think with some of these basic slides we talked, I think you can get an idea of exactly the way to attack it.
+
+And then again, we've gone to pretty good lengths, actually, in Tiger to let you get to the underlying CUPS API. And once you're there, that's open source, so you can know exactly how that works. And honestly, if I have my way, more and more stuff will push there so you guys can just go look and see how things work.
+
+There's not a lot of secrets in printing, at least from our point of view. So the more we can make that visible to you, the happier we're going to be. There is a printing lab tomorrow. Come on by. We'll have pretty much the whole printing team is going to be there. So if you have questions, it's a great place to come. I'm not saying we'll have answers, but if you have questions, you should definitely go there.

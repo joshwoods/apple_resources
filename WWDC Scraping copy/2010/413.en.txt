@@ -1,0 +1,210 @@
+---
+Title:  Audio Development for iPhone OS, Part 2
+Year:   2010
+Web:    https://nonstrict.eu/wwdcindex/wwdc2010/413/
+
+[!] This transcript has potential transcription errors.
+---
+
+[Murray Jason]
+Good morning and welcome to the third of 3 talks focusing on Audio here at WWDC 10. My name is Murray Jason. I am on the Developer Publications Team at Apple. And you folks are here today because your applications have the most demanding audio needs. To satisfy those needs, you want to go to the lowest layer of our audio stack. I'm here to help with that.
+
+So today I'll talk about 3 main things. First, I'll put Audio Units in context. There may be some of you who are not entirely clear on when to use Audio Units, when to use one of our other audio technologies, so I'll try to answer that for you. Second, we'll take a quick look at the audio architecture of an iPhone app that uses audio units and that will give us a conceptual grounding for looking at the code for building one. I'll spend most of my time today showing you how to build 2 different types of audio unit apps. Now, these are simple prototype apps that I designed to illustrate some important design principles and coding patterns that you can use in your own applications.
+
+So, let's begin at the beginning and define audio units. An audio unit is an audio processing plug-in. It's the one type of audio plug-in available in iPhone OS. And the Audio Unit framework is the architecture, the one architecture for audio plug-ins. One of its key features is that it provides a flexible processing change facility that lets you string together audio units in creative ways so you can do things that a single audio unit could not do on its own. One of the key value adds over our other audio technologies is that Audio Units support real-time input, output and simultaneous I/O.
+
+Being a low level API, they demand an informed approach so you're in the right place. So, here's our audio stack. All audio technologies in iOS are built on top of audio units so you're using them whether or not you're using them directly. Most mobile application audio needs are handled extremely well by the Objective-C layer of the stack, Media Player and AV Foundation. And if you were here for the earlier talks today, you heard quite a bit about these.
+
+The Media Player framework gives you access to the user's iPod Library and the AV Foundation framework provides a flexible and powerful set of classes for playing and recording audio. And in iOS 4, it adds about 4 dozen or so new classes focused on video but with a lot of very interesting audio capabilities.
+
+Now if you're doing a game and want to provide an immersive 3D sound environment, you'll use one of our C APIs, OpenAL. And if you want to work with audio samples or do more advanced work, you can use one of the very powerful opaque types in Audio Toolbox.
+
+The Audio Queue API which we've heard about a little bit earlier connects to input or output hardware and gives you access to samples. Audio Converter let's you convert to and from various formats. And Extended Audio File let's you write to and from disk. It's when you want to do more advanced work that you don't want and don't want anything in between you and the audio units that you use them directly. So, with Audio Units, like I mentioned, you can perform simultaneous I/O with very low latency.
+
+If you're doing a synthetic musical instrument or an interactive musical game where responsiveness is very important, you can use audio units as well and the third scenario where you'd pick them is if you want one of their built-in features such as mixing or echo cancellation as Eric talked about. iOS gives you 4 sets of audio units listed here. We group them into effects, mixers, I/O and format converters.
+
+Currently, in iOS, we provide 1 effect unit and that's the iPod Equalizer. It's the same audio units that the iPod app itself uses. We provide 2 mixers that we also heard about earlier if you were here this morning. The 3D Mixer is the audio unit upon which OpenAL is built. The Multichannel Mixer lets you combine any number of mono or stereo streams into a single stereo output. There are 3 I/O units.
+
+The Remote I/O connects to input and output audio hardware and provides format conversion for you. The Voice Processing I/O adds to that acoustic echo cancellation. The Generic Output is a little bit different. It sends its output back to your application and all of these I/O units make use of the Format Converter. The converter itself lets you convert to and from linear PCM.
+
+Today I'm going to focus on these two. These are probably the most commonly used audio units, I'll also say something about the equalizer. If most mobile application audio needs are handled well by the Objective-C layer, where do we want to use audio units? Well, in a VoIP app, Voice over Internet Protocol, you use our voice processing I/O unit.
+
+It is purpose built for that and it keeps getting better. In an interactive music app, for example, you may be providing drum sounds and one or more melodic instruments and want to mix them together to a stereo output, you'd use a mixer unit. For real-time audio I/O processing such as an app where the users talks into the device and the voice comes out sounding different, you use a Remote I/O. So, that's a quick overview. Now, let's look at the architecture of an app that uses audio units.
+
+In this part of my talk, we'll begin with a demo of a "hello world" style app using an I/O unit. And then we'll look at the design of that app starting with a black box and moving quickly through a functional description and then the API pieces that make it work. So, I'd now like to invite up on to stage, Bill Stewart from the Core Audio Engineering Team to show us the I/O host example.
+
+[Bill Stewart]
+So, what I'm going to show today is the first of 2 examples. I'll come back later and show you the second one and then Murray's going to go through and look at the code that we have in order to write this audio unit. And what the program does is that it's going to take a microphone input through this connector here which has a mic built in to it.
+
+Take it through the phone and then we're going to use a mixer unit and we're not really using the mixer unit to mix because there's only one source here but we're going to use a service on the mixer unit to pan the mono input from left to right and then we'll go out and you'll hear the sound coming out.
+
+So, what I'm going to do now is launch application and if I could have my mic turned off. So, here is me talking through the phone with the feedback which is just great. And as you can see I have a pan control here and if I pan this to the left of my finger works, here we go, then you'll hear my voice coming out the left speaker.
+
+Alternatively, if I go to right you'll hear my voice coming out of the right speaker of course. [Whispering] Well, see, that's got nothing to do with audio, so.
+
+[ Applause ]
+
+There you go. And then back into the middle. So, we'll get Murray to come back and we'll go through the how to build this application and it's a good way to get yourself started with Audio Units.
+
+[Murray Jason]
+Thanks, Bill. So, a black box sketch of what you just saw looks something like this. Audio comes in from the microphone and goes out to output hardware and in between, it goes through a stereo panner. So, what would a functional representation of this be? For the panner, we need something to perform the panning. We need something to handle input and we need something to handle output.
+
+We also need or could at least use the help of an object to let us manage and coordinate these 3 objects. So, as Bill mentioned, the panning feature is handled by the Multichannel Mixer unit. The coordination feature that we need is going to be handled by an opaque type from the Audio Toolbox layer called an AU Graph and we call it an audio processing graph. So, what about input and output? Input and output have a special responsibility of connecting to the input and output audio hardware. Whatever the user has selected for input, whatever they've selected for output and conveying that to your application.
+
+Well, it turns out that the input and output roles are handled by 2 parts of one object and that one object is the I/O Unit. The input element of the I/O Unit connects to input audio hardware and sends it to your application, likewise, the output element takes audio from your application and conveys it to the output hardware. So, before we get into the code, let's make sure we're clear on just a few definitions.
+
+An audio unit as I've mentioned is an audio processing plug-in that you find it at runtime. An audio unit node, now that's a term that I haven't mentioned yet today, is an object that represents an audio unit in the context of an audio processing graph. And the graph itself is the object that manages the network of nodes. Now we'll look at the steps you take to create the app that you just saw. We're going to use this checklist. It's a little bit long but we can refer back to it to keep track of where we are. Let's just get into it.
+
+The first step in building this application is the same as the first step in just about any audio application and that is to configure the audio session, going through step by step. First we're going to declare the sample rate that we want the hardware to use. This is because we want to have some command over the audio quality in our app and we also want to avoid sample rate conversion. Sample rate conversion is quite CPU-intensive especially if you're going for a high audio quality.
+
+So, we've just declared the value then we get hold of a pointer to the audio session object and we use that in the rest of the calls. Here we call the setPreferredHardwareSampleRate instance method of the audio session to let it know what we would like. The system may or may not be able to comply with our request depending on what else is going on. We also set a category. This is a simultaneous I/O app so we need the play and record category.
+
+We then asked the session to activate. At this point, it grants our request for the sample rate if it can. In either case we ask the audio session object what the actual hardware sample rate is after activation and we stash that away in an instance variable so we can use it throughout our app. The next step is to specify the audio units that you want from the system because remember your application's running but the audio units are not acquired yet.
+
+To do that, you make use of a struct called AudioComponentDescription. You fill its fields with 3 codes and together these 3 codes uniquely identify the audio unit that you want. For the I/O unit, we're going to use output as the type, Remote I/O as the subtype and all iPhone OS audio units are manufactured by Apple. On the Desktop, the story is somewhat different where third party audio units are available as well.
+
+We do the same thing for our mixer unit. Declare the struct and then fill its fields, mixer for the type, multichannel mixer for the subtype and again Apple as the manufacturer. Now, we're ready to create the graph. Do that by declaring the graph and then instantiating it by calling NewAUGraph, declare a couple of AU node types for the audio unit nodes and then the second parameter in this call, the AUGraphAddNode call is a pointer to the description that you saw on the previous slide.
+
+This is our request to the system to give us pointers to the audio units. Next, we're going to instantiate the audio units because we can't work with them until we have real instances of them. Calling AUGraphOpen instantiates both the graph and the audio units it contains. We then declare 2 audio unit types.
+
+One for the Remote I/O, one for the Multichannel Mixer and then call AUGraphNodeInfo which is a call that lets us get pointers to our instances of the I/O unit and the mixer. So, that was quite a lot of code. This is where we are. We've configured the audio session.
+
+In particular, we've established the sample rate we're going to use. We specified the audio units we want and then obtained references to instances of them. So, now we're ready to configure the audio units and configuring means customizing them for the particular use we want in the app. To configure audio units, you need to know about a particular characteristic of audio units and that is the audio unit property. An audio unit property is a key-value pair and typically it does not change over time. Properties that you'll run into a lot when working with audio units are stream format, the connection from one audio unit to another.
+
+And on a mixer unit, the number of it's input busses. In general, not always but in general, the time to set properties is when an audio unit is not initialized, that means not in the state to play sound. A property key is a globally unique constant. A property value is a designated type.
+
+It can be just about anything with a particular read-write access and a target scope or scopes, and by scope, I mean the part of the audio unit that it applies to. For example, here is the set input call back properties description as you see it in our docs.
+
+And all of the properties are described in, Audio Unit Properties Reference. So, now I want to focus on one particular property and that is the property of stream formats. When you're working with audio at the individual sample level, you need to do more than just specify the data type.
+
+A data type is not expressive enough to describe what an audio sample value is and if you're here for the previous talk, you saw quite a bit of information about why that's true. So, when working with audio units, you need to be aware of some key things. The hardware itself has stream formats and it imposes those stream formats on the outward facing sides of the I/O unit.
+
+You'll see a picture of that in a second. Your application specifies the stream format for itself. The stream format you're going to use and the I/O units are capable of converting between those two. As James mentioned, you use the AudioStreamBasicDescription to specify a stream format and it's a mouthful so we often call it, usually call it ASBD. And they're so ubiquitous, these structs, in the use of Core Audio and in your work with audio units that it behooves you to become familiar with them and even comfortable with using them. We have some resources for you there.
+
+First, you can take a look at Core Audio Data Types Reference which describes all the fields of the struct. You can download and play with our sample code that uses the ASBDs. And in particular, I recommend that you take a look at a file that's included in your Xcode Tools Installation at this path, the CAStreamBasicDescription file. Now, this is a C++ file but it defines the gold standard on the correct way to use an ASBD.
+
+So, let's look at where this happens in the app. As I mentioned the hardware imposes stream formats. The audio input hardware imposes a format on the incoming side of the input element of the I/O unit. Likewise, the output audio hardware imposes its stream format on the output of the output element.
+
+Now your application has some responsibilities as well. You specify a stream format on the application side of the input element of the I/O unit and also wherever else is needed and that's application dependent. In this case, we need to set it on the output of the mixer. So, this is the code you use to fill in the fields of an audio stream basic description. You begin by specifying the data type you'll use to represent each sample. The recommended type to use when working with audio units is audio unit sample type. This is a defined type that's a cross platform type on iOS devices that uses 8.24 format.
+
+On the Desktop it uses 32-bit float. And here we simply count the number of bytes in that sample, in that data type because we'll need that to fill in the fields later. Second step is to declare your struct and to explicitly initialize all its fields to zero. Now this is an important step and it ensures that none of the fields contain garbage data, because if they contain garbage data then the results will probably not be very happy. Then now we start filling in the struct.
+
+The first field that we fill in is the FormatID and we're using linear PCM and why, because audio units use uncompressed audio so linear PCM is the format to use. Next in the flags field, we refine that format by setting a flag or set of flags. But what the flags do is specify the particular layout of the bits in the sample. The choices that you need to make when filling out an ASBD are is this integer or floating point, is this interleave data, non-interleave data, is it big-endian or little-endian.
+
+So if you had to do that manually, it will be a complicated process but in practice it's as simple as using this one meta flag AudioUnitCanonical and it takes care of the work for you. The next 4 fields in the struct specify the organization and meaning of the content of an individual value. These are the BytesPerPacket, BytesPerFrame, FramesPerPacket and BitsPerChannel.
+
+For more detail you can look at our docs. If you're using mono audio which we are in this example, you set the ChannelsPerFrame to 1, for stereo audio you set it to 2 and so on. And then finally, you specify a SampleRate for the stream. And we're using the graphSampleRate which is the variable that's holding the hardware sample rate we obtained early on when setting up the audio session. Now we can configure the I/O unit by applying this format.
+
+We're going to use the InputElement of the audio unit, the one that connects to the audio input hardware and that is element number 1. And a convenient mnemonic for that is to notice that the letter I of the word input looks sort of like a 1 then we call AudioUnitSetProperty. This is the function you use to set any property on any audio unit.
+
+We have the key and value highlighted here, we're using the-- we're applying the StreamFormat property and using the inputStreamFormat that you saw defined on the previous slide. There's one more configuration we need to do on the I/O unit and that is because by default I/O units have their output enabled but their input disabled. We're doing simultaneous I/O so we need to enable input. Set a variable to a nonzero value and apply it to the EnableIO property like this.
+
+Now we're ready to configure the mixer unit. We're only using one input bus because we're not mixing multiple sounds together. We're just taking the sound from the microphone. So we specify the value of one and apply it to the ElementCount property of the mixer. The second thing that we need to do for the Multichannel Mixer is to set its output stream format. Now it turns out that the Multichannel Mixer is preconfigured to use stereo output.
+
+All we really need to do is set the sample rate. So this is a bit of a convenience property by calling AudioUnitSetProperty and specifying sample rate, we can apply the same sample rate that we got from hardware and this ensures that the mixer has the same sample rate on input and output. That's very important because mixers do not perform sample rate conversion.
+
+So the audio units are configured and the next step is to connect them together. First, we need to connect the input side of the I/O unit to the input of the mixer. We call AUGraphConnectNodeInput. And the semantic here is source to destination. The numbers indicate the bus number of the audio unit.
+
+So we're connecting element 1 or bus 1, those are synonyms of the I/O node, that's the input part of the I/O unit to the input of the mixer with this call. Likewise, we call AUGraphConnectNodeInput again to connect the output of the mixer to the output part of the I/O unit. Well, that's most of the code.
+
+All that's left is to provide the user interface and to initialize and then start the processing graph which starts audio moving. To provide the user interface we need one more-- we need to understand one more characteristic of audio units and that is the Audio Unit Parameter. So parameters like properties are key-value pairs but unlike properties they're intended to be varied during processing. Parameters that you'll run into a lot and some of which we'll use today are volume, muting, stereo panning position, and that way it works is that you create a user interface to let the user control the parameters and then connect that user interface to the audio unit.
+
+A parameter key is an identifier that is defined by the audio unit. The parameter value is always of the same type, it's 32-bit float. And it's up to the audio unit to define the meaning and permissible range for that value. Here's an example of what our documentation looks like for a parameter and all of the parameters are described in Audio Unit Parameters Reference.
+
+So let's build a user interface. We'll use a UI slider object from UIKit which is a natural choice for doing something like panning. Here you see one with some labels around it. And we're going to apply the value of the slider thumb position to the pan parameter of the Multichannel Mixer. I will just mention that this parameter, this pan parameter for the Multichannel Mixer is a new feature of iOS 4. We'll save the value of the thumb into a variable to apply to the audio unit.
+
+We'll call it here new pan position. And set it like this using the AudioUnitSetParameter function call. Again it's a key-value semantic, same way as with properties. Now to convey the position of a UI widget on the screen into this C function, we wrap it in an IB action method like this.
+
+And that's all there is to creating a user interface for an audio unit parameter. Next we initialize the graph and what that does is check all of the connections and formats that you specified. Make sure that they're all valid. It conveys formats from source to destination in some cases and if everything returns without error, you can start the audio processing graph and audio starts moving. Sometime later you can-- when you're done with your audio you can call AUGraphStop and audio stops.
+
+And that is most of the audio code that you use to create the sample you saw. To see all of it, you can download it. It's available at the attendee site linked from the detailed description for the session. Next we're going to look at a rather different sort of audio unit application.
+
+And that is one that does not take audio from the microphone but instead uses audio that the application generates. In this part of the talk, we'll again start with a demo to see what we're aiming at and what this is about. We'll look at the architecture and then we'll show you the code how to build it. So again, I would like to invite up on to stage Bill Stewart from Core Audio Engineering.
+
+[Bill Stewart]
+So I'm going to just launch this app. So what I'm going to show you here is the application Murray will step through in a moment. What we're doing is sort of simulating a synthesizer so if you've all seen a bunch of apps that are available that do synthesis, this is something like the way that these apps are constructed. Now in this case we're going to have 2 separate sources of sound. We're going to have a guitar sound and a beat sound. We don't provide in the example a guitar synthesizer or drum machine or anything.
+
+So what we're doing is just using a very small file. We just read the file back into a buffer and that's a kind of place holder for where your synthesizer code would be. So if I can just, [background music] let's just start this playing. So I've got a global volume which controls the volume of the entire mix here. I can mute different parts of the mix so I can turn the guitar off or can turn the beats off.
+
+And these are just using audio unit parameters that are defined on the input busses for the mixer. And then I can also control the relative volumes of the 2 inputs that I have going into the mixer so the guitar, I can make it quieter. Or I can make the beat quieter. And that's basically using parameters on the mixer to provide the mix into a controller.
+
+And then the Start and the Stop button is just calling AUGraphStart and Stop in this case and that stops the entire graph for you. So that's basically the demo and then Murray is going to go through. He'll build on some of the knowledge that we covered in the previous section and then go through the specific parts of this app and show you basically how to build this kind of thing. So back to slides and back to Murray, thank you.
+
+[Murray Jason]
+OK. So let's take a look at a picture of the app we just saw. So the first thing to notice here is that we're only using the output piece of the I/O unit and the second thing to notice is that instead of taking audio from a microphone, we're using callback functions.
+
+Those callback functions are attached to the 2 input busses of the multichannel mixer unit. So to build an app like this you begin in exactly the same way as you would build the first demo that we saw, the I/O hosts simultaneous I/O app. You configure the audio session and in particular get hold of the hardware sample rate and specify your category.
+
+Specify the audio units that you want so you can ask the system for them. Construct your processing graph. Open it to instantiate everything. And that lets you obtain references to the audio units that you want to configure. From here the story diverges a little bit. So let's look at that. In this case, we are actually mixing, we have 2 different sounds.
+
+So the mixer needs 2 inputs and we need to set that. You may have noticed that in the drawing that the beat sound is mono and the guitar sound is stereo. And that's to add a little interest to the story here. So we need to set a separate stream format on each mixer input then we need to take responsibility for generating the audio.
+
+We do that by way of callback functions and need to attach those callbacks to the mixer inputs. To set the mixer bus count to 2, we use the same call AudioUnitSetProperty as before this time setting a value of 2 for the property. Now we need to set the stream formats.
+
+I'm not going to show you the audio stream basic description setup for this. It's very similar to what you saw before. But we suppose that we have a stereo format and a mono format defined. We're going to put the guitar sound on bus 0 of the mixer and apply the stereo format to that bus. In the same way, we'll apply the-- we're gonna send the beats sound to bus 1 of the mixer and apply to it the mono stream format. We also need to ensure that the output sample rate on the mixer is the same.
+
+That's a step that we also did in the previous app. There is one more property that's important to set in this case and not in the other case. I'll try to explain that. This property is called MaximumFramesPerSlice. It's a got a bit of a funny name. So let's figure out what it means.
+
+Now the term slice in that name is a notion we use to help understand what's going on when an audio unit is asked to provide audio. The system asks for audio in terms of render cycles and the slice is the set of audio unit sample frames that is requested of an audio unit in one of these render cycles. And a render cycle in turn is an invocation of an audio units callback.
+
+Closely related to this idea is a hardware property called I/O buffer duration. This is available both as a read and write value through the audio session API and it has a default value but you can also set it. And it determines if set the slice size. If you do want to set it, you make a call like this using the audio sessions set preferred I/O buffer duration call. Now there are a few slice sizes that are very good to know about.
+
+First, the default size, the default size is the size that is in play when your application is active and the screen is lit. And you have not set a specific I/O buffer duration. The system will ask for 1,024 frames of audio. That works out to about 0.02 seconds of sound each time it calls the render callback. If the screen sleeps, the system knows that there cannot be any user interaction. So to save power, it increases the frame count so it has to call the render callback less frequently. And it uses a slice size of 4,096. That's about a tenth of a second.
+
+If you want to perform very low latency I/O, you can set the frame count as low as about 200 frames by using the audio session property that I showed you on the previous slide. Now that's a lot but there's a little bit more about this property and that is when you need to set it and when you don't need to set it. You never need to set this property on an I/O unit because I/O units are preconfigured to handle anything the system might request of them.
+
+All other audio units including mixer units need this property explicitly set to handle the screen going dark if there is not input active. If you're not using the input side of an I/O unit then you do need to set the maximum frames per slice property, if you don't and the screen goes dark, the system will ask for more samples than the audio unit is prepared to deliver.
+
+An error will be generated and your sound will stop. So to set it, this is as simple as using the value of 4,096 again calling AudioUnitSetProperty, this time using the maximum frames per slice key on the mixer. So the audio units are configured and now we need to connect the sounds to the inputs of the mixer by attaching the render callback functions.
+
+Now audio unit render callback functions are normal callbacks, they don't use the block syntax so they need a context connected to them and the way we do that is by using a struct called the AURenderCallback struct. The struct includes a pointer to your callback and a pointer to whatever context you want to give the callback for it to do its work.
+
+Here we set up one for the guitar sound and then apply it to the guitar bus of the mixer input by calling AUGraphSetNodeInputCallback. We do the same thing for the beats sound, put together a struct that points both to the callback and to the context it needs, maybe same or different depending on how you want to write your code and attach it to the appropriate bus on the mixer.
+
+Now everything's hooked up but I haven't said anything about the callbacks themselves. They're one of the most interesting parts so let's look at them now. The role of a callback is to generate or otherwise obtain the audio to play. In the demo that you saw, they were simply grabbing some sound. They simply played some sounds out of a buffer that took its sounds from some small files on disk. In your apps you can generate a synthetic piano, farm animals, whatever you'd like to do.
+
+The callback then conveys that audio to an audio unit. The system invokes those callbacks as needed when the output wants more audio. A key feature of callback functions that you must know from the start is that they live on a real-time priority thread. That means all your work is done in a time-constrained environment.
+
+Whatever happens inside the body of a render callback must take this into consideration. You cannot take locks, you cannot allocate memory. If you miss the deadline for the next invocation you get a gap in the sound, the trains left the station. This is what the callback prototype looks like. It's described in audio unit component services reference.
+
+Let's look at each of its parameters. The first parameter inRefCon is the context that you associated with the callback when you attached it to the bus. It's whatever context the callback is going to need to generate its sound. The second parameter ioActionFlags is normally empty when your callback is invoked.
+
+However, if you're playing silence for example, if you have a synthetic guitar and you're between notes, then you can give a hint to the audio unit that there's no sound here. Nothing to process by oaring the value of this parameter with the output is silenced flag. Now if you're doing this, you should also, you must also memset the buffers in the last parameter the ioData parameter to 0.
+
+Some audio units need real silence to do their work correctly. The next parameter inTimeStamp is the time at which the callback was invoked. Now it has a field mSampleTime that is a sample counter. On every invocation, the value of that field increases by the inNumberFrames parameter that we'll see in a moment. If you're doing a sequencer or a drum machine you can use this for scheduling, this time stamp. BusNumber is simply the bus that called the callback and each bus can have its own context.
+
+NumberFrames is the number of frames of sample data that you are being requested to supply to the ioData parameter. And the ioData parameter is the centerpiece of the callback. It's what the callback needs to fill when called. ioData points to an audio buffer list struct, you can read about that and how it's structured.
+
+We can take a quick look at how you might visualize it. If your callback is feeding a mono bus on a mixer then you have a single buffer to fill. The size of that buffer will be inNumberFrames long and the first sample will be at inTimeStamp.mSampleTime. That is-- that will be the frame number for the first buffer. If you suppose that you're playing a piano sound and the user just tapped the piano key then what you'll put into this buffer is the first .02 seconds or so of the sound of the piano key.
+
+And the next time it's invoked, the next .2 seconds and so on. If you're feeding a stereo bus you have 2 buffers to fill and you can visualize that like this. So to create a user interface for this app, we do the same thing, we use interface builder and use UIKit widgets and we connect them to the appropriate parameters in the mixer unit.
+
+In this case, this sample uses the volume parameter and applies it to 2 different places, the input scope and the output scope. The input scope for the input level on the mixer, the output for the overall master volume. We're also making use of the enable parameter to turn each channel on and off. The rest of the code is as we saw before, you initialize the graph to set up all the connections and then call start.
+
+So at this point you've seen 2 different applications, one that took audio from the microphone, one that took audio that your application generated. And we've used audio processing graphs but we haven't really seen what they can do. So let's look at that now. First thing I'll talk about it is how audio processing graphs add thread safety to the audio unit story. Then we'll look at the architecture of a dynamic app and by dynamic, I mean one that the user can reconfigure while sound is playing and then we'll see the code that makes that work.
+
+So starting with thread safety, audio units on their own are not thread safe. While they are processing audio, you cannot do any of these things, cannot reconfigure them, cannot play with connections, cannot attach or remove callbacks. However, placed in the context of an audio processing graph, you can specify the changes you want and then when you call AUGraphUpdate, all pending changes are implemented in a thread-safe manner and sound continues.
+
+And there is no step 3. So AU graphs like many of our other APIs use a sort of a to-do list metaphor. Now all audio unit graph calls can be called at anytime. But in typical use, things like connecting callbacks, adding nodes to a graph and so on, are the ones that you'll do-- the ones that you can do while audio is playing.
+
+And the semantic is that this task is added to a pending list of things to implement. Audio continues without interruption. If you are not playing audio, if the graph is not initialized and you call AUGraphInitialize then all pending tasks are executed. If audio is playing and you call AUGraphUpdate then any pending tasks are executed at that time.
+
+So here again is an architectural diagram of the mixer host sample. Suppose here that the user is playing audio and enjoying their guitar and beat sounds, but they want a little more punch in the beat so they want to add an equalizer. The tasks to make that happen are the following. First you need to break the connection between the beats and the mixer input. Then you need to add an EQ unit to the graph, you need to configure it on both input and output and then make connections, all the time without disrupting the audio.
+
+So to do that are these steps, we'll just go through them quickly. To disconnect the beats callback you call AUGraphDisconnectNodeInput. As I mentioned, that becomes a pending task not executed yet. You then use an AudioComponentDescription struct to specify the iPod EQ unit and add it to the graph by calling AUGraphAddNode.
+
+Now when a graph is already initialized, when you call AUGraphAddNode, the node added to the graph, the action of adding the node to the graph initializes its audio unit. So when this step is finished the iPod EQ unit is initialized and you can obtain it by calling AUGraphNodeInfo. Next you're ready to configure and initialize and if I said initialize I meant instantiate. So we have an instantiated iPod EQ unit and a reference to it. We're now going to configure it and initialize it.
+
+That's a few steps so let's look at those. Now we need to set stream format but we have a different scenario here and that is we're starting with a working application that already has its stream format set. So rather than redo that work, we'll use the AudioUnitGetProperty function call to get the stream format from the mixer input bus storing that here in the beatsStreamFormat parameter.
+
+Then apply that format to both the input and the output of the iPod EQ unit. Here sending it to the input scope and here applying it to the output scope. Now we explicitly initialize the iPod EQ, that's because this could be an expensive operation. The iPod EQ is not actually in line yet. So any work that it has to do can be done before you do that.
+
+Call AudioUnitInitialize and we've now configured and initialized the iPod EQ, it's ready to be connected. You call AUGraphConnectNodeInput to connect the iPod EQ output to the mixer input and attach the beats callback using AUGraphSetNodeInputCallback. So at this point we have a pending list of these 4 items. The highlighted ones you see on the screen and you implement them in one fell swoop by calling AUGraphUpdate. From the users' perspective, they've tapped the button and all of a sudden they have EQ available on the beats sound.
+
+So, to wrap up this part of the talk, audio processing graphs always include exactly 1 audio unit. That's whether you're performing input, output or simultaneous I/O. They add great value to the audio unit story by adding thread safety and they do that by using a to-do list metaphor that we went through. Now for more information on anything I've talked about or anything else about audio units or audio, you can please contact Allan Schaffer who is our Graphics and Game Technologies Evangelist.
+
+Eryk Vershen who is our Media Technologies Evangelist and take a look at the iPhone Dev Center for docs and sample code. In particular, please look at Audio Unit Hosting Guide for iPhone OS which is a new book that you can link to from the detailed description of this session.
+
+It's in a preliminary state at the moment, we'll be flushing it out and please use our developer forums. In addition to these, also please use bugreport.apple.com. Tell us where we can do better in both our APIs and in our docs. So, in summary, use audio units when you need real-time high performance audio.
+
+Use I/O units to gain access to hardware, use properties to configure them and parameters to control them. And make sure you understand the lifecycle of an audio unit which includes access, instantiation, configuration, initialization and then rendering. Render callbacks let you send your own audio into an audio unit and audio processing graphs let you manage audio units dynamically while sound is playing. Thank you very much for your attention.

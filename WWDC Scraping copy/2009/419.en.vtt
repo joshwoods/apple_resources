@@ -1,0 +1,2324 @@
+WEBVTT
+
+00:00:12.849 --> 00:00:13.619
+>> Patrick Beard: Good afternoon.
+
+00:00:13.619 --> 00:00:18.480
+I'm Patrick Beard.
+
+00:00:18.480 --> 00:00:24.630
+And during the first half of this session I'm
+going to be talking about advancements we made
+
+00:00:24.629 --> 00:00:28.879
+to the Objective-C and garbage collection runtime systems.
+
+00:00:28.879 --> 00:00:32.969
+Later on, Blaine Garst will be coming
+up and telling you about Blocks,
+
+00:00:32.969 --> 00:00:37.039
+a major advancement we've made
+to the C programming language.
+
+00:00:40.079 --> 00:00:42.769
+So first up, I'm going to talk about performance.
+
+00:00:42.770 --> 00:00:45.820
+And this is the kind of performance that everybody likes.
+
+00:00:45.820 --> 00:00:50.980
+It's for free when you run your programs on Snow Leopard.
+
+00:00:52.929 --> 00:00:57.679
+So before Leopard, there was prebinding.
+
+00:00:57.679 --> 00:01:03.039
+Shared libraries had their own assigned address
+ranges, which were maintained by update prebinding,
+
+00:01:03.039 --> 00:01:07.819
+and they were all loaded one at a
+time, memory mapped, one at a time.
+
+00:01:07.819 --> 00:01:10.789
+In Leopard, we added the shared library cache.
+
+00:01:10.790 --> 00:01:19.320
+This cache is copies of all the prebound shared
+libraries, and memory announced them all at once.
+
+00:01:19.319 --> 00:01:26.479
+And by doing that, we saved space, we saved
+time, we're able to share all these libraries
+
+00:01:26.480 --> 00:01:30.329
+across all the processes of a particular architecture.
+
+00:01:30.329 --> 00:01:34.260
+And at launch time, performance was significantly improved.
+
+00:01:34.260 --> 00:01:40.890
+In Snow Leopard, Objective-C is
+now part of the shared cache.
+
+00:01:40.890 --> 00:01:47.960
+All of the selectors used by all of the Cocoa
+frameworks are stored in a unique table,
+
+00:01:47.959 --> 00:01:52.229
+and all the references to them are
+fixed up in all the shared libraries.
+
+00:01:52.230 --> 00:01:58.719
+That amounts to about 700 K of
+shared data in a 64-bit processd.
+
+00:01:58.719 --> 00:02:02.719
+That sharing allows processes to launch even faster.
+
+00:02:02.719 --> 00:02:08.560
+But we also sped up message send.
+
+00:02:10.509 --> 00:02:21.750
+The Objective-C 64-bit Compiledr now knows about a set of
+16 selectors, which it uses-it speeds up the calls to those
+
+00:02:21.750 --> 00:02:24.960
+by using a hybrid virtual function table.
+
+00:02:24.960 --> 00:02:31.590
+So there's a few of the selectors in that list,
+you know, the common ones you might expect.
+
+00:02:31.590 --> 00:02:37.969
+And we only use the top 16 for various, important reason.
+
+00:02:37.969 --> 00:02:43.180
+That speed up that you get by doing
+this comes at a cost, a space cost.
+
+00:02:43.180 --> 00:02:49.180
+It's an extra word per call site, and of
+course it's the 16 words for the Vtable.
+
+00:02:49.180 --> 00:02:53.270
+But this set of selectors covers
+about 70% of all message sends
+
+00:02:53.270 --> 00:02:57.219
+that happen globally in all programs, all Cocoa programs.
+
+00:02:57.219 --> 00:03:07.930
+So we're able to speed up by about 40% all of
+these calls without increasing space usage to much.
+
+00:03:07.930 --> 00:03:17.210
+So we save space in the previous optimization, and here
+we're using a little bit of that space to get some speed.
+
+00:03:17.210 --> 00:03:24.000
+Also, RV tables, unlike C++, are non fragile,
+just like we have non-fragile instance variables.
+
+00:03:24.000 --> 00:03:29.620
+So there's no C++ style release
+to release binary incompatibility.
+
+00:03:29.620 --> 00:03:37.920
+The Vtable slots are actually assigned at runtime,
+and can actually be unassigned and unused.
+
+00:03:37.919 --> 00:03:44.579
+You'll occasionally find that you have some methods
+you want to call that would be using a Vtable dispatch
+
+00:03:44.580 --> 00:03:48.040
+and retained release code, but not in GC.
+
+00:03:48.039 --> 00:03:50.239
+I'll tell you more about that in a minute.
+
+00:03:50.240 --> 00:04:00.570
+So to get a feel for the gist of how this stuff works, let's
+look at a simple program that sums an array of NSNumbers.
+
+00:04:00.569 --> 00:04:04.969
+Object at index is one of those accelerated selectors.
+
+00:04:04.969 --> 00:04:08.300
+So let's zoom in to the message send.
+
+00:04:09.430 --> 00:04:18.060
+For every unique message send in a program and across all
+the frameworks, there is a message structure generated
+
+00:04:18.060 --> 00:04:21.030
+by the compiler, it's static, and it contains two entries.
+
+00:04:21.029 --> 00:04:27.879
+The selector and a function to call
+to actually do the message send.
+
+00:04:27.879 --> 00:04:32.319
+First time it's called, the message
+send function is message send fix up.
+
+00:04:32.319 --> 00:04:36.339
+This is where the Vtable slot assignment it done,
+
+00:04:36.339 --> 00:04:42.269
+and it changes the actual message
+structure and converts it to the faster one.
+
+00:04:42.269 --> 00:04:45.099
+So all subsequent calls go through that.
+
+00:04:45.100 --> 00:04:48.590
+As I said earlier, this one takes
+about seven instructions to execute
+
+00:04:48.589 --> 00:04:52.649
+versus the 20 or so of the standard GCC message send.
+
+00:04:52.649 --> 00:04:57.039
+So it's fast, because it's a direct
+map, doesn't have to do any hashing.
+
+00:04:57.040 --> 00:05:06.020
+When you're debugging Vtable dispatch code, you'll
+see some changes when you're looking at the symbols.
+
+00:05:06.019 --> 00:05:09.519
+You might encounter objc message
+send fix up, which I showed you.
+
+00:05:09.519 --> 00:05:16.379
+Objc message send fixed up will appear when you
+make a call that was supposed to be a Vtable dispatch,
+
+00:05:16.379 --> 00:05:19.560
+but it didn't actually end up using a Vtable dispatch.
+
+00:05:19.560 --> 00:05:23.550
+This would be like retain and release
+in garbage collection mode.
+
+00:05:23.550 --> 00:05:27.400
+The runtime says we don't need to
+accelerate those, they don't do anything.
+
+00:05:27.399 --> 00:05:36.959
+So when you see these symbols in the debugger, don't worry
+about it, don't panic, it's just like GCC message send.
+
+00:05:36.959 --> 00:05:40.529
+You can step through your methods as ever.
+
+00:05:40.529 --> 00:05:45.649
+So that's Vtable dispatch.
+
+00:05:45.649 --> 00:05:50.229
+We've also enhanced the CrashReporter
+so it can give you more information
+
+00:05:50.230 --> 00:05:52.750
+in the unlikely event that your program crashes.
+
+00:05:52.750 --> 00:05:54.019
+[ Laughter ]
+
+00:05:54.019 --> 00:05:59.629
+>> When you call objc message send,
+the old style crash logs look like this.
+
+00:05:59.629 --> 00:06:06.170
+You just saw some obscure information, you go look at the
+register, you scratch your head, you go, what happened?
+
+00:06:06.170 --> 00:06:10.170
+Well, I know something from this
+method that caused the crash.
+
+00:06:10.170 --> 00:06:14.689
+The new one gives you the name of
+the selector you're trying to send.
+
+00:06:16.009 --> 00:06:21.539
+[ Applause ]
+
+00:06:21.540 --> 00:06:22.560
+>> Thanks a lot, Greg.
+
+00:06:22.560 --> 00:06:28.610
+So I don't think you're going to applaud
+for this, but the next feature I want
+
+00:06:28.610 --> 00:06:31.400
+to talk about is synthesized instance variables.
+
+00:06:31.399 --> 00:06:40.219
+So in Objective-C 2.0, you can actually synthesize
+the accessor methods for your properties.
+
+00:06:40.220 --> 00:06:50.390
+And if you're using the 64-bit ABI or the iPhone
+OS, you can leave the instance variables out.
+
+00:06:50.389 --> 00:06:53.419
+Unfortunately, there was one glitch.
+
+00:06:55.050 --> 00:07:03.199
+The compiler would generate the instance variable,
+add it to the class, but you couldn't touch it.
+
+00:07:03.199 --> 00:07:06.959
+You couldn't actually reference it by name.
+
+00:07:06.959 --> 00:07:14.879
+So this is fixed in the Snow Leopard compiler,
+GCC 42, and Clang now, both can handle this.
+
+00:07:14.879 --> 00:07:20.879
+But if you're writing code that needs to compile
+for iPhone or the Simulator, just go ahead
+
+00:07:20.879 --> 00:07:23.310
+and declare the instance variable, it works just fine.
+
+00:07:23.310 --> 00:07:30.579
+So now I want to talk about a brand new feature
+of the Objective-C runtime in Snow Leopard.
+
+00:07:30.579 --> 00:07:34.659
+It's called associative references.
+
+00:07:34.660 --> 00:07:41.350
+So imagine you're writing an application, and you
+get the bright idea to have whenever a window --
+
+00:07:41.350 --> 00:07:47.750
+every unique window kind comes to front, plays a sound.
+
+00:07:47.750 --> 00:07:50.050
+So you could model this, using a category.
+
+00:07:50.050 --> 00:07:55.710
+You just say, well, all my Windows
+will have a property called sound.
+
+00:07:55.709 --> 00:08:04.000
+And you could use key notifications and use that
+category, and see if the sound exists yet, dynamic,
+
+00:08:04.000 --> 00:08:06.759
+or lazily bind it to the window like this.
+
+00:08:06.759 --> 00:08:10.500
+So whenever the sound window comes from
+front, a sound is loaded and it's played.
+
+00:08:10.500 --> 00:08:16.199
+Whenever the window goes to the back
+or is no longer front, it stops.
+
+00:08:16.199 --> 00:08:20.819
+So how would you write a category like this?
+
+00:08:20.819 --> 00:08:26.639
+When a language like JavaScript, dynamic scripting language,
+you can add instance variables on the fly, it's no problem.
+
+00:08:26.639 --> 00:08:31.659
+But Objective-C doesn't support instance
+variables being added to objects on the fly.
+
+00:08:31.660 --> 00:08:37.420
+So we have a couple of problems we
+need to solve to make this work.
+
+00:08:37.419 --> 00:08:44.469
+One is where are you going to store the sound, where
+do you put it, and then how do you retrieve is later.
+
+00:08:44.470 --> 00:08:49.490
+So this seems like an ideal candidate for
+a map table, a global map table stored
+
+00:08:49.490 --> 00:08:52.470
+in a global variable, it's off to the side.
+
+00:08:52.470 --> 00:08:57.220
+And it would use weak keys and strong values.
+
+00:08:57.220 --> 00:09:02.639
+But if you're writing a garbage collected program,
+which I hope you are, this can cause subtle leaks
+
+00:09:02.639 --> 00:09:05.939
+if the value object points back to the key.
+
+00:09:05.940 --> 00:09:08.410
+It creates an uncollectable cycle.
+
+00:09:08.409 --> 00:09:11.149
+That's because the map table is global.
+
+00:09:11.149 --> 00:09:17.259
+It's not a problem in this case, because
+the sound doesn't point to the window.
+
+00:09:17.259 --> 00:09:19.799
+The harder problem is life time.
+
+00:09:19.799 --> 00:09:25.909
+How do we find out that the window has gone away
+or is about to go away so it can clean up after it.
+
+00:09:25.909 --> 00:09:29.339
+In this particular case, we get a
+notification that windows close.
+
+00:09:29.340 --> 00:09:35.030
+But in general, you might want to try
+to solve this problem by subclassing.
+
+00:09:35.029 --> 00:09:39.600
+But this particular scenario we want
+to actually catch every window type,
+
+00:09:39.600 --> 00:09:43.529
+NS Windows and NS Panels, and Save Panels and things.
+
+00:09:43.529 --> 00:09:46.839
+And some of them we're not going to be able to subclass.
+
+00:09:49.929 --> 00:09:54.039
+So the solution, it's very simple.
+
+00:09:54.039 --> 00:09:57.719
+We have a new API called Associative References.
+
+00:09:57.720 --> 00:10:01.279
+This is a complete implementation of that category.
+
+00:10:01.279 --> 00:10:06.059
+So notice there's a static variable called Sound Key.
+
+00:10:06.059 --> 00:10:09.849
+The address of this variable is what's important here.
+
+00:10:09.850 --> 00:10:18.330
+It is used as a globally unique identifier that
+represents the association between a window and a sound.
+
+00:10:18.330 --> 00:10:23.930
+So to create an association between two
+objects you call a set associative object.
+
+00:10:23.929 --> 00:10:27.479
+You pass a pointer to an object, in this case, the window.
+
+00:10:27.480 --> 00:10:33.200
+The key, which is the unique identifier,
+the sound, which is the value object,
+
+00:10:33.200 --> 00:10:35.890
+and a final parameter that's called the policy.
+
+00:10:35.889 --> 00:10:41.360
+In this case, the property attribute
+said we're going to retain the sound.
+
+00:10:41.360 --> 00:10:47.139
+So this tells the associative reference system, go
+ahead, when you create the association, call retain.
+
+00:10:47.139 --> 00:10:55.939
+So here's the API -- a piece of it,
+there is another function for getting.
+
+00:10:55.940 --> 00:11:03.800
+But you'll notice these policies are defined to correspond
+to the property attributes assign, retain, and copy.
+
+00:11:03.799 --> 00:11:09.549
+So it's very easy to implement properties
+in terms of associative references.
+
+00:11:09.549 --> 00:11:17.429
+In fact, I would say it would be a really
+good idea to be able to synthesize properties.
+
+00:11:17.429 --> 00:11:19.459
+There's no syntax for this yet.
+
+00:11:19.460 --> 00:11:24.610
+So there you have it.
+
+00:11:24.610 --> 00:11:32.870
+In Snow Leopard, Objective-C programs launch
+faster, the common selectors are accelerated,
+
+00:11:32.870 --> 00:11:38.679
+and you now have the freedom to associate
+arbitrary objects with each other.
+
+00:11:38.679 --> 00:11:42.689
+Pretty cool stuff.
+
+00:11:42.690 --> 00:11:47.940
+So now I'm going to tell you about what we've done
+to improve garbage collection for Snow Leopard.
+
+00:11:52.690 --> 00:11:58.270
+So in Snow Leopard, or since Leopard, all Cocoa frameworks
+
+00:11:58.269 --> 00:12:02.069
+and all Core Foundation frameworks
+have supported garbage collection.
+
+00:12:02.070 --> 00:12:11.750
+We added a ton more frameworks for you to use, we still
+support that, we're going to be supporting that from now on.
+
+00:12:11.750 --> 00:12:18.259
+What's more, 64-bit applications, the system
+applications, system references, and screen saver
+
+00:12:18.259 --> 00:12:25.319
+and automator are now using GC in 64-bit mode.
+
+00:12:25.320 --> 00:12:36.550
+So Apple is embracing 64-bit and GC at the same time,
+and we would like to encourage everybody to do the same.
+
+00:12:36.549 --> 00:12:43.799
+In Snow Leopard, garbage collection runs even faster.
+
+00:12:43.799 --> 00:12:47.529
+In Leopard, the garbage collector runs in two modes.
+
+00:12:47.529 --> 00:12:53.319
+Full collections, which collect lots of
+objects, and generational collection,
+
+00:12:53.320 --> 00:12:57.610
+which doesn't collect as many,
+but it runs about twice as fast.
+
+00:12:57.610 --> 00:13:04.090
+The generational collector was designed
+with short-lived objects in mind.
+
+00:13:04.090 --> 00:13:13.879
+The thread-local collector is based on the hypothesis
+that there are lots of threads-there are going to be lots
+
+00:13:13.879 --> 00:13:18.210
+of threads in Snow Leopard that
+allocate lots of temporary objects.
+
+00:13:18.210 --> 00:13:23.500
+This is actually the same rationale
+behind the Autorelease pool itself.
+
+00:13:23.500 --> 00:13:27.120
+You make an object on a thread,
+you put it in the autorelease pool,
+
+00:13:27.120 --> 00:13:30.100
+you're done with it, it goes away on that same thread.
+
+00:13:30.100 --> 00:13:38.409
+The thread-local collector provides even faster
+allocation because it uses a thread local cache.
+
+00:13:38.409 --> 00:13:50.370
+It also collects faster, because all it has to do is look at
+one thread's stack and all the objects reachable from that.
+
+00:13:50.370 --> 00:13:57.310
+So the full and generational collectors run in about a time
+that's proportional to the size of your program's heap.
+
+00:13:57.309 --> 00:14:01.339
+The Thread Local Collector is more efficient.
+
+00:14:01.340 --> 00:14:06.389
+It only has to collect as many objects
+as a particular thread is allocating.
+
+00:14:06.389 --> 00:14:13.179
+It also is able to return that memory that it
+collects directly back to its allocation cache.
+
+00:14:13.179 --> 00:14:16.649
+Which is a huge efficiency win.
+
+00:14:16.649 --> 00:14:17.860
+And it's more scaleable.
+
+00:14:17.860 --> 00:14:24.539
+As I said, the amount of memory it has to look at
+is proportional to the thread, the single thread.
+
+00:14:24.539 --> 00:14:28.559
+So each thread-local collector
+only has to worry about one thread.
+
+00:14:32.049 --> 00:14:36.269
+The thread-local collector only
+manages a particular set of objects,
+
+00:14:36.269 --> 00:14:41.980
+a particular size range, between 1 and 96 bytes in 64-bit.
+
+00:14:41.980 --> 00:14:50.399
+But all the classes on Snow Leopard, 68%
+of them are in that size range, in fact,
+
+00:14:50.399 --> 00:14:57.490
+99% of the objects we provide,
+their classes are less than 1 K.
+
+00:14:57.490 --> 00:15:04.120
+So it simplifies the collector to only
+support the smaller size; it makes it faster.
+
+00:15:04.120 --> 00:15:11.470
+And also only supports objects that have retained counts of
+zero, which is what you get when you create Cocoa objects.
+
+00:15:11.470 --> 00:15:17.230
+CoreFoundation objects start off with retained count 1,
+and you have to see if you release them to get rid of them.
+
+00:15:17.230 --> 00:15:19.100
+They're off the table for now.
+
+00:15:19.100 --> 00:15:25.920
+So the Thread Local Collector, or TLC for short,
+
+00:15:25.919 --> 00:15:32.399
+so I don't trip over it too much, works
+best if you trigger it explicitly.
+
+00:15:32.399 --> 00:15:38.990
+If you happen to know there are some objects that are
+ready to be collected, then you can use one of these APIs.
+
+00:15:38.990 --> 00:15:42.210
+You can use the Autorelease pool API.
+
+00:15:42.210 --> 00:15:47.050
+That works great if you're writing code like,
+well, a System Preferences pane, for example,
+
+00:15:47.049 --> 00:15:52.949
+which needs to be retained, released
+in 32-bit, and 64-bit GC.
+
+00:15:52.950 --> 00:15:59.650
+Otherwise, you can use the garbage collector, ask
+garbage collector API, or, obviously, collect.
+
+00:15:59.649 --> 00:16:03.889
+When you do that, you're only actually giving a hint.
+
+00:16:03.889 --> 00:16:07.059
+If you want to force the collector
+to run and you want to see
+
+00:16:07.059 --> 00:16:11.000
+if an object will go away you can use exhaustive collection.
+
+00:16:11.000 --> 00:16:14.500
+And that is provided us also in two flavors.
+
+00:16:14.500 --> 00:16:23.220
+That will always run TLC on the current thread, and it will
+push the background collector to run even more aggressively.
+
+00:16:26.330 --> 00:16:30.629
+Thread local objects-we call them local for short.
+
+00:16:30.629 --> 00:16:39.110
+If they escape the control of the thread
+local collector we say they go global.
+
+00:16:39.110 --> 00:16:45.639
+This happens in response to calling CFRetain, for example.
+
+00:16:45.639 --> 00:16:49.340
+When you call CFRetain, this makes
+an object ineligible for collection.
+
+00:16:49.340 --> 00:16:52.149
+It allows you to store that object anywhere.
+
+00:16:52.149 --> 00:16:56.419
+You can store it in malloced memory, and
+the collector wouldn't get rid of it.
+
+00:16:56.419 --> 00:17:00.699
+Well then the thread local collector
+won't get rid of it either.
+
+00:17:00.700 --> 00:17:04.380
+Simply assigning it to a global
+variable does the same thing.
+
+00:17:04.380 --> 00:17:07.470
+We use a right barrier, and that
+tells the thread local collector
+
+00:17:07.470 --> 00:17:12.940
+where the objects are being stored,
+if it's about to lose control of them.
+
+00:17:12.940 --> 00:17:18.610
+Also, the weak or associative references,
+if you use that, objects stop being local.
+
+00:17:18.609 --> 00:17:24.019
+The reason is those systems use locks,
+and we can keep TLC really fast.
+
+00:17:26.000 --> 00:17:30.619
+Finally, if you have a local object and
+you assign it into an instance variable
+
+00:17:30.619 --> 00:17:33.649
+of an already global object, that will make it go global.
+
+00:17:33.650 --> 00:17:40.490
+A good example is you create a new view, and
+you put it into the view hierarchy of a window.
+
+00:17:40.490 --> 00:17:44.519
+That causes all the objects connected
+to that view to go global.
+
+00:17:47.970 --> 00:17:51.759
+So now a couple of cautionary statements.
+
+00:17:51.759 --> 00:17:57.089
+You probably know this, or maybe you learned
+it the hard way, but it deserves repeating.
+
+00:17:57.089 --> 00:18:00.929
+When you use the autorelease pool, objects might go away.
+
+00:18:00.930 --> 00:18:04.049
+Their dealloc methods might be called.
+
+00:18:04.049 --> 00:18:08.159
+Dealloc methods can take locks.
+
+00:18:08.160 --> 00:18:13.700
+If you happen to be holding locks from your
+code, it's probably a bad idea to call drain,
+
+00:18:13.700 --> 00:18:16.529
+because you might dead lock your own code.
+
+00:18:16.529 --> 00:18:21.599
+The same is true, now, under garbage
+collection with thread local collection.
+
+00:18:21.599 --> 00:18:25.809
+Same thing can happen, a finalized
+method might be taking a lock.
+
+00:18:25.809 --> 00:18:29.470
+So if you hold locks, don't call into the collector.
+
+00:18:29.470 --> 00:18:37.319
+And better yet, don't write finalized methods
+at all, or finalized methods that take locks.
+
+00:18:37.319 --> 00:18:42.629
+So that's the collector, that's Thread Local Collection.
+
+00:18:42.630 --> 00:18:46.610
+Now I want to talk about our performance tools.
+
+00:18:46.609 --> 00:18:52.949
+Instruments has been enhanced to know a lot
+more about Garbage Collection in Snow Leopard.
+
+00:18:52.950 --> 00:19:01.490
+The garbage collector instrument can actually show
+you a log of all the collections that have occurred,
+
+00:19:01.490 --> 00:19:05.230
+and it will tell you their kind
+and how much time they're taking.
+
+00:19:05.230 --> 00:19:14.079
+So right here I'm showing a local collection has run, and
+it collected 100 objects, and it did that in about a third
+
+00:19:14.079 --> 00:19:19.409
+of the time of a generational collection,
+which also is collecting 100 objects.
+
+00:19:19.410 --> 00:19:26.390
+As I said before, the time to run these collections are
+proportional to the number of objects being managed.
+
+00:19:26.390 --> 00:19:32.890
+Also over here on the right side is the
+stack crawl where that collection occurred.
+
+00:19:32.890 --> 00:19:36.840
+So you can monitor where you're calling into the collector.
+
+00:19:36.839 --> 00:19:45.119
+It's a great idea to call in on a shallow stack,
+because more likely, there's more garbage to collect.
+
+00:19:47.190 --> 00:19:51.250
+The object graph instrument tells you
+about how your objects are connected
+
+00:19:51.250 --> 00:19:54.599
+to each other and to the heap and to global variables.
+
+00:19:54.599 --> 00:20:02.059
+So here I'm showing a path from a global
+object, the NSApplication, to its delegate.
+
+00:20:02.059 --> 00:20:06.839
+And here it actually shows the name of the
+instance variable that's connecting it.
+
+00:20:06.839 --> 00:20:10.919
+So you can use this to look at long
+chains of objects to get a grip
+
+00:20:10.920 --> 00:20:14.350
+on why an object isn't going away, what it's connected to.
+
+00:20:14.349 --> 00:20:18.529
+You can get a snapshot of this connectivity.
+
+00:20:18.529 --> 00:20:23.269
+Finally, the leaks instrument works with garbage collection.
+
+00:20:23.269 --> 00:20:29.660
+The only objects you're going to see in this list
+are objects that have a retain count that's non-zero.
+
+00:20:29.660 --> 00:20:34.009
+Because those are the only objects that
+can leak in a garbage collection program.
+
+00:20:34.009 --> 00:20:38.460
+The other kind of leak is over
+rooting, but we don't show that here.
+
+00:20:38.460 --> 00:20:40.509
+And we don't really call it a leak.
+
+00:20:40.509 --> 00:20:42.950
+You can go find it in the object graph.
+
+00:20:42.950 --> 00:20:51.460
+We also show the list of leaks and over here on
+the other side, we show the allocation stack crawl,
+
+00:20:51.460 --> 00:20:55.569
+which is a really important way to start finding leaks.
+
+00:20:55.569 --> 00:20:58.509
+Look where it's allocated.
+
+00:20:58.509 --> 00:20:59.490
+Now I want to talk about GDB.
+
+00:20:59.490 --> 00:21:06.549
+GDB is always available when you're debugging in
+Xcode or on the command line for you diehards.
+
+00:21:06.549 --> 00:21:09.480
+So we added three new commands to it.
+
+00:21:09.480 --> 00:21:11.620
+They're all prefixed with info
+
+00:21:11.619 --> 00:21:13.500
+One is totally general purpose.
+
+00:21:13.500 --> 00:21:17.019
+It accesses the malloc history information.
+
+00:21:17.019 --> 00:21:24.690
+You set up a particular environment variable and
+the allocator stack crawls for all the allocations.
+
+00:21:24.690 --> 00:21:27.360
+Well, it also works in garbage collection mode.
+
+00:21:27.359 --> 00:21:32.439
+And it tells you about all the places objects were
+allocated and all the places the collector got rid of them.
+
+00:21:32.440 --> 00:21:37.330
+So you can find out why an object that maybe
+is corrupted doesn't exist any more with it.
+
+00:21:37.329 --> 00:21:40.059
+Very handy for that kind of debugging.
+
+00:21:40.059 --> 00:21:46.230
+Info GC-references gives you all the pointers
+to a particular object that there are.
+
+00:21:46.230 --> 00:21:53.839
+And GC roots gives you all the pointers plus all
+the paths from the roots that lead to your object.
+
+00:21:53.839 --> 00:21:57.039
+So this gives you similar information to Instruments.
+
+00:21:57.039 --> 00:22:02.159
+Also, there are some handy one-liners.
+
+00:22:02.160 --> 00:22:06.600
+You can call ob-c collecting enable from the debugger
+and find out, are we really running the collector?
+
+00:22:06.599 --> 00:22:11.230
+Sometimes things don't happen like you expect,
+because you're not actually running the collector.
+
+00:22:11.230 --> 00:22:17.380
+CFGetRetainCount tells you if an object has
+a retain, therefore, it's not going away.
+
+00:22:17.380 --> 00:22:23.070
+Malloc side, you can call on any kind of allocate
+pointer, malloc, or the collector's memory.
+
+00:22:23.069 --> 00:22:24.240
+It works with either one.
+
+00:22:24.240 --> 00:22:26.349
+Tells you how big the object is.
+
+00:22:26.349 --> 00:22:32.009
+And objc is finalized, you can use during
+finalization and find out if a particular object,
+
+00:22:32.009 --> 00:22:37.980
+your object references, is about
+to be finalized, is going away.
+
+00:22:37.980 --> 00:22:44.509
+You can use that to find out whether it's safe
+to store that object or do other operations.
+
+00:22:44.509 --> 00:22:52.420
+So we have some environment variables
+to highlight the important ones.
+
+00:22:52.420 --> 00:22:58.539
+Auto-use guard is now available, which gives you
+guard pages and always allocates at least two pages,
+
+00:22:58.539 --> 00:23:02.829
+puts your object in the first one, and
+allocates a read-only page after it.
+
+00:23:02.829 --> 00:23:05.329
+Great for detecting buffer runs.
+
+00:23:05.329 --> 00:23:10.349
+Got to have a lot of memory, but it can be really handy.
+
+00:23:10.349 --> 00:23:15.819
+There's also auto-reference count logging, which
+as I said earlier enhances the malloc history.
+
+00:23:15.819 --> 00:23:22.889
+It will give you all of the activity the
+collector observed for reference counting.
+
+00:23:22.890 --> 00:23:28.710
+And it only logs the information that the GC itself sees.
+
+00:23:28.710 --> 00:23:34.279
+When you're using CFRetain, only the first CFRetain
+on an object will actually talk to the collector.
+
+00:23:34.279 --> 00:23:40.359
+So it's actually kind of handy, because it's going
+to be less voluminus to go through those logs.
+
+00:23:43.549 --> 00:23:50.919
+So the collector is now open source.
+
+00:23:50.920 --> 00:23:55.590
+We released the 10.5.3 version of it late last year.
+
+00:23:55.589 --> 00:24:01.579
+It's the version of the collector that
+was shipped as part of 10.5.3 Leopard.
+
+00:24:01.579 --> 00:24:04.839
+And here's the link to it.
+
+00:24:04.839 --> 00:24:08.949
+It's released under the Apache
+Open Source License Version 2.
+
+00:24:08.950 --> 00:24:12.230
+And it's not just for Objective-C.
+
+00:24:12.230 --> 00:24:15.670
+It's the collector's, actually, language diagnostic.
+
+00:24:15.670 --> 00:24:21.910
+The open source project Mac Ruby is using it, and
+we'd like to encourage other projects to use it too.
+
+00:24:21.910 --> 00:24:25.380
+So if you're interested in doing
+that, please contact Michael Jurewitz.
+
+00:24:25.380 --> 00:24:33.040
+His contact information will come
+up at the end, and let us know.
+
+00:24:33.039 --> 00:24:42.170
+In March we presented our extensions to C,
+including Garbage Collection and Blocks in a paper
+
+00:24:42.170 --> 00:24:45.700
+to the C Standards Committee, to the working group.
+
+00:24:45.700 --> 00:24:49.259
+And there was interest in it.
+
+00:24:49.259 --> 00:24:56.460
+And -- if you're interested in it yourself, I've published
+the link to that paper on there, on their web site.
+
+00:24:56.460 --> 00:24:59.250
+So thank you very much.
+
+00:24:59.250 --> 00:25:05.009
+I'd like to invite my colleague now, Blaine
+Garst, to come up and tell you all about Blocks.
+
+00:25:05.009 --> 00:25:11.200
+[ Applause ]
+
+00:25:11.200 --> 00:25:12.990
+>> Blaine Garst: Thank you, Patrick.
+
+00:25:12.990 --> 00:25:16.609
+So I want to tell you all about Blocks.
+
+00:25:16.609 --> 00:25:22.659
+I'm borrowing a few slides from a talk I gave a little bit
+earlier this afternoon, but here you're going to learn all
+
+00:25:22.660 --> 00:25:26.930
+about syntax, you're going to learn
+all about lifetime issues,
+
+00:25:26.930 --> 00:25:29.490
+you're going to learn more about Objective-C specialization.
+
+00:25:29.490 --> 00:25:31.539
+You're going to learn the full story.
+
+00:25:31.539 --> 00:25:34.500
+It's not that big, but it's a little bit bigger.
+
+00:25:34.500 --> 00:25:38.369
+But if you didn't come to my talk
+earlier, I want to start over again.
+
+00:25:38.369 --> 00:25:43.739
+If you've ever programmed with lambdas, then of
+course you've been using either Scheme or LISP.
+
+00:25:43.740 --> 00:25:48.150
+If you programmed in Smalltalk, you
+see those things in square brackets,
+
+00:25:48.150 --> 00:25:52.200
+that funny syntax, and that was called a Block.
+
+00:25:52.200 --> 00:25:53.940
+It was actually an object for them.
+
+00:25:53.940 --> 00:25:58.289
+Every if-then-else control structure
+kind of thing was an object,
+
+00:25:58.289 --> 00:26:03.180
+that code in the square brackets was actually a block.
+
+00:26:03.180 --> 00:26:06.220
+Interesting idea.
+
+00:26:06.220 --> 00:26:12.150
+In Ruby, we also see this concept coming back again.
+
+00:26:12.150 --> 00:26:22.080
+And in LISP and in Scheme this concept of having sort of
+this function that you pass to somebody was called closure.
+
+00:26:22.079 --> 00:26:29.699
+And the reason for that was that you got to
+carry along the variables locally for you.
+
+00:26:29.700 --> 00:26:37.809
+But if you're a programmer in C, or one of its related
+families, Objective-C or C++, or the union of those two,
+
+00:26:37.809 --> 00:26:41.759
+Objective-C++, you've been out of luck for a long time.
+
+00:26:41.759 --> 00:26:43.629
+But no longer.
+
+00:26:43.630 --> 00:26:47.080
+In Snow Leopard, we have the same kind of a construct.
+
+00:26:47.079 --> 00:26:49.649
+We call it a Block and it looks like this.
+
+00:26:49.650 --> 00:26:56.840
+It's the funny ^ symbol ahead of a curly
+brace, compound statement, expressionless.
+
+00:26:56.839 --> 00:27:02.709
+You're creating sort of a local function
+and passing it off to something that's going
+
+00:27:02.710 --> 00:27:10.170
+to do something more interesting
+with it that you want done to it.
+
+00:27:10.170 --> 00:27:16.200
+So in this case, what's going on
+is we're carrying along the value D
+
+00:27:16.200 --> 00:27:21.170
+in that local compound statement kind
+of block that you're passing along.
+
+00:27:21.170 --> 00:27:23.460
+And we do this very efficiently.
+
+00:27:23.460 --> 00:27:28.610
+Those other languages were not only
+garbage-collected, but they were mostly interpreted.
+
+00:27:28.609 --> 00:27:30.199
+And that's a very big expense.
+
+00:27:30.200 --> 00:27:34.779
+And of course C is neither garbage
+collected nor interpreted.
+
+00:27:34.779 --> 00:27:40.889
+So we know how to do this in a highly
+compiled, highly optimized way.
+
+00:27:40.890 --> 00:27:44.980
+So let's see how that repeat function might be implemented.
+
+00:27:44.980 --> 00:27:52.559
+So the syntax we use to declare a block reference is
+just like function pointers, except we use the ^ symbol.
+
+00:27:52.559 --> 00:27:57.250
+So semi-similar syntax and form, it's not so bad.
+
+00:27:57.250 --> 00:28:01.660
+Except as a parameter you've got to worry
+about the return type and the parameters,
+
+00:28:01.660 --> 00:28:05.950
+and when you're passing one or
+when you're trying to declare one.
+
+00:28:05.950 --> 00:28:10.509
+So we highly recommend that you use a
+Typedef to kind of hide the clutter.
+
+00:28:10.509 --> 00:28:15.660
+And so if you use the Typedef, the implementation
+of the repeat function becomes fairly simple.
+
+00:28:15.660 --> 00:28:22.430
+It's passed in a block, and then it simply calls
+it like a function pointer, like a function.
+
+00:28:22.430 --> 00:28:29.720
+So you know, you can pass parameters, get the results
+back, it's very natural to use as well as to create.
+
+00:28:29.720 --> 00:28:32.910
+So I use Blocks.
+
+00:28:32.910 --> 00:28:36.970
+It leads to smaller, easier, more precise code.
+
+00:28:36.970 --> 00:28:40.430
+Who can argue with that?
+
+00:28:40.430 --> 00:28:47.789
+We found over a hundred uses inside Snow Leopard
+already, and boy, we've not closed the book on that yet.
+
+00:28:47.789 --> 00:28:49.440
+There's going to be even more coming along.
+
+00:28:49.440 --> 00:28:57.120
+For the most part, we use them for callbacks, we use
+them for concurrency, using Grand Central Dispatch,
+
+00:28:57.119 --> 00:29:02.109
+and we use them for all the 40 years of
+accumulated wisdom on how to use closures.
+
+00:29:02.109 --> 00:29:07.039
+And that is for sort of these iterate,
+map, and reduce kinds of stuff.
+
+00:29:07.039 --> 00:29:14.039
+So I'm not going to touch on these hundred APIs, I'll give
+a couple examples here to give you a flavor of what's there.
+
+00:29:14.039 --> 00:29:17.519
+And you know, all the details of syntax and stuff.
+
+00:29:17.519 --> 00:29:24.139
+So my canonical example for this is
+qsortR, which is the existing way to get
+
+00:29:24.140 --> 00:29:27.930
+to 50 years worth of collected wisdom on sorting.
+
+00:29:27.930 --> 00:29:34.470
+So if you have a particular problem where you need to
+say, sort according to different parameters, I mean,
+
+00:29:34.470 --> 00:29:41.809
+not always the same way, then what you have to do is
+supply a callback argument to the key start routine,
+
+00:29:41.809 --> 00:29:47.539
+such that whenever it calls the compare function, and
+the compare function takes the left and the right,
+
+00:29:47.539 --> 00:29:53.319
+it will also then pass you this callback
+parameter that you've supplied it.
+
+00:29:53.319 --> 00:30:00.750
+So in practice, let's say we're trying to sort some kind
+of array of people objects, and age first might be one
+
+00:30:00.750 --> 00:30:04.880
+of the options, it happens sometimes,
+and other times other things.
+
+00:30:04.880 --> 00:30:09.800
+So the first thing you have to do is declare
+this custom structure somewhere in your code.
+
+00:30:09.799 --> 00:30:17.169
+You have to write the custom compare function, which
+takes that context pointer, does a lot of casting,
+
+00:30:17.170 --> 00:30:20.590
+gets to the thing of interest, and does its thing.
+
+00:30:20.589 --> 00:30:26.139
+You have to in the function that you're using
+for qsort, declare that custom structure,
+
+00:30:26.140 --> 00:30:32.070
+fill it in with the right values, and finally, somewhere,
+where you really want to use it, you get to call it.
+
+00:30:32.069 --> 00:30:36.039
+Well, that's a lot of work, especially
+if you change your mind.
+
+00:30:36.039 --> 00:30:39.950
+You know, how often do you write your
+code once and then you're done, right?
+
+00:30:39.950 --> 00:30:41.380
+You're always modifying your code.
+
+00:30:41.380 --> 00:30:45.850
+If you have to modify the criteria by
+which you sort these things then you've got
+
+00:30:45.849 --> 00:30:49.109
+to go modify your code in three different places.
+
+00:30:49.109 --> 00:30:54.339
+Could be in pair files, could be in separate files,
+could be bunched here, I mean, it's just a pain.
+
+00:30:54.339 --> 00:31:00.339
+So the better way to do it is with qsort_b,
+which we're introducing in Snow Leopard.
+
+00:31:00.339 --> 00:31:06.629
+And that is you just simply pass in the things
+that are important to qsort, and that is the array,
+
+00:31:06.630 --> 00:31:11.120
+the number of the elements, the size of
+each element, and the comparison block.
+
+00:31:11.119 --> 00:31:17.269
+And the comparison block just takes the left and the right.
+
+00:31:17.269 --> 00:31:27.200
+So to use this, you write your qsort_b with the
+natural reference to, you know, the age-first thing.
+
+00:31:27.200 --> 00:31:29.870
+And if you need to change it, you change it.
+
+00:31:29.869 --> 00:31:32.339
+And there is no Step 2 of course.
+
+00:31:32.339 --> 00:31:36.799
+Your code is exactly what you want to use for sorting that.
+
+00:31:36.799 --> 00:31:41.599
+So in general, this is kind of, you know, the callback case.
+
+00:31:41.599 --> 00:31:44.319
+I spoke about concurrency.
+
+00:31:44.319 --> 00:31:48.970
+We have a brand new system in Snow
+Leopard called Grand Central Dispatch.
+
+00:31:48.970 --> 00:31:55.299
+And so the idea there is it's really easy to
+just kind of push your code off onto a queue,
+
+00:31:55.299 --> 00:32:02.430
+and then that queue gets serviced
+by some thread somewhere, sometime.
+
+00:32:02.430 --> 00:32:05.070
+And you don't have to worry about it.
+
+00:32:05.069 --> 00:32:13.759
+So it's just one line of code you can push work off,
+and there's a ton of talks on how to program with GCD.
+
+00:32:13.759 --> 00:32:15.430
+It's really a fun system.
+
+00:32:15.430 --> 00:32:22.630
+Another one I think we'll all appreciate is the
+initialization of a singleton kind of situation.
+
+00:32:22.630 --> 00:32:26.020
+This is a case where you need to do some code once.
+
+00:32:26.019 --> 00:32:31.139
+Now how many people enjoy writing
+new text, P3 new text declarations.
+
+00:32:31.140 --> 00:32:38.160
+How many people enjoy using them, how many people
+love to put the little if, not singleton, you know,
+
+00:32:38.160 --> 00:32:40.930
+do this kind of stuff for a little speed enhancement.
+
+00:32:40.930 --> 00:32:44.710
+Anyway, there's huge debates on this kind of stuff.
+
+00:32:44.710 --> 00:32:47.829
+Here is the code to get a singleton initialized.
+
+00:32:47.829 --> 00:32:49.189
+This is it.
+
+00:32:49.190 --> 00:32:55.809
+There's no fancy initializations, you just pass
+dispatch once, the address of the unique thing
+
+00:32:55.809 --> 00:33:01.679
+that guards your singleton, and then the
+block of code that is needed to initialize it.
+
+00:33:01.680 --> 00:33:07.080
+And the dispatch system inside Grand
+Central Dispatch makes it work.
+
+00:33:07.079 --> 00:33:08.599
+It's fast.
+
+00:33:08.599 --> 00:33:12.500
+It's faster than thread new text is.
+
+00:33:12.500 --> 00:33:14.490
+So let's recap a little bit.
+
+00:33:14.490 --> 00:33:15.309
+What is a block.
+
+00:33:15.309 --> 00:33:18.869
+So a block is a data structure
+
+00:33:18.869 --> 00:33:22.739
+It's not a function alone, it is a data structure.
+
+00:33:22.740 --> 00:33:29.259
+And that data structure references that function
+expression, which in truth is, you know,
+
+00:33:29.259 --> 00:33:31.170
+sort of a hidden function we write for you.
+
+00:33:31.170 --> 00:33:34.060
+It references that function.
+
+00:33:34.059 --> 00:33:38.849
+It acts like a function when you invoke it.
+
+00:33:38.849 --> 00:33:48.399
+It carries along constant versions of the stack local
+variables that you use within that block expression.
+
+00:33:48.400 --> 00:33:53.990
+So in the case earlier, the D variable was
+actually made, there was a local copy of it made
+
+00:33:53.990 --> 00:34:00.289
+when that block was constructed,
+when that expression was evaluated.
+
+00:34:00.289 --> 00:34:01.529
+So it holds const versions.
+
+00:34:01.529 --> 00:34:07.759
+And that's very cool when you send that off to some other
+thread, you carry the memory with you and you get all kinds
+
+00:34:07.759 --> 00:34:13.699
+of thread core local kinds of benefits,
+performance benefits out of that.
+
+00:34:13.699 --> 00:34:19.089
+Sometimes, though, you do need to mutate
+a variable, and const variables if you try
+
+00:34:19.090 --> 00:34:21.480
+to mutate them are going to give you a compiler warning.
+
+00:34:21.480 --> 00:34:27.079
+So in the cases where you need to mutate something,
+and carry, you know, carry the value back,
+
+00:34:27.079 --> 00:34:33.409
+we introduce a new construct with the under under
+block keyword, and it's called block storage
+
+00:34:33.409 --> 00:34:41.190
+It's storage class-like register and auto for stack
+variables, and static for sort of local globals.
+
+00:34:41.190 --> 00:34:44.369
+So it's a new storage class within C.
+
+00:34:44.369 --> 00:34:47.960
+And you use it in that space.
+
+00:34:47.960 --> 00:34:53.039
+So I mentioned the qsort case,
+and that's a synchronous case.
+
+00:34:53.039 --> 00:34:55.779
+That's where you hand your work off and it comes right back.
+
+00:34:55.780 --> 00:35:04.220
+But in other callback situations, say with a timer,
+you need to hand some code off, and it will come back,
+
+00:35:04.219 --> 00:35:07.929
+and then that timer is going to fire,
+and it needs to execute your block.
+
+00:35:07.929 --> 00:35:13.599
+So in order to make that happen, the timer
+sub system has to make a copy of your block.
+
+00:35:13.599 --> 00:35:20.380
+And that block copy moves that block onto
+the heap and it obeys heap lifetime rules.
+
+00:35:20.380 --> 00:35:26.750
+And so blocks start out on the
+stack, because that's very efficient.
+
+00:35:26.750 --> 00:35:30.909
+That's how, you know, a huge number of uses are made.
+
+00:35:30.909 --> 00:35:34.149
+They're synchronous uses, there's
+no need to copy it to the heap.
+
+00:35:34.150 --> 00:35:41.369
+But if there is, they are easily copied to the
+heap where they live for as long as you need them.
+
+00:35:41.369 --> 00:35:50.869
+And so the block subsystem manages the lifetime of all
+the variables that it references, and that is a real win.
+
+00:35:50.869 --> 00:35:56.809
+Because there are many callback APIs that
+take these sort of context parameters,
+
+00:35:56.809 --> 00:36:04.329
+where the lifetime of that context thing, you know, could
+be malloced off the heap or who knows what its lifetime is
+
+00:36:04.329 --> 00:36:07.409
+and how to get rid of it, once
+you're done using that callback.
+
+00:36:07.409 --> 00:36:12.879
+With Blocks, we manage that lifetime
+in a very consistent and simple manner.
+
+00:36:12.880 --> 00:36:14.769
+So here's an example.
+
+00:36:14.769 --> 00:36:17.559
+I'm going to actually go through this line-by-line.
+
+00:36:17.559 --> 00:36:22.869
+So the idea here is that we're going to
+write a function called find key for value.
+
+00:36:22.869 --> 00:36:33.329
+We're going to pass in the Cocoa dictionary, and we want to
+find the key that matches the value that is sought after.
+
+00:36:33.329 --> 00:36:35.909
+So we're going to return the results.
+
+00:36:35.909 --> 00:36:39.279
+So we need a block variable for that.
+
+00:36:39.280 --> 00:36:43.320
+And we're going to pass a block
+of code to the enumerate keys
+
+00:36:43.320 --> 00:36:46.880
+in objects using block method-that's
+a new method in Snow Leopard.
+
+00:36:46.880 --> 00:36:57.190
+It will pass to the block the pairs, the key and object
+pairs, as long as the stop variable is left alone.
+
+00:36:57.190 --> 00:37:03.369
+So in this case, we want to see whether or not the
+object passed in matches the sought after object.
+
+00:37:03.369 --> 00:37:12.190
+And if it is, we set the result to key, we set the stop
+variable to say no more, we're done, quit now, we're happy.
+
+00:37:12.190 --> 00:37:18.599
+And enumerate keys and objects method
+completes, and we return the result.
+
+00:37:18.599 --> 00:37:27.389
+So there are many different APIs we've added in
+Snow Leopard for different kinds of iteration.
+
+00:37:27.389 --> 00:37:31.319
+It's a great way to express styles of iteration.
+
+00:37:31.320 --> 00:37:37.460
+For example, with arrays you can pass in a version that
+illustrates rate or goes through the array backwards,
+
+00:37:37.460 --> 00:37:40.500
+and it passes the index in so you know which index it was.
+
+00:37:40.500 --> 00:37:48.230
+So we have several, quite a few different
+blocks APIs, including ones that will go
+
+00:37:48.230 --> 00:37:51.570
+and do some work for you concurrently in the background.
+
+00:37:51.570 --> 00:37:58.630
+So there have been talks already on that, and I
+encourage you to go explore those to find out,
+
+00:37:58.630 --> 00:38:01.010
+you know, some really cool ways to use Blocks.
+
+00:38:01.010 --> 00:38:06.960
+Let's talk a little bit more about block variables.
+
+00:38:06.960 --> 00:38:10.750
+So they generally, you know, you
+allocate them inside, you know,
+
+00:38:10.750 --> 00:38:16.130
+local function context or actually inside a block itself.
+
+00:38:16.130 --> 00:38:19.300
+So they're mutable, as I said before.
+
+00:38:19.300 --> 00:38:30.230
+They're shared both with the stack or the scope of
+allocation, as well as any blocks that reference them.
+
+00:38:30.230 --> 00:38:34.199
+They also start on the stack, so they're very fast.
+
+00:38:34.199 --> 00:38:36.199
+And we have a couple restrictions on them.
+
+00:38:36.199 --> 00:38:42.489
+So you can't use variable length arrays on them
+because it's hard for us to track that varying number.
+
+00:38:42.489 --> 00:38:44.739
+You get two kinds of varying arrays.
+
+00:38:44.739 --> 00:38:48.609
+And the address of currently is implemented,
+
+00:38:48.610 --> 00:38:54.559
+but not recommended because the address
+changes as we move it to the heap.
+
+00:38:54.559 --> 00:39:00.799
+So let me go back and let's talk about block literals.
+
+00:39:00.800 --> 00:39:03.510
+But I'm going to talk about lifetime a little bit more also.
+
+00:39:03.510 --> 00:39:10.000
+But the key thing for creating blocks,
+this is the simplest syntax you can use.
+
+00:39:10.000 --> 00:39:12.719
+It's a ^ and a set of statements.
+
+00:39:12.719 --> 00:39:15.829
+Now we're trying to do something really nice for you here,
+
+00:39:15.829 --> 00:39:19.980
+and that is we're going to infer
+the return type of the block.
+
+00:39:19.980 --> 00:39:22.559
+Because it's really kind of a function.
+
+00:39:22.559 --> 00:39:31.059
+And so we infer the return type simply by the
+presence of absence of a return statement.
+
+00:39:31.059 --> 00:39:32.549
+So that's fine.
+
+00:39:32.550 --> 00:39:37.180
+In this case, Print F, there's no return
+statement in the first one, so it returns a void.
+
+00:39:37.179 --> 00:39:42.579
+And in the second case, the return type is an integer.
+
+00:39:43.820 --> 00:39:47.030
+Many blocks take parameters.
+
+00:39:47.030 --> 00:39:48.290
+No big deal.
+
+00:39:48.289 --> 00:39:52.920
+Same rules apply about, you know,
+inferring the return type of the thing.
+
+00:39:52.920 --> 00:39:58.490
+We do provide a syntax, though, where
+you can explicitly state the return type
+
+00:39:58.489 --> 00:40:01.559
+that you want out of this block expression.
+
+00:40:01.559 --> 00:40:07.239
+So in this last example, here's a block that
+takes a character and returns a character.
+
+00:40:07.239 --> 00:40:12.799
+If a character is greater than 0.0, it's going
+to return C, which is a type of character.
+
+00:40:12.800 --> 00:40:14.800
+Otherwise, it's going to return 0.
+
+00:40:14.800 --> 00:40:17.740
+Well guess what, 0 is of type integer.
+
+00:40:17.739 --> 00:40:19.179
+So the compiler doesn't like this.
+
+00:40:19.179 --> 00:40:24.319
+It says you're returning character in one
+place, integer in the other, what's the deal.
+
+00:40:24.320 --> 00:40:26.850
+So it will complain.
+
+00:40:26.849 --> 00:40:34.509
+There are a couple ways to resolve that dilemma, and
+one of them is to specify the return type explicitly,
+
+00:40:34.510 --> 00:40:42.930
+and that's with that ^char, that first char part is
+for that says this thing is returning a character.
+
+00:40:42.929 --> 00:40:54.799
+So then it uses normal compiler C language type conversion,
+implicitly cast that 0 into a character type as it returns.
+
+00:40:54.800 --> 00:41:00.120
+There are some subtleties, we have
+discovered, with inferred return types.
+
+00:41:00.119 --> 00:41:05.509
+It turns out that a single quoted character is an integer.
+
+00:41:05.510 --> 00:41:16.810
+Hmm. So if -- you're wanting this block to return a
+character, then you can cast the results, and that works.
+
+00:41:16.809 --> 00:41:20.349
+Or you can supply that, you know, return type parameter.
+
+00:41:20.349 --> 00:41:23.269
+So these are the 2 styles for resolving these subtleties.
+
+00:41:23.269 --> 00:41:27.559
+I say subtlety number 1 because there's a subtlety number 2.
+
+00:41:27.559 --> 00:41:40.779
+A = B is not a bool, is not, you know, it's not a
+bool by the B O O L, you know, Cocoa convention,
+
+00:41:40.780 --> 00:41:44.450
+or a bool as in lower case, it's just an int.
+
+00:41:44.449 --> 00:41:50.289
+So if you want a bool back, you
+have to cast or again redeclare.
+
+00:41:50.289 --> 00:41:56.880
+There is a subtlety number 3.
+
+00:41:58.190 --> 00:42:00.920
+This one stumped quite a few of us for a while.
+
+00:42:00.920 --> 00:42:08.470
+It turns out that enumeration, no matter
+how it's initialized, is always an integer.
+
+00:42:08.469 --> 00:42:14.230
+So if you want to return a long out of this expression --
+
+00:42:14.230 --> 00:42:20.679
+out of this block, you again-sorry,
+solution's on the next slide.
+
+00:42:20.679 --> 00:42:26.359
+A very pragmatic problem comes in with real Cocoa API.
+
+00:42:26.360 --> 00:42:32.809
+We have added a new method called sort, using
+Comparator or a compensator, is one of those typedefs
+
+00:42:32.809 --> 00:42:37.469
+that takes a block, you know, comparing two items.
+
+00:42:37.469 --> 00:42:41.359
+And it returns an NS enumeration result.
+
+00:42:41.360 --> 00:42:48.260
+Well, an NS enumeration results
+happens to be not always an integer.
+
+00:42:48.260 --> 00:42:54.570
+And so you can get a compiler error
+on this, on the 64-bit system.
+
+00:42:54.570 --> 00:42:59.860
+And so the solution in these cases, in the
+first case, you know, casting works pretty well.
+
+00:42:59.860 --> 00:43:06.410
+But in the second case, you really want to put in as
+comparison result, instead of repeating that cast 3 times.
+
+00:43:06.409 --> 00:43:11.460
+Wherever you use our recommended return results.
+
+00:43:11.460 --> 00:43:15.610
+So blockdeclare syntax.
+
+00:43:15.610 --> 00:43:19.480
+I showed you that sort of function pointer style syntax?
+
+00:43:19.480 --> 00:43:21.400
+Well, okay, remember that.
+
+00:43:21.400 --> 00:43:28.079
+In Objective-C we use sort of this
+abstract declarer form that looks funny,
+
+00:43:28.079 --> 00:43:31.340
+because we don't normally pass function pointers in,
+
+00:43:31.340 --> 00:43:35.059
+and you just have to get used to it
+if you don't have a typedef handy.
+
+00:43:35.059 --> 00:43:43.110
+This is the C syntax for declaring an
+array of function pointers or blocks.
+
+00:43:43.110 --> 00:43:45.300
+It's not very pretty.
+
+00:43:45.300 --> 00:43:46.810
+It gets worse.
+
+00:43:46.809 --> 00:43:54.150
+If you try to return a function pointer or another block
+you've got really funny patterns of parameter lists
+
+00:43:54.150 --> 00:43:57.210
+of the thing returned, anyway, use typedefs.
+
+00:43:57.210 --> 00:44:01.420
+We talk about lifetime once again.
+
+00:44:01.420 --> 00:44:06.450
+If we have a function that's going
+to take a block, then what happens?
+
+00:44:06.449 --> 00:44:13.139
+We declare some memory on the stack, there's room
+for local, there's the initial version of the
+
+00:44:13.139 --> 00:44:17.519
+under under block shared variable, and the block itself.
+
+00:44:17.519 --> 00:44:22.929
+So if it gets copied to the heap because it
+needs to be preserved, what's going to happen?
+
+00:44:24.289 --> 00:44:28.769
+Well, first of all we're going to
+move that under shared variable over.
+
+00:44:28.769 --> 00:44:37.829
+We have created, when we evaluated that expression, that
+block expression, a local copy of the value of local.
+
+00:44:37.829 --> 00:44:39.849
+Here I represent it as under-bar local.
+
+00:44:39.849 --> 00:44:41.529
+And that gets copied also.
+
+00:44:41.530 --> 00:44:48.410
+So every version of the block carries that -- all
+the local variables that it's sort of snapped up.
+
+00:44:48.409 --> 00:44:50.940
+And so things are fine.
+
+00:44:50.940 --> 00:44:54.740
+We have two situations to think about in
+terms of how we get rid of that memory.
+
+00:44:54.739 --> 00:44:57.000
+So the first one is the function might return.
+
+00:44:57.000 --> 00:45:05.219
+So of course we let go of our explicit reference
+to that now heap version of under under block,
+
+00:45:05.219 --> 00:45:14.189
+and we return off the stack, and we let the heap version
+of the block expression keep track of the memory.
+
+00:45:14.190 --> 00:45:17.030
+And so that's fine.
+
+00:45:17.030 --> 00:45:20.760
+Second case, say, the heap object goes away first.
+
+00:45:20.760 --> 00:45:24.140
+So if the heap's going to go away
+first, it lets go of its reference
+
+00:45:24.139 --> 00:45:27.949
+to the shared variable, the heap object is reclaimed.
+
+00:45:27.949 --> 00:45:33.469
+But because we're sharing that reference,
+the stack still has a valid reference
+
+00:45:33.469 --> 00:45:37.009
+to even the heap version of the under under block variable.
+
+00:45:37.010 --> 00:45:38.650
+And that's fine.
+
+00:45:38.650 --> 00:45:42.139
+When the stack's ready to return, it lets go of that.
+
+00:45:42.139 --> 00:45:49.009
+The heap memory is reclaimed, and the stack returns,
+leaving us in our initial state in both cases.
+
+00:45:49.010 --> 00:45:53.410
+We take care of this for you.
+
+00:45:53.409 --> 00:45:56.889
+We never do this copy to the heap for you automatically.
+
+00:45:56.889 --> 00:46:02.589
+This is always an explicit action on your
+part so that you know what's going on.
+
+00:46:02.590 --> 00:46:07.760
+Now a subsystem might do it on your behalf,
+but they make that choice to copy it.
+
+00:46:07.760 --> 00:46:15.360
+But Blocks behave the same no matter whether they're
+still on the stock or whether they're on the heap.
+
+00:46:15.360 --> 00:46:19.920
+That's a transparency thing for you.
+
+00:46:19.920 --> 00:46:22.860
+Objective-C special observations.
+
+00:46:22.860 --> 00:46:25.440
+All Blocks are objects.
+
+00:46:25.440 --> 00:46:26.769
+All the time.
+
+00:46:26.769 --> 00:46:29.829
+Even if they're created in C programs.
+
+00:46:29.829 --> 00:46:35.159
+So here I have a typedef for that
+generic work block kind of thing.
+
+00:46:35.159 --> 00:46:41.719
+So if you want to keep a block and you're in
+Objective-C, you can send the copy message to it.
+
+00:46:41.719 --> 00:46:42.519
+They're like IDs.
+
+00:46:42.519 --> 00:46:49.039
+You can,no matter what syntax you use, whether
+there's the funny caret style stuff or typedef,
+
+00:46:49.039 --> 00:46:52.389
+you can send the copy message to it directly.
+
+00:46:52.389 --> 00:47:04.000
+We prefer you to use the copy method because if you use
+the system-provided primitive block copy or block release,
+
+00:47:04.000 --> 00:47:10.969
+the block copies capital block copies, and
+the capital block releases have to be matched.
+
+00:47:10.969 --> 00:47:16.069
+And under GC, they can cause unrecoverable cycles.
+
+00:47:16.070 --> 00:47:17.420
+That's not good.
+
+00:47:17.420 --> 00:47:21.539
+So we much prefer the copy method.
+
+00:47:21.539 --> 00:47:26.369
+Autorelease and release work on them
+as well, in the retain/release world.
+
+00:47:26.369 --> 00:47:35.469
+So as I alluded, you can actually send a copy
+message directly to the ^ primitive, that's fine.
+
+00:47:35.469 --> 00:47:41.439
+The nice thing about being objects, being
+copyable objects, is that they participate
+
+00:47:41.440 --> 00:47:45.639
+as a first class citizen, even with our app property syntax.
+
+00:47:45.639 --> 00:47:50.379
+So this is a very natural way to just
+build one of these blocks as part
+
+00:47:50.380 --> 00:47:53.460
+of your, you know, as part of your object design.
+
+00:47:53.460 --> 00:47:59.110
+It's fully supported, synthesized,
+all that sort of stuff works.
+
+00:47:59.110 --> 00:48:04.849
+So when you're in Objective-C, you can
+do a lot of fun stuff inside the block.
+
+00:48:04.849 --> 00:48:11.829
+And this example, we've got a local variable,
+we've got one of those under under block variables,
+
+00:48:11.829 --> 00:48:16.599
+and inside that block expression,
+which we're going to be copying,
+
+00:48:16.599 --> 00:48:20.849
+we use both the A local in the
+block bar and what are we doing?
+
+00:48:20.849 --> 00:48:24.130
+We're actually going to update an instance variable.
+
+00:48:24.130 --> 00:48:29.640
+Hmm, okay, what happens when that thing is copied.
+
+00:48:29.639 --> 00:48:34.819
+So A local will be retained if you're using retain release.
+
+00:48:34.820 --> 00:48:35.460
+That's fine.
+
+00:48:35.460 --> 00:48:39.530
+That's the way -- that's what we've got
+to do to keep it alive if it's going
+
+00:48:39.530 --> 00:48:43.850
+to persist beyond, you know, the function thing.
+
+00:48:43.849 --> 00:48:49.279
+Implicitly, because you use my
+Ibar, we're going to retain self.
+
+00:48:49.280 --> 00:48:54.920
+So that let's you modify that instance
+variable within that block.
+
+00:48:54.920 --> 00:48:58.650
+You don't have to play under under
+block funny games or anything like that.
+
+00:48:58.650 --> 00:49:04.240
+So instance variables are directly
+-- remain directly mutable.
+
+00:49:04.239 --> 00:49:09.519
+That under under block object is going to be left alone.
+
+00:49:09.519 --> 00:49:13.639
+Whatever value it had is going to
+be sort of bit copied into the heap.
+
+00:49:13.639 --> 00:49:22.159
+We've gone around a couple of times with what we should do
+there, but this has proved to be pragmatically the hands
+
+00:49:22.159 --> 00:49:29.089
+down winner as to how we want to operate on under
+under block variables when they're objects themselves.
+
+00:49:29.090 --> 00:49:34.890
+Hmm. Some surprises you might run into.
+
+00:49:34.889 --> 00:49:40.019
+We did. A block reference isn't quite a void *.
+
+00:49:40.019 --> 00:49:47.909
+So I tell you, in my code I go %P and then the compiler gets
+mad at me all the time so I have to put void ** in there.
+
+00:49:47.909 --> 00:49:51.769
+Hmm, maybe that will get fixed someday.
+
+00:49:51.769 --> 00:49:54.739
+I don't know.
+
+00:49:54.739 --> 00:50:01.259
+We've implemented blocks such that the stack
+version of a block can be retained and released.
+
+00:50:01.260 --> 00:50:10.000
+So you can stick it inside, you know, as
+a retained property of some other object;
+
+00:50:10.000 --> 00:50:15.510
+as long as you let go of it before you're done, this works.
+
+00:50:15.510 --> 00:50:19.210
+It's not that recommended though, because big --
+
+00:50:19.210 --> 00:50:24.220
+lots of crashes and booms can happen
+if you're not very careful about that.
+
+00:50:24.219 --> 00:50:27.599
+For standard practice, you should do the copy.
+
+00:50:27.599 --> 00:50:30.949
+And if, you know, you're under-in this case,
+
+00:50:30.949 --> 00:50:36.099
+it's sort of like an instance variable,
+so release it before you reset it.
+
+00:50:36.099 --> 00:50:39.289
+So copy is the primitive to use.
+
+00:50:39.289 --> 00:50:44.070
+Copies of blocks that are already on the heap are cheap.
+
+00:50:44.070 --> 00:50:48.890
+So don't be afraid to use copy here.
+
+00:50:48.889 --> 00:50:55.509
+Another subtlety that came up is
+reflected in this by analogy.
+
+00:50:55.510 --> 00:51:02.380
+So as C programmers, we're very
+conscious of stack-allocated memory.
+
+00:51:02.380 --> 00:51:11.289
+So if I had an array of pointers to things and I allocated
+inside that 4 loop, a structure, and remember the pointer,
+
+00:51:11.289 --> 00:51:14.139
+are we going to get 10 different versions of that?
+
+00:51:14.139 --> 00:51:18.629
+No. We're going to get a pointer to dangling memory.
+
+00:51:18.630 --> 00:51:23.530
+10 copies of that pointer to dangling
+memory, and things are going to go boom.
+
+00:51:23.530 --> 00:51:29.590
+Or if they don't go boom, you wish they would have
+gone boom, because something funny is going to happen.
+
+00:51:29.590 --> 00:51:32.750
+So the same thing is going to happen with Blocks.
+
+00:51:32.750 --> 00:51:40.010
+If you try to capture blocks inside
+either an if statement, you know, an if...
+
+00:51:40.010 --> 00:51:47.220
+then...else compound statement, or inside a for
+loop, it's going to sort of not work, you know.
+
+00:51:47.219 --> 00:51:48.339
+It's going to go boom.
+
+00:51:48.340 --> 00:51:56.539
+And the answer here, of course, is to make a copy, to try to
+capture all the locality of each version of that iteration.
+
+00:51:56.539 --> 00:51:59.269
+You're going to need to copy them to preserve them.
+
+00:51:59.269 --> 00:52:08.889
+And if you're not using a Garbage Collection, you'll
+need to remember to do releases on them as well.
+
+00:52:08.889 --> 00:52:12.139
+I saw this once, thought it was worth telling you about.
+
+00:52:12.139 --> 00:52:17.509
+In this case, we're trying to build
+a smart kind of logging function.
+
+00:52:17.510 --> 00:52:24.690
+And only sometimes do we use this
+boilerplate method, or a boilerplate object.
+
+00:52:24.690 --> 00:52:33.769
+But when this block that uses that gets copied, the runtime
+doesn't know that you're not going to use it sometimes.
+
+00:52:33.769 --> 00:52:40.000
+It's always going to try to copy the
+value of that boiler plate variable.
+
+00:52:40.000 --> 00:52:41.829
+In this case, it's uninitialized.
+
+00:52:41.829 --> 00:52:45.909
+And so you get a big memory smash,
+or something happens that's bad.
+
+00:52:45.909 --> 00:52:52.219
+So you know, this might be obvious
+after 20 minutes of thinking about it.
+
+00:52:52.219 --> 00:52:57.359
+But if you remember this, and it happens to you,
+hopefully it will take less than 20 minutes.
+
+00:52:58.610 --> 00:53:01.680
+Debugging, I just have a really easy story to say.
+
+00:53:01.679 --> 00:53:03.500
+It just works.
+
+00:53:04.900 --> 00:53:12.280
+These block expressions are as I said
+copied by the compiler into a function.
+
+00:53:12.280 --> 00:53:20.350
+It's very much like that sorting Example:
+the Compiler generates a custom structure,
+
+00:53:20.349 --> 00:53:24.949
+it allocates one right near where
+you use it, fills it all in.
+
+00:53:24.949 --> 00:53:30.659
+But from the debugging view point, you know, you can set
+break points in the middle of them, the local variables look
+
+00:53:30.659 --> 00:53:36.159
+like -- I mean, all the variables you capture show up
+just the way you want them to, and it's really nice.
+
+00:53:36.159 --> 00:53:42.960
+And Instruments does a great job of
+monitoring Blocks use within GCD.
+
+00:53:44.809 --> 00:53:55.009
+So we've gotten full support of Blocks for C and
+Objective-C in both GCC 4.2, and the new compiler, Clang.
+
+00:53:55.010 --> 00:53:59.530
+Our support for C++ is not as complete.
+
+00:53:59.530 --> 00:54:00.019
+I'm sorry.
+
+00:54:00.019 --> 00:54:00.730
+I wish it were.
+
+00:54:00.730 --> 00:54:07.320
+But there's only so many hours in the day
+and there is preliminary support available,
+
+00:54:07.320 --> 00:54:14.510
+but don't start a huge project
+expecting - anyway, be careful.
+
+00:54:15.730 --> 00:54:22.590
+We have published the specification
+externally as part of the Clang open source.
+
+00:54:22.590 --> 00:54:27.890
+As of four hours ago, we have published the runtime as well.
+
+00:54:27.889 --> 00:54:32.579
+We like the idea of people using
+blocks in places other than Apple,
+
+00:54:32.579 --> 00:54:37.139
+and we're trying to really put
+some meat behind that statement.
+
+00:54:37.139 --> 00:54:44.039
+So much so that in fact in addition to Garbage Collection,
+we presented Blocks to the C Standards Committee.
+
+00:54:44.039 --> 00:54:47.980
+The C Standards Committee reaction was kind of interesting.
+
+00:54:47.980 --> 00:54:56.119
+They then -- taken a lot of work that's been
+falling out of the C++ standardization efforts,
+
+00:54:56.119 --> 00:55:08.440
+and there's a C++ kind of idea around closures, which they
+call lambdas, but lambdas can't really be copied and stored
+
+00:55:08.440 --> 00:55:11.889
+and used as callbacks, there's those timer things.
+
+00:55:11.889 --> 00:55:15.619
+They only work in the synchronous cases.
+
+00:55:15.619 --> 00:55:24.099
+We think that Blocks are far more versatile, and it turns
+out they're kind of, you know, compatible and interoperable.
+
+00:55:24.099 --> 00:55:27.389
+So we don't see this as a collision.
+
+00:55:27.389 --> 00:55:38.089
+But from the C perspective, we can implement Blocks in C
+whereas the lambda proposal cannot be brought back to C.
+
+00:55:38.090 --> 00:55:41.559
+So we'll see what happens with this.
+
+00:55:42.670 --> 00:55:52.050
+More information, of course, contact Michael Jurewitz,
+who is actually not going to be here today for this talk.
+
+00:55:52.050 --> 00:56:00.510
+Under documentation there's a Cocoa programming topics area,
+and then there's a sub-topic, the Objective-C language,
+
+00:56:00.510 --> 00:56:08.390
+and under there are 3 other docs that all describe
+stuff that Patrick talked about, garbage collection,
+
+00:56:08.389 --> 00:56:11.099
+the new runtime, we've got lots of APIs in our new runtime,
+
+00:56:11.099 --> 00:56:15.860
+and then of course we have a good
+document on Blocks themselves.

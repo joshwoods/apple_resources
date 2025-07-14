@@ -1,0 +1,275 @@
+---
+Title:  Core Image Techniques
+Year:   2012
+Web:    https://nonstrict.eu/wwdcindex/wwdc2012/511/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+All right, welcome, everyone, to our second session on Core Image today, and we'll be talking about some more advanced techniques for how to get the best performance out of Core Image and some advanced workflows using AV Foundation and using OpenGL and for games as well. Let me give you a brief outline of what we're talking about today. I'll just do a quick summary for those of you who weren't in the preceding session to introduce you to Core Image, and then I'll pass the stage over to Chendi, who will be giving an overview of what's new in iOS 6 for Core Image.
+
+So, first off, again, for those of you who weren't in our session earlier, this is just a little bit of a review. What is the key concept of Core Image? The idea behind Core Image is that you can chain together multiple filters in an image processing framework that's very easy to use. very easy to use and develop.
+
+Simple example of that is we have an original image and we want to apply multiple filters to that image. For example, applying a sepia tone image effect to it, then a hue adjustment effect, and then a contrast adjustment effect. Even though we've used just three filters here, we can combine these in very unique ways.
+
+One thing that we do to get the best possible formance is, even though you can conceptually think of there being an intermediate image between every filter, Core Image will concatenate the filter graph at runtime so that it'll be one program. And this greatly improves performance. Another thing we've done in this particular example is we've noted the fact that two of these filters could be represented as a matrix, and those two matrixes can be combined together into one effect.
+
+One of the key concepts in Core Image is also it's got very flexible inputs and outputs. In terms of inputs, you can bring in content to Core Image from your photo library, from a live video capture session, images that you may have in memory already, from files that are supported via Image.io, and also via OpenGL Textures. And OpenGL Textures we'll be talking about in a bit more detail this afternoon because this is some really great addition that we've added to Core Image.
+
+We also support very flexible outputs, and this is also key for getting the best performance out of Core Image. We, in the simplest form, allow producing a CG image from a CI image, and from a CG image, you can go to many different destinations, like into a UI image view or out to Image.io for exporting different file formats, or into the photo library.
+
+But we also support rendering into Eagle Contexts, into CV pixel buffers, which are useful for going into AV Foundations, and into raw bytes, or into OpenGL textures. And this flexibility, both in terms of input and output, is critical to get the best performance out of Core Image for real-time effects. So to talk about these performance enhancements in much more detail, I'm going to pass the stage over to Chendi, and he'll show you some great demos. Thanks, David.
+
+So for our first attempt at writing this app, we'll use AV Foundation to stream frames from the camera. We'll process them using Core Image. Then we'll set them as the URImage property on a URImageView. And we won't be actually using Core Image's CI context at all. So this will be extremely easy to write. Let's see how we do this.
+
+So basically, we have a single view controller with an image view, a couple of filters that we create once. And then in the main callback loop, what we're going to do is basically grab the pixel buffer from AV Foundation, Rotate it by 90 degrees because normally buffers come in rotated from the camera. Zero the origin. Pass it through our filter chain.
+
+Grab the final image from the final filter, wrap that inside a UI image, and set that on our view. And note at the very end, we nil out all the input image values in our filters so they don't keep the retain count on the CVPixel buffer, and we don't have buffers floating around when we should release them. So this is a pretty simple app. Let's see what it looks like.
+
+All right, so this definitely looks like the filter chain that we wanted. But as you can probably tell, it's running pretty slowly. If we had instruments, we could see that it's running around five or six frames per second, and this is just way too slow for a real-time use case. So we probably want something a little bit faster than this. If we go back to our slides.
+
+Why was this approach so slow? Well, UI image views are optimized for static images, and they're probably not the best approach for streaming real-time video with effects. Furthermore, if we had run an instruments trace on this, we would have noticed that we would have been wasting a lot of time in CG context draw image.
+
+So maybe UI Image View isn't rendering this optimally. And furthermore, we'd see that CI contexts were created for every single frame. This makes sense for a static image because you don't want to have a CI context floating around after your render. But if we're rendering real-time video, we don't want to create a context every single frame. This will kill our performance since creating context is pretty expensive.
+
+So this seems like a prime candidate for a place where we can drop down to a lower-level API for more performance-sensitive work. So for our next attempt... We'll keep the AV Foundation input stream. We'll still use CI to render, but instead of wrapping it inside a UI image directly, we'll create a CG image explicitly with the createCgImage method on CI context. And then we'll use this as this UI image for the UI image view. And hopefully this will run a little bit faster. So let's see what this looks like. So this is largely the same code.
+
+The only difference is in the capture output callback. Instead of calling URImage image with CI image, we'll manually invoke a render with CI context createCgImage and wrap that inside a UI image. This may not look like a lot of different code, but let's see what it looks like on the iPad.
+
+This already looks a lot better. And I think we're pretty much done, actually, right? Well, this is actually running around 21, 22 frames per second. If you look in the console, you would see a lot of frame drop notifications, so there's still a lot of work to be done.
+
+For something with a simpler filter chain, you might actually get away with using a CG image, UI image view approach, but for this app, we still want something to render-- we want something to render a little bit faster. Why is performance still non-ideal right here? Well, what is going on for every single render? We have an image in our application. We want to use Core Image to process it via OpenGL. So the first thing that happens is this image is uploaded to GL.
+
+[Transcript missing]
+
+And this is very non-ideal because we had this extraneous upload/download at the very end that hurts performance. So what we really want is something like this. We'll have a texture in our app. that we upload to OpenGL will use Core Image to render it, but directly to the display. There's no need to download it back to the CPU and upload it to GPU one more time. So this is something we want. How can we implement this?
+
+Well, for our third attempt, let's use AV Foundation again to stream frames, and let's render directly to a CA Eagle layer using Core Image this time. And hopefully this will give us the performance we need. So the code is a little more complex in this version. We're no longer using a URImageView.
+
+Instead, we have a custom GLESView that wraps around a CA Eagle layer. And in our main loop, instead of creating a CG image, we're just using CI context, draw image, in rect, from rect, and then telling the GL ES view to present its render buffer. And so let's see what this looks like on the iPad.
+
+This actually looks worse than the previous approach. It looks definitely more stuttery and looks like there's less frames per second going on right now. If we use instruments to trace this, we'll see that we're getting around 13 frames per second, which is about 8 worse than we did with the CG Image/URI imagery approach.
+
+Well, if we go back to the machine, we notice we're drawing this image at the screen resolution. And if you're hitting performance bottlenecks in Core Image, you need to realize the number one key to Core Image performance is the output render size. For the first two approaches, we had an input image of 640 by 480, and we rendered it to a 640 by 480 destination.
+
+And we let Core Animation scale it up to screen resolution via UI Image View. In this approach, we're actually rendering it directly to a 1024 by 768 destination. And so we're rendering 156% more pixels than we are in the previous two cases. So to get comparable performance, what we should do is not render at screen resolution, but 640 by 480.
+
+and have our view scale up. So we'll set a content scale factor on the view to scale up from 640x480 to 1024x768. And this should give us much better performance. If we go back to the iPad, we see this is much, much better. But if we use instruments again to trace this, we're not quite there. This is running at 28 frames per second, which is still not ideal because, again, the front camera on this iPad streams at 30. So ideally, we'd like to render at 30 frames per second.
+
+So there's still work left to be done to get this to be running at real time. What can we do at this point to go faster? Well, we already discussed reducing the render size, but we can also just now disable color management and leverage YUV image support as ways to speed up our program.
+
+By default, Core Image does all its rendering in a light linear color space for accuracy and consistency. This is not particularly cheap though because converting from and to sRGB involves these equations you see here. And a step, pow, mix function along with some arithmetic can really add to your shader complexity if you do it a lot.
+
+So in cases where you need the absolute highest performance in your app, or perhaps your app does some weird exaggerated
+
+[Transcript missing]
+
+New in iOS 6 is the ability to read directly from YUV 420 textures, or sorry, pixel buffers, natively. Camera buffers from the camera are natively YUV, but most image processing algorithms rely on RGBA data. So we have to convert between the two, which isn't free.
+
+There is dedicated hardware to do this in both the iPad and the iPhone, but it takes some time, and additionally, it requires more memory for intermediate buffer. So therefore, on iOS 6, sometimes it may make sense to just pass in your buffer as YUV data and let Core Image do the two reads from the two planes and apply the color transform for you.
+
+As we discussed earlier, performance is proportional to the number of output pixels in your render. And now with the advent of high DPI on Mac OS X, You'll run into the situations where you'll need to reduce this image size more and more frequently. In some applications, you just won't be able to render your image at full resolution without hitting performance bottlenecks.
+
+This is often the case in games. Many games on the iPad with the 2048 by 1536 screen have to render at half size or .75 size and scale up in order to get their 30 or 60 frames per second target frame rate. So we recommend rendering to a smaller size and letting Core Animation scale up very cheaply.
+
+In iOS 6 and Mac OS X.8, we're now deprecating CI context draw image at point from rect. This is because at point is ambiguous, especially in high DPI contexts. The preferred API now is CI Context Draw Image in Rect from Rect. Core Image always treats its images with a pixel-based coordinate system for extents and distances and radii and such. And so the firm-rec coordinates will always be pixel-based. The in-rec coordinates, however, depend on the type of context you've created.
+
+GL and GL ES based contexts don't know about points, so those will always be pixel based. However, if you create a CI context with a CG context on the Mac, it will be based on points. Be sure to double check your code for this if you're hitting high DPI issues while rendering. So let's go back to the demo and try to get our app running at 30 frames per second with the last two modifications.
+
+So this is the same as the previous code, except we're going to change two things. First of all, we're going to have the camera stream in its native YUV 420 bi-planar format instead of 32-bit BGRA. And all we have to do is basically pass in a different key value for this dictionary. The second thing we're going to do is disable color management. We can do this by passing in KCI image color space to be null whenever we create the CI image from the CVA pixel buffer.
+
+And we also have to set the context color space to be null, with KCI context working space to be null when we're creating the context. So with these changes, let's see what the app looks like now. And this is actually running at 30 frames per second finally. And we're basically done. And I'll show you some great demos if you all .
+
+Thanks, David. So let's start out with the major changes we've added to iOS 6 in Core Image. So we're always trying to make filter rendering faster on desktop and embedded. But for iOS 6, we've actually gone ahead and made the code generation a little more optimized. So throughout any of your code, if you're using Core Image to render, you should see slightly faster rendering times.
+
+We've also gone ahead and fixed our OpenGL ES integration to be a little bit nicer. There were some quirks in iOS 5 and 5.1, and those should be gone now in iOS 6. And as David mentioned earlier, we have 93 filters now. And two of the most requested filters were Gaussian Blur and Laneco Scaling, and both of those are now in.
+
+So a quick note about Gaussian Blur. It was the most requested filter in our bug reports, and now it's in iOS 6. It is multi-pass, though, and it can be somewhat slow if you use it on large radius blurs on large images. So if you're trying to do, say, a Gaussian Blur of a 50 radius on the back camera of an iPad 3 or the new iPad, it can probably be a little too slow for real-time use. and since we do have Gaussian Blur, we have several other filters that use it. In iOS 6, we have CI Bloom, CI Gloom, Unsharp Mask, and Sharpen Luminance. And all four of these filters use Gaussian Blur as their internal implementation.
+
+We also have Lanco scaling now in iOS 6. If you've tried to use affine scaling to downsample images in iOS 5 or 5.1, you may have noticed bad artifacting or an aliasing in your results. Lanco's scale transform is much better for downsampling, and it's comparable with Core Graphics' high-quality resampling mode.
+
+But it's done on the GPU, so it should be faster. As an example, I have this image here with some high-frequency content on the ground. I'm going to downsample it to 10% of the original size, and then zoom it back up so you can see what the differences are.
+
+So on the left is the result from using just a CI Affine Transform, and on the right is the new CI Lanco Scale Transform. And as you can see, it's very alias on the left side and a lot nicer on the right side. So if you're using Core Image to do any type of thumbnail-ing or downsampling, you should consider using Lanco Scale Transform instead of Affine Transform. All right, so for the next part, I'm going to demonstrate how to use Core Image to write a really performant real-time photo or video app.
+
+You may be aware that photo apps are really popular now on the App Store, and they could make you a billionaire if you write the right one. CPUs are really fast enough to do complex real-time effects on the iPad and the iPhone. And even if you're writing a photo app, it's nice to have live video preview of the effect, so having a real-time 30-frame-per-second preview for photo app can be important. And Core Image is ideal for this type of real-time image processing work.
+
+So let's say I'm on vacation and I take this photo of my friend Groot. It's a little too nice, I think. The detail's too nice, it's a little too bright. It looks like stock photography, in my opinion. I want it to look a little more human, a little more weathered, like it's been sitting in my wallet for 15 years. So I want to apply a set of filters on this image and get something a little bit more cool looking, something a little bit better.
+
+So how do we get a vintage look out of this? Well, we'll do it in four steps. We'll first apply a color transformation to make it slightly more yellowish and reduce the dynamic range. We'll apply a vignette to make it a little nice and dark on the edges, add some film scratches, and then some sort of border so it looks nice and framed.
+
+Using Core Image, we can do this with four filters. We'll start out with the CI Color Cube, which I'll talk about more in a moment. And this, as you can tell, makes it slightly more older vintage look. Add a vignette. We'll use CI Lighten Blend Mode with the daguerreotype texture to give it a nice model kind of grizzled look to the film. And then we'll use Source Over Compositing to put a nice frame around this.
+
+And this is something I am now proud to share on Facebook with my friends. And this is something that really captures the moment better than stock photography, SLR, or camera-type image, I think. So, before I go on, I'd like to talk a little bit about CI Color Cube.
+
+As you saw in the previous talk, it can be used for a wide variety of effects. It's one of our most flexible filters. And just about any color effect that doesn't rely on the position of a pixel in its calculations, only on the color, can be approximated using CI Color Cube.
+
+And since we implement this with two texture reads and a little bit of arithmetic, it's often faster than a pure algorithmic filter. If you're doing some sort of, like, polynomial approximation or some sort of complex calculation. And on iOS 6, we support up to a 64 by 64 by 64 color cube, which turns out to be more than enough for almost any effect.
+
+So as an example, I have CI sepia tone here on the left and a 64 by 64 by 64 approximation of it using CI Color Cube. As you can probably tell, they're pretty much the same. We wrote CI Sepia Tone with accuracy as the main concern. And so if you use Color Cube, you'll get something a little bit faster. In most cases, you won't actually notice the difference, and so if you want a real-time app, you might consider switching to Color Cube instead of using CISepiaTone.
+
+Even when we drop down to an 8x8x8 cube, the results are pretty much the same. This is because the linear approximation we use in Color Cube is still accurate enough to approximate the curves in our CDI sepia tone filter. It's only when we drop down to 2x2x2 that we get some sort of incorrect coloring in our effect. A 2x2x2 cube is essentially the same as a CI color matrix, so you could write it with that as well.
+
+So let's try to write a real-time CameraFX app. And our first attempt, we'll use AV Foundation for the input. We'll filter it with Core Image. And let's use the URImageView to display it. Instead of actually calling CI explicitly to render, we'll just set the URImageView's image to be a wrapped CI image. So let's go to the demo machine.
+
+[Transcript missing]
+
+Capital or? Capital Apple? Okay. I can't type apparently. Apple1234? What is this password? Okay. So this is an extremely simple setup. We'll have a single UI image view for display, a capture session to stream to frames. This is all kind of boilerplate code to stream frames from AV Foundation.
+
+We'll set up our filters once. In our color cube, I've generated offline, and I have like a-- Pre-populated table with the data. And so the most interesting part comes in the AV Foundation callback in the main loop. So what happens in every frame is we capture the pixel buffer, We'll create a CI image from it. Because pixel buffers come in from AV Foundation rotated, we'll have to rotate it by 90 degrees and zero the origin.
+
+We have our filter chain that we set up, the color cube, vignette, blend, and source over. Finally, we'll grab the image from the filter chain, wrap it in a UI image, and set it on the image view. Note that we haven't even used CI context yet for this implementation.
+
+And one nice thing at the end is we have to zero out or nil out the input images for the filters because otherwise they'll retain the CV pixel buffer from the previous frame and might cause higher memory usage. So if we have this implementation, let's see how it runs.
+
+I'm going to have to use the projector, unfortunately. And as you can tell, this is pretty slow. And there's some tearing as well, which I probably have to go fix. So this runs at maybe five or six frames per second, so it's definitely not good enough for real-time work.
+
+Why was this implementation so slow? Well, UI Image View is optimized for static images. It may not be ideal for real-time video. Furthermore, if you could actually run an instruments trace on this, you would see that CI context is being created for every single frame. This is because your image view doesn't know when your rendering's gonna stop. They don't wanna hold onto a context longer than they need to.
+
+And if you could do another Instruments Trace, you'd see that CG Context Draw Image is being called a lot. So maybe there's not the most efficient drawing going on in the background. In order to get something more performant, we should probably drop down to our lower-level API and try to tweak the performance.
+
+So for our second attempt, we'll still use AV Foundation for the input. We'll still use Core Image. But instead of using UI Image View to handle the rendering, we'll do it ourselves by calling CI Context Create CG Image and set that on the Image View. And hopefully this will be a little bit faster. So if I switch to the demo machine.
+
+So this is basically the same code. The only difference is instead of wrapping the CI image in a UI image, I'm manually creating a CG image and wrapping that in a UI image. And so this is a minor change, and you might not think that this would actually change things. But if we go to the machine, We see that this actually runs pretty quickly.
+
+And so we're done. But actually, this is not 30 frames per second. - If we actually open up instruments or the console, we'll see that we actually have frame drops in this thing. This is running at approximately 21, 22 frames per second. And the front camera streams at 30 frames per second. So this is still suboptimal. And as a note, everything on this-- every demo is running on iPad 2 to highlight the GPU differences because the iPad 3 is a lot faster GPU-wise.
+
+So why is performance still non-ideal? So what is happening for every frame? We have our input image. We uploaded to OpenGL as a texture. And in this case, even though we're using the optimal path of mapping a CV pixel buffer to a texture, there is still a cost associated with that.
+
+OpenGL then renders the result to the render buffer. And then when you call createCgImage, what happens is there's a GL readPixels callback that brings data back to the CPU. And then finally, when you set that on the URI Image View, Core Animation has to upload that image again to the GPU for display. And so there's a lot of extraneous uploads and downloads here that really hurts performance.
+
+So what is the optimal approach? What we'd like is just to upload the texture once and render directly to the display. There's no need to read back because we don't actually want to save it or anything. We just want to display it to screen. So how do we do this?
+
+Well, for our third attempt, we'll use AV Foundation again. We'll render with Core Image. But we'll render directly to the frame buffer of a CA Eagle layer. And this is how most games actually do their rendering via OpenGL ES and CA Eagle layers. So let's see how that works.
+
+So this is slightly different now. I have a GL ES view and an Eagle context. And when I'm setting things up, I'm actually creating a CI context, context with Eagle Context. That way, CI can draw to the destination frame buffer of your GL ES view's Eagle Context. The main loop is pretty much the same. We still take a CVPixel buffer, rotate and zero the origin, pass it through the filter chain, except now we're drawing it to the screen directly with the CI context Draw Image Interact Firmware Act API. So let's see how fast this runs.
+
+And this is actually pretty poor. I realize I'm blocking the thing with my hand. It's running at about 13 frames per second, which is actually worse than the previous example. So we must be doing something wrong. So whenever you have performance issues in Core Image, you have to keep in mind that performance is tied to the render output size. For the first two examples, we had a 640 by 480 input image, and we were rendering to the same size 640 by 480 destination, which is then upscaled to the full res, which is 1024 by 768.
+
+For this example, we're actually rendering
+
+[Transcript missing]
+
+While they fix that, what you would see is it would be running at 28 frames per second instead of 30 frames per second. Which is still not ideal because, again, input video runs at 30 frames per second for the front video camera.
+
+So this runs at around 28 frames per second. You actually really have to go into the console to see that it's not performing optimally, and there are frame drops going on. So what can we do at this point to improve performance? There are three things we can do at this point. Well, we talked about one of them already, which is reducing the render size. The other two are disabling color management and leveraging YUV image support, which is new in iOS 6.
+
+So by default, Core Image performs all its calculations in a light linear color space, as David mentioned in the earlier talk. And this provides the most accurate and consistent results for your renders. But this is not a cheap operation, necessarily. As you can see from example code, we have a mix, pow, step function, and some more arithmetic every time we have to convert a pixel from sRGB to linear RGB and back. And so if you have a lot of images and you're doing a lot of these conversions back and forth, this could really affect your performance.
+
+So if you absolutely need the highest possible frame rate or performance, and you don't really notice the differences in disabling color management, for example, in Photo Booth, if you're rendering thermal effect or X-ray, you probably won't notice that the RGB values are four or five units off. So if you don't really care about that slight difference, you can disable color management and get faster rendering.
+
+New in iOS 6 is YUV image support. So camera buffers from the iPad and iPhone natively come in as YUV 420. And if you specify that you want BGRA frames, there is a conversion that happens. There is a built-in hardware chip that does this conversion, but it's not free. And there is a higher memory usage involved because you have to have another intermediate buffer at every, for every frame. And since most image processing algorithms expect RGBA data, This conversion can be kind of costly.
+
+Well, on iOS 6 Core Image, we can read directly from YUV pixel buffers from the two planes and do the color conversion ourselves. This way, you can save on memory. And in some cases, a lot of cases, it's actually faster than having the hardware convert and doing the reads from an RGB buffer. So be sure to test this if you're just on the cusp of getting your app to be real time. And this might help your app gain maybe like two or three frames per second.
+
+We mentioned this earlier in the demo, but if you're a renderer, you've tried everything else and your rendering is still too slow, you might have to reduce the render size and scale up your image. This is something that games actually do a lot, especially on high DPI screens.
+
+If you're trying to run a complex 3D game on a 2048 by 1536 screen, chances are it's not going to be too fast. So what games do a lot of times is render at half res or 1.75 res and upscale. And you can do the same thing with Core Image.
+
+In our example demo, we rendered at 640x480 for the CA Eagle layer, and we had Core Animation scale it up to screen size. And Core Animation does this extremely efficiently, and it's essentially free. As a side note, now that there are high DPI screens on Mac OS and embedded, we're deprecating CI context draw image at point from rect. This is because this is a little bit ambiguous. At point doesn't really specify the destination size you want to render to. Instead, we want you to use CI context draw image in rect from rect instead.
+
+and as you probably know, everything in Core Image is pixel based for extents, for radii, for filters, stuff like that. So from rect in this call is always in pixel coordinates. But in rect can change depending on what type of context you're creating. Naturally, if you're doing a GL based context, the CGL context on desktop or Eagle context on embedded, GL doesn't have a concept of scale, so it's always pixel based for in rect.
+
+If you're using a CG context on desktop, however, and not on iOS, CG context do have a concept of scale. So you want to use points for CI context, draw image, in rect, from rect. So this tripped up a lot of developers, and this is something you should keep in mind when you're testing your app on OS X, 10.8, or iOS 6. And so to demonstrate the last set of techniques, I have one final demo.
+
+So this is the same as the previous demo that did rendering to the Eagle context. Instead of specifying the pixel format to be 32 BGRA for AV Foundation, I wanted to return the native 420 YCBCR bi-planar format. And then when we're creating the image, we can just pass in the PIS buffer just like before, except we're going to pass in an option, CI Image Color Space to be null to disable color management on that image.
+
+And the last thing we need to do is disable color management on the context by specifying CI context, context with Eagle context with the option working color space to be null as well. And with those three options in place, We finally have a 30 frames per second app that renders the filter shape we wanted in the beginning.
+
+We started off with a really naive implementation using UI Image View. We got six frames per second. We had a pretty good jump to 21 when we just used Create CG Image explicitly instead of having UIKit render. And then we fell back to 13 when we tried the first Eagle Contacts approach. This is because we rendered at the wrong size. And then once we fixed that, we got to 28. And then by disabling color management and enabling YUV image support, we got to our target 30 frames per second.
+
+For the next part, I'll talk a little bit about how to leverage OpenGL ES and Core Image at the same time for some more advanced rendering techniques. So as you may know from the previous example, you can create a CI context with a user-supplied Eagle context. And what happens internally is we create our own Eagle context with the same share group.
+
+And if you're familiar with OpenGL, you know that if you create one with the same share group, you can share resources between the two. In practice, or in theory, this could be anything from shaders, programs, vertex buffers, vertex arrays. But the things we're primarily concerned with in CI are textures and frame buffers/render buffers.
+
+And so using this, this
+
+[Transcript missing]
+
+creating CI images from textures, which is new in iOS 6. The API is CI Image, Image with Texture, with options for size, flipped, and color space. And the texture ID you pass in is basically just an unsigned int that refers to that GL texture.
+
+And so this image is only usable at render time if that texture ID is valid. It refers to a texture that exists in the share group. And the advantage of doing this is that the texture is kept on the GPU. There's no unnecessary downloads and re-uploads of data here. So Core Image can use that texture directly and very cheaply.
+
+And be sure that the texture data is valid when you're rendering. Otherwise you might get undesired results. We can't actually retain a GL texture, so if you create a CI image with a texture, make sure you don't delete the texture underneath this when you're trying to use it.
+
+And now in iOS 6, we can also render two textures. In iOS 5 and 5.1, we unfortunately limited to render buffers, but now anything that you attach to a frame buffer can be rendered to. And so it's pretty easy to do this. When you're setting up your context, just bind a texture to the frame buffer, call the same CI context drawImage, indirect from rect, and we will draw to that texture instead. And currently, only rendering to 8-bit RGBA textures is supported, so you can't render to a YUV or whatever buffer.
+
+Because we can render to texture now, it's advantageous to make draw image to be asynchronous. Calls like createCGImage, renderToBuffer, renderToCVPixelBuffer have always been synchronous in the past, but this is not something we want for GL rendering. So in iOS 6, we're changing it to be asynchronous. We will only issue a GL flush after our render and not a GL finish anymore. If you wrote your app and you linked against the old version of Core Image, we'll continue to maintain the same behavior, but we advise you to update your app to iOS 6 for better performance.
+
+And when you're using textures, rendering from or to textures, you should keep the OpenGL ES bind flush best practices in mind. And basically what you need to remember is if you have an object on context A that you're using or modifying, when you're done modifying it, issue a flush, and context B has to rebind that object before it can see the changes. So that's all you have to basically do.
+
+To demonstrate this, I'll take the basic Xcode OpenGL ES app template. I'll modify it slightly to use AV Foundation to stream in frames. And I'll use a CVOpenGL ES texture cache to map pixel buffers to textures. That way I can demonstrate creating CI images from textures, rendering it to another texture with the new render to texture functionality, and then just using some more OpenGL ES shader and draw functions to render a bunch of cubes with that modified texture. So I will demonstrate this real quick.
+
+So we will make this sample code pretty quickly, but this is basically the OpenGL app template that draws two rotating cubes. What we're going to do for every frame that we get from the camera is grab-- use CVOpenGLESTextureCache to grab the texture and map it as a OpenGL texture.
+
+Sorry, grab the buffer and map it as an OpenGL texture. And then in our draw function, what we're going to do is pass that texture in as a CI image Again, rotate-- or sorry, in this case, merely crop it because we want a square texture and not 640 by 480. And we'll have a pixelate filter and a CI vortex distortion to modify that image and have the parameters change in real time.
+
+When we're rendering, what we need to do is save the old framebuffer binding, bind our texture to-- our destination texture to this framebuffer, call CI context to render to the texture, Restore the old frame buffer and then draw a bunch of cubes with this as the new texture. So let's see what this looks like.
+
+This is kind of hard to see, but I have cubes with every face has a constantly changing vortex distortion and a pixelate that scales up and down. And this runs at 30 frames per second, and I can actually add probably a bunch more cubes since the hard work is running to that texture once, and the rest is a really easy OpenGL cube drawing process with really simple shaders. So back to slides.
+
+For the next part, I'd like to invite Jacques on stage to talk about how you can integrate Core Image with your game for some cool effects. Thanks. All right. Thank you. Thank you, Chendi. That's an interesting slide title there. So I'd like to talk to you about two of the common use cases for Core Image Techniques in your games.
+
+The first one that most of you will probably try is to apply an effect to the full screen. This is probably the easiest for you. Let's say you have a sprite-based game. You just want to create a transition or something. It's very easy to throw in a full screen effect.
+
+The second one is to apply an effect to an individual texture. And this can really be a great way for you to use an expensive filter as a one-off to create a more advanced effect. And then because you only did it once at startup, you can retain that sort of the real-time aspect of your game and still have an expensive filter. So let's just focus on the first one, which is to apply an effect to the full screen. I'm going to go over here and demo one of those for you.
+
+[Transcript missing]
+
+Using some of these recipes that Alex gave us earlier, I'm going to take this kind of vanilla space shooter game that I've made. It's, you know, it's kind of boring looking. I already got inspired. I added Gaussian blur as a full screen effect so you can tell I can no longer interact with it.
+
+[Transcript missing]
+
+Okay, that's kind of cool. That kind of takes us into the game. Now you can see, okay, there's a segue. Game over. Okay, that was kind of snappy. All right, let's try something else there. Pixelate. We've already tried that. Okay, let's try Bar Swipe. Cool. We do the same thing.
+
+We get into the game. The interesting thing here is with the full screen effect, it's helping you add a transition into the game that you didn't have to do yourself. So a lot of the times, You might engineer your own kind of fade to black, fade to white, whatever. Throw in the standard game programmer transition because I don't want to write the shader for it. But you can use CI really easily with these recipes to add a bar swipe, apparently. Or perhaps you can't. Let's just try that again.
+
+So let's go back here. We'll try a flash transition on the way in, because we've all seen Pixelate. I think this can be kind of cool. Oh, wow, cool. All right. And then as I die, game over. Truly game over. Okay. There you go. That's some of the easy things you can do. Now, DCI filters are actually extremely easy to do. There are only a few lines. I should probably go back and turn on the slides. Let's do that.
+
+Okay. So that was applying effects to full screen. They're very easy. It only takes you a couple of lines to set it up. And then you can swap these filters out. And you can use Quartz Composer to test them out offline. And then you can really hand it over to a designer or someone to just pick the right effect. And once you have it set up, just reuse it.
+
+So let's go through how we actually do this. So the first one is your standard game renders straight. It's just geocalls that you flush to the screen. We just want to pipe that around so that you go to a frame buffer, a texture frame buffer, and then you put that through a filter and then to the screen. So very simple stuff.
+
+So the first one is there's really four steps to this. The first one is you create a texture FBO. We've gone through this. Chendi has showed this before. Number two is you create the CI image to reference this FBO. And number three is you want to create the filter. And it's important here that you set the input image key to the texture. And then fourth, you create the context to actually draw it to the screen.
+
+Okay, so we'll just briefly go through the steps. uh... We have OS X first. You'll note that there's some setup here to create the texture. I'm sure you all know how to do that, so I've omitted that. You bind it, and note here, Texture Rectangle Arb, which is special for OS X.
+
+It's a way to access an arbitrary non-power-of-two texture. Also note that there's RGBA here. Then we just bind this texture as a frame buffer. And then for iOS, there's only a tiny change, which is that you use GL Texture 2D because of the non-power-to-support that's out of the box there. Okay, so then we create the CA image.
+
+This is very simple. You just reference the texture, make sure that the size is set to the width and height of the texture, and then of course you don't need to flip it, you know what's in there, and set the color space to nil. Next, we create the filter. In this case, I've chosen Bloom, which is one of these kind of expensive Gaussian blur-based filters. Set the defaults, set the input image. Very easy.
+
+Okay, then for OS X, you then create a context that references your current OpenGL context. I've called it NSGLCTX here for brevity. This is the OS X approach. Make a note here that I've set the working space to null, so I'm avoiding color management. And iOS... Even simpler. Same thing, just a simpler call. Okay, so that was the first one of the two use cases. So let's go and focus on the second case. So I'm going to walk over here and show you a demo.
+
+So some of you might have seen this little trees concept I've been working on in a previous session. And here I want to focus on effects that can be quite expensive that you apply to a texture once in order to create a deeper feeling. So here I have very simple flat geometry. There are some hand-painted textures here and a little particle effect.
+
+One of the things I can do here that we can go into is with a filter chain consisting of a random generator that we then tone up to just gray and a linear gradient, we can create this ground fog effect of this sheet that you see. We see this gray sheet between each layer, so I can just apply a noise there, and as I just move it, we get that little sense of movement, and we get the ground fog happening. So that's very easy. I only need to set that up once. The random generator is an infinitely repeating texture, so it's very easy for me to set that up once and sort of apply it wholesale.
+
+The next step is, of course, that these trees are very, very flat. You can see that there's no depth cueing on the trees whatsoever. And so, either you could try just to blur the whole screen or the whole layer, but really the easiest thing here is to take each one of these trees that I've composited using a random generator. So it consists of three components: a trunk, a left branch, and a right branch at varying heights. I render those out to a texture.
+
+Then I apply a Gaussian Blur filter once, and I vary the radius depending upon the depth of that tree. Now you can see that there's depth cueing here. So as we go deeper into the scene, the trees are blurred out, and you get that sense of it meshing with the fog. So depth cueing, very easy. It's only done once, so now it's rendering using that modified texture. Then, of course, we can go on to the next effect.
+
+[Transcript missing]
+
+Using CI Bloom, I create this glow effect around it. Of course, I could just create this as an asset, but it was just really easy for me to take a circle and gloom it, or bloom it. And so this is something that you can just try out and really get there much quicker than going back to your artist and saying, you know, is this what you want? No. Okay, go back. Oh, okay, I added some more. Oh, is this what you want? No.
+
+You can just play with it. The CI filters have input parameters that you can play with as a programmer to get the effect you're after. The next one is, of course, a film effect. So we're using vignette here on the whole screen. So we're doing a full-screen effect at the same time, which is vignette, and we also transform the screen slightly to get a jitter, a camera jitter in.
+
+And then, of course, we vary the luminance a little bit, just to get that kind of incandescent light bulb errors that you'd get in an old projector. And then you get the kind of old-style effect. And then, of course, another full-screen filter that we applied in the demo earlier was a distortion.
+
+And Chendi's shown you a distortion earlier. This one is a bump distortion that you can use. And this one can either go into or out of the page. In this case, I decided to go out of the page. And this is really easy. Yet again, once you've set it up, it's only a few lines to try out a different filter or try out a different filter chain. Okay.
+
+So... What's the idea here? Well, you have your input geometry. I've made some space there. The texture coordinates, positions, and your indices, they don't have to change, of course. It's just the texture that you're going to modify. So we move it over, prepare some space, create a new texture for the text cords to reference, and then we apply a Core Image filter between the original texture and the filtered texture.
+
+Now the great thing about this is if you keep this set up, you could modify that original texture, such as changing a frame in a frame-based animation, and at that point, filter again to get the filtered texture, so you have this kind of beautiful amortized cost of saying, "I can apply this expensive filter chain, Gaussian Blur, which is a multi-pass, to my filtered texture." And you really only have to do that when the content changes. And everything else stays the same, so you just render it out.
+
+Okay, so the workflow is the same as before, just in a slightly different order. So you create the CI image using a texture, the original texture. You create the CI filter that you intend to use, Gaussian Blur in the case of the game and the trees. And then you create a texture FBO to render this filtered texture out to. And that is the new texture that you're going to use. You create a CI context as before, or you might already have one around from your previous trials. And then you target the new texture by binding that frame buffer when you render with the CI context.
+
+So I've just shown you here a small example of the differences. So really all the same as before, except you just bind the texture frame buffer that you're targeting and you do your CI context. Draw Image in Rect from Rect using the output image of the filter. And there you will have your new texture that you can then use. So there's some great features in Core Image for your games.
+
+You have 93 combineable filters. They're all made for you. Please don't try to make your own Gaussian Blur filter. Please save yourself the time. It's really not that fun. So if you combine these and change, you can get billions of different effects, and it's really fun to play with.
+
+And because in iOS 6 now, you have rendered to and from textures as well, you can also get high performance to add to your game. And of course, as we've shown you, there are some properties and options that you can set so that you can select between quality or performance to suit your application. Okay, so I'm going to hand you back over to David.
+
+Thank you so much, Jacques. It's fun working on these filters at Apple, but it's even more terrific to actually see them being applied to really kind of beautiful-looking content in a real live game. It's fun to see. Really appreciate his team's help on that. Few things we want to just tip you off about.
+
+We have a session that was preceded this session that you might want to look for on the archives. It was getting started in Core Image if you want to get all the fundamentals of Core Image. Also, there's another session you might want to check out as well, which is Advances in OpenGL and GL ES, which is another good session to look at for tips and tricks with OpenGL programming. That's all. Thank you all again for coming, and look forward to talking with you again.

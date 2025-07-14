@@ -1,0 +1,197 @@
+---
+Title:  Unified Logging and Activity Tracing
+Year:   2016
+Web:    https://nonstrict.eu/wwdcindex/wwdc2016/721/
+
+[!] This transcript has potential transcription errors.
+---
+
+Welcome all of you to the Unified Logging and Tracing Activity session, Logging for the Future. And I'd like to thank all of you for turning out this late on a Friday. So my name is Steve Szymanski, yes.
+
+[ Applause ]
+
+Certainly, didn't expect a full room at this time. So my name is Steven Szymanski and I'll be doing most of the talking and a little bit later I'll be assisted by Matthieu Lucas. So let's get into this, there's a lot to talk about here. I'm going to start with a little bit of an introduction and then go into some of the basic concepts behind the new logging system that we've introduced this week.
+
+There will be a short demo, then I'll come back and start talking about how to actually use it. How to use the APIs, how to use the tools, and then some discussion of what we think is the best practices of how to use this. A little talk about how to gather the logs once you've created them and then finally, some talk about some deprecated interfaces. So let's get started.
+
+A little bit of background. For those of you who have been around for a while you'll know that back in 2014, Apple introduced the concept of Activity Tracing. This is the ability to keep track of all the work that is done throughout the system on behalf of some operation. Whether that work is done inside of an application, inside of a library of framework that's called from that application or even work that's done in a separate process on behalf of the application.
+
+Another thing we introduced at that same time was the concept of Faults and Errors, which are special kinds of log events that will trigger additional work to be done by the system to collect additional data. The last thing I want to say by way of introduction is we recognize that Apple has several logging APIs already and hopefully by the end of this talk you'll understand why we're introducing this new API and how that interrelates with the others.
+
+So what are the goals of this project? First and foremost, what we wanted to do was build one common efficient logging mechanism across the whole system that could be used in both user mode and kernel mode. One of the purposes of this was to maximize the amount of information that we could collect while minimizing the observer effect.
+
+By observer effect I mean the experience that all of us have had as developers where you have some problem, you stick some logging into your code and suddenly the problem stops happening because you've changed the timing. We want a very, very low footprint logging interface that has minimal impact on your code as you go off and call it.
+
+So the way we accomplish this as I'll go into more detail in this talk. First off, we compress the data. So you can fit a whole lot more information on the disk without using up more space. Another thing we do that's very, very important is we defer a lot of work. As anything that we can do at the point at which you display the information instead of the point at which we collect it we try to defer to that point. That's one of the key ways that we avoid observer effect.
+
+And then another thing we do is we manage the message lifecycle in new ways. The idea being that different kinds of messages may stick around in the system for different lengths of time to maximize the chance that the messages that you want will actually be there when you actually go off and look at them.
+
+The background of all that is that we want to be able to have as much logging turned on all of the time in the system without having to go back and say, oh can you turn this on and give me a new log. We want it all on as much as possible.
+
+The other thing that motivated this is we want to design privacy into the system from the ground up and I'll talk more about that as well. So what are the key features of the new system? There's new and improved ways of categorizing and filtering log messages. So there's some new tools that we're going to be providing to you for you to categorize your log messages, so when it comes around to looking at the logs it's easier to find log messages that you care about. Another important thing is logging system collects caller information for you, so there's no longer any need for you to pass file, line to identify where this is called from. We are automatically collecting that for you.
+
+[ Applause ]
+
+There's also a whole bunch of new built-in type specifiers that allow us to format binary data for you so you don't have to spend the time doing it. There's a new Console application and a new command line tool that we use to access all of these features. This is supported across all of our platforms macOS, iOS, watchOS, tvOS, and all the Simulators. It is supported in the release this week in C, C++, and Objective-C and support for Swift is coming real soon.
+
+So to give you a little foretaste of what's coming. This is the current Console application that you see here and this is what the new Console looks like. Now one thing I want to point out to you here is take a close look at the section that I highlighted there. That is a tree showing you the graph of a given activity as it flows from process to process to process, so you can see visually all of the work that's been done on behalf of some operation that you requested.
+
+So now let's back up and talk about the theory and the abstract concepts behind us. First off, adoption. If you want to use the new unified logging system all you need to start doing is building with the new SDK that was released this week. What'll happen if you do that is all of the legacy APIs, NSLog, asl log, message syslog, all of those will get redirected into the new system.
+
+You don't have to change a line of code to start using the system. Now obviously to use some of the features you need to start using the new APIs, but out-of-the-box if you just build with the new system it'll all get directed into the new logging architecture. On the other hand, if for some reason you don't want to start using the new logging system continue to build with the old SDK and there'll be no changes in your system.
+
+So new file formats. In this new system logging data is kept in a compressed binary format on disk, it's called a .tracev3 file. Those files are now stored under /var/db/diagnostics with additional supporting files in /var/db/uuidtext. There are new tools to access that data, there's a new Console, a new log command line tool and one of the things you have to keep in mind is because the data is now stored in a binary format you must use the new tools to access it. So you can no longer grep through logs you have to use our tools to do the surfing through it.
+
+There's also another new type of file the .logarchive, which is there for portability of log data. Essentially a .logarchive is a collection of information out of /var/db/diagnostics and you uuidtext collected together into a single file that's easier to transfer to email, to attach to bug reports and the like.
+
+Another new concept that comes in with this system is subsystems and categories. Log messages can now be associated with a subsystem and a category. They can be used to control how log messages are filtered and displayed. A subsystem can in fact maintain several different categories and you can use as many subsystems and categories as you need.
+
+So as an example, you may have some application and you might define a subsystem com. your-company. your-application that has three categories in it setup, inprogress and teardown. In that same application you can define another subsystem com. your-company. test.your-application with a single category of test in it. And you can then use those to control how the log messages get displayed. Logging behavior, this is kind of the heart of the system here. Each log message has a level determined by the API that you used to create it. There are three basic levels Default, Info and Debug and there are two special levels Fault and Error.
+
+Each basic level has two characteristics that can be set either system-wide for a specific subsystem or for a specific category within a subsystem. The first of those is, is it enabled, if you make the call does it actually generate a log line. Note that the fault messages are always enabled, you can't turn off default messages.
+
+The other characteristic that you can set at all of those levels is, is it stored to disk or to memory. Now storing to disk it's kind of obvious what we mean, but what I mean by storing to memory. Well the new Unified Logging System maintains a large set of in-memory circular buffers to which some log messages can be directed. These messages are then saved to disk only on a Fault and Error.
+
+This is very useful for messages that grow stale quickly. So if you have a message for instance that basically the information becomes stale and all you ever look at is the last version of that message whenever you get a log, there's no reason to store hundreds of different copies of that log message on disk.
+
+Instead, send it to the memory buffer and then get it captured on a Fault and Error and you'll get that last version that you need without a lot of extra things getting stored. The levels here are hierarchical, so what I mean by that is if you set Debug to go to disk that implies that info will go to disk as well.
+
+And all this behavior can be customized by installing profiles or on macOS using the log command. So what's the standard behavior out-of-the-box if you don't install a special profile? Well, default level messages are always enabled and by standard configuration they go to disk. Info level messages are enabled, but they go to memory. Debug level messages are standard off, they're not enabled and of course, since they're off they don't go anywhere.
+
+So the other two kinds of messages that occur are Faults and Errors. Faults and Errors are always enabled and always go to disk. So let's talk a moment about privacy. As you know, Apple values customer privacy a great deal. As a guiding principle in everything we design in our apps, in our services, in our new versions of the OS users about their privacy respected. And all developers, including everyone in this room shares that responsibility with us.
+
+So how does it apply to logging? What we want to prevent is the accidental logging of personally identifiable information in the logs where someone can actually get at it through the log data. So to that end, dynamic strings, collections, arrays, objects, and the like are assumed to contain private data. Static strings and scalars are assumed to be public. And I'll get into a little bit later about how you can control that.
+
+Okay, Faults and Errors. I talked earlier about how as part of the activity of Tracing Release, we introduced the concept of Faults and Errors. One of the basic ideas of Faults and Errors is that we do additional work on doing it Fault and Error, we save additional information. So an Error represents an issue discovered within the different application or library. On an Error what we do is we look through the in-memory buffers and we collect all of the log messages that were from that process and save them out to disk as part of the Error.
+
+Alternatively, Faults represent more global problems in the system where something larger has happened. On a Fault we again look through the memory buffers and collect up all the log messages from that process and every process that was involved in the activity. And we also we actually collect some other additional system information that might be useful to us.
+
+Faults and Errors and all of the log data that's collected as part of them are actually captured into a separate set of log files. We do that so that normal logging won't push them out and cause them to exceed their quotas and cause us to reclaim the space. So the idea is the Fault and Error data sticks around even longer than normal logging data.
+
+So okay, I'm going to give a very, very eyelevel overview of how the system works with a whole lot of details missing. So this is like a broad brush discussion. Okay within each process there's a collection of small buffers into which we log messages. These buffers are actually in memory that's shared with the logging daemon. As these buffers are filled up the logging daemon is triggered to compress that data into a set of larger buffers that it maintains. As those larger buffers are filled up we either save them out to disk or we recycle them as part of the memory only buffers.
+
+So the other activity that ends up happening is if you request livestreaming of log data, so you're on the Console and want to see the logs that are happening as they occur. The way we implement that is we immediately do an IPC over to the diagnostic daemon who then distributes those log messages out to all the clients.
+
+The side effect of that is that there is a significant performance impact of livestreaming of log data. Basically, a lot of the work that we've done to save effort and speed up logging so it doesn't have an observer effect on your code goes away because we're doing an IPC on every single call.
+
+The other thing to note is how individual kinds of messages from applications or particular subsystems get routed through this can be changed by profiles and such. So enough of me talking for a little bit, at this point I will invite Matthieu Lucas up to give a demonstration of this in action using the Console app.
+
+[ Applause ]
+
+Thanks Steven. So as Steven mentioned earlier in this talk, this year we introduced a brand new Console app. So we wrote it from scratch using Swift. We wanted to leverage a new logging system and making your developing experience easier. Let's look at the app. So here's the new look.
+
+As you can see, the layout hasn't really changed. You still have your mainstream on the center, different action on top, and then different sources on the sidebar. Let's look at the sidebar for a minute. So you can still see your different reports, the system or user reports, the different legacy logs that you may have the system routes. But here you can see that there is a new section. Now we display all the devices that are connected to your machine and we also show the current machine.
+
+So we support iOS, tvOS, and watchOS devices in here, so you can plug every device you have. So let's just look at the mainstream for a minute. So now the log stream is made of two views. You have the messages view and the activities view as Steven mentioned earlier. So in the activities view you can see the [inaudible] activities and the related messages if there is any right in the details it tells you in the bottom here.
+
+Let's switch to the messages now. So here you can see a bunch of messages, so in order to include Debug and Info messages you need to manually do it in the Action menu, so that they show up along the default stream. So now we should see more -- I just launch a few apps, so let's create some logs.
+
+So here now you can see that we have much more information. So you can see the different message type through those color dots on the type columns here. So the gray one are the Info messages, the yellow ones are the Errors, there is a red one for Fault and the dark gray are the Debug ones. Whenever there is no dots that's just the default type.
+
+So you can also expand or collapse your messages directly inline using your left or right arrows or using the View menu item here Expand or Collapse. Then whenever you are on the single message you can now see all the details of a specific message directly in the details view in the bottom.
+
+So we are able to show you all the information that we have about a specific log, that's part of the new logging system. So now we can show you the process, the library where it comes from. So as you can see for this one, we can see that it's coming from accounts D and then from the account framework.
+
+You can also see much more information as we gather during all the new logging. So you can see we have now the subsystem, the category, the activity ID, the thread ID or the PID. Now let's switch to the iPad that I have here. So I connected an iPad where I have just a very basic app that has some figures and we'll try to find yours by going through the different features.
+
+So first, we can start by just minimizing the column layout, so to do so I can right click on the top here and then include or add some columns. So I'll just add the subsystem, I also add the category, and then I will just move that here. So this layout is then persistent, so you won't have to do it twice.
+
+So now we can see that we have a bunch of information from this device. So in order to refine your search here you have two ways to do it. You can first right click on a specific message and then you'll get option to mute the subsystem, mute the process or show a specific process. So in that case we can just start by muting a specific category. Let's say that we want to mute widgets.
+
+Now you can also the second way of just refining is to just [inaudible]. So as you can see, we just added a custom token for widget. Let's say that I want to just see the Bookmarks app, that's the app that [inaudible] on my device here. So by doing so now I have only messages coming from Bookmarks without the category widgets. Let's just add another token to show only the Error type.
+
+So now we only have messages coming from Bookmarks without the category widgets and that has an Error type. So we can see that we have different Errors coming from the web view, so that's [inaudible] for now, we relate it down to what we're looking for. So in order to reuse it later you can just save it by clicking on the Save button on the top right.
+
+So I'll just name it Bookmark Errors. So you can see that all your saved searches will appear in this section here. So you can reorder those as you want, you can remove those if you want and you also have two saved searches by default, which are All Messages and Errors and Faults. Now let's switch to the activity view see if we can find more context about those logs and see if we can reproduce [inaudible].
+
+So here we can see that we have different activities. So the activities view is based on the same search mechanism, so we could apply the same features and then save it as well. So here we can see that we have a Bookmarks activity with different children. So we can see that we were preparing for transition, then we retrieve an object and then we push the detail view and then we configure the detail view and then we load the web view.
+
+So as you can see now, the messages appear directly in the bottom of this view, the messages that are related to this activity. So this message was written in this specific activity, so it showed up here. Now we can see that those messages, those two failures were part of the loading web view activity.
+
+So now we know that we have all these contexts of what happened to this Error. So now we also added the sharing option to Console, so you can just select a bunch of activities or messages and share it directly to someone or to a note. So I'll just add it as a note so that I can debug it later. Now the next.
+
+[ Applause ]
+
+The other input that we can use is a log archive. So [inaudible] log archive that was previously generated from another device. So if you do have one too you can just double-click on it and Console will open it. So as you can see whenever you click on it and then open it, it just loads everything. And then you can see that we also have the same [inaudible] filters as we just said before.
+
+So in order to see if this specific log archive has the same -- contain the same Error messages as the current device that we stream we can just click on it and it will automatically reapply the same filters. So we can see that we have the same errors and we can also look at the activities view to see the same activities and so on. So that's it for Console and I'll let Steven go back on the slides. Thank you.
+
+[ Applause ]
+
+So thank you very much Matthieu. I really like the new Console, it is glorious to use. So let's talk about the new Unified Logging System and how you actually use it. So to start off with here's a summary of all the new APIs that you'll have. Os log is your basic logging API that logs something with default mode. Os log info is the call that by default sends log messages into memory and that's for the additional timely information that you want to gather. Os log debug is for your high-frequency debugging.
+
+And then there's os log error and os log fault for generating a fault and an error. And the last call here is os log create that creates a log object you can then use to customize your behavior. So let's dive into that one a little bit more because it's probably the one that's least familiar in terms of analogy to other stuff. So we have a call os log create it takes two parameters, the name of the subsystem and the name of the category. And what it does is it creates a thread-safe singleton object that controls the behavior of the log calls that you pass it to.
+
+So by default it ends up having the system-wide behavior, but you can customize it to have specific behaviors using profiles or the log command line tool. The way you use it is you simply pass it as the first parameter to all of the other calls. So here I call os log and that first parameter is log, which is the value that got returned from os log create.
+
+What that does is it causes a reference to the category and subsystem that was defined with that log object to be stored with every log message that it's used with, which then can be used on the backend as you saw to filter and display messages. So if you don't care about having your own subsystem and category, then the other option is to simply pass an os log default, which is a default log object that we always provide. It doesn't have a subsystem or category, but it's useful if you really don't care about that kind of control.
+
+Built-in type formatters. We all spend way too much code trying to convert binary information into strings so that we can log them. The Unified Logging System takes over much of that work for you by providing built-in formatters for well-known types. What's even more important is that we save that conversion work until we display the log message, so you don't have to pay for that conversion at the time you generate the log message. Avoiding all of the different kinds of observer effects.
+
+So just to talk a little bit about it. There's built-in decoding for some common values. The syntax is instead of doing %d you would do %(time t)d and that basically says that that decimal value that you're passing in is actually a time t and that when it gets printed it should be printed as a time string. Likewise, for errno, if you do %(errno)d it converts that into a human readable form of that errno.
+
+We also have a new basic time format % capital P not lowercase P, which has been around for a while that you can use to display arbitrary binary data. And there's decoders for all sorts of common type so for instance %(uuid t). And in fact, here is a list of all of the current codes which we have, so all the different kinds of time values, errno, uuids, all the different kinds of network IDs. And we do anticipate having more coming out in future releases.
+
+So Per Parameter Privacy. Privacy is now handled on a parameter by parameter basis, scalars and static strings are assumed to be public. On the other hand, dynamic strings, collections and objects are assumed to contain private information unless you tell us otherwise. So that behavior can be overridden on a per-parameter basis.
+
+So instead of doing %@ to say oh this is an object that I want to include in my log you do %(public)@ to tell us it's an object and everything in that object is public, so you don't have to worry about it. Alternatively, if you happen to have a case where you have some integer that for some reason is secret you could do a %(private)d to log that data as being private information.
+
+You can by the way, combine privacy and formatting. So I could do %(public, uuid t).16P to basically say there's a uuid, it's public information and it gets formatted as such. So let's give a little bit of example of what the difference this makes to you as you code.
+
+So log message simplification. Okay, here's the old way of doing things. All right, first off you have to check and say is the current log level enabled before you call anything and then let's say you have a uuid that you need to display. Well the first thing you have to do is call unparse to convert that into a string. You also happen to have a socket address that you then need to also convert into a string.
+
+Then you call NSLog with all that stuff that's been converted, but also of course, you have to pass the function name and the file and the line number for you. And then when you're done with that don't forget to free the string that was created for the socket address. And you're done. Now here's the new way.
+
+You simply call os log info it takes care of checking the log level for you. In this case I'm passing the default log object. I specify in my format string that a given parameter is a uuid and a socket address, so I don't do any conversions then. None of the work happens now the work happens when we display it. And then I simply pass the parameters, it's that easy.
+
+[ Applause ]
+
+While I'm doing examples let me give a little bit more of an example of using some of the other APIs. So here I do a log create and I specify a subsystem and a category. The subsystem is com.apple.logging.example and the category is general and so this is my general log object. I do the same thing, but this time I create one with a category timestamp. You know, the basic simple call, I call os log, I use the general log object, pass it a string, it gets logged.
+
+Here's a little bit more of an interesting case. I call os log info, so this is something that's going to go into the memory buffer and only get saved if there's a Fault or an Error. And then in my format string I specify %(public)s for the filename because the filename is a dynamic string and we would assume that it's private information unless you tell us that it's public.
+
+A little bit more complicated case. I open the file, I check on an error if it returns an error I then call os log error and in my format string I again say that the filename is public information and I say to format the errno as an errno. Another very example, this time I'm calling fstat, but gee I'm calling fstat after I already have the file open, so maybe something weird is happening if I'm getting an error on that. So I call os log fault, same kinds of parameters.
+
+And then the very last thing is I call os log info, but this time I pass my timestamp log object and then I basically dump all the timestamps from that file. What that means is when I go off and look at the Console I can basically simply filter it and say all I want to see is that timestamp data or I don't want to see that timestamp data because I'm looking at something else.
+
+So the new Unified Logging System isn't the only change in this release. There are also some improvements to the Activity Tracing System. Activities are now first-class objects that can be stored and re-used. And the act of creation gives you control over the relationships between the various activity objects at the point at which you create them. There's also some new APIs that scope the activities within your code.
+
+So here's all of the new APIs. So there's a new os activity create that works just like os log create to create a log object only this time it's identifying an activity. There's two calls that you can then use to apply that to your code os activity scope and os activity apply. I'll show you examples in a moment about how they work differently. And finally, there's os activity label useraction that labels an activity as a user action UI-based activity basically.
+
+So let me give an example of doing this. First off, I call os activity create to create an activity that I'm calling init. Notice that the second parameter of this function is a constant os activity current. That's basically saying this init activity is subordinate to whatever happens to be the current activity. Now I go off and do os activity create for a verify activity, but my second parameter is the init activity I just created. So now I've created the hierarchy between these activities manually.
+
+So now I have a block of code, you know, if it's ready and then I have some code between a couple of braces. The first thing I do is I call os activity scope and I'm passing in this case the verify activity. What that does is it means all of the rest of the code in that block is considered in scope of that activity until I hit that closing brace.
+
+There's no need to have to remember to call os activity end at the end it just automatically does it for you. And as soon as you leave that scope you're now no longer part of that activity. The other call that we're providing is os activity apply, you pass the activity object and then you pass it a block and then it basically executes that block with that activity as the scope.
+
+Tools, so Matthieu already gave you a great demo of the new Console, I'll just run through the functionality very quickly. You can view live content from the system. You can open log archives. You can use the new activity centric view of logging tracing. You can use advanced filtering and searching and you can see logs from your devices. Now let me talk a little bit about the new log command line tool.
+
+It provides all of the same exact functionality as Console, but from the command line. So you want to stream live log messages you simply do log stream. If you want to get fancy, you can do log stream-- predicate eventMessage contains my message and what it will do for you is it will stream all of the log messages that contain the string my message. Just like the Console it could let you open up a log archives. You can display a log archive using the log command. You do log show and then give it the name of the file and it displays the contents of that log file.
+
+Another thing you can do on macOS is use the log command to actually change the configuration of your subsystems and categories. So here's an example, I do log config -- mode level:debug and then -system com.mycorp.myapp and what that does is it basically enables logging on that subsystem for you on your macOS.
+
+So coming soon. We do appreciate that many of you are going to be developing applications iOS 10, but sticking with macOS 10.11 on your Macs, i.e. El Capitan. Tools for being able to access the new logs from El Capitan are in fact coming, but in the meantime there is a sort of a hackish workaround, which is you can run the new tools from inside the simulator. So xcrun simctl spawn booted and then you give log show system logs.logarchive and you can run all those commands just like you would otherwise. The alternative is coming at some point.
+
+[ Applause ]
+
+So let me talk a moment about best practices, logging etiquette. Try to ensure that your messages only contain really useful information, don't have a lot of extra whitespace or filler data in there. Try to keep it compact. Let us do the formatting, leverage the built-in formatters that we provided.
+
+The more work you do to format your strings in advance the more that's going to slow down your app as opposed to letting us do the formatting at the point at which it gets output. Avoid wrapping os log APIs in other functions. If you wrap it in another function you then lose our ability to collect the file and line number for you. If you absolutely have to wrap our APIs, then wrap them in macros and not in functions.
+
+Only log what's needed from dictionaries and archives. Dictionaries, I mean dictionaries and arrays. They take up a lot of space on disk, which means they're going to pushing out other log messages that people may need. Try to only log the parts of those that you really, really need for your logs.
+
+And avoid logging in tight loops in code. So a brief word on what we think the best uses of our new APIs are. Os log to log basically details on your basic details on logging information. This is the kind of information you may need from hours ago to help debug your problem. Use os log info for additional information that is very, very timely. So use this first stuff that's going to get stale very, very quickly.
+
+Use os log debug for high volume debugging during development. Error in the case that you want additional information collected and captured for your app. And fault if you want additional information you want collected about the system. A quick word on gathering logs. Sydiagnose is the preferred method to capture data for bug reports. If you do sysdiagnose the logging data in the system I've just described will appear within that archive as a file called system logs.archive.
+
+You can use key-chords to trigger sysdiagnose. If you do a sysdiagnose on an Apple watch it will trigger on both the watch and the paired phone. And then you can use iTunes to transfer that archive over to your Mac to do something with. This is the file that Apple is going to be wanting to have from you when you talk to us about a problem. So either attaching it to the radar or delivering it to developer technical support. So here's the various key-chords. Shift + Control + Option + Command + Period (.) for Mac OS.
+
+Volume up + Volume Down + Power for iOS. On the phone you'll get a slight vibration, on iPad you won't. On watchOS it's press and hold the digital crown and side button for a full second. If you don't present it long enough you'll actually get a screenshot instead. There will be a slight haptic vibration when you trigger it. Play/Pause + Volume Down tvOS. Note that on older remotes for the Apple TV you have to actually hold it down for five seconds to trigger.
+
+Deprecations, so as part of this there be some APIs that we're going to be saying farewell to. First off, all of the ASL logging APIs are now superseded by these new APIs and, therefore, those old APIs are deprecated. There is an interesting edge case though. A new API for searching the log data is not going to be made public in this release. What that means is that there's no equivalent to asl search functionality. If you absolutely depend on asl search in your system that may be a reason to wait for adopting the new logging system.
+
+There's also some APIs from activities that are being deprecated. Instead of doing os activity start and os activity end we now have you do the os activity create as I showed you and then call either scope or apply to apply it to a block of code. Os activity breadcrumb gets replaced with os activity user label. Os trace with payload gets replaced by any of the os log calls. Note that these functions as of this release are now no ops. So if you continue calling these they're not going to do anything.
+
+So in summary, the new logging system is faster, easier to use and gives you more control, but it does require using new APIs and new tools. Related sessions, I've mentioned a few times back in 2014 Activity Tracing, this is the talk in which we talk about that. So if you want go back and look at that. And if you want to get more information about this talk, that's the URL. Thank you very much.
+
+[ Applause ]

@@ -1,0 +1,2990 @@
+WEBVTT
+
+00:00:10.770 --> 00:00:12.160
+Good afternoon.
+
+00:00:12.290 --> 00:00:13.590
+I'm Blaine Garst.
+
+00:00:13.650 --> 00:00:18.730
+We're going to be talking about the one
+section of the new Objective-C 2.0 that
+
+00:00:18.820 --> 00:00:23.790
+we couldn't cover in a quick 10 minutes,
+so we'll spend maybe 40
+
+00:00:23.860 --> 00:00:26.250
+or 50 minutes on it here.
+
+00:00:28.400 --> 00:00:31.060
+The talk is organized
+in the following way.
+
+00:00:31.240 --> 00:00:34.380
+We're going to talk a little bit
+about what garbage collection is,
+
+00:00:34.380 --> 00:00:38.250
+as a refresher, in case you might need a
+little bit of refreshing.
+
+00:00:38.280 --> 00:00:40.610
+We're going to talk about
+the collector itself,
+
+00:00:40.720 --> 00:00:41.920
+which we call LibAuto.
+
+00:00:41.920 --> 00:00:47.650
+We will dive into considerable depth in
+what I call the GC and Cocoa Essentials.
+
+00:00:47.690 --> 00:00:51.350
+That'll cover all the techniques that
+you might need to know about or want
+
+00:00:51.350 --> 00:00:53.280
+to know about and things like that.
+
+00:00:53.800 --> 00:00:55.400
+We'll step back a little bit.
+
+00:00:55.540 --> 00:00:59.720
+Actually, we'll dive deeper in and talk
+about tools and techniques,
+
+00:00:59.720 --> 00:01:01.960
+a few environment
+variables among friends.
+
+00:01:01.960 --> 00:01:04.370
+And finally,
+we'll close on a little bit of
+
+00:01:04.370 --> 00:01:08.070
+conversion notes if you were so
+daring as to want to try to maybe run
+
+00:01:08.070 --> 00:01:10.500
+GC on stuff you've already written.
+
+00:01:10.500 --> 00:01:13.060
+So let's get into it a little bit.
+
+00:01:15.100 --> 00:06:02.500
+[Transcript missing]
+
+00:06:03.010 --> 00:06:06.240
+And then after that's done,
+we get to reclaim the memory.
+
+00:06:06.270 --> 00:06:10.440
+In other systems,
+once you send that finalized method,
+
+00:06:10.610 --> 00:06:13.220
+that object might do something
+we call resurrection.
+
+00:06:13.410 --> 00:06:18.150
+It might try to store itself
+into some other global thing,
+
+00:06:18.200 --> 00:06:20.900
+keep itself alive for
+a little bit longer.
+
+00:06:20.900 --> 00:06:22.400
+This is what happens under Java.
+
+00:06:22.400 --> 00:06:26.650
+And then what happens there is that
+you have to run another collection
+
+00:06:26.650 --> 00:06:31.400
+cycle sometime later in order to really
+find out that this object has been,
+
+00:06:31.400 --> 00:06:34.490
+is no longer useful
+and reclaim the memory.
+
+00:06:34.500 --> 00:06:38.610
+You know, that level of memory latency,
+being able to, you know,
+
+00:06:38.610 --> 00:06:41.810
+get and reclaim the memory on
+the first go around is very
+
+00:06:42.060 --> 00:06:45.990
+important to maintaining memory
+performance on our system.
+
+00:06:46.000 --> 00:06:50.620
+And so from the outset, we've said,
+you know, resurrection is just,
+
+00:06:50.760 --> 00:06:52.380
+it's kind of a bad idea.
+
+00:06:52.400 --> 00:06:56.370
+I mean, this object has been, you know,
+already found to be unreferenced
+
+00:06:56.370 --> 00:06:59.600
+and it's been told to go away
+and it wants to stay around.
+
+00:06:59.600 --> 00:07:01.220
+It's, you know, anyway,
+we just don't quite,
+
+00:07:01.240 --> 00:07:02.220
+we don't quite like that.
+
+00:07:02.260 --> 00:07:04.600
+So as I said, we reclaim the memory.
+
+00:07:04.640 --> 00:07:09.810
+So this is a standard, classic,
+full garbage collection where you go
+
+00:07:09.820 --> 00:07:15.920
+through everything and find every piece
+of garbage that exists on the system.
+
+00:07:15.940 --> 00:07:20.740
+This, you know, we still, we do this,
+we do this when we have to.
+
+00:07:20.780 --> 00:07:22.380
+What we like to do instead.
+
+00:07:22.400 --> 00:07:27.210
+Though is do what we call generational
+or incremental garbage collection.
+
+00:07:27.220 --> 00:07:32.020
+And this starts with the observation
+that most objects are temporary.
+
+00:07:32.200 --> 00:07:33.820
+You know,
+they're little strings or little
+
+00:07:33.820 --> 00:07:35.050
+this or little bits of that.
+
+00:07:35.120 --> 00:07:37.650
+So you build up a lot of
+temporary objects while you're
+
+00:07:37.650 --> 00:07:39.390
+processing user events and stuff.
+
+00:07:39.500 --> 00:07:42.160
+And you very rarely change, you know,
+the global state of
+
+00:07:42.170 --> 00:07:43.440
+your program from that.
+
+00:07:43.480 --> 00:07:47.640
+So the idea is if there was,
+or the scheme behind this,
+
+00:07:47.680 --> 00:07:52.180
+if there was a way to quickly
+figure out which of these objects.
+
+00:07:52.400 --> 00:07:58.220
+Which of these newest objects are
+no longer used and reclaim them.
+
+00:07:58.220 --> 00:08:04.630
+Then you would gain a lot of memory
+back for a small amount of CPU time.
+
+00:08:04.720 --> 00:08:09.880
+And so this is what was first put in
+place in small talk systems a long,
+
+00:08:09.880 --> 00:08:15.380
+long time ago and is in modern
+garbage collected systems such
+
+00:08:15.380 --> 00:08:17.260
+as Java and C sharp and stuff.
+
+00:08:17.400 --> 00:08:21.420
+So the scheme is I, if I,
+as I've alluded to before,
+
+00:08:21.420 --> 00:08:22.380
+and I'll go through it a couple times.
+
+00:08:22.400 --> 00:08:24.390
+Because it's a little tricky.
+
+00:08:24.420 --> 00:08:28.450
+The idea is that you keep track of
+the generational age of an object.
+
+00:08:28.520 --> 00:08:31.570
+How many times has this
+object survived a collection,
+
+00:08:31.600 --> 00:08:34.520
+for example,
+is one way to think about the general,
+
+00:08:34.560 --> 00:08:35.600
+about the age.
+
+00:08:35.600 --> 00:08:40.140
+So as I said before,
+when you run the collector, this,
+
+00:08:40.140 --> 00:08:43.340
+the scheme is when you're
+running a generational collector.
+
+00:08:43.340 --> 00:08:45.660
+You only care about the newest objects.
+
+00:08:45.740 --> 00:08:48.910
+If you're tracing and you find
+that a new object talks to,
+
+00:08:48.910 --> 00:08:50.560
+references an old object.
+
+00:08:50.860 --> 00:08:53.780
+You skip, you go, well,
+we don't care about the old object.
+
+00:08:53.780 --> 00:08:56.360
+You know,
+it's only if new to new to new to new
+
+00:08:56.470 --> 00:08:58.700
+kinds of tracing that you need to do.
+
+00:09:00.130 --> 00:09:02.430
+When you're done,
+you get to reclaim all those
+
+00:09:02.750 --> 00:09:05.830
+new objects or youngest objects.
+
+00:09:06.140 --> 00:09:14.100
+And the way we make it work is that to
+limit the number of objects we start
+
+00:09:14.100 --> 00:09:19.610
+out searching instead of the whole heap,
+we limit the number of objects in
+
+00:09:19.610 --> 00:09:24.040
+the heap we start searching by using
+something called a write barrier.
+
+00:09:24.090 --> 00:09:28.770
+A write barrier is a,
+in our system it's a function call
+
+00:09:28.830 --> 00:09:34.180
+that says whenever you store a garbage
+collected pointer into something else,
+
+00:09:34.350 --> 00:09:36.810
+you put a little barrier in place,
+you put a function call in place,
+
+00:09:36.810 --> 00:09:40.370
+and the collector gets to know
+about that and keeps track of the
+
+00:09:40.470 --> 00:09:45.900
+fact that this older object has had
+a younger object stored into it.
+
+00:09:45.900 --> 00:09:47.440
+So that's what a write
+barrier is and you'll learn
+
+00:09:47.540 --> 00:09:49.370
+a little bit more about them.
+
+00:09:49.420 --> 00:09:55.870
+So a generational incremental collection
+does not find all the garbage.
+
+00:09:55.910 --> 00:09:58.060
+It just finds garbage
+among the newest stuff.
+
+00:09:58.100 --> 00:10:02.740
+And then after a time we fall back
+and do a full generation later
+
+00:10:02.740 --> 00:10:07.800
+and find out all the other older
+stuff that's turned to garbage.
+
+00:10:07.800 --> 00:10:10.420
+So in a diagram,
+let's see if I can explain
+
+00:10:10.420 --> 00:10:11.420
+this one a little bit better.
+
+00:10:11.420 --> 00:10:16.050
+So the write barrier starts out,
+so as you see we divide
+
+00:10:16.160 --> 00:10:17.900
+the heap conceptually.
+
+00:10:17.900 --> 00:10:22.350
+The heap is really just one continuous
+address space and the ages are
+
+00:10:22.350 --> 00:10:24.370
+kept within the objects themselves.
+
+00:10:24.380 --> 00:10:26.920
+But conceptually it's
+divided into sections.
+
+00:10:26.930 --> 00:10:27.700
+And so the write barriers
+tell us what the heap is.
+
+00:10:27.700 --> 00:10:27.700
+And then we divide it into sections.
+
+00:10:27.700 --> 00:10:32.680
+tell us that perhaps these objects have
+had new objects stored into them at
+
+00:10:32.700 --> 00:10:35.290
+some point since the last collection.
+
+00:10:35.290 --> 00:10:38.870
+And so when it's time to do a collection,
+what we do is we start
+
+00:10:38.950 --> 00:10:42.770
+with those objects,
+we examine the heap or the set
+
+00:10:42.770 --> 00:10:47.720
+of stacks like we did before,
+because you might well have a new
+
+00:10:47.720 --> 00:10:50.000
+object on the stack somewhere.
+
+00:10:50.000 --> 00:10:54.040
+So we trace through the heap, again,
+only going from new
+
+00:10:54.040 --> 00:10:55.890
+objects to newer objects.
+
+00:10:55.890 --> 00:10:59.200
+And as you can see,
+there's very little connection
+
+00:10:59.200 --> 00:11:02.630
+between new objects and new
+objects in this diagram.
+
+00:11:02.670 --> 00:11:07.410
+And we get to reclaim, you know,
+as garbage, the stuff that's from the
+
+00:11:07.510 --> 00:11:10.430
+newest generation only.
+
+00:11:10.760 --> 00:11:18.120
+So in practical terms,
+we recover about 90% of, you know,
+
+00:11:18.120 --> 00:11:21.980
+recently newest generation objects,
+and we kind of lose track of
+
+00:11:21.980 --> 00:11:24.020
+10%. And so what we've done,
+you know, we've reduced the number of
+
+00:11:24.020 --> 00:11:24.020
+objects that we've collected,
+and we've reduced the number of
+
+00:11:24.020 --> 00:11:24.020
+objects that we've collected.
+
+00:11:24.020 --> 00:11:24.020
+And so what we've done is
+we've reduced the number of
+
+00:11:24.020 --> 00:11:24.020
+objects that we've collected,
+and we've reduced the number of
+
+00:11:24.020 --> 00:11:24.020
+objects that we've collected.
+
+00:11:24.020 --> 00:11:24.020
+And so what we've done is
+we've reduced the number of
+
+00:11:24.020 --> 00:11:24.020
+objects that we've collected.
+
+00:11:24.020 --> 00:11:24.020
+And so what we've done is
+we've reduced the number of
+
+00:11:24.020 --> 00:11:24.020
+objects that we've collected.
+
+00:11:24.020 --> 00:11:26.140
+And so what we've done is set
+sort of our collection ratio of
+
+00:11:26.680 --> 00:11:32.070
+generational collections versus
+full generations at about 10 to 1.
+
+00:11:32.070 --> 00:11:36.830
+So we get to recover a lot of objects,
+a lot of time, and every now and then we
+
+00:11:36.830 --> 00:11:38.780
+have to do a full generation.
+
+00:11:41.400 --> 00:11:45.040
+The last thing I want to talk about,
+and the refresher part,
+
+00:11:45.120 --> 00:11:47.290
+is about weak references.
+
+00:11:47.340 --> 00:11:53.100
+So, again,
+when you look at the heap and the
+
+00:11:53.100 --> 00:11:58.630
+set of references into the heap,
+it turns out that there are cases
+
+00:11:58.750 --> 00:12:03.220
+where some of these objects have
+a weak reference to other objects.
+
+00:12:03.300 --> 00:12:06.420
+The garbage collector kind
+of knows where they are,
+
+00:12:06.420 --> 00:12:09.300
+and it knows not to use
+those weak references,
+
+00:12:09.300 --> 00:12:11.300
+these non-retained pointers.
+
+00:12:11.490 --> 00:12:14.000
+So, when doing the tracing,
+
+00:12:15.040 --> 00:12:17.430
+I have three weak references in here.
+
+00:12:17.520 --> 00:12:19.920
+You can have a weak reference
+from a global and from,
+
+00:12:19.980 --> 00:12:22.000
+say, an instance variable in an object.
+
+00:12:22.000 --> 00:12:25.880
+And so, when the garbage collector finds,
+you know,
+
+00:12:25.880 --> 00:12:29.150
+the set of stuff that's garbage,
+note that some of those weak
+
+00:12:29.150 --> 00:12:32.000
+references now point to things
+that are going to get collected.
+
+00:12:32.000 --> 00:12:36.000
+So, what we do is,
+before we even send the finalizers,
+
+00:12:36.000 --> 00:12:39.000
+the collector zeroes
+out the weak references.
+
+00:12:39.000 --> 00:12:40.320
+It knows the addresses.
+
+00:12:40.320 --> 00:12:43.000
+It knows the places these
+weak references are stored.
+
+00:12:43.000 --> 00:12:45.000
+And so, it zeroes them out.
+
+00:12:45.000 --> 00:12:48.000
+It puts zeroes in there where
+all your dangling pointers
+
+00:12:48.000 --> 00:12:49.970
+used to be in a non-GC system.
+
+00:12:50.000 --> 00:12:53.000
+Of course, yeah, this really works.
+
+00:12:53.000 --> 00:12:57.000
+Of course, if your weak reference is to
+an object that's still alive,
+
+00:12:57.000 --> 00:12:59.000
+you know, the garbage collector
+doesn't zero it out.
+
+00:12:59.000 --> 00:13:03.690
+So, this is a very nice facility
+for the cases where you really
+
+00:13:03.690 --> 00:13:07.000
+still do need to have a weak
+reference to one of your objects.
+
+00:13:07.000 --> 00:13:11.980
+And I'll tell you a couple cases where
+that is still a reasonable thing to do.
+
+00:13:13.330 --> 00:13:16.940
+So let me talk a little
+bit about our collector.
+
+00:13:17.110 --> 00:13:21.200
+So garbage collectors
+are kind of like curries.
+
+00:13:21.200 --> 00:13:24.230
+And my first experience
+with curry was sort of in a
+
+00:13:24.260 --> 00:13:28.050
+Chinese restaurant and I came with,
+you know, curried chicken.
+
+00:13:28.050 --> 00:13:30.800
+It was this yellow curry and I loved it.
+
+00:13:30.800 --> 00:13:35.610
+And so later I got exposed to
+Thai food and lo and behold there
+
+00:13:35.610 --> 00:13:39.520
+were red curries and green curries,
+but there weren't any yellow curries.
+
+00:13:39.520 --> 00:13:41.320
+But that didn't matter
+because I liked them both.
+
+00:13:41.320 --> 00:13:44.620
+I liked red curries, green curries,
+and yellow curries.
+
+00:13:44.620 --> 00:13:47.560
+And then of course I found
+out about Indian food.
+
+00:13:47.560 --> 00:13:49.670
+And there's all kinds of curries.
+
+00:13:49.690 --> 00:13:52.720
+Well it turns out that garbage
+collectors are the same way.
+
+00:13:52.860 --> 00:13:55.520
+There is,
+I have yet to see two garbage collected
+
+00:13:55.520 --> 00:13:57.300
+systems that are exactly alike.
+
+00:13:57.300 --> 00:13:58.720
+They all have like curry.
+
+00:13:58.720 --> 00:14:00.260
+Curry is a mixture of things.
+
+00:14:00.270 --> 00:14:04.020
+And so garbage collectors
+are a mixture of techniques.
+
+00:14:04.150 --> 00:14:08.560
+Some as you know are copying,
+some are generational, some are,
+
+00:14:08.620 --> 00:14:12.800
+you know, incremental, some are,
+you know, concurrent.
+
+00:14:12.800 --> 00:14:16.560
+I mean there's just all different kinds
+of terms used for garbage collection.
+
+00:14:16.560 --> 00:14:20.000
+And I forgot to bring the book on it,
+but there's this nice book that,
+
+00:14:20.010 --> 00:14:22.290
+an overview book,
+that talks about all these
+
+00:14:22.290 --> 00:14:23.590
+different techniques.
+
+00:14:23.590 --> 00:14:25.980
+And it's just a summary because
+there are thousands of papers
+
+00:14:26.090 --> 00:14:27.440
+written on garbage collectors.
+
+00:14:27.450 --> 00:14:32.490
+So if you think you knew what curry was,
+or if you think you know
+
+00:14:32.570 --> 00:14:36.240
+what garbage collection is,
+I just ask for your patience.
+
+00:14:36.270 --> 00:14:41.390
+Because what we've crafted for
+you is a custom curry for Cocoa.
+
+00:14:47.300 --> 00:14:52.300
+So we've structured our
+collector as its own library.
+
+00:14:52.300 --> 00:14:57.060
+It lays below in our system,
+below the Objective-C runtime.
+
+00:14:57.090 --> 00:15:03.820
+The API to it is not yet cooked,
+so it's SPI internally
+
+00:15:03.850 --> 00:15:06.200
+for us at Apple right now.
+
+00:15:06.200 --> 00:15:09.950
+We expect to make it API by Leopard GM.
+
+00:15:10.240 --> 00:15:12.960
+The collector has been a
+little bit tuned for Cocoa,
+
+00:15:13.000 --> 00:15:17.090
+but in fact we have been experimenting
+with using this collector with
+
+00:15:17.090 --> 00:15:20.200
+other systems like Ruby and Python.
+
+00:15:20.200 --> 00:15:24.500
+So we really think of the collector
+as a separate technology and it is
+
+00:15:24.540 --> 00:15:29.200
+actually a little more capable than
+what we get to use inside Cocoa today.
+
+00:15:29.200 --> 00:15:34.200
+And we're going to try to keep pushing on
+Cocoa to make use of all of its features.
+
+00:15:34.200 --> 00:15:38.220
+So there's a little bit of distinction
+between what the collector does and
+
+00:15:38.220 --> 00:15:40.200
+how we get to use it inside Cocoa.
+
+00:15:40.230 --> 00:15:44.200
+So let me talk about the
+collector's attributes itself.
+
+00:15:44.210 --> 00:15:47.200
+It is a conservative collector.
+
+00:15:47.200 --> 00:15:51.200
+What that means is we don't try to
+copy objects into new or better places.
+
+00:15:51.200 --> 00:15:53.200
+We don't compact.
+
+00:15:53.360 --> 00:15:56.360
+If you allocate an object
+to a particular spot,
+
+00:15:56.360 --> 00:15:59.600
+it stays at that spot
+for its entire lifetime.
+
+00:16:00.390 --> 00:16:04.590
+As you've seen before,
+the collector is generational.
+
+00:16:04.600 --> 00:16:07.300
+We use these write barrier
+assignment statements to keep
+
+00:16:07.300 --> 00:16:10.300
+track of new stuff going into old.
+
+00:16:10.460 --> 00:16:12.300
+It's non-resurrecting.
+
+00:16:12.300 --> 00:16:15.100
+It's a subtle point,
+but when you try to use it,
+
+00:16:15.100 --> 00:16:17.290
+you'll find some resurrection
+errors right away,
+
+00:16:17.290 --> 00:16:19.400
+so you better remember
+what resurrection means.
+
+00:16:19.400 --> 00:16:23.400
+We don't allow you to
+resurrect your object.
+
+00:16:23.950 --> 00:16:31.060
+Again, registered threads are only
+stopped once and one at a time.
+
+00:16:31.240 --> 00:16:39.700
+A neat side effect of not being a copying
+collector is we don't have to be so...
+
+00:16:39.700 --> 00:16:44.200
+we don't get to use a bump pointer system
+that requires fixed memory addresses.
+
+00:16:44.200 --> 00:16:50.830
+So if your application grows and
+grows and grows in its memory use,
+
+00:16:50.860 --> 00:16:55.000
+the collector will grow
+right along with you.
+
+00:16:57.680 --> 00:17:00.840
+Another interesting thing that
+we did to the collector that
+
+00:17:00.860 --> 00:17:04.650
+is very specific to Cocoa,
+but is actually a very good idea,
+
+00:17:04.650 --> 00:17:07.360
+is that the collector in
+the middle of scanning will
+
+00:17:07.360 --> 00:17:10.240
+actually do a call out and say,
+should I keep going?
+
+00:17:10.240 --> 00:17:16.600
+And so what we do in Cocoa is we
+kind of sniff for input events.
+
+00:17:17.060 --> 00:17:21.060
+So if you're in the middle of collecting,
+because we're trying to
+
+00:17:21.060 --> 00:17:24.180
+steal idle cycles away,
+and some user event pops up,
+
+00:17:24.180 --> 00:17:26.680
+and we kind of sniff at that while
+we're in the middle of scanning,
+
+00:17:26.680 --> 00:17:29.440
+and we'll actually interrupt
+the collection and abort it
+
+00:17:29.440 --> 00:17:31.060
+and respond to the user event.
+
+00:17:31.100 --> 00:17:34.990
+And so this way,
+we keep our system very responsive.
+
+00:17:35.000 --> 00:17:36.970
+We kind of like that.
+
+00:17:43.000 --> 00:17:47.800
+As I said before, maybe I didn't,
+but this collector is very tunable.
+
+00:17:47.800 --> 00:17:51.000
+We're still playing with
+lots of different parameters,
+
+00:17:51.000 --> 00:17:56.690
+whether we track approximately the same
+amount of CPU time that's currently
+
+00:17:56.690 --> 00:17:58.540
+spent in auto-release pools and stuff.
+
+00:17:58.600 --> 00:18:01.890
+But right now,
+we have the collector tuned on the
+
+00:18:01.960 --> 00:18:04.890
+basis of memory allocation thresholds.
+
+00:18:04.900 --> 00:18:06.040
+It's a very standard practice.
+
+00:18:06.040 --> 00:18:08.330
+And again, it is a modern system.
+
+00:18:08.330 --> 00:18:12.340
+It's got this zeroing weak
+reference system built into it.
+
+00:18:14.150 --> 00:18:16.780
+So that's what the Collector is.
+
+00:18:16.780 --> 00:18:17.500
+We're very proud of it.
+
+00:18:17.590 --> 00:18:24.650
+But what you guys want to know is,
+how do I use it inside Cocoa?
+
+00:18:25.230 --> 00:18:27.610
+We don't try to take over everything.
+
+00:18:27.690 --> 00:18:29.980
+This is not a replacement for malloc.
+
+00:18:30.040 --> 00:18:33.110
+There's a lot of research papers
+out there as to how do you
+
+00:18:33.110 --> 00:18:35.100
+add garbage collection to C.
+
+00:18:35.100 --> 00:18:37.770
+And they start out by going, well,
+let's just replace malloc,
+
+00:18:37.770 --> 00:18:39.060
+and then find out what happens.
+
+00:18:39.060 --> 00:18:45.710
+And, well, disaster happens because you
+end up having to examine all
+
+00:18:45.920 --> 00:18:48.250
+of memory to find pointers out.
+
+00:18:48.390 --> 00:18:52.660
+And it's not really C, still,
+because you can't cheat and mask bits
+
+00:18:52.660 --> 00:18:54.880
+onto your pointers and stuff like that.
+
+00:18:55.100 --> 00:18:58.040
+It's a research topic, OK?
+
+00:18:58.210 --> 00:18:59.440
+But we don't do that.
+
+00:18:59.440 --> 00:19:02.830
+So we're not trying to
+replace malloc for all uses.
+
+00:19:02.860 --> 00:19:05.400
+If you're using malloc to
+hold pointers to things,
+
+00:19:05.400 --> 00:19:08.670
+we'll let you get access to the
+collector for your purposes.
+
+00:19:08.790 --> 00:19:10.810
+But just standard malloc-based stuff.
+
+00:19:11.300 --> 00:19:13.250
+Go at it.
+
+00:19:13.290 --> 00:19:13.660
+Have fun.
+
+00:19:13.660 --> 00:19:18.940
+So a design point that's
+hard to come to was that all
+
+00:19:18.980 --> 00:19:22.480
+objects have to be collected.
+
+00:19:22.480 --> 00:19:24.930
+We thought and thought and thought.
+
+00:19:25.100 --> 00:19:29.100
+Trying to figure out how we could have
+some of it collected and some of it not.
+
+00:19:29.100 --> 00:19:31.300
+Would have made a nice,
+easier transition plan,
+
+00:19:31.300 --> 00:19:32.480
+but it just doesn't work.
+
+00:19:32.600 --> 00:19:35.960
+So all objects are
+collected on the system,
+
+00:19:35.960 --> 00:19:39.460
+including core foundation type objects.
+
+00:19:40.390 --> 00:19:42.940
+It is kind of because
+of that restriction,
+
+00:19:42.940 --> 00:19:48.300
+it's an opt-in system in that
+everything that you access,
+
+00:19:48.300 --> 00:19:52.200
+everything that you use
+has to be GC capable.
+
+00:19:53.480 --> 00:19:57.580
+and by Leopard GM,
+all frameworks will be capable.
+
+00:19:57.580 --> 00:20:01.040
+As I said in the earlier talk,
+all the major frameworks are
+
+00:20:01.040 --> 00:20:04.630
+already GC capable and we use
+them pretty much every day,
+
+00:20:04.630 --> 00:20:05.740
+etc., etc.
+
+00:20:05.740 --> 00:20:09.900
+So we will finish the
+GC stuff by Leopard GM.
+
+00:20:10.500 --> 00:20:16.600
+We are targeting for garbage collection
+new Leopard-only applications.
+
+00:20:16.600 --> 00:20:19.500
+And this actually is a
+fairly simple reason.
+
+00:20:19.500 --> 00:20:23.460
+Your existing applications
+can't use GC on Tiger,
+
+00:20:23.460 --> 00:20:24.260
+right?
+
+00:20:24.260 --> 00:20:28.660
+So, and well, you might think, well,
+they may be GC for Leopard
+
+00:20:28.660 --> 00:20:31.140
+and not GC for Tiger and well,
+okay,
+
+00:20:31.140 --> 00:20:35.210
+but it's kind of a testing nightmare,
+don't you think?
+
+00:20:35.240 --> 00:20:37.310
+And, you know,
+not all the APIs are available,
+
+00:20:37.310 --> 00:20:38.120
+etc., etc.
+
+00:20:38.150 --> 00:20:42.200
+So, the other reason is that
+existing applications often have,
+
+00:20:42.500 --> 00:20:45.000
+you know, some kind of plug-in model and,
+you know,
+
+00:20:45.000 --> 00:20:48.000
+you can't support existing plug-ins
+because they're not GC capable.
+
+00:20:48.000 --> 00:20:51.590
+So, we're targeting new applications,
+you know, in time, you know,
+
+00:20:51.590 --> 00:20:54.160
+Leopard will be the old release
+and there will be a new release
+
+00:20:54.160 --> 00:20:58.500
+coming along and that's when we,
+you know, actually expect a lot of
+
+00:20:58.500 --> 00:21:00.550
+you to shift over to use GC.
+
+00:21:00.600 --> 00:21:03.650
+A few of you now are going to
+be targeting new applications.
+
+00:21:03.660 --> 00:21:05.050
+We want to hear from you.
+
+00:21:05.060 --> 00:21:10.480
+So,
+another sort of WWDC restriction is this.
+
+00:21:10.510 --> 00:21:14.040
+This is 32-bit only.
+
+00:21:14.040 --> 00:21:18.160
+Small matter of time, you know,
+about 64-bit.
+
+00:21:18.160 --> 00:21:23.500
+And another big picture topic is that
+the collections right now run on the main
+
+00:21:23.500 --> 00:21:29.480
+thread and so because of locking issues
+and other kinds of stuff like that,
+
+00:21:29.480 --> 00:21:35.920
+we have the app kit to run the
+collector on the main thread.
+
+00:21:37.580 --> 00:21:41.060
+Because of locking during allocations,
+we can't actually run collections
+
+00:21:41.280 --> 00:21:43.040
+at allocation time currently.
+
+00:21:43.130 --> 00:21:45.150
+As soon as we move collections
+off on a second thread,
+
+00:21:45.160 --> 00:21:47.780
+we will be able to do that,
+and that's a very traditional
+
+00:21:47.780 --> 00:21:49.460
+GC kind of thing to do.
+
+00:21:49.690 --> 00:21:55.180
+So this is sort of a mini-overview
+of the stuff you want to hear about.
+
+00:21:55.210 --> 00:21:59.580
+And so I'm not going to
+go into detail right here.
+
+00:21:59.580 --> 00:21:59.580
+We're going to talk about--
+
+00:21:59.750 --> 00:22:02.010
+will talk about some thinking changes,
+new ways of thinking you need
+
+00:22:02.010 --> 00:22:04.400
+to think about when you're doing
+garbage collection programming.
+
+00:22:04.620 --> 00:22:06.600
+We're going to talk about the
+actual support in the language.
+
+00:22:06.600 --> 00:22:11.240
+We're going to talk about the
+APIs that are available to you
+
+00:22:11.240 --> 00:22:15.980
+and some words of wisdom about
+using core foundation objects.
+
+00:22:16.240 --> 00:22:18.530
+So first of all, here's Xcode.
+
+00:22:18.680 --> 00:22:22.700
+That's the checkbox you want to
+use if you want to try it out.
+
+00:22:22.700 --> 00:22:27.590
+It turns into some compiler flag,
+which you can figure out also.
+
+00:22:27.800 --> 00:22:33.000
+But the biggest thing you need to
+think about is that your life cycle
+
+00:22:33.110 --> 00:22:34.770
+changes under garbage collection.
+
+00:22:34.780 --> 00:22:37.960
+You, of course,
+get to forget about retain, release,
+
+00:22:37.960 --> 00:22:41.760
+and auto-release,
+but you also get to forget
+
+00:22:41.760 --> 00:22:45.920
+about unraveling your
+sub-graph of dependencies.
+
+00:22:45.920 --> 00:22:50.160
+You know,
+if those objects are not useful anymore,
+
+00:22:50.170 --> 00:22:55.200
+the collector's figured that out already,
+and you don't have to let go of them.
+
+00:22:55.480 --> 00:22:58.770
+And you're not going to get
+collected if you're being
+
+00:22:59.100 --> 00:23:01.940
+referenced by something else,
+so you don't have to tell that
+
+00:23:01.990 --> 00:23:03.280
+something else to forget about you.
+
+00:23:03.300 --> 00:23:05.480
+So, you know,
+there's a lot of stuff you don't
+
+00:23:05.480 --> 00:23:08.280
+have to worry about anymore,
+and old habits die hard.
+
+00:23:08.280 --> 00:23:13.440
+So, I want to make this point very, very,
+very, very, very strongly.
+
+00:23:13.440 --> 00:23:17.270
+You have to sit back and think
+about your object graph and how
+
+00:23:17.270 --> 00:23:19.250
+you would like it to behave.
+
+00:23:19.260 --> 00:23:21.520
+And the way you want it to
+behave is to let the collector
+
+00:23:21.630 --> 00:23:22.790
+to do all the work for you.
+
+00:23:23.360 --> 00:23:25.600
+So, that's the model you want to go for.
+
+00:23:25.600 --> 00:23:28.440
+You know, obviously,
+retain cycles are now okay.
+
+00:23:28.440 --> 00:23:31.340
+This might be job
+security for some of you,
+
+00:23:31.340 --> 00:23:34.140
+but, well,
+you can get up and walk out now
+
+00:23:34.140 --> 00:23:36.960
+because retain cycles are just fine.
+
+00:23:38.500 --> 00:23:40.380
+So, as I say before,
+and I will say in several
+
+00:23:40.380 --> 00:23:43.630
+slides following this,
+you need to transform your dialect
+
+00:23:43.630 --> 00:23:46.000
+thinking into finalized thinking.
+
+00:23:46.090 --> 00:23:50.300
+And part of that is to use
+zeroing weak references.
+
+00:23:50.780 --> 00:23:54.790
+So let's, I've mentioned finalized
+facts to you before,
+
+00:23:54.790 --> 00:23:55.970
+these two at least.
+
+00:23:56.230 --> 00:23:59.880
+Garbage comes in clumps and the methods
+can be called in an arbitrary order.
+
+00:23:59.900 --> 00:24:03.660
+Another thing that's going to
+surprise you though is that you,
+
+00:24:03.780 --> 00:24:06.820
+your object can be called after
+it's finalized has been finished.
+
+00:24:06.900 --> 00:24:07.430
+Right?
+
+00:24:07.630 --> 00:24:09.190
+That's a side effect of that.
+
+00:24:09.200 --> 00:24:12.220
+So you have to make your
+object a little aware,
+
+00:24:12.220 --> 00:24:15.980
+sort of idempotent to other methods,
+independent of whether the
+
+00:24:16.090 --> 00:24:17.700
+finalized has been called or not.
+
+00:24:18.390 --> 00:24:21.500
+The memory goes away only after
+all the finalizers are sent.
+
+00:24:21.500 --> 00:24:27.580
+And as I explained earlier to you,
+any weak references that you
+
+00:24:27.580 --> 00:24:30.990
+own or weak references to you
+have already been cleared.
+
+00:24:31.000 --> 00:24:35.420
+So with this kind of as the,
+kind of the mental model
+
+00:24:35.420 --> 00:24:39.380
+of what's going on,
+let's not forget about resurrection.
+
+00:24:40.920 --> 00:24:42.090
+Let's move on to thinking.
+
+00:24:42.320 --> 00:24:45.100
+So what should you do in a finalizer?
+
+00:24:45.180 --> 00:24:47.450
+Well, hopefully nothing.
+
+00:24:47.560 --> 00:24:50.500
+Finalizers should do no useful work.
+
+00:24:50.700 --> 00:24:55.660
+Now, what useful work do people
+do today in dialog methods?
+
+00:24:55.660 --> 00:24:56.590
+Hmm.
+
+00:24:57.090 --> 00:25:00.270
+Flush buffers and really
+make stuff happen sometimes.
+
+00:25:00.430 --> 00:25:04.460
+Some people program their
+objects such that they do action,
+
+00:25:04.460 --> 00:25:07.770
+have an action on the last release.
+
+00:25:07.930 --> 00:25:10.600
+You know, it's kind of a last use model.
+
+00:25:10.600 --> 00:25:13.030
+I mean,
+this is a kind of a fragile way of
+
+00:25:13.110 --> 00:25:17.130
+programming because if you've got,
+you know, a dependent captive subgraph
+
+00:25:17.130 --> 00:25:20.840
+and somebody else has a retained
+reference to the middle of your graph,
+
+00:25:20.840 --> 00:25:25.060
+then your teardown, you know,
+the last action on release gets kind
+
+00:25:25.060 --> 00:25:29.190
+of screwed up because that middle
+object doesn't do its last thing
+
+00:25:29.190 --> 00:25:31.630
+because it's not the last reference.
+
+00:25:31.670 --> 00:25:36.940
+So, as a style of thinking,
+your finalizer should do no
+
+00:25:36.940 --> 00:25:40.270
+useful work because it's going
+to be called when the garbage
+
+00:25:40.270 --> 00:25:44.950
+collector thinks nobody's using it,
+not when the actual
+
+00:25:44.950 --> 00:25:48.200
+last use was let go of.
+
+00:25:48.250 --> 00:25:53.110
+So, as I say,
+finalizers ideally should not even exist.
+
+00:25:53.190 --> 00:25:56.310
+You don't have to unravel that subgraph.
+
+00:25:56.490 --> 00:26:00.530
+They should really only be used
+to recover external references.
+
+00:26:00.530 --> 00:26:03.730
+File descriptors,
+communications channels, you know,
+
+00:26:03.730 --> 00:26:04.400
+graphics images.
+
+00:26:04.400 --> 00:26:09.190
+I mean stuff that's really kind
+of external to Objective-C itself.
+
+00:26:09.500 --> 00:26:14.080
+You can't rely on that orderly object
+reclamation like I said before.
+
+00:26:14.080 --> 00:26:18.680
+We have seen cases where we've
+had to add methods that say,
+
+00:26:18.680 --> 00:26:23.810
+"Okay, do your thing now in order to get
+out of this last action on last
+
+00:26:23.810 --> 00:26:28.400
+release semantics." You may need to
+do that now if you're going to be
+
+00:26:28.410 --> 00:26:31.000
+your ad sort of the do it now method.
+
+00:26:32.210 --> 00:26:36.880
+So let's take a look at a, maybe,
+you know, not a typical,
+
+00:26:36.880 --> 00:26:38.700
+but not actually an atypical one.
+
+00:26:38.700 --> 00:26:41.400
+This is a fairly complex dealloc method.
+
+00:26:41.420 --> 00:26:44.240
+So you might think, "Yeah,
+that's sort of true.
+
+00:26:44.240 --> 00:26:47.880
+You can just turn deallocs
+into finalizes." Now,
+
+00:26:47.880 --> 00:26:49.700
+is that all you need to do?
+
+00:26:49.700 --> 00:26:53.800
+Well, it would sort of work,
+but it's far, far from optimal.
+
+00:26:53.800 --> 00:26:56.200
+You know,
+all the finalizers happen in a bunch.
+
+00:26:56.200 --> 00:26:58.310
+It's kind of like the
+auto-release pool going away,
+
+00:26:58.310 --> 00:27:01.100
+and if you can get rid
+of that bunch of work,
+
+00:27:01.110 --> 00:27:03.290
+then your program's going to run faster.
+
+00:27:03.300 --> 00:27:04.690
+It's a good thing to optimize this.
+
+00:27:04.720 --> 00:27:07.270
+Let's see what we can do to this method.
+
+00:27:07.930 --> 00:27:09.830
+I already told you that
+releases do nothing,
+
+00:27:09.830 --> 00:27:10.240
+right?
+
+00:27:10.400 --> 00:27:12.470
+So let's just get rid
+of those two things.
+
+00:27:12.470 --> 00:27:13.970
+They're just not necessary.
+
+00:27:13.980 --> 00:27:15.180
+What's next?
+
+00:27:15.180 --> 00:27:19.310
+Well, it turns out that the Notification
+Center is a very old object,
+
+00:27:19.350 --> 00:27:24.200
+and it has, since its inception,
+held non-retained references to things.
+
+00:27:24.200 --> 00:27:28.420
+You don't want the Notification
+Center to keep you alive,
+
+00:27:28.420 --> 00:27:32.240
+so when you go do a dialog, though,
+you don't want it to
+
+00:27:32.420 --> 00:27:35.420
+hold a stale pointer,
+so you've had to do this
+
+00:27:35.460 --> 00:27:37.040
+remove observer stuff.
+
+00:27:37.710 --> 00:27:40.830
+It's quite tedious and quite
+crashy if you forget to do that.
+
+00:27:40.890 --> 00:27:46.900
+Well, what we did was we went in and
+started and replumbed the Notification
+
+00:27:46.900 --> 00:27:48.480
+Center to use weak references.
+
+00:27:48.480 --> 00:27:52.230
+So the garbage collector zeroes them
+out when they're no longer used.
+
+00:27:55.600 --> 00:27:58.100
+That method gets to go away.
+
+00:27:58.370 --> 00:28:00.100
+We like that.
+
+00:28:00.200 --> 00:28:02.390
+What else is possible to do?
+
+00:28:02.400 --> 00:28:07.480
+Well, you know, I threw it away earlier,
+but this object had a name field,
+
+00:28:07.480 --> 00:28:10.540
+and that's often the case that
+you might have a global table,
+
+00:28:10.540 --> 00:28:14.020
+you know, indexed by name to this object
+so that your clients can come
+
+00:28:14.020 --> 00:28:17.260
+in by name and you can hand out
+the thing that already exists.
+
+00:28:17.260 --> 00:28:20.490
+You know, it's kind of a weak cache
+of things that are existing,
+
+00:28:20.500 --> 00:28:23.530
+and so you need to take yourself
+out of this global table.
+
+00:28:24.020 --> 00:28:28.630
+Well, if you listen up very carefully,
+you can convert your table into
+
+00:28:28.630 --> 00:28:32.680
+one that has zeroing weak slots
+in it such that if you adjust that
+
+00:28:32.790 --> 00:28:36.150
+table over to use weak pointers,
+you don't have to take yourself
+
+00:28:36.150 --> 00:28:37.660
+out of the global table anymore.
+
+00:28:37.660 --> 00:28:38.760
+It's pretty cool.
+
+00:28:40.850 --> 00:28:44.690
+Another kind of reference that's
+going to happen in the same way,
+
+00:28:44.850 --> 00:28:46.640
+you might have something like, oh,
+I don't know,
+
+00:28:46.640 --> 00:28:49.820
+an inspector panel or something
+that's referencing you,
+
+00:28:49.820 --> 00:28:52.970
+but that you also don't
+want to hold you alive.
+
+00:28:52.980 --> 00:28:55.760
+You know,
+there might be a lot of those kinds
+
+00:28:55.760 --> 00:28:59.650
+of things in your application,
+and it's very tedious and
+
+00:28:59.650 --> 00:29:04.140
+error-prone to remember,
+you know, who all might be looking at you
+
+00:29:04.140 --> 00:29:07.470
+and to tell them to stop looking
+at you when you're going away.
+
+00:29:07.480 --> 00:29:12.160
+So, assuming you teach your
+friends about weak references,
+
+00:29:12.160 --> 00:29:14.360
+then that line can go away.
+
+00:29:14.380 --> 00:29:17.310
+And, obviously,
+you've listened to me before,
+
+00:29:17.440 --> 00:29:20.810
+and you know that your parent
+is part of this graph that you
+
+00:29:20.810 --> 00:29:23.200
+don't have to worry about anymore.
+
+00:29:23.200 --> 00:29:25.760
+I mean, if your parent isn't going
+away when you're going away,
+
+00:29:25.760 --> 00:29:27.640
+your parent should be
+using weak references,
+
+00:29:27.640 --> 00:29:28.140
+too.
+
+00:29:28.140 --> 00:29:32.210
+But, let's just assume that this
+object graph unraveling stuff,
+
+00:29:32.210 --> 00:29:35.960
+you've listened,
+and you haven't drank my Kool-Aid.
+
+00:29:35.960 --> 00:29:37.460
+But, anyway, you've gotten the message.
+
+00:29:37.480 --> 00:29:39.480
+And so, you're not going to
+worry about that anymore.
+
+00:29:39.480 --> 00:29:42.480
+And so, you end up with this as
+your finalized method,
+
+00:29:42.480 --> 00:29:47.980
+which, of course, can go away all,
+you know, can go completely away.
+
+00:29:47.980 --> 00:29:50.680
+And so,
+sort of in the competition between
+
+00:29:50.680 --> 00:29:55.380
+dialic versus finalized methods,
+I claim that finalized is
+
+00:29:55.380 --> 00:29:57.940
+the winner by a no-show.
+
+00:30:04.510 --> 00:30:06.610
+Let's talk about that API.
+
+00:30:06.990 --> 00:30:08.500
+Here is the garbage collector object.
+
+00:30:08.700 --> 00:30:10.860
+There's a lot of stuff up there.
+
+00:30:10.860 --> 00:30:14.310
+Most of it's not all that interesting,
+but I do want to talk about
+
+00:30:14.370 --> 00:30:15.500
+a couple of pairs of methods.
+
+00:30:16.330 --> 00:30:18.150
+Collect if needed.
+
+00:30:18.150 --> 00:30:23.900
+If you have performance tuned
+existing applications already,
+
+00:30:23.900 --> 00:30:26.980
+then you know that every now
+and then you have to set up
+
+00:30:27.100 --> 00:30:28.500
+your own auto-release pool.
+
+00:30:28.500 --> 00:30:31.980
+As of Tiger, you were supposed to send
+it the drain message.
+
+00:30:31.980 --> 00:30:33.820
+Now, why did we do that?
+
+00:30:33.820 --> 00:30:35.830
+Well,
+the release messages were being ignored,
+
+00:30:35.830 --> 00:30:36.380
+remember?
+
+00:30:37.400 --> 00:30:41.430
+So, what we've done is we actually have
+a little hook in the auto-release
+
+00:30:41.430 --> 00:30:45.380
+pool mechanism that says,
+you know, call the collector to collect,
+
+00:30:45.380 --> 00:30:47.380
+you know,
+or at least think about collecting.
+
+00:30:47.380 --> 00:30:50.280
+So, that's sort of a
+compatibility bridge for us,
+
+00:30:50.280 --> 00:30:54.510
+but if you're writing new code,
+what you do instead is, of course,
+
+00:30:54.510 --> 00:30:58.090
+tell the collector to
+collect if it's necessary.
+
+00:30:58.190 --> 00:31:02.060
+Again, if there's user events
+going to be coming up,
+
+00:31:02.180 --> 00:31:05.190
+the collector will, you know,
+the collector may not run if
+
+00:31:05.190 --> 00:31:07.260
+the thresholds aren't exceeded.
+
+00:31:07.360 --> 00:31:10.100
+It may start running and decide
+there's better things to do.
+
+00:31:10.100 --> 00:31:13.470
+So this is a call you
+can make fairly freely.
+
+00:31:13.470 --> 00:31:16.770
+You know, we're not going to collect
+every time you call us.
+
+00:31:16.800 --> 00:31:18.500
+We're going to collect if it's necessary.
+
+00:31:18.500 --> 00:31:22.930
+But you know, based on your tuning,
+that this might be a good idea.
+
+00:31:22.940 --> 00:31:26.180
+So we ask you to continue to
+tell us that it's a good idea
+
+00:31:26.180 --> 00:31:28.020
+to collect at these times.
+
+00:31:28.100 --> 00:31:31.970
+The other call, collect exhaustively,
+is something you can use
+
+00:31:32.040 --> 00:31:35.960
+when something big has,
+you know, you've closed a document or,
+
+00:31:36.040 --> 00:31:40.180
+you know, you know that a whole bunch of
+stuff has gone away and it might
+
+00:31:40.180 --> 00:31:44.020
+be time to like really wring
+the memory out of the system.
+
+00:31:44.020 --> 00:31:47.630
+And you can call us,
+collect exhaustively, and we will,
+
+00:31:47.630 --> 00:31:50.420
+we will, we will collect exhaustively.
+
+00:31:54.480 --> 00:31:58.280
+Another interesting API pair is
+on a pointer-by-pointer basis
+
+00:31:58.280 --> 00:32:00.450
+to disable collection for it.
+
+00:32:00.450 --> 00:32:03.490
+This is the JNI global
+reference equivalent.
+
+00:32:03.490 --> 00:32:07.060
+If you need to stick your pointer into,
+oh, I don't know,
+
+00:32:07.180 --> 00:32:11.500
+some piece of malloc memory that
+you don't allocate and you need to,
+
+00:32:11.500 --> 00:32:14.590
+you know, you used to be able to just,
+you know,
+
+00:32:14.590 --> 00:32:19.070
+retain your object or create a whole
+new one and that is going to hold the
+
+00:32:19.070 --> 00:32:24.380
+only reference to your object and then
+there's some kind of free-me-save.
+
+00:32:24.400 --> 00:32:26.450
+You call back and that's
+the place you retain it.
+
+00:32:26.460 --> 00:32:28.340
+Well, it's malloc memory.
+
+00:32:28.340 --> 00:32:31.480
+The collector is never going
+to look through malloc heap
+
+00:32:31.660 --> 00:32:35.800
+and so you need a way to,
+you know, let your object survive in
+
+00:32:35.800 --> 00:32:37.650
+that hunk of malloc memory.
+
+00:32:37.660 --> 00:32:40.560
+And so what you do is you
+tell the collector to,
+
+00:32:40.730 --> 00:32:42.570
+you know, don't collect me.
+
+00:32:42.600 --> 00:32:45.760
+And so, you know, on the,
+when you call back,
+
+00:32:45.760 --> 00:32:50.070
+when your release-me callback or
+I'm done callback comes along,
+
+00:32:50.070 --> 00:32:51.570
+you do the other one.
+
+00:32:51.570 --> 00:32:53.720
+You disable the collector.
+
+00:32:54.000 --> 00:32:54.880
+These things stack.
+
+00:32:54.880 --> 00:32:57.090
+There's actually, you know,
+a little reference count
+
+00:32:57.090 --> 00:32:58.570
+going on underneath,
+but, you know,
+
+00:32:58.630 --> 00:33:00.150
+you don't really need to know that.
+
+00:33:00.210 --> 00:33:03.510
+You disable the collector and enable it.
+
+00:33:07.000 --> 00:33:11.460
+Having looked through,
+or having my tools looked through,
+
+00:33:11.460 --> 00:33:13.340
+but having reviewed what
+the tools have done,
+
+00:33:13.340 --> 00:33:18.640
+having examined and processed hundreds
+of thousands of lines of code,
+
+00:33:18.700 --> 00:35:19.000
+[Transcript missing]
+
+00:35:19.480 --> 00:35:21.810
+While we're there,
+there's another couple things you
+
+00:35:21.890 --> 00:35:24.940
+kind of always wanted to do but
+couldn't do with dictionaries.
+
+00:35:24.940 --> 00:35:27.640
+So let me talk about two
+other options you can do.
+
+00:35:27.640 --> 00:35:30.040
+The first one I already mentioned,
+zeroing memory.
+
+00:35:30.040 --> 00:35:32.540
+That's a very important one
+from the collector perspective,
+
+00:35:32.540 --> 00:35:37.650
+but this is a general purpose object,
+and so some of the things that are
+
+00:35:37.650 --> 00:35:42.000
+interesting to do to it are to maybe
+copy its objects on the way in.
+
+00:35:42.000 --> 00:35:44.130
+That's what dictionary does for its keys.
+
+00:35:44.130 --> 00:35:45.380
+That's interesting.
+
+00:35:45.780 --> 00:35:50.290
+But another one that's often very useful,
+I found it in some of the Omnicode,
+
+00:35:50.370 --> 00:35:54.500
+for example, is to key off of the object
+pointer instead of sending hash
+
+00:35:54.500 --> 00:35:56.320
+method and as equal method.
+
+00:35:56.320 --> 00:35:59.220
+So if you need to map
+objects by pointers,
+
+00:35:59.220 --> 00:36:01.950
+you get that option also,
+and this is the initialization
+
+00:36:01.950 --> 00:36:03.180
+method you use for that.
+
+00:36:03.200 --> 00:36:05.900
+And this style is carried
+over to a hash table.
+
+00:36:05.900 --> 00:36:08.220
+I'm not going to talk about that.
+
+00:36:08.230 --> 00:36:14.660
+Before I talk about how to allocate
+and use garbage collected memory,
+
+00:36:14.760 --> 00:36:17.880
+You know, for C stuff,
+I have to talk about how we do
+
+00:36:17.890 --> 00:36:20.770
+some of this stuff in the language.
+
+00:36:20.900 --> 00:36:25.890
+So, I've already said that
+assignments are overridden,
+
+00:36:25.890 --> 00:36:31.440
+or assignment helper functions are used,
+so to be a little bit
+
+00:36:31.440 --> 00:36:34.700
+more literal about it,
+if you have these three lines of code,
+
+00:36:34.700 --> 00:36:37.800
+you've got a local Y, and you've got an
+instance variable I of R,
+
+00:36:37.800 --> 00:36:38.540
+and a global.
+
+00:36:38.540 --> 00:36:44.050
+So, what the compiler does is transform
+the instance variable and the global
+
+00:36:44.050 --> 00:36:48.240
+assignments into helper functions,
+and those helper functions
+
+00:36:48.240 --> 00:36:49.530
+are my write barriers.
+
+00:36:50.910 --> 00:36:54.330
+You might go,
+"Is that expensive?" But in fact,
+
+00:36:54.440 --> 00:36:56.250
+we did this for Tiger.
+
+00:36:56.260 --> 00:37:00.940
+So, Tiger already has been built with
+these function calls in place.
+
+00:37:00.940 --> 00:37:03.580
+On PowerPC,
+these function calls are actually
+
+00:37:03.580 --> 00:37:08.030
+single instruction dispatches,
+so they are very fast.
+
+00:37:08.060 --> 00:37:12.040
+So, to just make the point here,
+when we write,
+
+00:37:12.040 --> 00:37:15.330
+when you write stuff into stack,
+into local variables,
+
+00:37:15.340 --> 00:37:18.030
+we know we're going to look at the stack,
+so we don't need a
+
+00:37:18.030 --> 00:37:19.400
+write barrier for that.
+
+00:37:19.400 --> 00:37:20.700
+So, it's really, really easy to do.
+
+00:37:20.760 --> 00:37:25.460
+It's really only for sort of
+graph changing kinds of operations
+
+00:37:25.460 --> 00:37:26.630
+that we use the write barrier.
+
+00:37:31.640 --> 00:37:33.780
+A little bit of review.
+
+00:37:33.800 --> 00:37:36.140
+Const.
+
+00:37:36.140 --> 00:37:39.100
+When we use const in this way,
+we say that the character
+
+00:37:39.100 --> 00:37:40.750
+x cannot be changed.
+
+00:37:40.830 --> 00:37:45.220
+When we put const on the
+right-hand side of a pointer,
+
+00:37:45.220 --> 00:37:49.260
+we say that the pointer can't be changed.
+
+00:37:49.260 --> 00:37:53.680
+So, it's a little tricky,
+but the idea is that right-hand
+
+00:37:53.680 --> 00:37:58.360
+sides of the pointers are actually
+recognized by the compiler.
+
+00:37:58.360 --> 00:38:02.320
+The ++xp is really xp is
+assigned some new value,
+
+00:38:02.320 --> 00:38:07.020
+and it's that assignment that is
+flagged by the compiler as being told
+
+00:38:07.020 --> 00:38:10.100
+"no." That assignment is very familiar,
+right?
+
+00:38:10.100 --> 00:38:12.690
+That's sort of like a "hmm,
+garbage." If the compiler
+
+00:38:12.690 --> 00:38:14.860
+knows about assignments,
+that's what we've done to the compiler.
+
+00:38:14.860 --> 00:38:17.740
+We've taught it about
+assignments to things.
+
+00:38:18.140 --> 00:38:18.540
+Const.
+
+00:38:18.540 --> 00:38:22.490
+And so, we've introduced two
+new language attributes,
+
+00:38:22.490 --> 00:38:25.000
+or storage attributes, on pointers.
+
+00:38:25.000 --> 00:38:28.940
+The first one is called strong,
+and that's pretty much what
+
+00:38:28.940 --> 00:38:30.840
+we're doing for objects.
+
+00:38:30.840 --> 00:38:32.280
+I'll reiterate that, too.
+
+00:38:32.280 --> 00:38:37.340
+So, this is if all pointers to
+objects have a strong attribute.
+
+00:38:37.340 --> 00:38:40.090
+But in this case,
+we use it on just normal C stuff.
+
+00:38:42.050 --> 00:38:47.150
+So when root is assigned,
+because it's been told
+
+00:38:47.150 --> 00:38:51.100
+that it holds GC storage,
+that assignment is overridden
+
+00:38:51.100 --> 00:38:54.960
+by the compiler to be the
+global assignment thing.
+
+00:38:54.960 --> 00:38:59.240
+We also introduce a weak
+storage attribute in the
+
+00:38:59.240 --> 00:39:01.800
+same kind of language way.
+
+00:39:01.800 --> 00:39:04.980
+And what's a little even more
+special about weak is that we
+
+00:39:04.980 --> 00:39:08.740
+need to have a read barrier also.
+
+00:39:08.740 --> 00:39:12.580
+So that when you reference that object,
+we actually have to go through
+
+00:39:12.580 --> 00:39:14.310
+a helper function call as well.
+
+00:39:14.310 --> 00:39:17.070
+So it's a different one in both cases.
+
+00:39:17.260 --> 00:39:21.890
+But we need to do that so that
+when we read that value out,
+
+00:39:21.920 --> 00:39:25.140
+we go under the right circumstances.
+
+00:39:25.240 --> 00:39:27.140
+We don't always have to
+take locks and stuff.
+
+00:39:27.260 --> 00:39:29.960
+But when we pull it out,
+under the right circumstances,
+
+00:39:29.960 --> 00:39:33.730
+we interlock with the collector to
+make sure we're not going to revive
+
+00:39:33.730 --> 00:39:37.240
+something that would otherwise
+have been found to be garbage
+
+00:39:37.240 --> 00:39:38.700
+and about ready to be taken away.
+
+00:39:38.700 --> 00:39:43.750
+So let's talk a little
+bit about pointers.
+
+00:39:44.920 --> 00:39:48.620
+So as I said before,
+the compiler treats all objects,
+
+00:39:48.660 --> 00:39:53.440
+all object pointers,
+as if they have that strong attribute.
+
+00:39:53.440 --> 00:40:02.560
+Structures can contain objects
+and other strong pointers,
+
+00:40:02.560 --> 00:40:05.990
+and the compiler will
+generate yet another call,
+
+00:40:05.990 --> 00:40:10.300
+a strong cast assignment,
+when assigning pointers into
+
+00:40:10.440 --> 00:40:13.140
+the middle of structures.
+
+00:40:13.140 --> 00:40:16.210
+And unions can also.
+
+00:40:16.600 --> 00:40:19.560
+Anyway, be careful.
+
+00:40:19.700 --> 00:40:23.920
+For weak,
+we only can allow zeroing weak references
+
+00:40:23.920 --> 00:40:25.620
+on instance variables and globals.
+
+00:40:25.620 --> 00:40:28.860
+We need to know when that
+memory goes away in order to
+
+00:40:28.860 --> 00:40:30.780
+unregister that reference.
+
+00:40:30.780 --> 00:40:36.990
+We can only do that for
+things we know the layout of,
+
+00:40:37.000 --> 00:40:38.820
+which we do.
+
+00:40:38.820 --> 00:40:41.850
+The runtime knows how
+many variables we have,
+
+00:40:41.850 --> 00:40:44.150
+and it also knows where they are.
+
+00:40:44.200 --> 00:40:53.680
+So part of the new runtime
+metadata includes references
+
+00:40:53.680 --> 00:40:58.000
+to which ones are weak.
+
+00:40:58.000 --> 00:40:58.000
+So when an object goes away,
+we kind of go, "Hmm,
+
+00:40:58.000 --> 00:40:58.000
+does this class have any weak
+references?" And if it does,
+
+00:40:58.000 --> 00:40:58.000
+we go and we unregister the addresses.
+
+00:40:58.350 --> 00:41:01.640
+So C is C and you can hang yourself.
+
+00:41:01.810 --> 00:41:03.010
+We all know that.
+
+00:41:03.090 --> 00:41:06.080
+So there are cases where we
+have pointers to pointers.
+
+00:41:06.500 --> 00:41:14.540
+The AppKit has been propagating this
+NSError ** thing and it can give
+
+00:41:14.540 --> 00:41:19.570
+us some troubles because we don't
+yet handle taking the address of a
+
+00:41:19.570 --> 00:41:21.890
+global pointer and handing it through.
+
+00:41:22.000 --> 00:41:24.410
+We know how to fix that,
+but that's not fixed
+
+00:41:24.410 --> 00:41:25.750
+in your current seed.
+
+00:41:25.870 --> 00:41:28.240
+So that's just a little
+bit of a caveat right now.
+
+00:41:28.300 --> 00:41:29.330
+Yeah.
+
+00:41:29.610 --> 00:41:36.620
+Another thing which is we can't and
+will not support is if you somehow get a
+
+00:41:36.620 --> 00:41:43.060
+pointer to a pointer on another thread,
+another thread stack.
+
+00:41:44.420 --> 00:41:46.560
+We might get away with it,
+but if you kind of update
+
+00:41:46.710 --> 00:41:49.040
+those pointers and stuff,
+you will fool our collector.
+
+00:41:49.040 --> 00:41:52.180
+The object will get collected
+and your program will crash.
+
+00:41:52.180 --> 00:41:54.780
+So we really say stay away from that.
+
+00:41:54.800 --> 00:41:59.340
+I should at this point say, I mean,
+we are adding garbage collection not
+
+00:41:59.340 --> 00:42:03.130
+only to the object part of Objective-C,
+but to the C part.
+
+00:42:03.160 --> 00:42:06.660
+And C is, you know, somewhat untameable.
+
+00:42:06.660 --> 00:42:09.460
+So you have to be,
+you have to cooperate with us.
+
+00:42:09.460 --> 00:42:12.600
+You got to go maybe 5% of the
+way and let us do the other
+
+00:42:12.600 --> 00:42:14.340
+95%. But you got to help us out.
+
+00:42:14.390 --> 00:42:17.250
+Not disguise your pointers
+with masks and stuff.
+
+00:42:17.250 --> 00:42:19.730
+And the garbage collection
+system will work.
+
+00:42:21.530 --> 00:42:27.390
+So now we just have a
+small API to expose to you.
+
+00:42:27.710 --> 00:42:33.620
+You must use these strong attributes
+in order to get these right barriers,
+
+00:42:33.620 --> 00:42:38.050
+which enable the performance that
+enables garbage collection to be real.
+
+00:42:38.290 --> 00:42:42.170
+If you miss a right barrier,
+we will collect that object
+
+00:42:42.180 --> 00:42:45.620
+right underneath you right away,
+and you will get a very fast crash.
+
+00:42:45.760 --> 00:42:48.820
+So you have to use these
+strong attributes if you want
+
+00:42:48.820 --> 00:42:50.410
+to get into C programming.
+
+00:42:50.510 --> 00:42:51.940
+So here's a simple example.
+
+00:42:51.940 --> 00:42:55.880
+We add the strong
+attribute onto a char star,
+
+00:42:55.900 --> 00:42:58.180
+and we call this new method,
+or this new function,
+
+00:42:58.180 --> 00:42:59.940
+allocate collectible.
+
+00:42:59.990 --> 00:43:08.990
+And what happens is when you assign from
+that into the string instance variable,
+
+00:43:09.300 --> 00:43:11.960
+the correct right barrier will happen.
+
+00:43:12.170 --> 00:43:15.500
+Another example, more complicated,
+let's say you want to have
+
+00:43:15.500 --> 00:43:18.700
+your own C structure based,
+collected and stuff.
+
+00:43:18.700 --> 00:43:19.460
+It's possible.
+
+00:43:19.460 --> 00:43:21.110
+This is a little hairy.
+
+00:43:21.120 --> 00:43:24.650
+We don't recommend it necessarily,
+but it is possible for
+
+00:43:24.680 --> 00:43:26.240
+the intrepid among you.
+
+00:43:26.430 --> 00:43:30.940
+And so in this case,
+by declaring the next pointer strong,
+
+00:43:30.940 --> 00:43:34.210
+then the appropriate assignments
+are going to get right barriers.
+
+00:43:34.330 --> 00:43:38.630
+But notice that since we're not only
+allocating a collectible piece of memory,
+
+00:43:38.630 --> 00:43:44.340
+we are also going to tell the allocator
+that it's going to hold pointers so
+
+00:43:44.610 --> 00:43:48.430
+that the collector will scan it and
+try to chase references through it.
+
+00:43:48.550 --> 00:43:52.460
+So that's a big flavor
+for garbage collection.
+
+00:43:52.500 --> 00:43:54.120
+Scanning takes a lot of time.
+
+00:43:54.120 --> 00:43:57.550
+And so whenever we don't have to scan,
+we don't want to.
+
+00:43:57.590 --> 00:44:00.460
+So inside the collector,
+we mark memory as whether it
+
+00:44:00.460 --> 00:44:01.930
+needs to be scanned or not.
+
+00:44:01.970 --> 00:44:05.940
+And as I said before, for objects,
+we know the layout.
+
+00:44:05.940 --> 00:44:10.040
+And so we do the right thing
+with the layout as well.
+
+00:44:10.690 --> 00:44:14.340
+In this case,
+the next pointer gets the right barrier
+
+00:44:14.340 --> 00:44:16.720
+because of that strong declaration.
+
+00:44:16.770 --> 00:44:21.540
+I meant to, and I didn't,
+that elem thing up there, the ID,
+
+00:44:21.780 --> 00:44:24.320
+it also gets a right barrier
+automatically because
+
+00:44:24.320 --> 00:44:25.960
+it's an object pointer.
+
+00:44:26.070 --> 00:44:29.790
+And object pointers inside structures
+also get the right barriers.
+
+00:44:30.200 --> 00:44:34.680
+Diving in,
+we have an NS reallocate collectible,
+
+00:44:34.680 --> 00:44:37.200
+and we've got a couple options.
+
+00:44:37.300 --> 00:44:59.300
+[Transcript missing]
+
+00:45:00.030 --> 00:45:03.380
+And that other funny one,
+Collector Disabled,
+
+00:45:03.380 --> 00:45:08.440
+tells the collector actually to start
+this object out as uncollectible.
+
+00:45:08.440 --> 00:45:13.010
+A funny way we integrate with
+the zone system is that you
+
+00:45:13.010 --> 00:45:15.840
+actually can call free on this.
+
+00:45:15.840 --> 00:45:18.780
+So if you really just need a
+list of pointers to objects,
+
+00:45:18.780 --> 00:45:21.500
+you can allocate sort
+of this thing disabled,
+
+00:45:21.500 --> 00:45:23.480
+stuff pointers into it to
+get the right barriers,
+
+00:45:23.480 --> 00:45:27.200
+and when you're done with it,
+and you know, you can hang yourself,
+
+00:45:27.200 --> 00:45:30.040
+but you get to free that
+hunk of memory right then.
+
+00:45:30.040 --> 00:45:32.890
+The other way is to hand
+it off to the collector,
+
+00:45:33.020 --> 00:45:34.620
+but I mean,
+that would be kind of strange.
+
+00:45:34.620 --> 00:45:36.410
+Just don't use this option to begin with.
+
+00:45:38.700 --> 00:45:42.140
+Using core foundation objects.
+
+00:45:42.250 --> 00:45:49.240
+So there's a handful of core foundation
+objects that are called fully bridged.
+
+00:45:49.270 --> 00:45:51.100
+And it means two things to us.
+
+00:45:51.100 --> 00:45:54.220
+Well, it means one thing to you,
+which you probably know already.
+
+00:45:54.220 --> 00:45:59.740
+A fully bridged object is one that has--
+you can have Objective-C API on it or
+
+00:45:59.740 --> 00:46:02.640
+use the C function API on it underneath.
+
+00:46:02.640 --> 00:46:09.850
+So a dictionary, you've got cf, get item,
+or something like-- no, CFDictionary,
+
+00:46:09.850 --> 00:46:10.760
+get item on it.
+
+00:46:10.760 --> 00:46:16.420
+Or you can pass it an Objective-C method
+if you cast it in the right way.
+
+00:46:16.440 --> 00:46:19.000
+So that's the first
+definition of fully bridged.
+
+00:46:19.040 --> 00:46:24.360
+The second definition for us
+is that inside these objects,
+
+00:46:24.360 --> 00:46:28.220
+we've made them GC savvy,
+such that they can hold
+
+00:46:28.220 --> 00:46:30.720
+references in a GC savvy way.
+
+00:46:30.720 --> 00:46:33.820
+It's programmed in C,
+and so the compiler doesn't
+
+00:46:33.820 --> 00:46:34.880
+give us the right barriers.
+
+00:46:34.880 --> 00:46:37.000
+We've had to hand code the
+right barriers in there,
+
+00:46:37.000 --> 00:46:40.160
+and it is a-- difficult thing to do.
+
+00:46:40.170 --> 00:46:41.970
+That's why this is for Objective-C.
+
+00:46:41.970 --> 00:46:42.890
+It's for the object part.
+
+00:46:43.000 --> 00:46:46.410
+But we do what we need
+to make this work well.
+
+00:46:46.520 --> 00:46:50.610
+There are hundreds of other sort
+of CF-type objects out there,
+
+00:46:50.610 --> 00:46:53.740
+though, including other things
+in core foundation.
+
+00:46:53.740 --> 00:46:57.710
+Now, the only bridging that really kind
+of goes on with these things is that,
+
+00:46:57.710 --> 00:46:59.580
+well, they get to go into a collections.
+
+00:46:59.580 --> 00:47:03.800
+You can-- it turns out you can actually
+send retain and release to these things,
+
+00:47:03.890 --> 00:47:06.050
+or, well, you used to be able to.
+
+00:47:06.150 --> 00:47:10.980
+So let's talk about-- about a
+little bit of a rule change here.
+
+00:47:11.390 --> 00:47:14.740
+This toll-free bridging for
+retain and release has been
+
+00:47:14.740 --> 00:47:16.250
+changed under garbage collection.
+
+00:47:16.260 --> 00:47:22.990
+There's a lot of C code in our system
+that uses CF release on things,
+
+00:47:23.000 --> 00:47:24.120
+and we couldn't change that.
+
+00:47:24.120 --> 00:47:27.320
+We didn't want to go in and change
+every line of core foundation-based
+
+00:47:27.320 --> 00:47:28.770
+programming in our system.
+
+00:47:28.780 --> 00:47:31.100
+So we honor CF retain.
+
+00:47:31.100 --> 00:47:35.740
+It really means what it has always meant,
+and that is this object
+
+00:47:35.740 --> 00:47:37.010
+needs to stay alive.
+
+00:47:38.180 --> 00:47:42.290
+So if you've been cheating and
+using release methods where
+
+00:47:42.290 --> 00:47:46.150
+CF releases could have been used,
+you're going to have to go
+
+00:47:46.150 --> 00:47:47.920
+back and re-look at that code.
+
+00:47:47.940 --> 00:47:50.390
+So it's a very simple rule.
+
+00:47:50.400 --> 00:47:55.310
+Rule number one, the only rule really,
+is don't mix those styles.
+
+00:47:55.320 --> 00:47:59.390
+If you have a CF run loop create,
+then don't try to send it
+
+00:47:59.390 --> 00:48:01.620
+an auto-release message.
+
+00:48:01.620 --> 00:48:04.080
+You have to send it a CF release.
+
+00:48:05.060 --> 00:48:07.770
+Under the covers,
+when we allocate that core
+
+00:48:07.860 --> 00:48:11.050
+foundation style object,
+it's marked uncollectable
+
+00:48:11.050 --> 00:48:13.950
+until that last CF release.
+
+00:48:14.280 --> 00:48:16.240
+Now, think about that.
+
+00:48:16.240 --> 00:48:20.520
+The last CF release doesn't
+let go of that object.
+
+00:48:20.610 --> 00:48:25.660
+It lets it go so the collector can find
+it sometime if it's nowhere else used.
+
+00:48:25.690 --> 00:48:28.670
+So...
+
+00:48:29.770 --> 00:48:34.230
+There is an option, however,
+if you don't like doing CF releases,
+
+00:48:34.230 --> 00:48:39.590
+then you can tell the collector to
+start looking for it right away by
+
+00:48:39.740 --> 00:48:43.580
+declaring the instance variable with
+a strong attribute and on creation
+
+00:48:43.580 --> 00:48:45.590
+using this little piece of code.
+
+00:48:45.610 --> 00:48:47.940
+Let me show you this in code.
+
+00:48:47.940 --> 00:48:54.740
+Rule #1: If you have an existing
+use of CF style objects,
+
+00:48:54.740 --> 00:48:58.860
+you can CF create the image just fine,
+it's an image ref just fine,
+
+00:48:58.860 --> 00:49:01.970
+it's an IVAR just fine,
+and in your finalized method,
+
+00:49:02.010 --> 00:49:03.600
+you can do a CF release.
+
+00:49:03.600 --> 00:49:07.050
+If you don't like that, though,
+if you want to get rid
+
+00:49:07.050 --> 00:49:10.600
+of that finalized method,
+you can use option 1.
+
+00:49:10.600 --> 00:49:15.590
+Option 1 says,
+"Call CF make collectible."
+
+00:49:15.600 --> 00:49:20.440
+Right at the allocation point,
+declare it with that strong attribute,
+
+00:49:20.650 --> 00:49:21.600
+and you don't have to have a finalize.
+
+00:49:21.600 --> 00:49:28.600
+The collector will recover the
+Core graphics image when it's time.
+
+00:49:29.940 --> 00:49:32.280
+So as I said before,
+some of those fully bridged objects,
+
+00:49:32.340 --> 00:49:34.960
+there is code out there
+that is kind of like this.
+
+00:49:34.960 --> 00:49:38.900
+It's declared as an NSString,
+but they use a CFString,
+
+00:49:38.900 --> 00:49:40.900
+and it's just an object, right?
+
+00:49:40.900 --> 00:49:44.570
+Well,
+this is a case where that auto-release
+
+00:49:44.570 --> 00:49:51.490
+is ignored under garbage collection,
+but that uncollectible attribute is not.
+
+00:49:51.500 --> 00:49:53.880
+And so since you don't
+need the auto-release,
+
+00:49:53.880 --> 00:49:56.680
+you can get rid of that thing,
+and you should do a CF make
+
+00:49:56.680 --> 00:49:58.400
+collectible on these guys.
+
+00:49:58.880 --> 00:50:01.880
+So fully bridged objects,
+you've got to look at your
+
+00:50:01.880 --> 00:50:03.690
+retain and release logic on that.
+
+00:50:04.310 --> 00:50:07.580
+So, a few things that probably,
+I don't know,
+
+00:50:07.580 --> 00:50:10.390
+a few people in here might be doing,
+I don't know,
+
+00:50:10.620 --> 00:50:12.920
+custom CFAllocators we don't support.
+
+00:50:12.920 --> 00:50:17.200
+These null callbacks are actually
+correctly handled by the collector,
+
+00:50:17.340 --> 00:50:19.240
+but you still have to zero them out.
+
+00:50:19.260 --> 00:50:22.500
+Switch over to map table and
+hash table wherever you can.
+
+00:50:22.500 --> 00:50:27.560
+And if you have custom callbacks
+for some of these things,
+
+00:50:27.560 --> 00:50:30.280
+the collector will do the right thing.
+
+00:50:30.280 --> 00:50:35.000
+If you use the standard
+retain and release callbacks.
+
+00:50:35.000 --> 00:50:38.080
+Otherwise,
+you'll have to find out what happens.
+
+00:50:38.080 --> 00:50:42.040
+So, that's it for programming.
+
+00:50:42.040 --> 00:50:46.680
+Let's talk a little bit about some
+low-level tools and techniques for
+
+00:50:46.680 --> 00:50:49.040
+figuring some of this stuff out.
+
+00:50:49.090 --> 00:50:50.790
+We've got two tools.
+
+00:50:50.800 --> 00:50:53.130
+X-Ray you've seen demos of.
+
+00:50:53.180 --> 00:50:57.480
+It shows you what's going on in your
+app when collections are happening.
+
+00:50:57.480 --> 00:51:00.210
+We've got a couple parameters
+here that you can set.
+
+00:51:00.270 --> 00:51:02.510
+To kind of tune when collections happen.
+
+00:51:02.600 --> 00:51:05.280
+We've adjusted this on
+several different apps.
+
+00:51:05.280 --> 00:51:07.050
+This seems to be a good ratios for us.
+
+00:51:07.140 --> 00:51:10.260
+You can set some environment variables
+up and watch things happen as you
+
+00:51:10.370 --> 00:51:11.940
+launch them from the command line.
+
+00:51:12.040 --> 00:51:16.270
+We have another tool which we'll show
+you in the labs called zone monitor.
+
+00:51:16.400 --> 00:51:17.720
+It helps you dig in.
+
+00:51:17.840 --> 00:51:21.940
+It lets you look at all the heap,
+kind of chase your objects around.
+
+00:51:22.040 --> 00:51:23.720
+It has some very important functions.
+
+00:51:23.720 --> 00:51:26.830
+It'll find all the
+routes to your objects.
+
+00:51:26.980 --> 00:51:29.410
+You can double click on one
+of the items and find out.
+
+00:51:29.500 --> 00:51:30.220
+Who else?
+
+00:51:30.220 --> 00:51:33.930
+Allocated and where it got allocated
+to find out what's going on.
+
+00:51:33.980 --> 00:51:35.140
+So.
+
+00:51:36.890 --> 00:51:40.320
+When you're running garbage collected,
+a few new things can happen to you.
+
+00:51:40.320 --> 00:51:44.580
+If you've been trying to convert code,
+you might have missed the right barrier
+
+00:51:44.580 --> 00:51:45.610
+because you weren't thinking about it.
+
+00:51:45.620 --> 00:51:47.780
+There's a hidden malloc
+somewhere going on.
+
+00:51:47.780 --> 00:51:52.400
+If you turn off the generational stuff,
+and we always examine everything,
+
+00:51:52.400 --> 00:51:56.140
+often that'll help you find out where
+you're missing that right barrier.
+
+00:51:56.140 --> 00:52:01.460
+Clearly, your objects can get recycled,
+get sent funny messages.
+
+00:52:01.900 --> 00:52:07.880
+You typically break on rays and
+find out who allocated that spot,
+
+00:52:07.880 --> 00:52:10.950
+and very quickly find out
+where you were missing that
+
+00:52:10.950 --> 00:52:13.220
+right barrier or declaration.
+
+00:52:13.320 --> 00:52:16.550
+And we've got some entry points
+in the runtime that you can break
+
+00:52:16.640 --> 00:52:21.820
+on to find out other things that
+might be a little bit out of whack.
+
+00:52:21.880 --> 00:52:28.760
+So performance,
+performance is pretty good.
+
+00:52:29.000 --> 00:56:10.700
+[Transcript missing]

@@ -1,0 +1,261 @@
+---
+Title:  What's New in Metal, Part 2
+Year:   2016
+Web:    https://nonstrict.eu/wwdcindex/wwdc2016/605/
+
+[!] This transcript has potential transcription errors.
+---
+
+Welcome. This is Part 2 of our What's New in Metal session. My name is Charles Brissart, and I'm a GPU Software Engineer, and together with my colleague, Dan Omachi and Ana Tikhonova, I will be telling you about some of our new features. But first, let's take a look at the other Metal session at the WWDC.
+
+The first two sessions I call Adopting Metal uncovered some of the basic concepts of Metal as well as some more advanced considerations. The What's New in Metal session covered our new features. Finally, the Advanced Shadow Optimization session will tell you how to get the best performance out of your shaders.
+
+So this morning you were told about tessellation, resource heaps, memoryless render targets as well as some improvement for GPU tools. This afternoon we'll tell you about function specialization, function resource read-writes, wide color, texture assets, as well as some addition to the Metal Performance Shaders. So let's get started with function specialization.
+
+It is a common pattern in a rendering engine to define a few complex master functions and then use those master functions to generator minimum of specialized simple functions. The idea is that the master function allow you to avoid duplicating card while the specialized function are simpler on those as a result of better performance.
+
+So let's take an example. If we are trying to write a material function you could write a master function that implements every aspect of any material that you might need. But then, if you are trying to implement a shiny -- a simple shiny material, you would probably not need reflection, but you will need a specular highlight.
+
+If you implement a reflected material on the other hand you will need to add reflection on also the specular highlights. Our transition material will need subsurface scattering, but probably no reflection or may be no specular highlights either, and so on. You get the idea. So this is typically implemented using preprocessor macros.
+
+The master function is compiled with a set of values for the macro to create a specialized function. This can be done at runtime, but this is expensive. You can also try to precompile every single variant of the precompiled function, but -- and then store them in Metal, but this requires a lot of storage because you can have many, many variants, or maybe you don't know which one you will need.
+
+Another approach is to use runtime constants. Runtime constants avoid the need to recompile your functions. However, you need to evaluate the values of the constant at runtime. That will impact the performance of your shaders. So we are proposing a new way to create specialized functions using what we call function constants. So function constants are constants that are defined directly in the Metal shading language and can be compiled into IR and stored in the Metal lib. Then at runtime you can provide the value of the constant to create a specialized function.
+
+The advantage of this approach is that you can compile the master function offline and store it in the Metal lib. The storage requirement is small because you only store the master functions. And since we run a quick optimization pass when we create the specialized function, you still get the best performance.
+
+So let's look at an example. This is what a master function could look like using a preprocessor macro. Of course, this is a simple example. A real one would be much more complex. As you can see, different parts of the code surrounded by what if statements so that you can eliminate that section of the code.
+
+Here is what it would look like with function constant. As you can see at the top, we are defining a number of constants, and then we use them in the code. To define the constants, you use the constant keyword followed by the type, in this case Boolean, and finally the name of the constant and the function constant attribute.
+
+The function constant attribute specifies that the value of the constant is not going to be provided at compile time but will be provided at runtime when we create the specialized function. You should also note that we are passing an index. That index can be used in addition to the name to identify the constant when we create the specialized function at runtime.
+
+You can then use the constant anywhere in your code like your normal constant. Here we have a simple if statement that is used to conditionalize part of the code. So once you've created your master function and compiled it and stored it in a Metal lib, you need to at runtime create specialized functions.
+
+So you need to provide the values of the constant. To do that, we use an MTL function constant values object that will solve the values of multiple constants. Once we created the object, we can then set the values of a constant either by name, by index, or by name.
+
+Once we have created an object, we can then create the specialized function by simply coding the new function with names and constant values on the library, providing the name of the master function as well as the values we just filled. This will return a regular MTL function that can then be used to create compute pipeline or render pipeline depending on the type of the function.
+
+So to better understand how this works, let's look at the compilation pipeline. So at build time, you use the source of your master function and compile it and store into a Metal lib. At runtime you load the Metal lib and create a new function using the MTL function constant values to specialize the function. At this point, we run some optimization to eliminate any code that's not used anymore, and then we have an interior function that we can use to create a render pipeline or a compute pipeline.
+
+You can declare constants of any scalar or vector type that is [inaudible] in Metal , so float, half, int, uint, and so on. Here we are defining half4 color. You can also create intermediate constants using the value of function constants. Here we're defining a Boolean constant that has the opposite value of a function constant a. Here we are calculating a value based on the value of the value function constant.
+
+We can also have optional constants. Optional constants are constants for which you don't need to always provide the value when you specialize the function. This is exactly the same thing as using a what ifdef in your code when using preprocessor macros. To do this, you use the if function constant defined built in that will return true if the value has been provided and false if otherwise.
+
+You can also use function constant to add or eliminate arguments from function. This is useful to avoid, to making sure you don't have to bind a buffer or texture if you know it's not going to be used. It's also useful to replace the type of an argument, and we'll talk about -- we'll talk more about this in the next couple of slides. So here we have an example. This is a vertex function that can implement skinning depending of the value of the doSkinning constant.
+
+The first argument of the function is the matrices buffer that will exist depending on whether the doSkinning constant is true or false. We use the function constant attribute to qualify that argument as being optional. In the code, you still need to use the same function constant to protect the code that's using that argument. So here we use doSkinning in the if statement, and then we can use the matrices safely in our code.
+
+You can as well use function constant to eliminate arguments from the stage in struct. Here, we have two color arguments. The first color argument as type float4 on these use for attributes, that is attribute 1. The second lowp color is a lower precision color half4 but is overriding the same attribute index. So you can have either one or the other. These are used to specifically change the type of the color attributes in your code.
+
+There are some limitations with function constants, namely, you cannot really change the layout of a struct in memory, and that can be a problem because you might want to have different constants for different shaders and so on. But you can work around that but adding multiple arguments with different types. So in this example, we have two buffer arguments that are using buffer index 1. They are controlled by function constants, use ConstantA and ConstantB.
+
+So these are used to select one or the other. Note that we have -- we use an intermediate constant that is the opposite of the first constant to make sure only one of the arguments will exist at a given time. So in summary, you can use function constant to create specialized function at runtime.
+
+It avoids front end compilation, and because we only use -- and it only uses fast optimization phase to eliminate unused code. The storage is compact because you only need to store the master function in your library. You don't have to ship your source. It can only ship the IR. And finally, the unused code is eliminated, which gives you the best performance.
+
+So let's now talk about function resource read-writes. So we're introducing two new features, function buffered read-writes and function texture read-writes. Function buffered read-writes is the ability to read and write to a buffer from any function type and also the ability to use atomic operations on those buffers from any function type. As you guessed, function texture read-writes is the ability to read and write to texture from any function type.
+
+Function buffer read-writes is available on iOS with a 9 processor and macOS. Function texture read-writes is available on macOS. So let's talk about function buffered read-writes. So what's new here? What's new is the ability to write to buffer from fragment function as well as using an atomic operation in the text and fragment function. These can be used to implement such things as order-independent transparency, building lists of lights that affect the given tile, or simply to debug your shaders.
+
+So let's look at the simple example. Let's say we want to write the position of the visible fragments we are rendering. It could look like this. So we have a fragment function to which we pass an output buffer. The output buffer is where we are going to store the position of the fragments.
+
+Then we have a counter, so another buffer that we start after [inaudible] that we use to find the position into the buffer, the first buffer, to which we want to write. We can then use an atomic preparation to count the number of fragments with that has been already written to get an index in the buffer. And then we can write into the buffer the position of the fragments. So this looks pretty good, but there is a small problem.
+
+The depth and stencil test when you're writing to buffer is actually always exhibited after the fragment shader. So this is a problem because we are going to still perform the rights to the buffer, which is not what we want. We only want the visible fragments. It's also something to be aware of because it will impact your performance. That means we don't have any early Z optimization here, so we are going to exhibit fragment shader when we probably wouldn't want to.
+
+Fortunately we have a new function qualifier early fragment test that can be used to force the depth and stencil test to appear before the fragment shader. As a result, if the depth test fail, we will skip the execution of the fragment shader and thus not write to the buffer. So this is what we need here, to reach the final function with the early fragment test attribute which otherwise to only execute the function when the fragments are visible. Now let's talk about function texture read-writes.
+
+So what's new is the ability to write to texture from the vertex and fragment functions as well as the ability to read and write to a texture from a single function. This can be used, for instance, to save memory when implementing post processing effects by using the same texture on both input and output. So writing to texture is fairly simple. You just define your texture with the access qualifier write, and then you can write to your texture.
+
+Read-write texture, a texture to which you can both -- that you can both read and write in your shader. Only a limited number of formats is reported for those textures. To use the read-write texture you will use the access qualifier of read-write, and then you can read to the texture and write to it in your shader.
+
+However, you have to be careful when you write to the texture if you want to read the results, if you want to read the same pixel again in your shader. In this case, you need to use a texture fence. The texture fence will ensure that the writes have been committed to memory so that you can read the proper value.
+
+Here, we write to a given pixel, and then we use a texture fence to make sure we can read that value again and then we can finally read the value. We should also be careful with texture fence because they only apply on a single SIMD thread, which means that if you have two threads that are writing to a texture and the second thread is trying to read the value that was written by the first thread, even after a texture fence, this will not work. What will work is if each thread is reading the pixel values that it was writing to but not the ones that are written by other threads.
+
+So one note about reading, we talked a lot about writing to buffers and textures. With vertex and fragment functions, you have to be careful. In this example, fragment function is trying to write -- is writing to a buffer and a vertex function is trying to read the results. However, this is not going to work because of having the same RenderCommandEncoder. To fix this, we need to use two RenderCommandEncoder.
+
+The fragment function writes to the buffer in the first RenderCommandEncoder while the texture -- the vertex function in the second RenderCommandEncoder can finally read the result and get proper results. You should note that with compute shader, this is not necessary. It can be done the same compute CommandEncoder.
+
+So in summary, we introduced two new features, function buffer read-writes and function texture read-writes. You can use early fragment tests to make sure the depth and stencil test is done because the execution of the fragment shader. You should use a texture fence if you are trying to read data from a read-write texture that you have been writing to. And finally, when using vertex and fragment shader to write to buffers, you need to make sure to use a different RenderCommandEncoder when you want to read the results. So with this, I will hand the stage to Dan Omachi to talk to you about wide color.
+
+[ Applause ]
+
+Thank you, Charles. Thank you. As Charles mentioned, my name is Dan Omachi. I work as an engineer in Apple's GPU Software Frameworks Team and I'd like to start off talking to you about color management, which isn't a topic that all developers are actually familiar with. So if you are an artist at either the -- either a texture artist creating assets for a game or a photographer editing photos for distribution, you would have a particular color scheme in mind, and you'd choose colors pretty carefully. And you'd want consistency regardless of the display on which your content is viewed. Now it's our responsibility as developers and software engineers to guarantee that consistency.
+
+If you're using a high level framework like SceneKit, SpriteKit, or Core Graphics, much of this work is done for you, and you as app developers don't need to think about it. Metal, however, is a much lower level API. This offers increased performance and some flexibility but also places some of this responsibility in your hands.
+
+So why now? You've been able to use different displays with different color spaces with Apple devices for many years now. Well, late last year, Apple introduced a couple of iMacs with a display capable of rendering colors in the P3 color space. And in April, we introduced the 9.7-inch iPad Pro, which also has a P3 display.
+
+So what is the P3 color space? Well, this is a chromaticity diagram, and conceptually this represents all of the colors in the visual spectrum, in other words, all the colors that the normal human eye can see. Of that, within this triangle are colors that a standard sRGB display can represent.
+
+The P3 display is able to represent colors of a much broader variety. So here's how it works on macOS. We want you to be able to render in any color space and as I mentioned, high level frameworks take care of this, this job of color management for you by performing an operation called color matching where your color and one color space is matched to that of the display color space so that the same intensity on the display regardless of the color space that you're working in is displayed. Now, Metal views by default are not color managed. This color match operation is skipped, and this generally offers increased performance.
+
+So by default, you're ignoring the color profile of the display, and therefore, the display will interpret colors in its own color space. Now, this means that sRGB colors will be interpreted as P3 colors, and rendering will be inconsistent between the two. So if this is your application with an sRGB drawable and this is the display, well, when you call present drawable, these colors become much saturated. So why does this happen? Well, let's go back to our chromaticity diagram.
+
+This is the most green color that you can represent in the sRGB color space, and in a fragment shader, you'd represent this as 0.0 in the red channel, 1.0 in the green channel and 0.0 in the blue channel. Well, the P3 Display just takes that raw value and interprets it, and it basically thinks that it's a P3 color. So you're getting the most green color of a P3 Display, which happens to be a different green color.
+
+Now, for content creation apps, it's pretty critical that you get this right because artists have used careful consideration to render their colors. For games, the effect is more subtle, but if your designers and artists are looking for this dark and gritty theme, well, they're going to be disappointed when it looks much more cheerful and happy when you plug in a P3 Display. Also, this problem can get worse as the industry moves towards even wider gamut displays.
+
+So, the solution is really quite simple. You enable color management on the NSWindow or CAMetal by setting the color space to your working color space, probably the sRGB color space. This causes the OS to perform a color match as part of its window server's normal compositing pass. So if here's your display, or excuse me, here's your application with sRGB drawable and here's the display, the window server takes your drawable when you call present and performs the color match before slapping it on the glass.
+
+Now, all right, so now you've got that consistency. What if you want to adopt wide color? You want to purposefully render those more intense colors a wide gamut display is only capable of rendering. Well, first of all, you need to create some content. You need your artist to create wider content, and for that we recommend using the extended range sRGB color space.
+
+This allows existing assets that aren't offered for wide color to continue working as they have, and your shader pipelines don't need to do anything different. However, your artists can create new wider color assets that will provide much more intense colors. So what exactly is the extended range sRGB? Well here's the sRGB triangle and here's P3.
+
+Extended range sRGB just goes out infinitely in all directions, meaning values outside of 0 to 1 in your shader represent values that can only be viewed on a wider than sRGB color display. So I mentioned values outside of 0 to 1. This means that you will need to use floating point pixel formats to express such values, and for source textures we recommend a couple of formats. You can use the BC6H floating point format. It's a compressed format offering high performance as well as the pack float and shared exponent formats. For your render targets, you can use this pack float format or the RGBA half-float format, allowing you to specify these more intense colors.
+
+Color management on iOS is a bit simpler. You always render in the sRGB color space, even when targeting a P3 Display. Colors are automatically matched with no performance penalty. And if you want to use wide colors, you can make use of some new pixel formats that are natively readable by the display. There's no compositing operation that needs to happen.
+
+They can be gamma encoded, offering better blacks and allowing you to do linear blending in your shaders, and they're efficient for use as source textures. All right. Here are the bit layouts of these new formats. So, there are -- there is a 32-bit RGB format with 10 bits per channel and also an RGBA format with 10 bits per channel spread across 64 bits.
+
+Now, this, the values of this 10 bits are -- can express values outside of 0 to 1. Values from 0 to 384 represent negative values, 384 to 894, the next 510 values, represent values between 0 and 1 and those greater than 894 represent these more intense values. Now, note here that the RGBA pixel format is twice as large and therefore uses twice as much memory and twice as much bandwidth as this RGB format. So, in general, we recommend that you use this only in the CAMetal Layer if you need destination alpha.
+
+All right, so you've made the decision that you want to create some wide gamut content. How can you do this? Well, you have an artist -- author using image editor on macOS, which supports the P3 color space, such as Adobe Photoshop. You can save that image as a 16-bit per channel PNG or JPEG using the display P3 color profile.
+
+Now, once you've got this image, how do you create textures from it? Well, you've got two solutions here. The first is you can create your own asset conditioning tool, and from that 16-bit per channel Display P3 image you can convert using the extended sRGB floating point color space using either the ImageIO or vImage frameworks.
+
+And then from that on macOS, you'd convert to one of those floating point pixel formats I mentioned earlier, and on iOS you'd convert to one of those extended range pixel formats I just mentioned. All right, so that's option one if you really want explicit control of how your textures are built.
+
+The next option is to use Xcode support for textures in asset catalogues. With that, will automatically create extended range sRGB textures for devices with a P3 Display, and I'll talk a little bit more about asset catalogues right now. So for a while now you've been able to put icons and images into an asset catalogue within your Xcode project.
+
+Last year, we introduced app thinning whereby you can create a specialized version for various devices based upon device capability such as the amount of memory, the graphics features set, or the type of device, whether it be an iPad, Mac or TV or watch or even phone, of course.
+
+And when your app was downloaded, you download and install only the single version of that assess made for that device with the capabilities you specified. The asset was compressed over the wire and on the device, saving a lot of storage on the user's device, and there were numerous APIs, which offer efficient access to those assets. So now we've added texture sets to these asset catalogues. So what does this offer? Well, storage for mipmap levels. Textures are more than just 2D images.
+
+You can perform offline mipmap generation within Xcode, will automatically color match this texture. So if it's a wide gamut texture in some different color space, will perform a color matching operation to the sRGB or extended range sRGB color space. And I think the most important feature of this ability here is that we can choose the most optimal pixel format for every device on which your app can run. So on newer devices that support ASTC texture compression, we can use that format. On older devices which don't support that, we can choose either a noncompressed format or some other compressed format. Additionally, we can choose a wide color format for devices with a P3 Display.
+
+So here's the basic workflow. You create texture sets within Xcode. You assign a name to the set, a unique identifier. You'll add an image and indicate basically how that texture will be used, whether it's a color texture or some other type of data like a normal map or a height map. Then, you'll -- can create this texture. Xcode will build this texture and deliver it to your application. Now, you can create these texture sets via the Xcode UI or programmatically.
+
+Once your texture is on the device, you can supply the name to MetalKit, and MetalKit will build a texture, a Metal texture, from that asset. So I'd like to walk you through the Xcode workflow to introduce some of these concepts to you. So, you'll first select the asset catalogue in your projects navigator sidebar and then hit this plus button here, which brings up this menu. Now, here's where you can create the various types of sets. There are image sets, icon sets, generic data sets, as well as texture and cube map texture sets. So once you've created your texture set, you need to name it.
+
+Now, your naming hierarchy need not be flat. If you have a number of textures that are called base texture, one for each object, you can create a folder for each object and stuff your base texture for that object in that folder, and your hierarchy can be as complex as you'd like.
+
+You add your image, and then you set the interpretation. Now there are three options here. Color, in color NonPremultiplied perform this color match operation. The NonPremultiplied option will multiply the alpha channel by your R, B, and G -- RGB channels before building the texture. The data option here will -- is used for normal maps, height maps, roughness maps, textures of noncolor type. Now, this is all you need to do. Xcode will go off and build various versions of this texture, and it will pick the most optimal pixel format.
+
+You can, however, have more explicit control. You can select any number of these traits here, which will open up a number of buckets that you can select to customize. You can add different images for each version. You probably wouldn't use a different image, but may be a different size of an image. So on a device with lots of memory, you can use a bigger texture, and a device with a smaller memory, you would use a much smaller texture.
+
+And then you can specify how or whether you want mipmaps. The all option will generate mipmaps all the way down to the 1 by 1 level and the fixed option here will give you some more explicit control, such as whether you want to use a max level and also whether you want to have different images for each level.
+
+And finally, you can override our automatic selection of pixel formats. Now I mentioned that you can programmatically create these texture sets. You don't really want to go through the Xcode UI if you've got thousands of assets. So there's a pretty simple directory structure, and within that directory structure are a number of JSON files. Now these files and directory structure is fully documented on the asset catalogue reference. So you can create your own asset conditioning tool to set up your texture set.
+
+So once you've got this asset on the device, how do you make use of it? Well, you create a MetalKit texture loader supplying your Metal device, and then you supply the name along with its hierarchy to the texture loader and MetalKit will go off and build that texture.
+
+You can supply a couple of other options here such as scale factor if you have different versions of the texture for different scale factors or the bundle if the asset catalogue is in something other than the main bundle. There are also a couple of options here that you can specify.
+
+So I'd really like you to pay attention to color space and set your apps apart by creating content with wide color. Asset catalogues can help you achieve that goal. As well, they provide a number of other features which you can make use of, such as optimal pixel format selection. I'd like to have my colleague Anna Tikhonova up here to talk about some exciting improvements to the Metal Performance Shaders framework.
+
+[ Applause ]
+
+Hi. Good afternoon. Thank you, Dan, for the introduction. As Dan said, my name is Anna. I'm an engineer on the GPU Software Team. So let's talk about some new additions to the Metal Performance Shaders. We introduced the Metal Performance Shaders framework last year in the What's New in Metal Part 2 talk. If you haven't seen that session, you should definitely check out the video. But just to give you a quick recap, the Metal Performance Shaders framework is the framework of optimized high performance data parallel algorithms for the GPU in Metal .
+
+The algorithms are optimized for iOS, and they have been available for you since iOS 9, for the A8 and now the A9 processors. The framework is designed to integrate easily into your Metal applications and be very simple to use. It should be as simple as calling a library function.
+
+So last year, we talked about following a list of supported image operations, and you should watch the video for lots of details and examples. But this year, we've added some more cool stuff for you. We've added wide color conversion, which you can use to convert your Metal textures between different color spaces. You can convert between RGB, sRGB, grayscale, CMYK, C3 and any color space you define.
+
+We've also added Gaussian pyramids, which you can use to create multiscaler presentations of image data on the GPU to enable multiscale algorithms. They can also be used for common optical flow algorithms, image blending, and high-quality mipmap generation. And finally, we've added convolutional neural networks, or CNNs, which are used to accelerate deep learning algorithms. This is going to be the main topic of this talk. So let's just dive right in. First of all, what is deep learning?
+
+Deep learning is a field of machine learning which goal is to answer this question. Can a machine do the same task that a human can do? Well, what types of tasks am I talking about? Each one of you has an iPhone in your pocket. You probably took a few pictures today, and all of us are constantly exposed to images and videos on the Web every day, on news sites, on social media.
+
+When you see an image, you know instantly what is depicted on it. You can detect faces. If you know these people, you can tag them. You can annotate this image. And this works well for a single image, but what if you have more images and even more images? Think about all of the images uploaded to the Web every day. No human can hand annotate this many images. So deep learning is a technique for solving these kinds of problems.
+
+It can be used for sifting through large amounts of data and for answering questions such as, "Who's in this image?" And "Where was it taken?" But I'm using image-based examples in this talk because they are visual. So they are a great fit for this type of a presentation, but I just want to mention that deep learning algorithms can be used for other types of data. For example, other types of signal like audio to do speech recognition and haptics to create the sense of touch.
+
+Deep learning algorithms have two phases. The first one is the training phase. So let's talk about it, give a specific example. So image that you want train your system to categorize images into classes. This is an image of a cat. This is an image of a dog. This is the image of a rabbit.
+
+This is a labor intensive task that requires a large number of images, hand-labeled annotated images for each one of these categories. So for example, if you want to train your system to recognize cats, you need to feed it a large number of images of cats all labeled, and same for your rabbits and all the other animals that you want your system to be able to recognize.
+
+This is a one-time computationally expensive step. It's usually done offline, and there are plenty of training packages available out there. The result of the training phase is trained parameters. So I will not talk about them right now, but we will get back to them later. The trained parameters are required for the next phase, which is the inference phase.
+
+This is the phase where your system is presented with a new image that has never seen before, and it needs to classify in real-time. So in this example, the system correctly classified this image as an image of a cat. We provide GPU acceleration for the inference phase. Specifically, we give you the building blocks to build your inference networks for the GPU. So let's now talk about what are the convolutional neural networks and what are these building blocks we provide?
+
+The convolutional neural networks, or CNNs, are biologically inspired and designed to resemble the visual cortex. When our brain processes visual input, the first hierarchy of neurons that receive information in the visual cortex are sensitive to specific edges or blobs of color, while the brain regions further down the visual pipeline respond to more complex structures like faces or kinds of animals. So in a very similar way, the convolutional neural networks are organized into layers of neurons which are trained to recognize increasingly complex features.
+
+So the first layers are trained to recognize low level features like edges and blobs of color, while the subsequent layers are trained to recognize higher level features. So for example, if we are doing face detection, then will have layers that will recognize features like noses, eyes, cheeks, and then combination of these features, and then finally faces.
+
+And then the final few layers combine all the generated information to produce the final output for the network, such as the probability that there is a face in the image. And I keep mentioning features. Think of a feature as a filter that filters the input for that feature, such as a nose, and if that information is found, it's passed along.
+
+If that feature is found, this information is passed along to the subsequent layers. And, of course, we need to look for many such features. So if we're doing face detection, then looking for just noses is simply not enough. We also need to look for other facial features like cheeks, eyes, and then combinations of such features. So we need many of these feature filters.
+
+So now that I've covered convolutional neural networks, let's talk about the building blocks we'll provide. The first building block is your data. We want you to use MPS images and MPS temporary images, which we added specifically to support convolutional networks. They provide and optimize layout for your data, for your input and intermediate results. Think of MPS temporary images as light-weight MPS images, which we want you to use for image data with a transient lifetime. MPS temporary images are built using the Metal resource heaps, which were described in the Part 1 of these sessions.
+
+They address some of the reused cache memory, and they avoid expensive allocation and deallocation of texture resources. So the goal is to save you lots of memory and to help you manage intermediate resources. We also provide a collection of layers, which you can use to create your inference networks. But you may be thinking right now, "How do I know which building blocks I actually need to build my own inference network?"
+
+So the answer is trained parameters. The trained parameters, I mentioned them previously when we talked about the training phase. The trained parameters give you a complete recipe for how to build your inference networks. They tell you how many layers you will have, what kind they will be, in which order they will appear, and you also get all those feature filters for every layer.
+
+So we take care of everything under the hood to make sure that the networks you build using these building blocks have the best possible performance on all iOS GPUs. All you have to do is to mine your data into this optimized layout that we provide and to call library functions to create the layers that make up your network. So now let's discuss all these building blocks in more detail, but let's do it in a context of a specific example.
+
+So in this demo, I have a system that has been trained to detect smiles. And what we'll have is in real-time the system will detect whether I am smiling or not. So I will first smile, and then I will frown, and you will see the system report just that.
+
+[ Laughter ]
+
+All right. So that [inaudible] my demo.
+
+[ Applause ]
+
+Okay. So now let's take a look at the building blocks that I needed to build this kind of a network. So the first building block we're going to talk about is the convolution layer. It's the core building block of convolutional neural networks, and its goal is to recognize features and input.
+
+And it's called a convolutional layer because it performs a convolution on the input. So let's recall how regular convolution works. You have your input and your output and in this case a 5 by 5 pixel filter with some weight. And in order to compute the value of this pixel in your output, you need to convolve the filter with the input.
+
+Pretty easy. The convolution layer is a generalization of regular convolution. It allows you to have multiple filters. The different filters are applied to the input separately, resulting in different output channels. So if you have 16 filters. That means you have 16 output channels. So in order to get the value of this pixel in the first channel of the output, you need to take the first filter and convolve it with the input. And in order to get the value of this pixel in the second channel of the output, you need to take the second filter and convolve it with your input.
+
+Of course, in our examples, mild detection we are dealing with color images. So that means that your input actually has three separate channels, and just because of how convolutional neural networks work, you need three sets of 16 filters where you have one set for each input channel. And then you apply the different filters to separate input channels and combine the results to get a single output value.
+
+So this is how you would create one of these convolution layers in our framework. You first create a descriptor and specify such parameters as the width and height of the filters you're going to use and then the number of input and output channels. And then you create a convolution layer from this descriptor and provide the actual data for the feature filters, which you get from the trained parameters.
+
+The next layer we are going to talk about is the pooling layer. The function of the pooling layer is to progressively reduce the spatial size of the network, which reduces the amount of competition for the subsequent layers. And it's common to insert a pooling of the in between successive convolution layers. Another function of the pooling layer is to summarize or condense information in a region of the input, and it would provide two pooling operations, maximum and average.
+
+So in this example, we take a 2 by 2 pixel region of the input. We take the maximum value and store it as our output. And this is the API you need to use in the Metal Performance Shaders framework to create one of these pooling layers. It's common to use the max operation with a filter size of 2 by 2.
+
+The fully connected layer is a layer where every neuron in the input is connected to every neuron in the output. But think about it as a special type of a convolution layer where the filter size is the same as your input size. So in this example, we have a filter of the same size as the input, and we convolve them to get a single output value.
+
+So in this architecture, the convolution and pooling layers operate on regions of input, while the fully connected layer can be used to aggregate information from across the entire input. It's usually one of the last layers in your network, and this is where your final decision-making is taking place and you create -- you generate the output for the network, such as the probability that there's a smile in the image.
+
+And this is how you would create one of these fully connected layers in the Metal Performance Shaders framework. You create a convolution descriptor because this is a special type of a convolution layer, and then you create a fully connected layer from this descriptor. We'll also provide some additional layers, which I'm not going to cover in detail in this presentation but they are described in our documentation.
+
+We provide the neural layer, which is usually used in conjunction with the convolution layer, and we also provide the soft max and normalization layers. So now that we've covered all of the layers, let's talk about your data. I mentioned that you should be using MPS images. So what are they really?
+
+Most of you are already familiar with Metal textures. So this is a 2D Metal texture with multiple channels where every channel corresponds to a color channel and alpha. And I mentioned in my previous examples that we need to create images with multiple channels, for example, 32 channels. If we have 32 feature filters, we need to create an output channel -- an output image that has 32 channels. So how do we do this?
+
+So an MPS image is really a Metal 2D array texture with multiple slices. And when you're creating an MPS image, all you really should care about is that you are creating an image with 32 -- with 32 channels. But sometimes you may need to reach the MPS image data back to the CPU, or you may want to use an existing Metal 2D array texture as your MPS image. So for those cases, you need to know that we use a special packed layout for your data. So every pixel in a slice of the structure contains the data for four channels. So a 32-channel image would really just have eight slices.
+
+And this is the API you need to use to create one of the MPS images in our framework. You first create a descriptor and specify such parameters as the channel for data format with the height of the image and the number of channels. And then you create an MPS image from this descriptor, pretty simple.
+
+Of course, if you have small input images, then you should batch them to better utilize the GPU, and we provide a simple mechanism for you to do this. So in this example, we create an array of 100 MPS images. Okay, so now that we've covered all the layers, we've covered data, and now let's take a look at the actual network you need to build to do smile detection.
+
+So we start with our inputs, and now we're going to use the trained parameters that I keep mentioning to help us build this network. So the trained parameters tell us that the first layer in this network is going to be a convolution layer, which takes a three-channel images input and outputs a 16-channel image. The trained parameters also give us the three sets of 16 filters for this layer, and these colorful blue images show you the visualization of the output channels after the filters have been applied to the input.
+
+The next layer is a pooling layer, which reduces the spatial resolution of the output of the convolution layer by a factor of two in each dimension. The trained parameters tell us that the next layer is another convolution layer, which takes a 16-channel images input and outputs a 16-channel image, which is further down reduced in size by the next pooling layer, and so on until we get to our output.
+
+As you can see, this network has a series of convolution layers followed by the pooling layers, and the last two layers are the fully connected layers, which generate the final output for your network. So now that we know what this network should look like, and this is very common for a convolutional neural network for inference, so now let's write the code to create it in our framework.
+
+So the first step is to create the layers. Once again, the trained parameters tell us that we need to have four convolution layers in our network and I'm showing that the code had to create one of them for simplicity but as you can see, I'm using exactly the same API that I've showed you before.
+
+Then we need to create our pooling layer. We just need one because we're always going to be using the max operation with a filter size of 2 by 2. And we also need to create two fully connected layers, and once again I'm only showing you the code for one for simplicity.
+
+And now, we need to take care of our input and output. In this particular example, I'm assuming that we have an existing Metal app and you have some textures that you would like to use for your input and output, and this is the API that you need to use to create MPS images from existing Metal textures. And so the last step is to encode all your layers into an existing command buffer in the order prescribed by the trained parameters.
+
+So we have our input and our outputs, and now we notice that we need one more thing to take care of. We need to store the output of the first layer somewhere. So let's use MPS temporary images for that. This is how you would create an MPS temporary image. As you can see, this is very similar to the way you would create a regular MPS image. And now we immediately use it when we encode the first layer. And the temporary image will go away as soon as the command buffer is submitted.
+
+And then we continue. We create another temporary image to store the output of the second layer, and so on until we get to our output. That's it. And just to tie it all back together, the order in which you encode the layers matches the network diagram that I showed you earlier exactly, so starting from the input and all the way to the output. So now we worked through a pretty simple example. Let's look at a more complex one.
+
+We've ported the inception inference network from tensor flow to run using the Metal Performance Shaders framework. This is a very commonly used inference network for object detection, and this is the full diagram for this network. As you can see, this network is a lot more complex that the previous one I showed you. It has over 100 layers. But just to remind you, all you have to do is to call some library functions to create these layers. And now first, let's take a look at this network in action.
+
+So here I have a collection of images of different objects, and as soon as I tap on this image, we will run the inference network in real-time and it will report the top five guesses for what it thinks this object is. So the top guess is that it's a zebra. Then this is a pickup truck, and this a volcano. So that looks pretty good to me, but of course, let's do a real live demo right here on this stage. And we'll take a picture of this water bottle, and let's use this image, water bottle.
+
+[ Applause ]
+
+So what I wanted to show you with this live demo is that even a large network with over 100 layers can run in real-time using the Metal Performance Shaders framework, but this is not all. I also want to talk about the memory savings we got from using MPS temporary images in this demo.
+
+So in the first version of this demo, we used MPS images to store intermediate results, and we ended up needing 74 MPS images totaling in size over 80 megabytes for the entire network. And of course, you don't have to use 74 images. You can come up with your own clever scheme for how to reuse these images, but this means more stuff to manage in your code, and we want to make sure that our framework is as easy for you to use as possible.
+
+So in the second version of the demo, we replaced all the MPS images with MPS temporary images, and this gave us several advantages. The first one is reduced CPU cost in terms of time and energy, but also creating 74 temporary images resulted in just 5 underlying memory allocations, totaling just over 20 megabytes and this is 76% of memory savings. That's pretty huge.
+
+So what I showed you with these two live demos is that the Metal Performance Shaders framework provides complete support for building convolutional neural networks for inference, and it's optimized iOS GPU use. So please, use the convolutional neural networks to build some cool apps. So this is the end of What's New in Metal talks, and if you haven't seen the first session, please check out the video so you can learn about such cool new features as tessellation, resource heaps, and memoryless render targets and improvements to our tools.
+
+In this session, we talked about function specialization and function resource read-writes, white color and texture assets, and new additions to the Metal performance tools, concentrating on convolutional neural networks. For more information about this session, please go to this URL. You can catch the video and get links to related documentation and sample code. And here's some information on the related sessions. You could always check out the videos of the past Metal sessions online, but you can also catch an advanced Metal shader optimization talk later today, and just note the location of this talk has changed to Knob Hill.
+
+Tomorrow, you have an opportunity to catch the Working with White Color talk and the Neural Networks and Accelerate talk where you can learn how to create neural networks for the CPU using the Accelerate framework. So thank you very much for coming, and I hope you have a great WWDC.
+
+[ Applause ]

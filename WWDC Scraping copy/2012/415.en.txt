@@ -1,0 +1,277 @@
+---
+Title:  Debugging with LLDB
+Year:   2012
+Web:    https://nonstrict.eu/wwdcindex/wwdc2012/415/
+
+[!] This transcript was generated using Whisper, it has known transcription errors.
+---
+
+Welcome to the debugging session for LLDB. Looks like we have a good crowd. I'm Greg Clayton, one of the architects of LLDB. Now, before we get started with a lot of the great content that we have today, I just want to kind of take a look at what's happened over the past year, because it's been a big year for LLDB itself. Last year at WWDC, we introduced an Xcode seed that had LLDB as an available debugger, so it's just one of your choices. Later on in the year, in December, we released Xcode 4.3, in which LLDB became the default debugger.
+
+And this year, we've got a great seed for you guys with Xcode 4.5. And LLDB, again, is the default debugger, but we've made a lot of improvements for you guys. So just to highlight some of the things that you can watch for is we've got much improved Objective-C debugging support for you guys. We've got property syntax built into the expression parser so that you can actually use your backed and your unbacked properties in your expressions.
+
+And we also will find the one true definition of your class so that when you're debugging and if you happen to use the nameless category where you hide some instance variables in your main definition of your class, we'll actually try and dig up that definition as much as possible while debugging.
+
+We've done some great stuff with some of the new data formatters. We've got some data formatters that are actually built into the core of LLDB itself. Now, that helps us display your Objective-C types, like your NSStrings and your NSArrays and other Objective-C collection classes, as well as your C++, standard template library, collections, and data types.
+
+One of the other great things that we've done with the Objective-C data formatters is we've actually made them so 80% of the time where we actually used to have to run code to show you your data types, we don't actually have to run code. What that means for you is your data will be available more of the time, your summaries and the contents of your arrays.
+
+We now added Watchpoint support for desktop and for iOS. And we've got an improved Python interface where we've exposed much more of the API that's built into the debugger itself so you can get access to it through some Python scripting. And we'll talk about that as the talk goes on.
+
+Today we're going to go through a couple things. We're going to introduce you into LLDB and talk about the hows and the whys and why we decided to write the debugger in the first place. And we'll move on to getting more in-depth with LLDB and going through some of the command interpreter, going through some of the terminology that's involved, and then go through a debug session where we'll stop along the way and take a look at how LLDB can help us out when we're debugging.
+
+And then we'll use LLDB to do a couple of different things that are not debugging-related, but there's a lot of great features inside of a debugger that you should be able to take advantage of, and we'll go through a few examples there. And then we'll wrap things up. So let's get started.
+
+Well, before we get into LLDB, we want to talk a little bit about why we decided to create LLDB in the first place. And what it came down to is we really wanted a better debugger to give to you guys. Now, you might ask, what was wrong with our existing technology? We kind of took a look at where we wanted to be over the next couple of years, and we thought about the things that we want to do with multi-threaded debugging and a lot of different things that we wanted to add support for.
+
+And we just came up with the fact that the architecture inside of GDB wasn't correct for where we wanted to be. Now, one of the issues that we had was how debug information was parsed as you're debugging. And GDB parses information in large chunks. And the best analogy I can offer is if debug information is a book, GDB likes to ingest debug information a chapter at a time.
+
+And we thought we could do better. Also, there was never an API. There was never an API that was vended from GDB itself. And we have a lot of tools where people will actually launch GDB from the command line, feed text into it, and get text back out in order to use it as if it did have an API.
+
+Now, another issue that we had was a lot of information inside the debugger itself was contained in global variables that were kind of strewn across the code. And that made it really difficult for us to, say, put all those things together inside of one structure that would represent maybe your debugging target or your process or your threads.
+
+[Transcript missing]
+
+With the expression parser, one of the things that happens is as time goes on, the compiler adds new features. It adds new languages, new runtime support, and the expression parsers tend to lag behind. And you're always playing catch-up with the debugger when you're not actually, when you have an expression parser that is just built into the debugger itself. And it made it hard for us to add even simple things like Objective-C property support into the expression parser.
+
+There's a lot of languages that are supported inside of the expression parser because GDB's been around for quite a few years. And again, adding something as simple as Objective-C property support proved to be a lot harder than it should have been. So we wanted to go design a new debugger, and we wanted to keep a lot of different things in mind. Now, of course, we wanted something that performed great and did well on memory. But really, we wanted to be able to customize our debug sessions so that you guys can see your data exactly how you want to see it.
+
+So we wanted to do a lot of things that are really, really easy to do while debugging. We also wanted to integrate with a compiler because the compiler guys, we'd much rather have the LLVM and Clang folk do the great work that they're doing and take advantage of what they're doing. And then we also wanted to modernize our architecture. So we're going to concentrate on a few things here today, and we're just going to talk about the customization, the compiler integration, and the architecture itself.
+
+So one of the great things that you can do with LLDB that we added for this year was we added a lot of ways to display your data. You can override the formats for given types so that you don't always have to right-click and set the format manually. You can create summaries for your data types, much like you could in Xcode, but we actually built this into the core of LLDB itself so that the command line users aren't left out in the cold.
+
+And also, synthetic instance variables allows us to take opaque collection classes, like, say, an NSArray or a standard template library vector, and actually create a new set of objects that appear underneath the data type so that you can view your data the way that you want to see it.
+
+We have a lot of great ways for you guys to customize your command interface. If you're a GDB user and we forgot one of your favorite commands, you can easily add aliases. If you're coming from a different debugger and you're used to typing in certain commands, we wanted to make sure that it was very customizable.
+
+We also have a lot of different ways for you to customize the prompts that show up. And the prompts appear when you display your threads or when you display your frames. And we've got great ways to customize all those things. Now, when integrating with a compiler, I just want to ask the question, why do we actually want to integrate with the compiler itself? And to answer that, we should look at what debuggers typically do. Typically, a debugger will make up its own homegrown type system. And the debug information is actually parsed into this internal representation. On top of that, an expression parser is built that actually uses these internal types.
+
+Now, the type system that the debuggers make up is not the same type system that the compiler would use. So there's often shortcuts that are taken, and there's often different, you know, issues that arise as you're adding support for new languages when you have these, you know, homegrown data structures.
+
+And the expression parsers are always striving for a compiler level of accuracy to make up for this, and they never quite attain that. So the expression parsers we talked about needs to be updated. As the compilers get updated and added, they're going to be updated. So we're going to have to write new features. And how hard can it be to write a good C++ expression parser?
+
+So we prefer to let the compiler guys do their job, and we just took a full copy of Clang and built it right into LDB itself. Now that gives us-- allows us to take the debug information and actually just translate it into the actual data types that the compiler would use, just as if it were compiling your code.
+
+So now we didn't make up our own type system, but we have a type system that fully represents all the detail that's contained in your code. And it allows us to just use the compiler as our expression parser. Now we attain what all the other debuggers are striving for, trying to attain compiler level of accuracy when evaluating expressions.
+
+We also get the complete language support full of every single feature that's built into the compiler itself. We get the same errors that you're used to from the command line and from within Xcode. And we get the compiler features for free. Most notably recently, we've added Objective-C literal support and C++11, including Lambda support. So we're able to take advantage of this really quickly because we just used the code that is the compiler itself.
+
+So if we talk about architecture, one of the things we wanted to start over with and make sure that we had a clean object-oriented design, that enables us to encapsulate the different objects that make up your debug session into, say, a process or into a thread object. And we don't run into the same issues that we ran into where we had globals that were trying to maintain some program state. And by encapsulating it, it allows us to do a lot better job of running multiple architectures within the same debugger, having multiple debug sessions going on inside the same debugger as well.
+
+We have a plugin interface that allows us to quickly adapt to new file formats and debug information formats, and there's a whole bunch of other plugins that are actually built into the debugger itself that cover languages and runtimes and a lot of different features that make LLDB able to adapt to the changing languages and the changing future of the code that you'll be dealing with. And we wanted to design a debugger that meets today's debugging requirements.
+
+The biggest issue that we are running into now, as you well know, we have more and more threads in our debug sessions. So we wanted to make sure in these objects that we've made to represent your debug sessions that we do a great job at multi-threaded debugging. We also stay in sync with the compiler, so we're never lagging behind and playing catch-up. LLDB is a framework, and that allows us to actually vend an API.
+
+That means that people can take advantage of some of the great features that are built into the debugger itself. It also allows us to make this entire API available to you through a Python scripting interface. Now, this is available both internally inside of LLDB from the embedded script interpreter and also externally, so that you can load up Python and actually script a debug session.
+
+So that was a quick introduction into why we decided to write LLDB. Let's get a little more in-depth into LLDB and discover some things. So we're going to get started and introduce you to some of the LLDB commands first. And in that section, we'll learn about some of the terminology that's involved and some of the objects that are the key players inside of the debugger.
+
+And we'll move on to showing you how you can customize your commands in case we have forgotten a shortcut that you need. We'll talk about some of the things that go into launching your program, and then we'll get into a debug session where we'll explore and we'll stop along the way and use some of the features of LLDB.
+
+So if we get started here, let's start by running LLDB from the command line. The XCRUN command allows us to run a binary that's contained inside the Xcode application bundle, and it will also load the correct application depending on which Xcode you may have selected. So here we launch LLDB.
+
+We create a debug session using the file command. Set a breakpoint at main. Let's go ahead and run. Do some backtraces and some stepping. Display some data. Do a little bit more stepping, and then quit. Now, if anyone's used GDB before from the command line, you're probably going to recognize a lot of these commands. And they're actually aliases into the actual LLDB commands that back them. We wanted to make sure that the people that had been debugging for a long time felt right at home. When running LLDB from the command line, as well as from within the debugger console in Xcode.
+
+Now, that's not how these commands are actually represented inside of LLDB itself. If we take a look at these same commands in LLDB, we would tell a target that we would like to create a new debug session using the executable ADAT out. Then we would set a breakpoint, and we would specify an option that we're setting a breakpoint by name. We would tell the process to launch, and we would tell the thread to backtrace and step. We'd run an expression, and do a little bit more stepping, and quit.
+
+Now, with the command interpreter, we wanted to fix a couple of things that we ran into with GDB. With GDB, we had a very inconsistent command syntax. From command to command, you really didn't know what to expect. Some commands were single characters. Some commands were multiple characters. Some commands were multi-word commands. Others had options, long options, short options. There was a different parser for every different command. And there was a lot of different hidden shortcuts inside of these commands. And that's one of the things we wanted to avoid.
+
+There was a lot of argument overloading that went on inside of commands. For example, GB's breakpoint command could take a file colon line, it could take the name of a function, it could take an address, but only if you put a star in front of it. And there's a lot of different things that might not make sense to users that are coming at it with a fresh pair of eyes. With LLDB's command interpreter, we wanted to make sure that we had a very consistent command syntax, so no matter what command you typed, you knew exactly what to expect. We use options instead of overloading the arguments.
+
+And that helps us target the auto-completion a little more efficiently. Instead of -- with the break command, if you hit tab after typing the break command in GDB, we'd have to auto-complete every file and line, every function and a whole lot of different things. And by using options, we can actually show you the data that you're actually looking for a lot more efficiently.
+
+We also wanted to make commands more discoverable. And in the upcoming terminology slides, we'll see how we can discover what different commands can do. Greg Clayton And the documentation for the commands is actually built right into the debugger itself. So if we take a look at the command syntax in LLDB, we tend to stick to a noun-verb paradigm.
+
+Target create, break point set, process launch. And after that, we add on the standard Unix style options. And then we add on our arguments that come after this. We use the same command interpreter to parse all of your expressions -- or to parse all of your commands. You're going to know exactly what to expect when you come in.
+
+We actually also use a very common Unix library to parse up our options so that you can actually intermingle your arguments and your options. If you take a look at the first command, we can actually put one of the arguments first. So if you're used to debugging from -- or if you're used to running commands from the shell, you'll be right at home when running commands in LLDB.
+
+Now, the other thing that we could do in GDB is you could shorten down your commands by only typing in the fewest number of characters that you had to in order to uniquely identify the command itself. We've implemented that as well. And for every long Unix style option that we have, we have a short Unix style counterpart. So you'll know exactly what to expect when typing in commands.
+
+So we've learned about some of the commands and we've seen some terminologies so far, but I want to introduce you to some of the key components that you'll be using when debugging in LLDB. To get started, a target. A target is something that represents your debug session. It contains your breakpoints and it contains all the information that persists between runs. Now, file A.out is an alias to target create A.out. That allows us to create a new target that we want to debug.
+
+If we want to discover the various things that we can actually do with the target, you can type target followed by space and hit the tab key, and we'll actually autocomplete all the various things that you can actually do with the target. You can see that there's a lot of different things that you can do.
+
+You can create, you can delete, you can list, and you can see the modules inside of a target. To drive home the fact that a target actually represents a standalone debug session, let's go ahead and create a target using a very simple executable, set a breakpoint inside of it, and run that target.
+
+Now, what happens when we create another target and set a breakpoint at a different function and run it? Well, we actually have two simultaneous debug sessions going on at the same time. This will allow you to debug your client and server applications inside the same binary. Using the target list command, you can see a list of the current targets that you actually have running. They maintain their own state. They know if they're running or stopped. They have their own breakpoints. You can switch between the different targets using the target select command, and you can switch back.
+
+Another benefit of actually running two debug sessions in the same binary is memory footprint. If we take a look at debugging these two programs in, say, GDB, each of these boxes would represent a chunk of memory that would be taken up. By debugging two of the applications in the same binary itself, we can actually share the resources in between the different debugging targets. Now, this will come in handy if you have large applications or a large client and server where you're sharing a lot of infrastructure underneath that has a lot of debug information. Thank you.
+
+If we get back to terminology, let's talk about a process. When you type the run command followed by some arguments, it's actually equivalent to typing process launch and specifying some arguments. Now, you might notice the dash dash that appears here. And the dash dash is actually something that terminates the options to the process launch command itself. Because some of the arguments that you might want to pass on to your program might look like options themselves and might get confused with options and cause the process launch to get some arguments it wasn't expecting.
+
+So if we take a look at what we can do with a process, we can type process and hit the tab key again to discover all the variety of different things that we can do with a process. We'll show you some of the more common things that you'll do.
+
+If you want to attach to a process by process ID, you can use the process attach with the dash dash PID option. You can attach to a process by name. You can create a target first. And if you create a target, we already know the name of the executable that you're going to attach to. So you can just type process attach.
+
+As well, you might not have control over how your program gets launched. And one of the features that we added was the process attach with the wait for option. Basically, it'll wait around and pull the operating system and watch for the next instance of your program to be run.
+
+Now, there's an inherent race condition in this where you might miss the first couple thousand instructions, and I used an XPC service here to kind of drive that point home. Because XPC services kind of launch very quickly, they kind of run through the code, and they kind of either exit or kind of go idle. So if you're looking to attach to an XPC service, you might need to put a few delays inside of your code to make sure that you can catch your breakpoints and make sure that we don't attach to your process after your code has gone by.
+
+To continue your process after this, you can type process continue. We have aliases for the GDB users, continue and C. And to interrupt your process, you can type control C. If we move on into thread, we can type thread. Again, hit tab and discover all the variety of different things that we can do with thread itself. Some of the more popular things that you'll use is thread list to list all the threads that are currently in your current process.
+
+Also, thread select allows you to select a thread using the index, the unique index that's been given to your thread as they are created. If you want to do a backtrace, you can type thread backtrace, or we do have shortcuts for the GDB users, which is BT, stands for backtrace. To backtrace all of your threads, you can type bt all.
+
+Now, if we move on to the frame, same thing. We can discover the variety of different things that we can do with the frame itself. Basically, frame select is how you switch between the different frames. We've got a shortcut to keep up with the GDB commands. We can also go up or down to select the frame that appears above or below us.
+
+And one of the important things that's different from GDB is how you get variables, your locals and your arguments. You ask the frame to show you its variables. This command is equivalent to both the info locals and the info args commands from GDB kind of built into one command.
+
+The last thing I wanted to talk about in terminology is modules. When you create a debug session, you might have your main executable and you might have one or more shared libraries that goes along with that. When you type target modules list, you can see a list of all the shared libraries that are currently involved in your debug session. This is equivalent to the GDB's info shared command. There's a lot of different things that you can do with the target modules list.
+
+With the seed, you can actually specify an exact file if you're only interested in seeing the details on one of your shared libraries, and you can specify that file by the base name or by the full shared library path name. You can also dump the symbol tables or the sections, but the ones that you guys will probably find yourself using is the target modules lookup command. It says, look up something by address. Show me what file and line and function this comes from. Also, to look up a type, you can type target modules lookup with the type option and specify a type name.
+
+So that kind of wraps up the terminology. If you need help on any of the commands that you discover, you can type help followed by the command name, and we'll output a man-page style section of help. Now, if we scroll down, we can see that we actually have an option down here that's the format option. And the format says that it takes a format option type.
+
+You can also get help on option types as well by typing help followed by the text that you see in the option values. And here we can see that when you're specifying a format, you can specify a whole bunch of different things so you can see the data exactly how you want to.
+
+If you don't know what you're looking for, but you know it has something to do with the thread, you can use the apropos command. Apropos takes one or more keywords. Again, it's very similar to GDB. And it'll dump out a list of the different commands that you can actually use. You can go type help on those commands to see further what you can do with each command after reading the descriptions.
+
+So that wraps up the terminology. Let's look at how we can actually customize the commands themselves. We've got three different ways to customize commands. We've got some simple aliases. We've got regular expression commands. And we also have a way to make user-defined commands, in case we have missed a command that you missed in a previous debugger.
+
+With simple aliases, it's very simple. We use the command alias command. You specify an alias name, and you specify one or more things that you'd like us to type in its place. Here, we're going to remake the aliases for the up and down, which selects the next and previous frame by creating quick aliases to them. We can also use positional argument inclusion. Here, we're going to make an alias for being able to disassemble a range.
+
+And we'll make it, you know, insert the arguments exactly where we want them to go. Any arguments that we want to make, we can make them in the same way. Any arguments that aren't specified on the command line or aren't positionally included will be appended onto the end of your alias. And we'll also make sure that we're not using any of the same alias for the up and down, which selects the next and previous frame by creating quick aliases to them.
+
+We're going to create an alias called F, which is going to do a variety of different things for us. First off, we're going to specify a regular expression, and if the arguments match just a number on a line, we're going to actually substitute it into the frame select command.
+
+If it matches plus or minus followed by a number on the line, we'll substitute it into the frame select inside the relative option. And then anything else, we'll just pass on to the frame variable command. So we've just implemented the argument overloading that we're used to from within GDL.
+
+I see there's some people that know what a regular expression is. So now if we move on to user-defined commands, we have Python built in. Make the command with Python. So all you have to do is create a Python module, which is just a fancy word for a Python file that creates a function with the following prototype. Then we can actually import the module into LLDB itself and bind it up. And to show this, let's go through a quick example.
+
+Let's say I cannot live without being able to list files inside of LLDB itself. The ls command, for those that might not know, is a command you run from the terminal that lists files for you. And we're going to take a look at the file that it takes to implement this command in Python. First, we mention Python.
+
+Then we import the LLDB module so that we can actually use some of the debugger objects that are passed into us. Then we import a Python module that allows us to run a shell script or a shell command and get the textual output. And then we create our function.
+
+We quickly create a string that we want to go execute. We run it out in the shell and get the result back. And we can put the result right into the result object that was passed in. That simple. Now we run LLDB from the command line. We type command script import and specify a path to our Python file. And now we need to bind up a new command to the actual function inside of that file itself.
+
+To do that, we use the command script add command. Now we specify that we want to bind it to a Python function. And we have to give it the Python module name, which is the same as the name of the file that you used. And we also bind it to a function inside of that module. So inside of one Python module, you can have multiple commands that you can actually bind up.
+
+And then all we do is give it a quick command name that we want to use. In this case, we'll use LS. And from here on out, when you're in the debugger, if you type the LS command, you can see that you've actually just added shell scripting. And then you can see that you've actually just added shell script-- you know, shell support into your debugger.
+
+So this is a very simple example. And I just wanted to show something quick so we could see how easy it is to just get the command interpreter to come in and call your Python function itself. But we actually have a lot of different objects that are built into Python. The debugger has access to all of your current targets. Each of your targets has access to the process. Your process has access to the objects that back your threads. Your threads have access to your frames, and your frames have access to your variables.
+
+You have access to everything that's contained inside the debugger. So there's a lot of different uses that you can do to make commands where you can introspect your current process. There's global objects that actually represent the current process and the current frame and the current thread that are selected inside the command interpreter. And we've got a web page for you up at ldb.lvm.org in the Python reference section down here. Highly recommend going and checking this out.
+
+It'll explain all of the various variables that are predefined for you. It'll explain how to get help. We have a command template that is kind of a hollowed out version of one of these commands that we've just shown you that has a few more bells and whistles built in. So there's a lot of great resources up on the website.
+
+Now, we've learned about a lot of commands, and you might want to put some of these commands into your debug session every time you run. For that, just like GDB, GDB has an initialization file called .gdbnit. We made a .ldbnit file as well. Now, this is a great place to add any commands that you want to run just after LLDB gets launched. And, of course, there's a lot of different things that you can do that you can put into these files, and we'll leave that to you guys to decide what there is, but we're going to talk about some type formatting commands a little later on.
+
+This would be a great place for you guys to put those. Now, there's a little bit more information that we need to go through about what initialization files we'll actually load. First and foremost, when we launch an application, we'll look for an application-specific version of your LLDB.nit file. In this case, if we're running Xcode, we'll look for a .ldbnit-xcode. If that file's there, we'll actually source that file, and if it's not there, we'll actually just look for the .ldbnit file itself, and then your debug session will start.
+
+With the command line, we go one step further. If we first change directory into the temporary directory, we go create a new debug session. What kind of files get loaded? Well, first, we look for the application-specific version of the initialization file, our LLDB.nit-ldb. If that file does not exist, we back up and just load the LLDB.nit file itself, we then load the program that you specified on the command line, and then we actually also look in the current working directory for an LLDB.nit file.
+
+This allows you to place an LLDB.nit file in your current working directory, wherever you're debugging from, and it allows you to have a place where you can actually set breakpoints or set up your debug session so that you don't have to type in all the commands every time you run.
+
+So we're going to go through just a few things about launching programs because there's a few things that you might not know. When we launch programs with arguments, we can actually specify those arguments on the command line itself. Here we use XCRUN to run LLDB. We're going to launch a program called PrintArgs. Its sole job is to print out the arguments that were passed to the program and then quit.
+
+So in LLDB, if we type run, we can see that we didn't specify any arguments, but remembered the actual arguments that you specified on the command line. If you rerun again, we'll run with those same arguments. But if you specify different arguments, you can notice that we'll actually update the arguments. And the next time you run, we'll remember the last set of arguments that you used.
+
+Setting environment variables. There's a right way and a wrong way, depending on what kind of environment variable you're setting. A common thing to do is to go to your shell and set the environment variable there. Then we go ahead and run the debugger. We launch the process, and we can interrupt it and see that the actual environment variable got set. But that's a good idea only if the environment variable only affects your current program.
+
+The malloc stack logging, as some of you might know, enables a very expensive system-wide feature that tracks every allocation and every free and makes a stack backtrace to it inside of this file. So it's a pretty expensive thing to enable. And by setting this environment variable in our shell, we've just actually run LLDB and XCRUN with that functionality enabled.
+
+So the way around this is to not set the environment variable in your shell, but just use the process launch command with the dash dash. We can use the short style option and specify it more than once if we want to set more than one environment variable. But this is a great way to ensure that the environment variables that you set only get set for the program that you want to debug.
+
+Another great feature if we've got anyone that's doing command line debugging is we have the ability to launch your program in a standalone terminal with the --tty option. That'll pop open a brand-new window where your debugger is still in one window and your debug session's in another and allow you to debug your program. Now, if you debug VI or Emacs or anything else that actually mucks with the terminal settings by playing with the echo settings and a lot of other, you know, complex things, this feature will be for you.
+
+So let's get into a debug session now where we'll kind of stop along the way and see where LLDB can help us out. And in this debug session, we're going to use a very simple class. Here we have a pointer array class that's got two instance variables. It's got a pointer to some pointers, and it also has a size.
+
+Now, if we start our debug session in Xcode and run, we note that we get an assertion. And if we take a look at our code here, we can see that we actually checked if our value of pointers was nil, and it was nil. And so we assume that the size would be zero, but it isn't, and that's why we had the assertion in our code.
+
+If we take a look at the bottom of the screen, we see that size is this very large number. Now, this might be a random number we might have gotten scribbled on by some other thing on the stack. We might have had some other issues. But let's take a look at this value in hex.
+
+So if we right-click on the variable itself, we can actually set the value to hex. But this might not be what we want to do, because the size you're going to get is nil. So we normally going to want to see that as a decimal number. So another way that you can actually implement this is go over into the command line and use the frame variable command.
+
+With frame variable, you're asking the frame to show you one of its variables. We can specify an alternate format so that we don't override the format permanently on that variable. And then we can specify a path. And we can see that our variable contains all Fs. Now, for me, that's a sign that I took zero and I probably decremented it one too many times.
+
+So if we run our debug session again and stop before things go wrong, we take a look at our variables and we say, "Wait a minute. I've got some uint pointer Ts, which are actually pointers, and we're actually seeing them as decimal." Now, one fix for this would be to every time you stopped in your code when you're debugging an Xcode, right-click on the variable and set it to hex. Next time you run and stop somewhere else, right-click again, set it to hex. You can be right-clicking all day, or you can actually use one of the new features inside of LDB where we can actually override the format permanently for a given type.
+
+For that, we use the type format add command. We specify a format, and in this case, hex, and we can give it one or more type names to apply it to. Now, any time we see a uint pointer T, an int pointer T, or an off T, we can actually view those as hex, both from the command line itself and also back in the UI.
+
+Now, if we run again and we stop before we actually try and find our problem, we can see our pointer array down here in the variable view, and it's not expanded by default. So again, everywhere that you're going to run and stop, you're going to see that your pointer array is not going to be expanded. You're going to have to go expand it just to see what's inside of it. And if we expand it and take a look inside of it, we can see that it actually doesn't contain that much stuff. It wouldn't be that hard to create a summary for this.
+
+So we can in LLDB, using the type summary add command, we can specify a summary string that actually refers to the variable itself and to instance variables inside the variable, as well as including some plain text, and then we can apply it to a type. Now, if we view that variable, we can see that we actually see a quick summary both in the command line and up in Xcode itself.
+
+Now, the summary string syntax can contain plain text. It can contain references to your variables. And you can optionally override the format in which that is used to display your variable. So variable path references are contained inside of a dollar sign and a squiggly bracket, just to make it unique so that you can type in plain text.
+
+You can optionally specify a path down inside that variable, and you can also override the format. The formats are the same formats that we looked at at the beginning when we typed help and we got help on the option type of format. And it just helps to see some example strings. Here's a quick string. We've got stuff color coded so you can see what's what.
+
+Where we specify some plain text, natural is equal to the variable. And we would insert the value of the variable in its natural format right there. Octal is equal to the variable, and then we actually want to override the format for this and show it as octal. So we can quickly see that there's a lot of different ways to customize your debug session for your types, show a nice little succinct summary both in the command line and up in Xcode itself.
+
+So if we take a look back at our code, we can see that we've got a lot of different ways to customize your debug session for your types. So if we take a look back at our code, once we've run and we've done this, we can see that we've got a nice little summary.
+
+We can keep an eye on this summary as we step along and watch for our size to kind of go to that, you know, incorrect value. And we see that as soon as we step over line 120, we've caused our problem to show up, our size is this invalid value, and we should step into the function call at line 120.
+
+So we've got a page up on the website, again, that talks about variable formatting down on the left. There's a whole bunch of stuff that we haven't gotten to today, just didn't have time. We've got ways for you guys to run Python functions that can actually create a new summary string for you.
+
+So you can use flow control to discover what kind of type you might want to show. You might want to look at your variable and say, if size is greater than, you know, a million, then print error. So you can actually use, you know, flow control when you're doing this.
+
+So the other way that we could have solved this problem is actually with the expression parser. And we talked about compiler integration at the start of the talk. And really, that's one of the best things about, you know, LLDB itself. So it's worth taking a step back and looking at the different things that we can do with an expression parser.
+
+So for one, if we run and we stop here in our code, and if we're going to write an expression, think of it as if we actually made a little space right before where your program counter is and inserted a new scope. And any expression that you type there actually appears inside of that scope. And that'll become evident in a second.
+
+For people that might not know what an expression is, it's a statement that you type that gets evaluated as if it were in your code. The result gets displayed and actually gets saved into a convenience store. So if you want to do that, you can do that with a lot of different things. You can do arithmetic. You can say X plus Y. You can make function calls. You can do casting. And with LLDB, you can do much, much more.
+
+So if we get back to our code, we can do a simple expression like this where we just check for the equality of an item inside of our array. But we have a compiler as our expression parser. We're not limited to single statements. We can do multiple statements. We can actually declare expression local variables. Here we declare a typed expression local variable whose lifetime is good for only the expression itself. We made uint pointer ti equals 12. And then we used that variable and added it to something that was actually in our program.
+
+We can actually create expression global variables that are typed. Here we declare a variable, and if you put a dollar sign at the beginning of the variable name, it will persist for longer than just the current expression. And it's something that you got to type yourself. It's not the result of expression that you had to cast.
+
+You get to explicitly tell us what type it is. Now, we can use that expression global variable, and we can also use flow control. You can use an if statement. So... Now, one of the things that you might want to do when evaluating your expression is stop while evaluating your expression. Here, if we run the expression command and we use one of these fancy options that says unwind on error and we set that to zero, what is that going to do?
+
+Well, usually if you run an expression and you cause an exception to occur or if you dereference bad memory or you do a lot of other different things, we'll stop your expression, we'll wipe it away from your program as if it never happened and just go on with what you were executing.
+
+But you might actually want to stop while you're actually inside of this expression to go, wait a minute, why did this expression not work? So if you use the unwind on error and we set that to zero, that'll allow us to stop at breakpoints. You can stop when you hit an exception to figure out why your expression didn't work. You can do a lot of different things.
+
+Now, to reproduce our problem, we just had to call the pop function a bunch of times in a row until we actually got our assertion. So let's go ahead and use flow control to use a while loop and say while we have a size greater than zero, keep calling pop and just make my problem happen. You don't need to go inject code into your program and rerun it to make the problem happen. You can just make it happen in your expression parser. This has some great, you can do some great things with this.
+
+If you just got done writing a function and you want to test out the boundary conditions of your function by calling it with a high number, a low number, or a whole set of different parameters, you can actually set breakpoints inside of your code, use the unwind on error option and set it to zero and stop at your breakpoints and explore while you're evaluating your expression without actually injecting the code into your program.
+
+Now, we've got a compiler, right? So we can actually define local types. Now, there's a lot of great implications here. Some people use, you know, the expression parser like a compiler scratchpad. What would happen if I typed this in, and if I made a zero-sized array, how big would that thing be? Well, we've got the compiler answering the question, not just a, you know, kind of a handmade expression parser that might not get the same result as a compiler. So you can actually really trust the results that come back from these kind of things.
+
+Also, if you have an opaque data type and you're debugging your shared library at, say, a client's office, and you know that this first argument to something is actually a simple type that you can recreate really quickly, you can go into your expression, recreate your type, cast one of the current void star arguments into a type, and actually use it in place.
+
+So... One of the other great things that we can do with this expression, because we can have multiple lines in our expressions, or multiple statements, is we want to be able to probably type more than one line when we're entering expressions. Here, if you type the expression command, but you don't specify an expression, you can actually enter multiple line expression mode, where you type as many things as you want to. Here, we'll declare a couple of local variables. We'll use a while loop to iterate through the arguments that were passed to our program.
+
+We'll print something out, and the last statement in our expression will be the return value of our expression. Here, I want to see how many arguments there were, and I hit enter, and we see that we actually run the code in there, and we get the result back. So, again, this is a great place to kind of go in and possibly call your new function that you've just gotten done creating with your different boundary conditions, and actually just using more than one statement in your expressions in the debugger.
+
+One of the other differences that we have in when evaluating expressions is the way that we evaluate them. With GDB, it would take an expression, it would chop it up with its expression parser and create a tree that would get evaluated every time you wanted to evaluate this expression. It would go grab the value of 2.2 and the value of Y, and in GDB itself, it would add the two things together, and then it would craft up a function call and actually call the function itself.
+
+With LLDB, we took a different tact because we have the compiler built in. We actually use Clang to compile the expression into an internalized format. We run it through a code gen phase, which actually creates code and data for us. We take your entire expression, all of your statements and everything, and we download it into your program and we run it.
+
+This means that you will get a very accurate representation of how that expression would have ran, not this evaluating a tree and doing each item wrong. It also helps ensure that whatever you're evaluating is evaluated on the bare metal that you actually wanted to evaluate on, not incorrectly possibly adding two floating point numbers on the desktop system when it doesn't match the current settings in the debugger itself.
+
+The other thing that we can do is we can actually inject checks into your expression to make them safer to evaluate. If we take a look at this expression here, we're going to be asked to evaluate this expression. Now, the first item, the item here, might not be valid. It might be uninitialized. It could be garbage. It could be something else that's been trounced in your debug session. So if we compile up this expression with Clang, we get an internalized compiler format. We can actually run a set of checks over this expression.
+
+And we notice, hey, we're dereferencing a pointer here. Why don't we go ahead and insert a call that will check this pointer? And when it checks the pointer, it'll try and read one byte of data from where the pointer lives. And if that fails, it'll throw an exception and stop before any other bad things happen to your program. Likewise, we have an Objective-C object here. This object could have been on the stack.
+
+It could be uninitialized. It could contain the previous remnants of a previous object that might be somewhat close but not really close. So we can actually call. It actually changes into a call that checks the object much more thoroughly and actually asks the runtime to verify that this object is good prior to calling it in your expression. So then we end up with a much safer expression that we can evaluate in your program.
+
+So that was the in-depth tour into LLDB. Now let's take a look at a few examples of how we can use LLDB in non-debugging scenario. And the best thing I can come up with is how can I do symbolication using LLDB, and why would I want to? So first off, we're going to manually symbolicate stuff so you guys know how to do it yourselves, and then we'll actually use a module that's built into the current Xcode 4.5c that you guys have received at the conference to actually do it automagically.
+
+So the first thing we need when we're actually going to symbolicate something is a crash log. Now, you take this crash log, you open up LLDB, you grab the executable from your crash log, and you specify it as the target, you locate it somehow. And then if you want to load any other shared libraries, you can use the target modules add to go locate all the correct copies of your shared libraries and add them into your debug session.
+
+And after that, here we actually load up DLD as well, just for fun. And after that, we need to take a look at the addresses where these actual shared libraries were loaded when your program actually crashed. And what these addresses are is they're actually the address of your text segment inside of your program.
+
+Now, you can take these addresses and use the target modules load, specify each of the files, and tell us where the text segment lives. Now, once you've done this, you have a debug session that is idly sitting there with the shared libraries loaded at the exact same locations as the stack frames that we have in the program.
+
+So, if we take a look up at the top here, we might want to take a look at what this address means here. And if we notice, if we look up right next to the address, we can see that it told us that it happily crashed in car_trades.h. That doesn't really help us figure out where it actually crashed in our code.
+
+That just tells it it crashed in some inline header file. So, if we use the target modules lookup command that we learned about at the beginning, we can look up the address and get a result. And note that we got three stacks of shared libraries loaded. So, we can actually get the stack frames back for one single address. We will unwind your inline stack frames all the way back to where it actually crashed inside of your code. And here we can see that we actually crashed in main.cpp on line 11.
+
+Now, there's an automated way to do this. We've got a built-in module in the Xcode 4.5 seed only that is called ldb.macosx.crashlog. And it kind of uses a lot of the things that we talked about today. When we import this, we can see that it installs a new command line command using the command script add command that we learned about before. We now have a new command at our disposal that is called crashlog.
+
+We can type crashlog and specify a crashlog itself. And it'll actually symbolicate everything for us by looking for all the different things, disassembling around the crash site because we've got access to the disassembler and we can use these objects inside of the debugger API. And if we take a look at the end of the stack trace here, we can see that we have actually reconstructed all of our inline stack frames.
+
+So we've got a lot of great modules, and you might want to customize this for your workflow when you guys get crash logs from either Apple or from another service. Inside of the Xcode application, you find the LLDB.framework. Inside the LLDB.framework, we actually have the Python package that is LLDB. Inside here, we've got some great examples for you for the exact formatters that we use to format the standard template library.
+
+So if you have some templatized classes and you want to be able to view your data types just like you're seeing your standard template library data types, take a look at these examples, see what you can glean from them, and modify them for your own projects. Likewise, all of the Objective-C types have ways to view their data inside of them as well, often without running code. Some great examples to look at are contained inside of multiple different files inside of this directory.
+
+Likewise, we've got the symbolication, which is generic symbolication. We've got the crash log module, which will actually take a crash log on Mac OS X, parse it up into Python objects, and actually load your program up at exactly the right address that it needs to and do a lot of different things.
+
+A great example to take in case you need to modify it to fit how you locate your crashed, you know, how you desymbolicate your crash logs once you get them. And we also have a couple of other examples that put together things in a lot more complex ways. So, again, I encourage you to take a look inside the LLDB module and look for anything that ends in .py and see what you can do.
+
+So that brings us to the end of the talk. We think we've got a great product for you guys in the Xcode 4.5 seed. We've got some great customization that you can do for all your types and your formatting. We have a great story for multi-threaded debugging where we know what every thread is up to. We know why each thread stopped.
+
+We've got compiler integration that really should make you rethink what you can do with your expressions. And LLDB is a framework, which means that it's available, you know, for you to use as an API, and it's also available through the Python scripting interface, both inside and outside of LLDB.
+
+So we've got some web URLs here in case anyone wants to go check out the website. Really going to ldb.lvm.org will help you get a lot more information and go a lot more in-depth in a lot of the things that we weren't able to dive into today. Thank you. Thank you.
